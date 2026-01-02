@@ -5,7 +5,12 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
-const AURORA_ENDPOINT = "http://aurora.tophatsecurity.com:9150";
+const AURORA_ENDPOINT = "https://128.136.131.89:9150";
+
+// Create a custom HTTP client that ignores SSL certificate errors
+const client = Deno.createHttpClient({
+  caCerts: [],
+});
 
 serve(async (req) => {
   // Handle CORS preflight requests
@@ -19,11 +24,12 @@ serve(async (req) => {
     const url = `${AURORA_ENDPOINT}${path}`;
     console.log(`Proxying ${method} request to: ${url}`);
 
-    const fetchOptions: RequestInit = {
+    const fetchOptions: RequestInit & { client?: Deno.HttpClient } = {
       method,
       headers: {
         'Content-Type': 'application/json',
       },
+      client,
     };
 
     if (body && method !== 'GET') {
