@@ -1,20 +1,18 @@
 import { useQuery } from "@tanstack/react-query";
-import { supabase } from "@/integrations/supabase/client";
 
-const SUPABASE_URL = "https://hewwtgcrupegpcwfujln.supabase.co";
+const AURORA_API_URL = "http://aurora.tophatsecurity.com:9151";
 
 interface AuroraProxyResponse {
   error?: string;
 }
 
-async function callAuroraProxy<T>(path: string, method: string = "GET", body?: unknown): Promise<T> {
-  const response = await fetch(`${SUPABASE_URL}/functions/v1/aurora-proxy`, {
-    method: "POST",
+async function callAuroraApi<T>(path: string, method: string = "GET", body?: unknown): Promise<T> {
+  const response = await fetch(`${AURORA_API_URL}${path}`, {
+    method,
     headers: {
       "Content-Type": "application/json",
-      "apikey": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imhld3d0Z2NydXBlZ3Bjd2Z1amxuIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjczNzM0ODEsImV4cCI6MjA4Mjk0OTQ4MX0.KBi-s-z9yxU6d0D-kGrHDjKK00VwhYj1WebEzR8qZvA",
     },
-    body: JSON.stringify({ path, method, body }),
+    body: body ? JSON.stringify(body) : undefined,
   });
 
   if (!response.ok) {
@@ -249,7 +247,7 @@ export function useSensors() {
   return useQuery({
     queryKey: ["aurora", "sensors"],
     queryFn: async () => {
-      const response = await callAuroraProxy<SensorsListResponse>("/api/sensors/list");
+      const response = await callAuroraApi<SensorsListResponse>("/api/sensors/list");
       return response.sensors || [];
     },
     refetchInterval: 10000,
@@ -261,7 +259,7 @@ export function useClients() {
   return useQuery({
     queryKey: ["aurora", "clients"],
     queryFn: async () => {
-      const response = await callAuroraProxy<ClientsListResponse>("/api/clients/list");
+      const response = await callAuroraApi<ClientsListResponse>("/api/clients/list");
       return response.clients || [];
     },
     refetchInterval: 15000,
@@ -273,7 +271,7 @@ export function useAlerts() {
   return useQuery({
     queryKey: ["aurora", "alerts"],
     queryFn: async () => {
-      const response = await callAuroraProxy<AlertsResponse>("/api/alerts");
+      const response = await callAuroraApi<AlertsResponse>("/api/alerts");
       return response.alerts || [];
     },
     refetchInterval: 30000,
@@ -284,7 +282,7 @@ export function useAlerts() {
 export function useAdsbAircraft() {
   return useQuery({
     queryKey: ["aurora", "adsb", "aircraft"],
-    queryFn: () => callAuroraProxy<AdsbAircraft[]>("/api/adsb/aircraft"),
+    queryFn: () => callAuroraApi<AdsbAircraft[]>("/api/adsb/aircraft"),
     refetchInterval: 5000,
     retry: 2,
   });
@@ -293,7 +291,7 @@ export function useAdsbAircraft() {
 export function useAdsbStats() {
   return useQuery({
     queryKey: ["aurora", "adsb", "stats"],
-    queryFn: () => callAuroraProxy<AdsbStats>("/api/adsb/stats"),
+    queryFn: () => callAuroraApi<AdsbStats>("/api/adsb/stats"),
     refetchInterval: 10000,
     retry: 2,
   });
@@ -302,7 +300,7 @@ export function useAdsbStats() {
 export function useDashboardStats() {
   return useQuery({
     queryKey: ["aurora", "dashboard", "stats"],
-    queryFn: () => callAuroraProxy<DashboardStats>("/api/dashboard/sensor-stats"),
+    queryFn: () => callAuroraApi<DashboardStats>("/api/dashboard/sensor-stats"),
     refetchInterval: 10000,
     retry: 2,
   });
@@ -311,7 +309,7 @@ export function useDashboardStats() {
 export function useDashboardTimeseries(hours: number = 24) {
   return useQuery({
     queryKey: ["aurora", "dashboard", "timeseries", hours],
-    queryFn: () => callAuroraProxy<DashboardTimeseries>(`/api/dashboard/sensor-timeseries?hours=${hours}`),
+    queryFn: () => callAuroraApi<DashboardTimeseries>(`/api/dashboard/sensor-timeseries?hours=${hours}`),
     refetchInterval: 30000,
     retry: 2,
   });
@@ -321,7 +319,7 @@ export function useDashboardTimeseries(hours: number = 24) {
 export function useComprehensiveStats() {
   return useQuery({
     queryKey: ["aurora", "stats", "comprehensive"],
-    queryFn: () => callAuroraProxy<ComprehensiveStats>("/api/stats/comprehensive"),
+    queryFn: () => callAuroraApi<ComprehensiveStats>("/api/stats/comprehensive"),
     refetchInterval: 10000,
     retry: 2,
   });
@@ -331,7 +329,7 @@ export function useComprehensiveStats() {
 export function useDeviceStats() {
   return useQuery({
     queryKey: ["aurora", "stats", "devices"],
-    queryFn: () => callAuroraProxy<{ total_devices: number; devices: DeviceSummary[] }>("/api/stats/devices"),
+    queryFn: () => callAuroraApi<{ total_devices: number; devices: DeviceSummary[] }>("/api/stats/devices"),
     refetchInterval: 10000,
     retry: 2,
   });
@@ -362,7 +360,7 @@ export function useAlertRules() {
   return useQuery({
     queryKey: ["aurora", "alerts", "rules"],
     queryFn: async () => {
-      const response = await callAuroraProxy<AlertRulesResponse>("/api/alerts/rules");
+      const response = await callAuroraApi<AlertRulesResponse>("/api/alerts/rules");
       return response;
     },
     refetchInterval: 60000,
@@ -385,7 +383,7 @@ export interface PowerStats {
 export function usePowerStats() {
   return useQuery({
     queryKey: ["aurora", "power", "stats"],
-    queryFn: () => callAuroraProxy<PowerStats>("/api/power/stats"),
+    queryFn: () => callAuroraApi<PowerStats>("/api/power/stats"),
     refetchInterval: 10000,
     retry: 2,
   });
