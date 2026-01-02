@@ -27,6 +27,7 @@ const MapContent = () => {
   const {
     aircraftMarkers,
     sensorMarkers,
+    clientMarkers,
     allPositions,
     stats,
     isLoading,
@@ -98,7 +99,6 @@ const MapContent = () => {
       if (filter !== 'all' && sensorType !== filter) return;
 
       const icon = mapIcons[sensorType as IconType] || mapIcons.gps;
-      const statusClass = sensor.status === 'active' ? 'text-green-500' : 'text-yellow-500';
       
       const popupContent = `
         <div class="p-2 min-w-[180px]">
@@ -106,7 +106,8 @@ const MapContent = () => {
           <div class="text-sm space-y-1">
             <div><span class="text-gray-500">Type:</span> ${sensor.type}</div>
             <div><span class="text-gray-500">Value:</span> ${sensor.value} ${sensor.unit}</div>
-            <div><span class="text-gray-500">Status:</span> <span class="${statusClass}">${sensor.status}</span></div>
+            <div><span class="text-gray-500">Status:</span> ${sensor.status}</div>
+            <div><span class="text-gray-500">Updated:</span> ${new Date(sensor.lastUpdate).toLocaleString()}</div>
           </div>
         </div>
       `;
@@ -115,12 +116,30 @@ const MapContent = () => {
         .addTo(markersLayerRef.current!);
     });
 
+    // Add client device markers when filter is 'all' or 'clients'
+    if (filter === 'all' || filter === 'clients') {
+      clientMarkers.forEach((client) => {
+        const popupContent = `
+          <div class="p-2 min-w-[180px]">
+            <div class="font-bold mb-2">${client.hostname}</div>
+            <div class="text-sm space-y-1">
+              <div><span class="text-gray-500">Client ID:</span> ${client.client_id.substring(0, 8)}...</div>
+              <div><span class="text-gray-500">Type:</span> Client Device</div>
+            </div>
+          </div>
+        `;
+        L.marker([client.location.lat, client.location.lng], { icon: mapIcons.client })
+          .bindPopup(popupContent)
+          .addTo(markersLayerRef.current!);
+      });
+    }
+
     // Fit bounds if we have positions
     if (allPositions.length > 0 && mapRef.current) {
       const bounds = L.latLngBounds(allPositions);
       mapRef.current.fitBounds(bounds, { padding: [50, 50], maxZoom: 12 });
     }
-  }, [aircraftMarkers, sensorMarkers, filter, allPositions]);
+  }, [aircraftMarkers, sensorMarkers, clientMarkers, filter, allPositions]);
 
   const handleFilterChange = useCallback((newFilter: FilterType) => {
     setFilter(newFilter);
