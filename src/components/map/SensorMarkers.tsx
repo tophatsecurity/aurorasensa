@@ -1,7 +1,6 @@
-import { memo, Fragment } from "react";
-import { Marker, Popup } from "react-leaflet";
-import { Navigation } from "lucide-react";
-import { Badge } from "@/components/ui/badge";
+import { useEffect, useRef } from "react";
+import { useMap } from "react-leaflet";
+import L from "leaflet";
 import { mapIcons, IconType } from "@/utils/mapIcons";
 import type { SensorMarker, FilterType } from "@/types/map";
 
@@ -10,69 +9,71 @@ interface SensorMarkersProps {
   filter: FilterType;
 }
 
-const SensorPopup = memo(function SensorPopup({ sensor }: { sensor: SensorMarker }) {
-  return (
-    <div className="p-2 min-w-[180px]">
-      <div className="flex items-center gap-2 mb-3 pb-2 border-b border-border/50">
-        <Navigation className="w-5 h-5 text-green-400" />
-        <span className="font-bold">{sensor.name}</span>
+function createSensorPopupContent(sensor: SensorMarker): string {
+  const statusClass = sensor.status === 'active' 
+    ? 'bg-green-500/20 text-green-400' 
+    : 'bg-yellow-500/20 text-yellow-400';
+  
+  return `
+    <div class="p-2 min-w-[180px]">
+      <div class="flex items-center gap-2 mb-3 pb-2 border-b border-gray-600">
+        <span class="font-bold">${sensor.name}</span>
       </div>
-      <div className="space-y-2 text-sm">
-        <div className="flex justify-between">
-          <span className="text-muted-foreground">Type</span>
-          <Badge variant="secondary" className="capitalize">{sensor.type}</Badge>
+      <div class="space-y-2 text-sm">
+        <div class="flex justify-between">
+          <span class="text-gray-400">Type</span>
+          <span class="px-2 py-0.5 bg-gray-700 rounded capitalize">${sensor.type}</span>
         </div>
-        <div className="flex justify-between">
-          <span className="text-muted-foreground">Value</span>
-          <span className="font-medium">{sensor.value} {sensor.unit}</span>
+        <div class="flex justify-between">
+          <span class="text-gray-400">Value</span>
+          <span class="font-medium">${sensor.value} ${sensor.unit}</span>
         </div>
-        <div className="flex justify-between">
-          <span className="text-muted-foreground">Status</span>
-          <Badge 
-            variant="outline" 
-            className={sensor.status === 'active' ? 'bg-success/20 text-success' : 'bg-warning/20 text-warning'}
-          >
-            {sensor.status}
-          </Badge>
+        <div class="flex justify-between">
+          <span class="text-gray-400">Status</span>
+          <span class="px-2 py-0.5 rounded ${statusClass}">${sensor.status}</span>
         </div>
-        <div className="flex justify-between text-xs">
-          <span className="text-muted-foreground">Updated</span>
-          <span>{new Date(sensor.lastUpdate).toLocaleTimeString()}</span>
+        <div class="flex justify-between text-xs">
+          <span class="text-gray-400">Updated</span>
+          <span>${new Date(sensor.lastUpdate).toLocaleTimeString()}</span>
         </div>
       </div>
     </div>
-  );
-});
+  `;
+}
 
-export const SensorMarkers = memo(function SensorMarkers({ 
-  sensors, 
-  filter 
-}: SensorMarkersProps) {
-  const filteredSensors = sensors.filter((sensor) => {
-    const sensorType = sensor.type.toLowerCase();
-    return filter === 'all' || sensorType === filter;
-  });
+export function SensorMarkers({ sensors, filter }: SensorMarkersProps) {
+  const map = useMap();
+  const markersRef = useRef<L.Marker[]>([]);
 
-  if (filteredSensors.length === 0) return null;
+  useEffect(() => {
+    // Clear existing markers
+    markersRef.current.forEach(marker => marker.remove());
+    markersRef.current = [];
 
-  return (
-    <Fragment>
-      {filteredSensors.map((sensor) => {
-        const sensorType = sensor.type.toLowerCase();
-        const icon = mapIcons[sensorType as IconType] || mapIcons.gps;
-        
-        return (
-          <Marker
-            key={sensor.id}
-            position={[sensor.location.lat, sensor.location.lng]}
-            icon={icon}
-          >
-            <Popup className="custom-popup">
-              <SensorPopup sensor={sensor} />
-            </Popup>
-          </Marker>
-        );
-      })}
-    </Fragment>
-  );
-});
+    // Filter sensors based on current filter
+    const filteredSensors = sensors.filter((sensor) => {
+      const sensorType = sensor.type.toLowerCase();
+      return filter === 'all' || sensorType === filter;
+    });
+
+    if (filteredSensors.length === 0) return;
+
+    // Create new markers
+    filteredSensors.forEach((sensor) => {
+      const sensorType = sensor.type.toLowerCase();
+      const icon = mapIcons[sensorType as IconType] || mapIcons.gps;
+      
+      const marker = L.marker([sensor.location.lat, sensor.location.lng], { icon })
+        .bindPopup(createSensorPopupContent(sensor))
+        .addTo(map);
+      markersRef.current.push(marker);
+    });
+
+    return () => {
+      markersRef.current.forEach(marker => marker.remove());
+      markersRef.current = [];
+    };
+  }, [map, sensors, filter]);
+
+  return null;
+}
