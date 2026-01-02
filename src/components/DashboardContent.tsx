@@ -100,65 +100,125 @@ const DashboardContent = () => {
         />
       </div>
 
-      {/* Sensor Averages */}
+      {/* Live Sensor Values */}
       <div className="mb-8">
         <h2 className="text-lg font-semibold mb-4 flex items-center gap-2">
           <Activity className="w-5 h-5 text-primary" />
-          Sensor Averages (All Time)
+          Live Sensor Values
+          {!dashboardStatsLoading && (
+            <Badge variant="outline" className="ml-2 text-xs bg-success/10 text-success border-success/30">
+              Real-time
+            </Badge>
+          )}
         </h2>
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-          <div className="glass-card rounded-xl p-4 border border-border/50">
+          <div className="glass-card rounded-xl p-4 border border-border/50 hover:border-red-500/30 transition-colors">
             <div className="flex items-center gap-3 mb-2">
               <div className="w-10 h-10 rounded-lg bg-red-500/20 flex items-center justify-center">
                 <Thermometer className="w-5 h-5 text-red-400" />
               </div>
-              <div>
-                <p className="text-xs text-muted-foreground">Avg Temperature</p>
+              <div className="flex-1">
+                <p className="text-xs text-muted-foreground">Temperature</p>
                 <p className="text-2xl font-bold text-red-400">
                   {dashboardStatsLoading ? "..." : avgTemp !== null && avgTemp !== undefined ? `${avgTemp.toFixed(1)}°C` : "—"}
                 </p>
               </div>
             </div>
+            <div className="text-xs text-muted-foreground mt-1">
+              {avgTemp !== null && avgTemp !== undefined && (
+                <span className="text-red-400/70">{((avgTemp * 9/5) + 32).toFixed(1)}°F</span>
+              )}
+            </div>
           </div>
-          <div className="glass-card rounded-xl p-4 border border-border/50">
+          <div className="glass-card rounded-xl p-4 border border-border/50 hover:border-blue-500/30 transition-colors">
             <div className="flex items-center gap-3 mb-2">
               <div className="w-10 h-10 rounded-lg bg-blue-500/20 flex items-center justify-center">
                 <Droplets className="w-5 h-5 text-blue-400" />
               </div>
-              <div>
-                <p className="text-xs text-muted-foreground">Avg Humidity</p>
+              <div className="flex-1">
+                <p className="text-xs text-muted-foreground">Humidity</p>
                 <p className="text-2xl font-bold text-blue-400">
                   {dashboardStatsLoading ? "..." : avgHumidity !== null && avgHumidity !== undefined ? `${avgHumidity.toFixed(1)}%` : "—"}
                 </p>
               </div>
             </div>
+            <div className="text-xs text-muted-foreground mt-1">
+              {avgHumidity !== null && avgHumidity !== undefined && (
+                <span className={avgHumidity > 60 ? "text-warning" : avgHumidity < 30 ? "text-warning" : "text-success"}>
+                  {avgHumidity > 60 ? "High" : avgHumidity < 30 ? "Low" : "Normal"}
+                </span>
+              )}
+            </div>
           </div>
-          <div className="glass-card rounded-xl p-4 border border-border/50">
+          <div className="glass-card rounded-xl p-4 border border-border/50 hover:border-purple-500/30 transition-colors">
             <div className="flex items-center gap-3 mb-2">
               <div className="w-10 h-10 rounded-lg bg-purple-500/20 flex items-center justify-center">
                 <Signal className="w-5 h-5 text-purple-400" />
               </div>
-              <div>
-                <p className="text-xs text-muted-foreground">Avg Signal</p>
+              <div className="flex-1">
+                <p className="text-xs text-muted-foreground">Signal Strength</p>
                 <p className="text-2xl font-bold text-purple-400">
-                  {dashboardStatsLoading ? "..." : avgSignal !== null && avgSignal !== undefined ? `${avgSignal.toFixed(1)} dBm` : "—"}
+                  {dashboardStatsLoading ? "..." : avgSignal !== null && avgSignal !== undefined ? `${avgSignal.toFixed(0)} dBm` : "—"}
                 </p>
               </div>
             </div>
+            <div className="text-xs text-muted-foreground mt-1">
+              {avgSignal !== null && avgSignal !== undefined && (
+                <span className={avgSignal > -50 ? "text-success" : avgSignal > -70 ? "text-warning" : "text-destructive"}>
+                  {avgSignal > -50 ? "Excellent" : avgSignal > -70 ? "Good" : "Weak"}
+                </span>
+              )}
+            </div>
           </div>
-          <div className="glass-card rounded-xl p-4 border border-border/50">
+          <div className="glass-card rounded-xl p-4 border border-border/50 hover:border-orange-500/30 transition-colors">
             <div className="flex items-center gap-3 mb-2">
               <div className="w-10 h-10 rounded-lg bg-orange-500/20 flex items-center justify-center">
                 <Zap className="w-5 h-5 text-orange-400" />
               </div>
-              <div>
-                <p className="text-xs text-muted-foreground">Avg Power</p>
+              <div className="flex-1">
+                <p className="text-xs text-muted-foreground">Power Draw</p>
                 <p className="text-2xl font-bold text-orange-400">
                   {dashboardStatsLoading ? "..." : avgPower !== null && avgPower !== undefined ? `${avgPower.toFixed(1)}W` : "—"}
                 </p>
               </div>
             </div>
+            <div className="text-xs text-muted-foreground mt-1">
+              {avgPower !== null && avgPower !== undefined && (
+                <span className="text-orange-400/70">{(avgPower / 1000).toFixed(3)} kW</span>
+              )}
+            </div>
           </div>
+        </div>
+      </div>
+
+      {/* Sensor Types Summary */}
+      <div className="mb-8">
+        <h2 className="text-lg font-semibold mb-4 flex items-center gap-2">
+          <Radio className="w-5 h-5 text-primary" />
+          Active Sensor Types ({sensorsSummary?.total_sensor_types ?? 0})
+        </h2>
+        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
+          {sensorsSummary?.sensor_types?.slice(0, 6).map((sensor) => (
+            <div 
+              key={sensor.device_type}
+              className="glass-card rounded-lg p-3 border border-border/50 hover:border-primary/30 transition-colors"
+            >
+              <div className="text-xs text-muted-foreground capitalize truncate">
+                {sensor.device_type.replace(/_/g, ' ')}
+              </div>
+              <div className="text-lg font-bold text-foreground">
+                {sensor.device_count}
+              </div>
+              <div className="text-xs text-muted-foreground">
+                {sensor.total_readings.toLocaleString()} readings
+              </div>
+              {sensor.active_last_hour && (
+                <Badge variant="outline" className="mt-1 text-[10px] px-1.5 py-0 bg-success/10 text-success border-success/30">
+                  Active
+                </Badge>
+              )}
+            </div>
+          ))}
         </div>
       </div>
 
