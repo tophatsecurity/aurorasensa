@@ -2,10 +2,10 @@ import { Server, Bell, Settings, Wifi, WifiOff, AlertCircle } from "lucide-react
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
-import { useDashboardStats } from "@/hooks/useAuroraApi";
+import { useComprehensiveStats } from "@/hooks/useAuroraApi";
 
 const Header = () => {
-  const { isLoading, isError, dataUpdatedAt } = useDashboardStats();
+  const { isLoading, isError, data, dataUpdatedAt } = useComprehensiveStats();
   
   // Determine connection status
   const getConnectionStatus = () => {
@@ -20,6 +20,8 @@ const Header = () => {
   const lastUpdated = dataUpdatedAt 
     ? new Date(dataUpdatedAt).toLocaleTimeString() 
     : 'Never';
+  
+  const activeDevices = data?.devices_summary?.devices?.filter(d => d.status === 'online').length ?? 0;
 
   return (
     <header className="relative z-10 border-b border-border/50 backdrop-blur-sm">
@@ -81,6 +83,11 @@ const Header = () => {
                   <div className="space-y-1">
                     <p className="font-medium">Aurora API Status</p>
                     <p className="text-muted-foreground">Last updated: {lastUpdated}</p>
+                    {connection.status === 'online' && (
+                      <p className="text-success flex items-center gap-1">
+                        {activeDevices} devices online
+                      </p>
+                    )}
                     {isError && (
                       <p className="text-destructive flex items-center gap-1">
                         <AlertCircle className="w-3 h-3" />
