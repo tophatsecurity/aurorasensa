@@ -1,5 +1,6 @@
 import { useState, useCallback } from "react";
-import { MapContainer, TileLayer } from "react-leaflet";
+import { MapContainer, TileLayer, useMap } from "react-leaflet";
+import { ZoomIn, ZoomOut, Maximize2 } from "lucide-react";
 import "leaflet/dist/leaflet.css";
 
 // Types and utilities
@@ -13,7 +14,6 @@ import { useMapData } from "@/hooks/useMapData";
 import {
   MapHeader,
   MapFilters,
-  MapControls,
   MapLegend,
   MapStatistics,
   MapLoadingOverlay,
@@ -21,6 +21,47 @@ import {
   AircraftMarkers,
   SensorMarkers,
 } from "@/components/map";
+import { Button } from "@/components/ui/button";
+
+// Map controls must be defined as a component used inside MapContainer
+const MapControlsInner = () => {
+  const map = useMap();
+  
+  const handleZoomIn = useCallback(() => map.zoomIn(), [map]);
+  const handleZoomOut = useCallback(() => map.zoomOut(), [map]);
+  const handleRecenter = useCallback(() => {
+    map.setView(MAP_CONFIG.defaultCenter, MAP_CONFIG.defaultZoom);
+  }, [map]);
+
+  return (
+    <div className="absolute top-4 left-4 z-[1000] flex flex-col gap-2">
+      <Button 
+        variant="outline" 
+        size="icon"
+        className="bg-card/90 backdrop-blur border-border/50 hover:bg-card"
+        onClick={handleZoomIn}
+      >
+        <ZoomIn className="w-4 h-4" />
+      </Button>
+      <Button 
+        variant="outline" 
+        size="icon"
+        className="bg-card/90 backdrop-blur border-border/50 hover:bg-card"
+        onClick={handleZoomOut}
+      >
+        <ZoomOut className="w-4 h-4" />
+      </Button>
+      <Button 
+        variant="outline" 
+        size="icon"
+        className="bg-card/90 backdrop-blur border-border/50 hover:bg-card"
+        onClick={handleRecenter}
+      >
+        <Maximize2 className="w-4 h-4" />
+      </Button>
+    </div>
+  );
+};
 
 const MapContent = () => {
   const [filter, setFilter] = useState<FilterType>('all');
@@ -37,10 +78,6 @@ const MapContent = () => {
 
   const handleFilterChange = useCallback((newFilter: FilterType) => {
     setFilter(newFilter);
-  }, []);
-
-  const handleRecenter = useCallback(() => {
-    // Recenter logic handled by FitBounds
   }, []);
 
   const showAircraft = filter === 'all' || filter === 'adsb';
@@ -76,7 +113,7 @@ const MapContent = () => {
             url={MAP_CONFIG.tileUrl}
           />
 
-          <MapControls onRecenter={handleRecenter} />
+          <MapControlsInner />
           
           {allPositions.length > 0 && <FitBounds markers={allPositions} />}
 
