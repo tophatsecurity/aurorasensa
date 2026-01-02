@@ -166,7 +166,7 @@ const DashboardContent = () => {
           <div 
             className="h-64 rounded-lg overflow-hidden relative bg-slate-900 flex items-center justify-center cursor-pointer group"
             style={{
-              backgroundImage: 'url(https://api.mapbox.com/styles/v1/mapbox/dark-v11/static/-74.006,40.7128,8,0/800x400?access_token=pk.placeholder)',
+              backgroundImage: 'url(https://tile.openstreetmap.org/4/8/5.png)',
               backgroundSize: 'cover',
               backgroundPosition: 'center'
             }}
