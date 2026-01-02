@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { useMemo, useEffect } from "react";
 import { MapContainer, TileLayer, Marker, useMap } from "react-leaflet";
 import { Icon, LatLngExpression, divIcon } from "leaflet";
 import { Loader2 } from "lucide-react";
@@ -35,7 +35,7 @@ const icons = {
 function FitBounds({ markers }: { markers: LatLngExpression[] }) {
   const map = useMap();
   
-  useMemo(() => {
+  useEffect(() => {
     if (markers.length > 0) {
       const bounds = L.latLngBounds(markers);
       map.fitBounds(bounds, { padding: [20, 20], maxZoom: 10 });
