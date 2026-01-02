@@ -59,21 +59,17 @@ export const AircraftMarkers = memo(function AircraftMarkers({
   aircraft, 
   visible 
 }: AircraftMarkersProps) {
-  if (!visible) return null;
+  if (!visible || aircraft.length === 0) return null;
 
-  return (
-    <>
-      {aircraft.map((ac) => (
-        <Marker
-          key={ac.hex}
-          position={[ac.lat, ac.lon]}
-          icon={mapIcons.adsb}
-        >
-          <Popup className="custom-popup">
-            <AircraftPopup ac={ac} />
-          </Popup>
-        </Marker>
-      ))}
-    </>
-  );
+  return aircraft.map((ac) => (
+    <Marker
+      key={ac.hex}
+      position={[ac.lat, ac.lon]}
+      icon={mapIcons.adsb}
+    >
+      <Popup className="custom-popup">
+        <AircraftPopup ac={ac} />
+      </Popup>
+    </Marker>
+  ));
 });
