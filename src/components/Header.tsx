@@ -1,7 +1,26 @@
-import { Server, Bell, Settings } from "lucide-react";
+import { Server, Bell, Settings, Wifi, WifiOff, AlertCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+import { useDashboardStats } from "@/hooks/useAuroraApi";
 
 const Header = () => {
+  const { isLoading, isError, dataUpdatedAt } = useDashboardStats();
+  
+  // Determine connection status
+  const getConnectionStatus = () => {
+    if (isLoading) return { status: 'connecting', label: 'Connecting...', color: 'bg-warning', icon: Wifi };
+    if (isError) return { status: 'offline', label: 'Offline', color: 'bg-destructive', icon: WifiOff };
+    return { status: 'online', label: 'Online', color: 'bg-success', icon: Wifi };
+  };
+  
+  const connection = getConnectionStatus();
+  const ConnectionIcon = connection.icon;
+  
+  const lastUpdated = dataUpdatedAt 
+    ? new Date(dataUpdatedAt).toLocaleTimeString() 
+    : 'Never';
+
   return (
     <header className="relative z-10 border-b border-border/50 backdrop-blur-sm">
       <div className="container mx-auto px-6 py-4">
@@ -37,6 +56,42 @@ const Header = () => {
 
           {/* Actions */}
           <div className="flex items-center gap-3">
+            {/* Connection Status Indicator */}
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Badge 
+                    variant="outline" 
+                    className={`gap-1.5 px-2.5 py-1 cursor-default transition-all ${
+                      connection.status === 'online' 
+                        ? 'border-success/50 bg-success/10 text-success' 
+                        : connection.status === 'offline'
+                        ? 'border-destructive/50 bg-destructive/10 text-destructive'
+                        : 'border-warning/50 bg-warning/10 text-warning'
+                    }`}
+                  >
+                    <ConnectionIcon className={`w-3.5 h-3.5 ${connection.status === 'connecting' ? 'animate-pulse' : ''}`} />
+                    <span className="text-xs font-medium">{connection.label}</span>
+                    {connection.status === 'online' && (
+                      <span className={`w-1.5 h-1.5 rounded-full ${connection.color} animate-pulse`} />
+                    )}
+                  </Badge>
+                </TooltipTrigger>
+                <TooltipContent side="bottom" className="text-xs">
+                  <div className="space-y-1">
+                    <p className="font-medium">Aurora API Status</p>
+                    <p className="text-muted-foreground">Last updated: {lastUpdated}</p>
+                    {isError && (
+                      <p className="text-destructive flex items-center gap-1">
+                        <AlertCircle className="w-3 h-3" />
+                        Connection failed
+                      </p>
+                    )}
+                  </div>
+                </TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
+
             <Button variant="ghost" size="icon" className="text-muted-foreground hover:text-foreground">
               <Bell className="w-5 h-5" />
             </Button>
