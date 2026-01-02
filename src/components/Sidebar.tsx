@@ -50,7 +50,7 @@ const menuSections = [
 
 const Sidebar = ({ activeItem, onNavigate }: SidebarProps) => {
   return (
-    <aside className="w-64 min-h-screen bg-sidebar-background border-r border-sidebar-border flex flex-col">
+    <aside className="w-64 min-h-screen bg-sidebar-background border-r border-sidebar-border flex flex-col relative z-20 shrink-0">
       {/* Logo */}
       <div className="p-6 border-b border-sidebar-border">
         <div className="flex items-center gap-3">
