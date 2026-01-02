@@ -1,7 +1,6 @@
-import { memo, Fragment } from "react";
-import { Marker, Popup } from "react-leaflet";
-import { Plane } from "lucide-react";
-import { Badge } from "@/components/ui/badge";
+import { useEffect, useRef } from "react";
+import { useMap } from "react-leaflet";
+import L from "leaflet";
 import { mapIcons } from "@/utils/mapIcons";
 import type { AircraftMarker } from "@/types/map";
 
@@ -10,70 +9,72 @@ interface AircraftMarkersProps {
   visible: boolean;
 }
 
-const AircraftPopup = memo(function AircraftPopup({ ac }: { ac: AircraftMarker }) {
-  return (
-    <div className="p-2 min-w-[200px]">
-      <div className="flex items-center gap-2 mb-3 pb-2 border-b border-border/50">
-        <Plane className="w-5 h-5 text-cyan-400" />
-        <span className="font-bold text-lg">{ac.flight?.trim() || ac.hex}</span>
+function createAircraftPopupContent(ac: AircraftMarker): string {
+  return `
+    <div class="p-2 min-w-[200px]">
+      <div class="flex items-center gap-2 mb-3 pb-2 border-b border-gray-600">
+        <span class="font-bold text-lg">${ac.flight?.trim() || ac.hex}</span>
       </div>
-      <div className="space-y-2 text-sm">
-        <div className="flex justify-between">
-          <span className="text-muted-foreground">Callsign</span>
-          <span className="font-mono">{ac.flight?.trim() || '—'}</span>
+      <div class="space-y-2 text-sm">
+        <div class="flex justify-between">
+          <span class="text-gray-400">Callsign</span>
+          <span class="font-mono">${ac.flight?.trim() || '—'}</span>
         </div>
-        <div className="flex justify-between">
-          <span className="text-muted-foreground">Hex Code</span>
-          <span className="font-mono uppercase">{ac.hex}</span>
+        <div class="flex justify-between">
+          <span class="text-gray-400">Hex Code</span>
+          <span class="font-mono uppercase">${ac.hex}</span>
         </div>
-        <div className="flex justify-between">
-          <span className="text-muted-foreground">Altitude</span>
-          <span className="font-medium">{ac.alt_baro?.toLocaleString() || '—'} ft</span>
+        <div class="flex justify-between">
+          <span class="text-gray-400">Altitude</span>
+          <span class="font-medium">${ac.alt_baro?.toLocaleString() || '—'} ft</span>
         </div>
-        <div className="flex justify-between">
-          <span className="text-muted-foreground">Ground Speed</span>
-          <span className="font-medium">{ac.gs?.toFixed(0) || '—'} kts</span>
+        <div class="flex justify-between">
+          <span class="text-gray-400">Ground Speed</span>
+          <span class="font-medium">${ac.gs?.toFixed(0) || '—'} kts</span>
         </div>
-        <div className="flex justify-between">
-          <span className="text-muted-foreground">Track</span>
-          <span className="font-medium">{ac.track?.toFixed(0) || '—'}°</span>
+        <div class="flex justify-between">
+          <span class="text-gray-400">Track</span>
+          <span class="font-medium">${ac.track?.toFixed(0) || '—'}°</span>
         </div>
-        {ac.squawk && (
-          <div className="flex justify-between">
-            <span className="text-muted-foreground">Squawk</span>
-            <Badge variant="outline" className="font-mono">{ac.squawk}</Badge>
-          </div>
-        )}
-        {ac.rssi && (
-          <div className="flex justify-between">
-            <span className="text-muted-foreground">Signal</span>
-            <span className="font-medium">{ac.rssi.toFixed(1)} dBm</span>
-          </div>
-        )}
+        ${ac.squawk ? `
+        <div class="flex justify-between">
+          <span class="text-gray-400">Squawk</span>
+          <span class="font-mono px-2 py-0.5 bg-gray-700 rounded">${ac.squawk}</span>
+        </div>` : ''}
+        ${ac.rssi ? `
+        <div class="flex justify-between">
+          <span class="text-gray-400">Signal</span>
+          <span class="font-medium">${ac.rssi.toFixed(1)} dBm</span>
+        </div>` : ''}
       </div>
     </div>
-  );
-});
+  `;
+}
 
-export const AircraftMarkers = memo(function AircraftMarkers({ 
-  aircraft, 
-  visible 
-}: AircraftMarkersProps) {
-  if (!visible || aircraft.length === 0) return null;
+export function AircraftMarkers({ aircraft, visible }: AircraftMarkersProps) {
+  const map = useMap();
+  const markersRef = useRef<L.Marker[]>([]);
 
-  return (
-    <Fragment>
-      {aircraft.map((ac) => (
-        <Marker
-          key={ac.hex}
-          position={[ac.lat, ac.lon]}
-          icon={mapIcons.adsb}
-        >
-          <Popup className="custom-popup">
-            <AircraftPopup ac={ac} />
-          </Popup>
-        </Marker>
-      ))}
-    </Fragment>
-  );
-});
+  useEffect(() => {
+    // Clear existing markers
+    markersRef.current.forEach(marker => marker.remove());
+    markersRef.current = [];
+
+    if (!visible || aircraft.length === 0) return;
+
+    // Create new markers
+    aircraft.forEach((ac) => {
+      const marker = L.marker([ac.lat, ac.lon], { icon: mapIcons.adsb })
+        .bindPopup(createAircraftPopupContent(ac))
+        .addTo(map);
+      markersRef.current.push(marker);
+    });
+
+    return () => {
+      markersRef.current.forEach(marker => marker.remove());
+      markersRef.current = [];
+    };
+  }, [map, aircraft, visible]);
+
+  return null;
+}
