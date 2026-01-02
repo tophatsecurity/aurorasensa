@@ -9,17 +9,30 @@ import {
   Activity,
   Database,
   Clock,
-  ExternalLink
+  ExternalLink,
+  Server,
+  Cpu,
+  Wifi,
+  Droplets,
+  Signal,
+  UserPlus,
+  CheckCircle,
+  AlertCircle,
+  Satellite,
+  Plane,
+  Navigation
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import SensorCard from "./SensorCard";
 import SensorCharts from "./SensorCharts";
-import { useComprehensiveStats, useAlerts } from "@/hooks/useAuroraApi";
+import { useComprehensiveStats, useAlerts, useClients, useDashboardStats, Client } from "@/hooks/useAuroraApi";
 
 const DashboardContent = () => {
   const { data: stats, isLoading: statsLoading } = useComprehensiveStats();
+  const { data: dashboardStats, isLoading: dashboardStatsLoading } = useDashboardStats();
   const { data: alerts } = useAlerts();
+  const { data: clients, isLoading: clientsLoading } = useClients();
 
   // Extract key metrics from comprehensive stats
   const global = stats?.global;
@@ -31,6 +44,43 @@ const DashboardContent = () => {
   const activeDevices1h = global?.activity?.last_1_hour?.active_devices_1h ?? 0;
   const readings1h = global?.activity?.last_1_hour?.readings_1h ?? 0;
   const totalSensorTypes = sensorsSummary?.total_sensor_types ?? 0;
+  const totalDevices = devicesSummary?.total_devices ?? 0;
+  const activeAlerts = global?.database?.active_alerts ?? 0;
+
+  // Sensor averages from dashboard stats
+  const avgTemp = dashboardStats?.avg_temp_c ?? dashboardStats?.avg_temp_aht;
+  const avgHumidity = dashboardStats?.avg_humidity;
+  const avgSignal = dashboardStats?.avg_signal_dbm;
+  const avgPower = dashboardStats?.avg_power_w;
+
+  // Devices pending adoption (auto-registered but not manually adopted)
+  const pendingDevices = clients?.filter((c: Client) => c.auto_registered && !c.adopted_at) || [];
+  const adoptedDevices = clients?.filter((c: Client) => c.adopted_at) || [];
+
+  // Format last seen
+  const formatLastSeen = (dateString: string) => {
+    const date = new Date(dateString);
+    const now = new Date();
+    const diffMs = now.getTime() - date.getTime();
+    const diffMins = Math.floor(diffMs / 60000);
+    const diffHours = Math.floor(diffMins / 60);
+
+    if (diffMins < 1) return 'Just now';
+    if (diffMins < 60) return `${diffMins}m ago`;
+    if (diffHours < 24) return `${diffHours}h ago`;
+    return `${Math.floor(diffHours / 24)}d ago`;
+  };
+
+  const getDeviceStatus = (client: Client) => {
+    const date = new Date(client.last_seen);
+    const now = new Date();
+    const diffMs = now.getTime() - date.getTime();
+    const diffMins = Math.floor(diffMs / 60000);
+    
+    if (diffMins < 5) return 'online';
+    if (diffMins < 60) return 'stale';
+    return 'offline';
+  };
 
   return (
     <div className="flex-1 overflow-y-auto p-8">
@@ -47,8 +97,8 @@ const DashboardContent = () => {
         <SensorCard
           title="CONNECTED CLIENTS"
           value={statsLoading ? "..." : totalClients.toString()}
-          subtitle={`${activeDevices1h} sensor types active`}
-          icon={Activity}
+          subtitle={`${activeDevices1h} active in last hour`}
+          icon={Server}
           iconBgColor="bg-green-500/20"
         />
         <SensorCard
@@ -61,7 +111,7 @@ const DashboardContent = () => {
         <SensorCard
           title="SENSOR TYPES"
           value={statsLoading ? "..." : totalSensorTypes.toString()}
-          subtitle="Unique device types"
+          subtitle={`${totalDevices} unique devices`}
           icon={Radio}
           iconBgColor="bg-purple-500/20"
         />
@@ -74,6 +124,68 @@ const DashboardContent = () => {
         />
       </div>
 
+      {/* Sensor Averages */}
+      <div className="mb-8">
+        <h2 className="text-lg font-semibold mb-4 flex items-center gap-2">
+          <Activity className="w-5 h-5 text-primary" />
+          Sensor Averages (All Time)
+        </h2>
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+          <div className="glass-card rounded-xl p-4 border border-border/50">
+            <div className="flex items-center gap-3 mb-2">
+              <div className="w-10 h-10 rounded-lg bg-red-500/20 flex items-center justify-center">
+                <Thermometer className="w-5 h-5 text-red-400" />
+              </div>
+              <div>
+                <p className="text-xs text-muted-foreground">Avg Temperature</p>
+                <p className="text-2xl font-bold text-red-400">
+                  {dashboardStatsLoading ? "..." : avgTemp !== null && avgTemp !== undefined ? `${avgTemp.toFixed(1)}°C` : "—"}
+                </p>
+              </div>
+            </div>
+          </div>
+          <div className="glass-card rounded-xl p-4 border border-border/50">
+            <div className="flex items-center gap-3 mb-2">
+              <div className="w-10 h-10 rounded-lg bg-blue-500/20 flex items-center justify-center">
+                <Droplets className="w-5 h-5 text-blue-400" />
+              </div>
+              <div>
+                <p className="text-xs text-muted-foreground">Avg Humidity</p>
+                <p className="text-2xl font-bold text-blue-400">
+                  {dashboardStatsLoading ? "..." : avgHumidity !== null && avgHumidity !== undefined ? `${avgHumidity.toFixed(1)}%` : "—"}
+                </p>
+              </div>
+            </div>
+          </div>
+          <div className="glass-card rounded-xl p-4 border border-border/50">
+            <div className="flex items-center gap-3 mb-2">
+              <div className="w-10 h-10 rounded-lg bg-purple-500/20 flex items-center justify-center">
+                <Signal className="w-5 h-5 text-purple-400" />
+              </div>
+              <div>
+                <p className="text-xs text-muted-foreground">Avg Signal</p>
+                <p className="text-2xl font-bold text-purple-400">
+                  {dashboardStatsLoading ? "..." : avgSignal !== null && avgSignal !== undefined ? `${avgSignal.toFixed(1)} dBm` : "—"}
+                </p>
+              </div>
+            </div>
+          </div>
+          <div className="glass-card rounded-xl p-4 border border-border/50">
+            <div className="flex items-center gap-3 mb-2">
+              <div className="w-10 h-10 rounded-lg bg-orange-500/20 flex items-center justify-center">
+                <Zap className="w-5 h-5 text-orange-400" />
+              </div>
+              <div>
+                <p className="text-xs text-muted-foreground">Avg Power</p>
+                <p className="text-2xl font-bold text-orange-400">
+                  {dashboardStatsLoading ? "..." : avgPower !== null && avgPower !== undefined ? `${avgPower.toFixed(1)}W` : "—"}
+                </p>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
       {/* Realtime Sensor Charts */}
       <div className="mb-8">
         <h2 className="text-lg font-semibold mb-4 flex items-center gap-2">
@@ -81,6 +193,154 @@ const DashboardContent = () => {
           Sensor Trends (Realtime)
         </h2>
         <SensorCharts />
+      </div>
+
+      {/* Devices to Adopt Section */}
+      {pendingDevices.length > 0 && (
+        <div className="mb-8">
+          <h2 className="text-lg font-semibold mb-4 flex items-center gap-2">
+            <UserPlus className="w-5 h-5 text-warning" />
+            Devices to Adopt ({pendingDevices.length})
+          </h2>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {pendingDevices.slice(0, 6).map((device: Client) => (
+              <div key={device.client_id} className="glass-card rounded-xl p-4 border border-warning/30 bg-warning/5">
+                <div className="flex items-start justify-between mb-3">
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-lg bg-warning/20 flex items-center justify-center">
+                      <Server className="w-5 h-5 text-warning" />
+                    </div>
+                    <div>
+                      <h3 className="font-semibold text-sm">{device.hostname || device.client_id.slice(0, 8)}</h3>
+                      <p className="text-xs text-muted-foreground">{device.ip_address}</p>
+                    </div>
+                  </div>
+                  <Badge variant="outline" className="bg-warning/20 text-warning border-warning/30 text-xs">
+                    Pending
+                  </Badge>
+                </div>
+                <div className="space-y-1 text-xs">
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">Last seen:</span>
+                    <span>{formatLastSeen(device.last_seen)}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">Batches:</span>
+                    <span>{device.batches_received}</span>
+                  </div>
+                  {device.sensors && device.sensors.length > 0 && (
+                    <div className="flex justify-between">
+                      <span className="text-muted-foreground">Sensors:</span>
+                      <span>{device.sensors.length} detected</span>
+                    </div>
+                  )}
+                </div>
+                <Button size="sm" className="w-full mt-3 gap-2 bg-warning/20 text-warning hover:bg-warning/30 border border-warning/30">
+                  <CheckCircle className="w-4 h-4" />
+                  Adopt Device
+                </Button>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* All Connected Devices */}
+      <div className="mb-8">
+        <h2 className="text-lg font-semibold mb-4 flex items-center gap-2">
+          <Cpu className="w-5 h-5 text-primary" />
+          Connected Devices ({adoptedDevices.length})
+        </h2>
+        {clientsLoading ? (
+          <div className="flex items-center justify-center py-8">
+            <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
+          </div>
+        ) : adoptedDevices.length > 0 ? (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {adoptedDevices.slice(0, 6).map((client: Client) => {
+              const status = getDeviceStatus(client);
+              const system = client.metadata?.system;
+              
+              return (
+                <div key={client.client_id} className="glass-card rounded-xl p-4 border border-border/50">
+                  <div className="flex items-start justify-between mb-3">
+                    <div className="flex items-center gap-3">
+                      <div className="w-10 h-10 rounded-lg bg-primary/20 flex items-center justify-center">
+                        <Server className="w-5 h-5 text-primary" />
+                      </div>
+                      <div>
+                        <h3 className="font-semibold text-sm">{client.hostname || client.client_id.slice(0, 8)}</h3>
+                        <p className="text-xs text-muted-foreground">{client.ip_address}</p>
+                      </div>
+                    </div>
+                    <Badge 
+                      variant="outline" 
+                      className={`text-xs ${
+                        status === 'online' 
+                          ? 'bg-success/20 text-success border-success/30' 
+                          : status === 'stale'
+                          ? 'bg-warning/20 text-warning border-warning/30'
+                          : 'bg-destructive/20 text-destructive border-destructive/30'
+                      }`}
+                    >
+                      {status === 'online' ? <CheckCircle className="w-3 h-3 mr-1" /> : <AlertCircle className="w-3 h-3 mr-1" />}
+                      {status}
+                    </Badge>
+                  </div>
+                  
+                  {/* Sensors */}
+                  {client.sensors && client.sensors.length > 0 && (
+                    <div className="flex flex-wrap gap-1 mb-3">
+                      {client.sensors.slice(0, 5).map((sensorId) => (
+                        <Badge key={sensorId} variant="outline" className="text-[10px] px-1.5 py-0">
+                          {sensorId.includes('adsb') && <Plane className="w-2.5 h-2.5 mr-1" />}
+                          {sensorId.includes('gps') && <Navigation className="w-2.5 h-2.5 mr-1" />}
+                          {sensorId.includes('starlink') && <Satellite className="w-2.5 h-2.5 mr-1" />}
+                          {sensorId.includes('lora') && <Radio className="w-2.5 h-2.5 mr-1" />}
+                          {sensorId.includes('wifi') && <Wifi className="w-2.5 h-2.5 mr-1" />}
+                          {sensorId.replace(/_/g, ' ').replace(/\d+$/, '').trim().slice(0, 10)}
+                        </Badge>
+                      ))}
+                      {client.sensors.length > 5 && (
+                        <Badge variant="outline" className="text-[10px] px-1.5 py-0">
+                          +{client.sensors.length - 5} more
+                        </Badge>
+                      )}
+                    </div>
+                  )}
+
+                  <div className="space-y-1 text-xs">
+                    <div className="flex justify-between">
+                      <span className="text-muted-foreground">Batches:</span>
+                      <span>{client.batches_received.toLocaleString()}</span>
+                    </div>
+                    {system?.cpu_percent !== undefined && (
+                      <div className="flex justify-between">
+                        <span className="text-muted-foreground">CPU:</span>
+                        <span>{system.cpu_percent.toFixed(1)}%</span>
+                      </div>
+                    )}
+                    {system?.memory_percent !== undefined && (
+                      <div className="flex justify-between">
+                        <span className="text-muted-foreground">Memory:</span>
+                        <span>{system.memory_percent.toFixed(1)}%</span>
+                      </div>
+                    )}
+                    <div className="flex justify-between">
+                      <span className="text-muted-foreground">Last seen:</span>
+                      <span>{formatLastSeen(client.last_seen)}</span>
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        ) : (
+          <div className="glass-card rounded-xl p-8 text-center border border-border/50">
+            <Server className="w-12 h-12 mx-auto mb-3 text-muted-foreground/50" />
+            <p className="text-muted-foreground">No adopted devices yet</p>
+          </div>
+        )}
       </div>
 
       {/* GPS Position & Device Activity */}
@@ -111,6 +371,10 @@ const DashboardContent = () => {
                   ? new Date(global.time_ranges.latest_reading).toLocaleString() 
                   : "—"}
               </span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-muted-foreground">Active Alerts:</span>
+              <span className="font-medium">{activeAlerts}</span>
             </div>
           </div>
         </SensorCard>
@@ -192,7 +456,7 @@ const DashboardContent = () => {
         <div className="mb-8">
           <h2 className="text-lg font-semibold mb-4 flex items-center gap-2">
             <span className="text-warning">⚠</span>
-            Recent Alerts
+            Recent Alerts ({alerts.length})
           </h2>
           <div className="space-y-2">
             {alerts.slice(0, 5).map((alert) => (
