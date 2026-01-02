@@ -40,26 +40,104 @@ export function useMapData() {
     [aircraft]
   );
   
-  // Filter and prepare sensor markers
-  const sensorMarkers = useMemo<SensorMarker[]>(() => 
-    (sensors?.filter(s => s.location?.lat && s.location?.lng) || []) as SensorMarker[], 
-    [sensors]
-  );
+  // Build sensor markers from sensors API and clients with GPS
+  const sensorMarkers = useMemo<SensorMarker[]>(() => {
+    const markers: SensorMarker[] = [];
+    
+    // Add sensors that have location data
+    if (sensors) {
+      sensors.forEach(s => {
+        if (s.location?.lat && s.location?.lng) {
+          markers.push(s as SensorMarker);
+        }
+      });
+    }
+    
+    // Add clients as sensors based on their enabled sensor types
+    if (clients) {
+      clients.forEach(client => {
+        const config = client.metadata?.config?.sensors;
+        if (!config) return;
+        
+        // Check for GPS-enabled client and create marker
+        const gps = config.gps;
+        if (gps?.enabled) {
+          // Use GPS coordinates if available, otherwise use a position based on client_id hash
+          const hash = client.client_id.split('').reduce((a, b) => a + b.charCodeAt(0), 0);
+          const gpsLat = typeof (gps as Record<string, unknown>).lat === 'number' ? (gps as Record<string, unknown>).lat as number : null;
+          const gpsLng = typeof (gps as Record<string, unknown>).lng === 'number' ? (gps as Record<string, unknown>).lng as number : null;
+          const lat = gpsLat ?? (40.7128 + (hash % 100) * 0.001);
+          const lng = gpsLng ?? (-74.006 + ((hash * 7) % 100) * 0.001);
+          
+          markers.push({
+            id: `${client.client_id}-gps`,
+            name: `${client.hostname} GPS`,
+            type: 'gps',
+            value: 0,
+            unit: '',
+            status: client.status || 'active',
+            lastUpdate: client.last_seen,
+            location: { lat, lng }
+          });
+        }
+        
+        // Add LoRa sensors
+        const lora = config.lora;
+        if (lora?.enabled) {
+          const hash = client.client_id.split('').reduce((a, b) => a + b.charCodeAt(0), 0);
+          markers.push({
+            id: `${client.client_id}-lora`,
+            name: `${client.hostname} LoRa`,
+            type: 'lora',
+            value: 0,
+            unit: 'dBm',
+            status: client.status || 'active',
+            lastUpdate: client.last_seen,
+            location: { 
+              lat: 40.7128 + (hash % 100) * 0.0015,
+              lng: -74.006 + ((hash * 3) % 100) * 0.0015
+            }
+          });
+        }
+        
+        // Add Starlink sensors
+        const starlink = config.starlink;
+        if (starlink?.enabled) {
+          const hash = client.client_id.split('').reduce((a, b) => a + b.charCodeAt(0), 0);
+          markers.push({
+            id: `${client.client_id}-starlink`,
+            name: `${client.hostname} Starlink`,
+            type: 'starlink',
+            value: 0,
+            unit: 'Mbps',
+            status: client.status || 'active',
+            lastUpdate: client.last_seen,
+            location: { 
+              lat: 40.7128 + (hash % 100) * 0.002,
+              lng: -74.006 + ((hash * 5) % 100) * 0.002
+            }
+          });
+        }
+      });
+    }
+    
+    return markers;
+  }, [sensors, clients]);
 
-  // Get client locations from metadata if available
+  // Get client markers for the clients filter
   const clientMarkers = useMemo<ClientMarker[]>(() => {
     if (!clients) return [];
-    return clients.filter(c => {
-      const gps = c.metadata?.config?.sensors?.gps;
-      return gps && typeof gps === 'object';
-    }).map(c => ({
-      client_id: c.client_id,
-      hostname: c.hostname,
-      location: { 
-        lat: 40.7128 + Math.random() * 0.1, 
-        lng: -74.006 + Math.random() * 0.1 
-      }
-    }));
+    return clients.map(c => {
+      const hash = c.client_id.split('').reduce((a, b) => a + b.charCodeAt(0), 0);
+      return {
+        client_id: c.client_id,
+        hostname: c.hostname,
+        location: { 
+          lat: 40.7128 + (hash % 100) * 0.001, 
+          lng: -74.006 + ((hash * 7) % 100) * 0.001 
+        }
+      };
+    });
   }, [clients]);
 
   // All marker positions for bounds fitting
