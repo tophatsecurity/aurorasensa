@@ -31,6 +31,7 @@ import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Client } from "@/hooks/useAuroraApi";
+import { formatDateTime } from "@/utils/dateUtils";
 
 interface DeviceDetailDialogProps {
   client: Client | null;
@@ -235,8 +236,8 @@ const SensorCard = ({ sensorId, config, type, onViewAll, isExpanded }: SensorCar
   );
 };
 
-const formatDate = (dateString: string) => {
-  return new Date(dateString).toLocaleString();
+const formatDate = (dateString: string | null | undefined): string => {
+  return formatDateTime(dateString, "—");
 };
 
 const DeviceDetailDialog = ({ client, open, onOpenChange }: DeviceDetailDialogProps) => {

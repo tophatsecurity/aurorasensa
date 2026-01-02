@@ -27,6 +27,7 @@ import { Button } from "@/components/ui/button";
 import SensorCard from "./SensorCard";
 import SensorCharts from "./SensorCharts";
 import { useComprehensiveStats, useAlerts, useClients, useDashboardStats, Client } from "@/hooks/useAuroraApi";
+import { formatLastSeen, formatDate, formatDateTime, getDeviceStatusFromLastSeen } from "@/utils/dateUtils";
 
 const DashboardContent = () => {
   const { data: stats, isLoading: statsLoading } = useComprehensiveStats();
@@ -56,31 +57,6 @@ const DashboardContent = () => {
   // Devices pending adoption (auto-registered but not manually adopted)
   const pendingDevices = clients?.filter((c: Client) => c.auto_registered && !c.adopted_at) || [];
   const adoptedDevices = clients?.filter((c: Client) => c.adopted_at) || [];
-
-  // Format last seen
-  const formatLastSeen = (dateString: string) => {
-    const date = new Date(dateString);
-    const now = new Date();
-    const diffMs = now.getTime() - date.getTime();
-    const diffMins = Math.floor(diffMs / 60000);
-    const diffHours = Math.floor(diffMins / 60);
-
-    if (diffMins < 1) return 'Just now';
-    if (diffMins < 60) return `${diffMins}m ago`;
-    if (diffHours < 24) return `${diffHours}h ago`;
-    return `${Math.floor(diffHours / 24)}d ago`;
-  };
-
-  const getDeviceStatus = (client: Client) => {
-    const date = new Date(client.last_seen);
-    const now = new Date();
-    const diffMs = now.getTime() - date.getTime();
-    const diffMins = Math.floor(diffMs / 60000);
-    
-    if (diffMins < 5) return 'online';
-    if (diffMins < 60) return 'stale';
-    return 'offline';
-  };
 
   return (
     <div className="flex-1 overflow-y-auto p-8">
@@ -258,7 +234,7 @@ const DashboardContent = () => {
         ) : adoptedDevices.length > 0 ? (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
             {adoptedDevices.slice(0, 6).map((client: Client) => {
-              const status = getDeviceStatus(client);
+              const status = getDeviceStatusFromLastSeen(client.last_seen);
               const system = client.metadata?.system;
               
               return (
@@ -359,17 +335,13 @@ const DashboardContent = () => {
             <div className="flex justify-between">
               <span className="text-muted-foreground">Earliest Reading:</span>
               <span className="font-medium text-xs">
-                {global?.time_ranges?.earliest_reading 
-                  ? new Date(global.time_ranges.earliest_reading).toLocaleDateString() 
-                  : "—"}
+                {formatDate(global?.time_ranges?.earliest_reading)}
               </span>
             </div>
             <div className="flex justify-between">
               <span className="text-muted-foreground">Latest Reading:</span>
               <span className="font-medium text-xs">
-                {global?.time_ranges?.latest_reading 
-                  ? new Date(global.time_ranges.latest_reading).toLocaleString() 
-                  : "—"}
+                {formatDateTime(global?.time_ranges?.latest_reading)}
               </span>
             </div>
             <div className="flex justify-between">

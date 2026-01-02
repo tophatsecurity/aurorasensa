@@ -3,6 +3,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { useComprehensiveStats } from "@/hooks/useAuroraApi";
+import { formatTime } from "@/utils/dateUtils";
 
 const Header = () => {
   const { isLoading, isError, data, dataUpdatedAt } = useComprehensiveStats();
@@ -18,7 +19,7 @@ const Header = () => {
   const ConnectionIcon = connection.icon;
   
   const lastUpdated = dataUpdatedAt 
-    ? new Date(dataUpdatedAt).toLocaleTimeString() 
+    ? formatTime(new Date(dataUpdatedAt).toISOString()) 
     : 'Never';
   
   const activeDevices = data?.devices_summary?.devices?.filter(d => d.status === 'online').length ?? 0;

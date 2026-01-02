@@ -6,6 +6,7 @@ import "leaflet/dist/leaflet.css";
 // Types and utilities
 import { FilterType, MAP_CONFIG } from "@/types/map";
 import { mapIcons, IconType } from "@/utils/mapIcons";
+import { formatDateTime } from "@/utils/dateUtils";
 
 // Custom hook for map data
 import { useMapData } from "@/hooks/useMapData";
@@ -161,7 +162,7 @@ const MapContent = () => {
             <div><span class="text-gray-500">Type:</span> ${sensor.type}</div>
             <div><span class="text-gray-500">Value:</span> ${sensor.value} ${sensor.unit}</div>
             <div><span class="text-gray-500">Status:</span> ${sensor.status}</div>
-            <div><span class="text-gray-500">Updated:</span> ${new Date(sensor.lastUpdate).toLocaleString()}</div>
+            <div><span class="text-gray-500">Updated:</span> ${formatDateTime(sensor.lastUpdate)}</div>
           </div>
         </div>
       `;
