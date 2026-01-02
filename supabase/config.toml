@@ -1,1 +1,4 @@
 project_id = "hewwtgcrupegpcwfujln"
+
+[functions.aurora-proxy]
+verify_jwt = false
