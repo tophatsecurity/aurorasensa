@@ -1,27 +1,20 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-
-const AURORA_API_URL = "http://aurora.tophatsecurity.com:9151";
+import { supabase } from "@/integrations/supabase/client";
 
 interface AuroraProxyResponse {
   error?: string;
 }
 
 async function callAuroraApi<T>(path: string, method: string = "GET", body?: unknown): Promise<T> {
-  const response = await fetch(`${AURORA_API_URL}${path}`, {
-    method,
-    headers: {
-      "Content-Type": "application/json",
-    },
-    body: body ? JSON.stringify(body) : undefined,
+  const { data, error } = await supabase.functions.invoke("aurora-proxy", {
+    body: { path, method, body },
   });
 
-  if (!response.ok) {
-    throw new Error(`Aurora API error: ${response.status}`);
+  if (error) {
+    throw new Error(`Aurora API error: ${error.message}`);
   }
 
-  const data = await response.json();
-  
-  if ((data as AuroraProxyResponse).error) {
+  if ((data as AuroraProxyResponse)?.error) {
     throw new Error((data as AuroraProxyResponse).error);
   }
 
