@@ -1,3 +1,4 @@
+import { useMemo } from "react";
 import { 
   Thermometer, 
   Radio, 
@@ -6,6 +7,7 @@ import {
   MapPin,
   Loader2,
   TrendingUp,
+  TrendingDown,
   Activity,
   Database,
   Clock,
@@ -20,18 +22,44 @@ import {
   AlertCircle,
   Satellite,
   Plane,
-  Navigation
+  Navigation,
+  ArrowUp,
+  ArrowDown,
+  Minus
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import SensorCard from "./SensorCard";
 import SensorCharts from "./SensorCharts";
-import { useComprehensiveStats, useAlerts, useClients, useDashboardStats, Client } from "@/hooks/useAuroraApi";
+import { useComprehensiveStats, useAlerts, useClients, useDashboardStats, useDashboardTimeseries, Client } from "@/hooks/useAuroraApi";
 import { formatLastSeen, formatDate, formatDateTime, getDeviceStatusFromLastSeen } from "@/utils/dateUtils";
+
+interface SensorStats {
+  min: number | null;
+  max: number | null;
+  avg: number | null;
+  current: number | null;
+  trend: 'up' | 'down' | 'stable';
+}
+
+const calcStats = (data: { value: number }[] | undefined): SensorStats => {
+  if (!data || data.length === 0) {
+    return { min: null, max: null, avg: null, current: null, trend: 'stable' };
+  }
+  const values = data.map(d => d.value);
+  const min = Math.min(...values);
+  const max = Math.max(...values);
+  const avg = values.reduce((a, b) => a + b, 0) / values.length;
+  const current = values[values.length - 1];
+  const previous = values.length > 1 ? values[values.length - 2] : current;
+  const trend = current > previous + 0.1 ? 'up' : current < previous - 0.1 ? 'down' : 'stable';
+  return { min, max, avg, current, trend };
+};
 
 const DashboardContent = () => {
   const { data: stats, isLoading: statsLoading } = useComprehensiveStats();
   const { data: dashboardStats, isLoading: dashboardStatsLoading } = useDashboardStats();
+  const { data: timeseries, isLoading: timeseriesLoading } = useDashboardTimeseries(24);
   const { data: alerts } = useAlerts();
   const { data: clients, isLoading: clientsLoading } = useClients();
 
@@ -54,10 +82,15 @@ const DashboardContent = () => {
   const avgSignal = dashboardStats?.avg_signal_dbm;
   const avgPower = dashboardStats?.avg_power_w;
 
+  // 24h sensor statistics
+  const tempStats = useMemo(() => calcStats(timeseries?.temperature), [timeseries?.temperature]);
+  const humidityStats = useMemo(() => calcStats(timeseries?.humidity), [timeseries?.humidity]);
+  const signalStats = useMemo(() => calcStats(timeseries?.signal), [timeseries?.signal]);
+  const powerStats = useMemo(() => calcStats(timeseries?.power), [timeseries?.power]);
+
   // Devices pending adoption (auto-registered but not manually adopted)
   const pendingDevices = clients?.filter((c: Client) => c.auto_registered && !c.adopted_at) || [];
   const adoptedDevices = clients?.filter((c: Client) => c.adopted_at) || [];
-
   return (
     <div className="flex-1 overflow-y-auto p-8">
       {/* Header */}
@@ -219,6 +252,140 @@ const DashboardContent = () => {
               )}
             </div>
           ))}
+        </div>
+      </div>
+
+      {/* 24h Sensor Comparison */}
+      <div className="mb-8">
+        <h2 className="text-lg font-semibold mb-4 flex items-center gap-2">
+          <BarChart3 className="w-5 h-5 text-primary" />
+          24-Hour Sensor Comparison
+          {timeseriesLoading && <Loader2 className="w-4 h-4 animate-spin text-muted-foreground" />}
+        </h2>
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+          {/* Temperature */}
+          <div className="glass-card rounded-xl p-4 border border-border/50">
+            <div className="flex items-center gap-2 mb-3">
+              <div className="w-8 h-8 rounded-lg bg-red-500/20 flex items-center justify-center">
+                <Thermometer className="w-4 h-4 text-red-400" />
+              </div>
+              <span className="font-medium text-sm">Temperature</span>
+              {tempStats.trend === 'up' && <TrendingUp className="w-4 h-4 text-success ml-auto" />}
+              {tempStats.trend === 'down' && <TrendingDown className="w-4 h-4 text-destructive ml-auto" />}
+              {tempStats.trend === 'stable' && <Minus className="w-4 h-4 text-muted-foreground ml-auto" />}
+            </div>
+            <div className="space-y-2">
+              <div className="flex justify-between items-center">
+                <span className="text-xs text-muted-foreground flex items-center gap-1">
+                  <ArrowDown className="w-3 h-3 text-blue-400" /> Min
+                </span>
+                <span className="font-mono text-sm">{tempStats.min !== null ? `${tempStats.min.toFixed(1)}°C` : '—'}</span>
+              </div>
+              <div className="flex justify-between items-center">
+                <span className="text-xs text-muted-foreground flex items-center gap-1">
+                  <ArrowUp className="w-3 h-3 text-red-400" /> Max
+                </span>
+                <span className="font-mono text-sm">{tempStats.max !== null ? `${tempStats.max.toFixed(1)}°C` : '—'}</span>
+              </div>
+              <div className="flex justify-between items-center border-t border-border/50 pt-2">
+                <span className="text-xs text-muted-foreground">Avg</span>
+                <span className="font-mono text-sm font-bold text-red-400">{tempStats.avg !== null ? `${tempStats.avg.toFixed(1)}°C` : '—'}</span>
+              </div>
+            </div>
+          </div>
+
+          {/* Humidity */}
+          <div className="glass-card rounded-xl p-4 border border-border/50">
+            <div className="flex items-center gap-2 mb-3">
+              <div className="w-8 h-8 rounded-lg bg-blue-500/20 flex items-center justify-center">
+                <Droplets className="w-4 h-4 text-blue-400" />
+              </div>
+              <span className="font-medium text-sm">Humidity</span>
+              {humidityStats.trend === 'up' && <TrendingUp className="w-4 h-4 text-success ml-auto" />}
+              {humidityStats.trend === 'down' && <TrendingDown className="w-4 h-4 text-destructive ml-auto" />}
+              {humidityStats.trend === 'stable' && <Minus className="w-4 h-4 text-muted-foreground ml-auto" />}
+            </div>
+            <div className="space-y-2">
+              <div className="flex justify-between items-center">
+                <span className="text-xs text-muted-foreground flex items-center gap-1">
+                  <ArrowDown className="w-3 h-3 text-blue-400" /> Min
+                </span>
+                <span className="font-mono text-sm">{humidityStats.min !== null ? `${humidityStats.min.toFixed(1)}%` : '—'}</span>
+              </div>
+              <div className="flex justify-between items-center">
+                <span className="text-xs text-muted-foreground flex items-center gap-1">
+                  <ArrowUp className="w-3 h-3 text-red-400" /> Max
+                </span>
+                <span className="font-mono text-sm">{humidityStats.max !== null ? `${humidityStats.max.toFixed(1)}%` : '—'}</span>
+              </div>
+              <div className="flex justify-between items-center border-t border-border/50 pt-2">
+                <span className="text-xs text-muted-foreground">Avg</span>
+                <span className="font-mono text-sm font-bold text-blue-400">{humidityStats.avg !== null ? `${humidityStats.avg.toFixed(1)}%` : '—'}</span>
+              </div>
+            </div>
+          </div>
+
+          {/* Signal */}
+          <div className="glass-card rounded-xl p-4 border border-border/50">
+            <div className="flex items-center gap-2 mb-3">
+              <div className="w-8 h-8 rounded-lg bg-purple-500/20 flex items-center justify-center">
+                <Signal className="w-4 h-4 text-purple-400" />
+              </div>
+              <span className="font-medium text-sm">Signal</span>
+              {signalStats.trend === 'up' && <TrendingUp className="w-4 h-4 text-success ml-auto" />}
+              {signalStats.trend === 'down' && <TrendingDown className="w-4 h-4 text-destructive ml-auto" />}
+              {signalStats.trend === 'stable' && <Minus className="w-4 h-4 text-muted-foreground ml-auto" />}
+            </div>
+            <div className="space-y-2">
+              <div className="flex justify-between items-center">
+                <span className="text-xs text-muted-foreground flex items-center gap-1">
+                  <ArrowDown className="w-3 h-3 text-blue-400" /> Min
+                </span>
+                <span className="font-mono text-sm">{signalStats.min !== null ? `${signalStats.min.toFixed(0)} dBm` : '—'}</span>
+              </div>
+              <div className="flex justify-between items-center">
+                <span className="text-xs text-muted-foreground flex items-center gap-1">
+                  <ArrowUp className="w-3 h-3 text-red-400" /> Max
+                </span>
+                <span className="font-mono text-sm">{signalStats.max !== null ? `${signalStats.max.toFixed(0)} dBm` : '—'}</span>
+              </div>
+              <div className="flex justify-between items-center border-t border-border/50 pt-2">
+                <span className="text-xs text-muted-foreground">Avg</span>
+                <span className="font-mono text-sm font-bold text-purple-400">{signalStats.avg !== null ? `${signalStats.avg.toFixed(0)} dBm` : '—'}</span>
+              </div>
+            </div>
+          </div>
+
+          {/* Power */}
+          <div className="glass-card rounded-xl p-4 border border-border/50">
+            <div className="flex items-center gap-2 mb-3">
+              <div className="w-8 h-8 rounded-lg bg-orange-500/20 flex items-center justify-center">
+                <Zap className="w-4 h-4 text-orange-400" />
+              </div>
+              <span className="font-medium text-sm">Power</span>
+              {powerStats.trend === 'up' && <TrendingUp className="w-4 h-4 text-success ml-auto" />}
+              {powerStats.trend === 'down' && <TrendingDown className="w-4 h-4 text-destructive ml-auto" />}
+              {powerStats.trend === 'stable' && <Minus className="w-4 h-4 text-muted-foreground ml-auto" />}
+            </div>
+            <div className="space-y-2">
+              <div className="flex justify-between items-center">
+                <span className="text-xs text-muted-foreground flex items-center gap-1">
+                  <ArrowDown className="w-3 h-3 text-blue-400" /> Min
+                </span>
+                <span className="font-mono text-sm">{powerStats.min !== null ? `${powerStats.min.toFixed(1)}W` : '—'}</span>
+              </div>
+              <div className="flex justify-between items-center">
+                <span className="text-xs text-muted-foreground flex items-center gap-1">
+                  <ArrowUp className="w-3 h-3 text-red-400" /> Max
+                </span>
+                <span className="font-mono text-sm">{powerStats.max !== null ? `${powerStats.max.toFixed(1)}W` : '—'}</span>
+              </div>
+              <div className="flex justify-between items-center border-t border-border/50 pt-2">
+                <span className="text-xs text-muted-foreground">Avg</span>
+                <span className="font-mono text-sm font-bold text-orange-400">{powerStats.avg !== null ? `${powerStats.avg.toFixed(1)}W` : '—'}</span>
+              </div>
+            </div>
+          </div>
         </div>
       </div>
 
