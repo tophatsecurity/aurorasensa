@@ -1,20 +1,21 @@
-import { Download, FileJson, FileSpreadsheet, FileText, Calendar, Filter } from "lucide-react";
+import { Download, FileJson, FileSpreadsheet, FileText, Calendar, Filter, Loader2 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-
-const sensors = [
-  { id: "bme280", name: "BME280 - Temperature/Humidity" },
-  { id: "gps", name: "GPS Module" },
-  { id: "adsb", name: "ADS-B Receiver" },
-  { id: "ina219", name: "INA219 - Power Monitor" },
-  { id: "lora", name: "LoRa Transceiver" },
-  { id: "starlink", name: "Starlink Terminal" },
-];
+import { useComprehensiveStats } from "@/hooks/useAuroraApi";
 
 const ExportContent = () => {
+  const { data: stats, isLoading } = useComprehensiveStats();
+
+  // Get real sensor types from API
+  const sensorTypes = stats?.sensors_summary?.sensor_types || [];
+  const totalReadings = stats?.global?.database?.total_readings ?? 0;
+
+  // Estimate export size based on readings
+  const estimatedSize = (totalReadings * 0.0001).toFixed(1); // ~100 bytes per reading
+
   return (
     <div className="flex-1 p-6 overflow-y-auto">
       <div className="mb-6">
@@ -28,18 +29,31 @@ const ExportContent = () => {
             <CardHeader>
               <CardTitle className="text-lg flex items-center gap-2">
                 <Filter className="w-5 h-5" />
-                Select Sensors
+                Select Sensors ({sensorTypes.length} available)
               </CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="grid grid-cols-2 gap-4">
-                {sensors.map((sensor) => (
-                  <div key={sensor.id} className="flex items-center space-x-2">
-                    <Checkbox id={sensor.id} defaultChecked />
-                    <Label htmlFor={sensor.id} className="text-sm cursor-pointer">{sensor.name}</Label>
-                  </div>
-                ))}
-              </div>
+              {isLoading ? (
+                <div className="flex items-center justify-center py-8">
+                  <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
+                </div>
+              ) : sensorTypes.length > 0 ? (
+                <div className="grid grid-cols-2 gap-4">
+                  {sensorTypes.map((sensor) => (
+                    <div key={sensor.device_type} className="flex items-center space-x-2">
+                      <Checkbox id={sensor.device_type} defaultChecked />
+                      <Label htmlFor={sensor.device_type} className="text-sm cursor-pointer capitalize">
+                        {sensor.device_type.replace(/_/g, ' ')}
+                        <span className="text-xs text-muted-foreground ml-2">
+                          ({sensor.total_readings.toLocaleString()} readings)
+                        </span>
+                      </Label>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <p className="text-muted-foreground text-center py-4">No sensors available</p>
+              )}
             </CardContent>
           </Card>
 
@@ -64,7 +78,7 @@ const ExportContent = () => {
                       <SelectItem value="24h">Last 24 Hours</SelectItem>
                       <SelectItem value="7d">Last 7 Days</SelectItem>
                       <SelectItem value="30d">Last 30 Days</SelectItem>
-                      <SelectItem value="custom">Custom Range</SelectItem>
+                      <SelectItem value="all">All Data ({stats?.global?.time_ranges?.data_span_days?.toFixed(0) ?? '—'} days)</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
@@ -83,6 +97,11 @@ const ExportContent = () => {
                   </Select>
                 </div>
               </div>
+              {stats?.global?.time_ranges && (
+                <div className="mt-4 p-3 rounded-lg bg-muted/30 text-xs text-muted-foreground">
+                  <p>Data available from {new Date(stats.global.time_ranges.earliest_reading).toLocaleDateString()} to {new Date(stats.global.time_ranges.latest_reading).toLocaleDateString()}</p>
+                </div>
+              )}
             </CardContent>
           </Card>
         </div>
@@ -127,8 +146,8 @@ const ExportContent = () => {
             <CardContent className="p-4">
               <div className="text-center mb-4">
                 <p className="text-sm text-muted-foreground">Estimated Export Size</p>
-                <p className="text-2xl font-bold">~4.2 MB</p>
-                <p className="text-xs text-muted-foreground">~52,000 records</p>
+                <p className="text-2xl font-bold">~{estimatedSize} MB</p>
+                <p className="text-xs text-muted-foreground">~{totalReadings.toLocaleString()} records</p>
               </div>
               <Button className="w-full gap-2">
                 <Download className="w-4 h-4" />

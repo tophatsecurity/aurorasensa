@@ -388,3 +388,47 @@ export function usePowerStats() {
     retry: 2,
   });
 }
+
+// Latest sensor readings hook
+export interface LatestReading {
+  device_id: string;
+  device_type: string;
+  timestamp: string;
+  data: Record<string, unknown>;
+}
+
+interface LatestReadingsResponse {
+  count: number;
+  readings: LatestReading[];
+}
+
+export function useLatestReadings() {
+  return useQuery({
+    queryKey: ["aurora", "readings", "latest"],
+    queryFn: async () => {
+      const response = await callAuroraApi<LatestReadingsResponse>("/api/readings/latest");
+      return response.readings || [];
+    },
+    refetchInterval: 10000,
+    retry: 2,
+  });
+}
+
+// Starlink stats hook
+export interface StarlinkStats {
+  uptime_seconds?: number;
+  downlink_throughput_bps?: number;
+  uplink_throughput_bps?: number;
+  pop_ping_latency_ms?: number;
+  snr?: number;
+  obstruction_percent_time?: number;
+}
+
+export function useStarlinkStats() {
+  return useQuery({
+    queryKey: ["aurora", "starlink", "stats"],
+    queryFn: () => callAuroraApi<StarlinkStats>("/api/starlink/stats"),
+    refetchInterval: 15000,
+    retry: 2,
+  });
+}

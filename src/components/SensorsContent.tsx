@@ -15,11 +15,14 @@ import {
   Bluetooth,
   Plane,
   Satellite,
-  Monitor
+  Monitor,
+  ArrowUp,
+  ArrowDown,
+  Activity
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { useComprehensiveStats, useDashboardTimeseries } from "@/hooks/useAuroraApi";
+import { useComprehensiveStats, useDashboardTimeseries, useDashboardStats, useClients } from "@/hooks/useAuroraApi";
 import { useQueryClient } from "@tanstack/react-query";
 import {
   AreaChart,
@@ -199,9 +202,28 @@ const getSensorColor = (deviceType: string) => {
   }
 };
 
+interface SensorStats {
+  min: number | null;
+  max: number | null;
+  avg: number | null;
+}
+
+const calcStats = (data: { value: number }[] | undefined): SensorStats => {
+  if (!data || data.length === 0) {
+    return { min: null, max: null, avg: null };
+  }
+  const values = data.map(d => d.value);
+  const min = Math.min(...values);
+  const max = Math.max(...values);
+  const avg = values.reduce((a, b) => a + b, 0) / values.length;
+  return { min, max, avg };
+};
+
 const SensorsContent = () => {
   const { data: stats, isLoading: statsLoading } = useComprehensiveStats();
+  const { data: dashboardStats, isLoading: dashboardStatsLoading } = useDashboardStats();
   const { data: timeseries, isLoading: timeseriesLoading } = useDashboardTimeseries(24);
+  const { data: clients } = useClients();
   const queryClient = useQueryClient();
 
   const handleRefresh = () => {
@@ -215,6 +237,18 @@ const SensorsContent = () => {
   const totalReadings = global?.database?.total_readings ?? 0;
   const totalDevices = global?.devices?.total_unique_devices ?? 0;
   const activeDevices1h = global?.activity?.last_1_hour?.active_devices_1h ?? 0;
+
+  // Live sensor values
+  const avgTemp = dashboardStats?.avg_temp_c ?? dashboardStats?.avg_temp_aht;
+  const avgHumidity = dashboardStats?.avg_humidity;
+  const avgSignal = dashboardStats?.avg_signal_dbm;
+  const avgPower = dashboardStats?.avg_power_w;
+
+  // Calculate 24h stats
+  const tempStats = useMemo(() => calcStats(timeseries?.temperature), [timeseries?.temperature]);
+  const humidityStats = useMemo(() => calcStats(timeseries?.humidity), [timeseries?.humidity]);
+  const signalStats = useMemo(() => calcStats(timeseries?.signal), [timeseries?.signal]);
+  const powerStats = useMemo(() => calcStats(timeseries?.power), [timeseries?.power]);
 
   const formatData = (points: { timestamp: string; value: number }[] | undefined) => {
     if (!points || points.length === 0) return [];
@@ -232,6 +266,9 @@ const SensorsContent = () => {
   const humidityData = useMemo(() => formatData(timeseries?.humidity), [timeseries?.humidity]);
   const signalData = useMemo(() => formatData(timeseries?.signal), [timeseries?.signal]);
   const powerData = useMemo(() => formatData(timeseries?.power), [timeseries?.power]);
+
+  // Count sensors from clients
+  const totalSensors = clients?.reduce((acc, client) => acc + (client.sensors?.length || 0), 0) || 0;
 
   return (
     <div className="flex-1 overflow-y-auto p-8">
@@ -276,7 +313,7 @@ const SensorsContent = () => {
           <StatCard
             title="Sensor Types"
             value={statsLoading ? "..." : sensorTypes.length.toString()}
-            subtitle="Unique device types"
+            subtitle={`${totalSensors} total sensors`}
             icon={<Radio className="w-6 h-6" style={{ color: '#f97316' }} />}
             color="#f97316"
           />
@@ -287,6 +324,103 @@ const SensorsContent = () => {
             icon={<TrendingUp className="w-6 h-6" style={{ color: '#22c55e' }} />}
             color="#22c55e"
           />
+        </div>
+      </div>
+
+      {/* Live Sensor Values with 24h Range */}
+      <div className="mb-8">
+        <h2 className="text-lg font-semibold mb-4 flex items-center gap-2">
+          <Activity className="w-5 h-5 text-primary" />
+          Live Sensor Values (with 24h range)
+        </h2>
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+          <div className="glass-card rounded-xl p-4 border border-border/50">
+            <div className="flex items-center gap-2 mb-3">
+              <div className="w-8 h-8 rounded-lg bg-red-500/20 flex items-center justify-center">
+                <Thermometer className="w-4 h-4 text-red-400" />
+              </div>
+              <span className="font-medium text-sm">Temperature</span>
+            </div>
+            <p className="text-2xl font-bold text-red-400 mb-2">
+              {dashboardStatsLoading ? "..." : avgTemp !== null && avgTemp !== undefined ? `${avgTemp.toFixed(1)}°C` : "—"}
+            </p>
+            <div className="space-y-1 text-xs">
+              <div className="flex justify-between">
+                <span className="text-muted-foreground flex items-center gap-1"><ArrowDown className="w-3 h-3 text-blue-400" />Min</span>
+                <span>{tempStats.min !== null ? `${tempStats.min.toFixed(1)}°C` : '—'}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-muted-foreground flex items-center gap-1"><ArrowUp className="w-3 h-3 text-red-400" />Max</span>
+                <span>{tempStats.max !== null ? `${tempStats.max.toFixed(1)}°C` : '—'}</span>
+              </div>
+            </div>
+          </div>
+
+          <div className="glass-card rounded-xl p-4 border border-border/50">
+            <div className="flex items-center gap-2 mb-3">
+              <div className="w-8 h-8 rounded-lg bg-blue-500/20 flex items-center justify-center">
+                <Droplets className="w-4 h-4 text-blue-400" />
+              </div>
+              <span className="font-medium text-sm">Humidity</span>
+            </div>
+            <p className="text-2xl font-bold text-blue-400 mb-2">
+              {dashboardStatsLoading ? "..." : avgHumidity !== null && avgHumidity !== undefined ? `${avgHumidity.toFixed(1)}%` : "—"}
+            </p>
+            <div className="space-y-1 text-xs">
+              <div className="flex justify-between">
+                <span className="text-muted-foreground flex items-center gap-1"><ArrowDown className="w-3 h-3 text-blue-400" />Min</span>
+                <span>{humidityStats.min !== null ? `${humidityStats.min.toFixed(1)}%` : '—'}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-muted-foreground flex items-center gap-1"><ArrowUp className="w-3 h-3 text-red-400" />Max</span>
+                <span>{humidityStats.max !== null ? `${humidityStats.max.toFixed(1)}%` : '—'}</span>
+              </div>
+            </div>
+          </div>
+
+          <div className="glass-card rounded-xl p-4 border border-border/50">
+            <div className="flex items-center gap-2 mb-3">
+              <div className="w-8 h-8 rounded-lg bg-purple-500/20 flex items-center justify-center">
+                <Signal className="w-4 h-4 text-purple-400" />
+              </div>
+              <span className="font-medium text-sm">Signal</span>
+            </div>
+            <p className="text-2xl font-bold text-purple-400 mb-2">
+              {dashboardStatsLoading ? "..." : avgSignal !== null && avgSignal !== undefined ? `${avgSignal.toFixed(0)} dBm` : "—"}
+            </p>
+            <div className="space-y-1 text-xs">
+              <div className="flex justify-between">
+                <span className="text-muted-foreground flex items-center gap-1"><ArrowDown className="w-3 h-3 text-blue-400" />Min</span>
+                <span>{signalStats.min !== null ? `${signalStats.min.toFixed(0)} dBm` : '—'}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-muted-foreground flex items-center gap-1"><ArrowUp className="w-3 h-3 text-red-400" />Max</span>
+                <span>{signalStats.max !== null ? `${signalStats.max.toFixed(0)} dBm` : '—'}</span>
+              </div>
+            </div>
+          </div>
+
+          <div className="glass-card rounded-xl p-4 border border-border/50">
+            <div className="flex items-center gap-2 mb-3">
+              <div className="w-8 h-8 rounded-lg bg-orange-500/20 flex items-center justify-center">
+                <Zap className="w-4 h-4 text-orange-400" />
+              </div>
+              <span className="font-medium text-sm">Power</span>
+            </div>
+            <p className="text-2xl font-bold text-orange-400 mb-2">
+              {dashboardStatsLoading ? "..." : avgPower !== null && avgPower !== undefined ? `${avgPower.toFixed(1)}W` : "—"}
+            </p>
+            <div className="space-y-1 text-xs">
+              <div className="flex justify-between">
+                <span className="text-muted-foreground flex items-center gap-1"><ArrowDown className="w-3 h-3 text-blue-400" />Min</span>
+                <span>{powerStats.min !== null ? `${powerStats.min.toFixed(1)}W` : '—'}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-muted-foreground flex items-center gap-1"><ArrowUp className="w-3 h-3 text-red-400" />Max</span>
+                <span>{powerStats.max !== null ? `${powerStats.max.toFixed(1)}W` : '—'}</span>
+              </div>
+            </div>
+          </div>
         </div>
       </div>
 
