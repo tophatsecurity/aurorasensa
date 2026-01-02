@@ -16,12 +16,14 @@ import {
   Thermometer,
   Bluetooth,
   Monitor,
-  Satellite
+  Satellite,
+  Eye
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { useClients, useAdsbAircraft, Client } from "@/hooks/useAuroraApi";
 import { useQueryClient } from "@tanstack/react-query";
+import DeviceDetailDialog from "./DeviceDetailDialog";
 
 type DeviceType = 'all' | 'client' | 'adsb';
 
@@ -39,6 +41,7 @@ interface DeviceCardProps {
   icon: React.ReactNode;
   details?: Record<string, string | number>;
   sensors?: SensorBadge[];
+  onViewDetails?: () => void;
 }
 
 const getSensorIcon = (sensorId: string) => {
@@ -67,7 +70,7 @@ const getSensorColor = (sensorId: string) => {
   return 'bg-primary/20 text-primary border-primary/30';
 };
 
-const DeviceCard = ({ name, type, status, lastSeen, icon, details, sensors }: DeviceCardProps) => {
+const DeviceCard = ({ name, type, status, lastSeen, icon, details, sensors, onViewDetails }: DeviceCardProps) => {
   const getStatusIcon = () => {
     switch (status.toLowerCase()) {
       case 'online':
@@ -93,7 +96,10 @@ const DeviceCard = ({ name, type, status, lastSeen, icon, details, sensors }: De
   };
 
   return (
-    <div className="glass-card rounded-xl p-5 border border-border/50 hover:border-primary/30 transition-all">
+    <div 
+      className="glass-card rounded-xl p-5 border border-border/50 hover:border-primary/30 transition-all cursor-pointer group"
+      onClick={onViewDetails}
+    >
       <div className="flex items-start justify-between mb-4">
         <div className="flex items-center gap-3">
           <div className="w-12 h-12 rounded-xl bg-primary/10 flex items-center justify-center">
@@ -104,13 +110,24 @@ const DeviceCard = ({ name, type, status, lastSeen, icon, details, sensors }: De
             <p className="text-xs text-muted-foreground capitalize">{type}</p>
           </div>
         </div>
-        <Badge className={getStatusColor()}>
-          {getStatusIcon()}
-          <span className="ml-1 capitalize">{status}</span>
-        </Badge>
+        <div className="flex items-center gap-2">
+          <Badge className={getStatusColor()}>
+            {getStatusIcon()}
+            <span className="ml-1 capitalize">{status}</span>
+          </Badge>
+          {onViewDetails && (
+            <Button 
+              variant="ghost" 
+              size="icon" 
+              className="h-8 w-8 opacity-0 group-hover:opacity-100 transition-opacity"
+              onClick={(e) => { e.stopPropagation(); onViewDetails(); }}
+            >
+              <Eye className="w-4 h-4" />
+            </Button>
+          )}
+        </div>
       </div>
 
-      {/* Sensors */}
       {sensors && sensors.length > 0 && (
         <div className="mb-4">
           <p className="text-xs text-muted-foreground mb-2">Sensors ({sensors.length})</p>
@@ -178,6 +195,8 @@ const getClientStatus = (client: Client) => {
 
 const DevicesContent = () => {
   const [filter, setFilter] = useState<DeviceType>('all');
+  const [selectedClient, setSelectedClient] = useState<Client | null>(null);
+  const [detailsOpen, setDetailsOpen] = useState(false);
   const { data: clients, isLoading: clientsLoading } = useClients();
   const { data: aircraft, isLoading: aircraftLoading } = useAdsbAircraft();
   const queryClient = useQueryClient();
@@ -186,17 +205,21 @@ const DevicesContent = () => {
     queryClient.invalidateQueries({ queryKey: ["aurora"] });
   };
 
+  const handleViewDetails = (client: Client) => {
+    setSelectedClient(client);
+    setDetailsOpen(true);
+  };
+
   const isLoading = clientsLoading || aircraftLoading;
 
   // Transform data into devices
-  const devices: DeviceCardProps[] = [];
+  const devices: (DeviceCardProps & { client?: Client })[] = [];
 
   // Add clients as devices with their sensors
   clients?.forEach((client: Client) => {
     const status = getClientStatus(client);
     const system = client.metadata?.system;
     
-    // Extract sensors from the client
     const sensorList: SensorBadge[] = (client.sensors || []).map(sensorId => ({
       id: sensorId,
       type: sensorId.split('_')[0],
@@ -216,6 +239,7 @@ const DevicesContent = () => {
         ...(system?.cpu_percent !== undefined && { 'CPU': `${system.cpu_percent.toFixed(1)}%` }),
         ...(system?.memory_percent !== undefined && { 'Memory': `${system.memory_percent.toFixed(1)}%` }),
       },
+      client,
     });
   });
 
@@ -247,7 +271,6 @@ const DevicesContent = () => {
     adsb: devices.filter(d => d.type === 'adsb').length,
   };
 
-  // Count total sensors across all clients
   const totalSensors = clients?.reduce((acc, client) => acc + (client.sensors?.length || 0), 0) || 0;
 
   const filterButtons: { id: DeviceType; label: string; icon: React.ReactNode }[] = [
@@ -304,7 +327,11 @@ const DevicesContent = () => {
       ) : filteredDevices.length > 0 ? (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
           {filteredDevices.map((device, index) => (
-            <DeviceCard key={`${device.name}-${index}`} {...device} />
+            <DeviceCard 
+              key={`${device.name}-${index}`} 
+              {...device}
+              onViewDetails={device.client ? () => handleViewDetails(device.client!) : undefined}
+            />
           ))}
         </div>
       ) : (
@@ -318,6 +345,13 @@ const DevicesContent = () => {
           </p>
         </div>
       )}
+
+      {/* Detail Dialog */}
+      <DeviceDetailDialog 
+        client={selectedClient}
+        open={detailsOpen}
+        onOpenChange={setDetailsOpen}
+      />
     </div>
   );
 };
