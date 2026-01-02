@@ -1,8 +1,67 @@
 import { useMemo, useState, useEffect, useCallback } from "react";
 import { LatLngExpression } from "leaflet";
-import { useAdsbAircraft, useSensors, useClients } from "@/hooks/useAuroraApi";
+import { useAdsbAircraft, useSensors, useClients, useLatestReadings } from "@/hooks/useAuroraApi";
 import { useQueryClient } from "@tanstack/react-query";
 import type { MapStats, AircraftMarker, SensorMarker, ClientMarker } from "@/types/map";
+
+// Helper to extract GPS coordinates from various data sources
+function extractGpsFromReadings(readings: Array<{ device_id: string; device_type: string; data: Record<string, unknown> }>) {
+  const gpsData: Record<string, { lat: number; lng: number }> = {};
+  
+  readings.forEach(reading => {
+    const data = reading.data;
+    
+    // Check for GPS coordinates in the data
+    let lat: number | null = null;
+    let lng: number | null = null;
+    
+    // Try various GPS coordinate field names
+    if (typeof data.latitude === 'number' && typeof data.longitude === 'number') {
+      lat = data.latitude;
+      lng = data.longitude;
+    } else if (typeof data.lat === 'number' && typeof data.lon === 'number') {
+      lat = data.lat;
+      lng = data.lon;
+    } else if (typeof data.lat === 'number' && typeof data.lng === 'number') {
+      lat = data.lat;
+      lng = data.lng;
+    } else if (typeof data.gps_lat === 'number' && typeof data.gps_lon === 'number') {
+      lat = data.gps_lat;
+      lng = data.gps_lon;
+    } else if (typeof data.gps_latitude === 'number' && typeof data.gps_longitude === 'number') {
+      lat = data.gps_latitude;
+      lng = data.gps_longitude;
+    } else if (data.location && typeof data.location === 'object') {
+      const loc = data.location as Record<string, unknown>;
+      if (typeof loc.lat === 'number' && typeof loc.lng === 'number') {
+        lat = loc.lat;
+        lng = loc.lng;
+      } else if (typeof loc.latitude === 'number' && typeof loc.longitude === 'number') {
+        lat = loc.latitude;
+        lng = loc.longitude;
+      }
+    } else if (data.position && typeof data.position === 'object') {
+      const pos = data.position as Record<string, unknown>;
+      if (typeof pos.lat === 'number' && typeof pos.lng === 'number') {
+        lat = pos.lat;
+        lng = pos.lng;
+      } else if (typeof pos.latitude === 'number' && typeof pos.longitude === 'number') {
+        lat = pos.latitude;
+        lng = pos.longitude;
+      }
+    }
+    
+    // Validate coordinates are within valid ranges
+    if (lat !== null && lng !== null && 
+        lat >= -90 && lat <= 90 && 
+        lng >= -180 && lng <= 180 &&
+        !(lat === 0 && lng === 0)) { // Exclude 0,0 as it's often a default/invalid value
+      gpsData[reading.device_id] = { lat, lng };
+    }
+  });
+  
+  return gpsData;
+}
 
 export function useMapData() {
   const [lastUpdate, setLastUpdate] = useState<Date>(new Date());
@@ -25,6 +84,11 @@ export function useMapData() {
     isLoading: clientsLoading 
   } = useClients();
 
+  const {
+    data: latestReadings,
+    isLoading: readingsLoading
+  } = useLatestReadings();
+
   // Update last refresh time
   useEffect(() => {
     setLastUpdate(new Date());
@@ -33,6 +97,12 @@ export function useMapData() {
   const handleRefresh = useCallback(() => {
     queryClient.invalidateQueries({ queryKey: ["aurora"] });
   }, [queryClient]);
+
+  // Extract GPS coordinates from latest readings
+  const gpsCoordinates = useMemo(() => {
+    if (!latestReadings) return {};
+    return extractGpsFromReadings(latestReadings);
+  }, [latestReadings]);
 
   // Filter and prepare aircraft markers
   const aircraftMarkers = useMemo<AircraftMarker[]>(() => 
@@ -59,17 +129,36 @@ export function useMapData() {
         const config = client.metadata?.config?.sensors;
         if (!config) return;
         
-        const hash = client.client_id.split('').reduce((a, b) => a + b.charCodeAt(0), 0);
         const baseStatus = client.status || 'active';
+        
+        // Try to get GPS coordinates from readings for this client's sensors
+        const clientSensors = client.sensors || [];
+        let clientGps: { lat: number; lng: number } | null = null;
+        
+        // Look for GPS coordinates in any of the client's sensor readings
+        for (const sensorId of clientSensors) {
+          if (gpsCoordinates[sensorId]) {
+            clientGps = gpsCoordinates[sensorId];
+            break;
+          }
+        }
+        
+        // Also check for starlink GPS data which often includes location
+        const starlinkId = clientSensors.find(s => s.includes('starlink'));
+        if (!clientGps && starlinkId && gpsCoordinates[starlinkId]) {
+          clientGps = gpsCoordinates[starlinkId];
+        }
+        
+        // If no GPS found from readings, skip adding map markers for this client
+        // (we don't want to show fake coordinates)
+        if (!clientGps) {
+          console.log(`No GPS coordinates found for client ${client.hostname}`);
+          return;
+        }
         
         // Check for GPS-enabled client and create marker
         const gps = config.gps;
-        if (gps?.enabled) {
-          const gpsLat = typeof (gps as Record<string, unknown>).lat === 'number' ? (gps as Record<string, unknown>).lat as number : null;
-          const gpsLng = typeof (gps as Record<string, unknown>).lng === 'number' ? (gps as Record<string, unknown>).lng as number : null;
-          const lat = gpsLat ?? (40.7128 + (hash % 100) * 0.001);
-          const lng = gpsLng ?? (-74.006 + ((hash * 7) % 100) * 0.001);
-          
+        if (gps?.enabled && clientGps) {
           markers.push({
             id: `${client.client_id}-gps`,
             name: `${client.hostname} GPS`,
@@ -78,13 +167,13 @@ export function useMapData() {
             unit: '',
             status: baseStatus,
             lastUpdate: client.last_seen,
-            location: { lat, lng }
+            location: clientGps
           });
         }
         
-        // Add LoRa sensors
+        // Add LoRa sensors with actual GPS
         const lora = config.lora;
-        if (lora?.enabled) {
+        if (lora?.enabled && clientGps) {
           markers.push({
             id: `${client.client_id}-lora`,
             name: `${client.hostname} LoRa`,
@@ -93,16 +182,13 @@ export function useMapData() {
             unit: 'dBm',
             status: baseStatus,
             lastUpdate: client.last_seen,
-            location: { 
-              lat: 40.7128 + (hash % 100) * 0.0015,
-              lng: -74.006 + ((hash * 3) % 100) * 0.0015
-            }
+            location: clientGps
           });
         }
         
-        // Add Starlink sensors
+        // Add Starlink sensors with actual GPS
         const starlink = config.starlink;
-        if (starlink?.enabled) {
+        if (starlink?.enabled && clientGps) {
           markers.push({
             id: `${client.client_id}-starlink`,
             name: `${client.hostname} Starlink`,
@@ -111,16 +197,13 @@ export function useMapData() {
             unit: 'Mbps',
             status: baseStatus,
             lastUpdate: client.last_seen,
-            location: { 
-              lat: 40.7128 + (hash % 100) * 0.002,
-              lng: -74.006 + ((hash * 5) % 100) * 0.002
-            }
+            location: clientGps
           });
         }
         
         // Add ADS-B receivers as sensor markers
         const adsbDevices = config.adsb_devices;
-        if (adsbDevices && Array.isArray(adsbDevices)) {
+        if (adsbDevices && Array.isArray(adsbDevices) && clientGps) {
           adsbDevices.forEach((adsb, idx) => {
             if (adsb.enabled) {
               markers.push({
@@ -131,10 +214,7 @@ export function useMapData() {
                 unit: 'aircraft',
                 status: baseStatus,
                 lastUpdate: client.last_seen,
-                location: { 
-                  lat: 40.7128 + (hash % 100) * 0.0018,
-                  lng: -74.006 + ((hash * 4) % 100) * 0.0018
-                }
+                location: clientGps!
               });
             }
           });
@@ -142,7 +222,7 @@ export function useMapData() {
         
         // Add WiFi sensors
         const wifi = config.wifi;
-        if (wifi?.enabled) {
+        if (wifi?.enabled && clientGps) {
           markers.push({
             id: `${client.client_id}-wifi`,
             name: `${client.hostname} WiFi`,
@@ -151,16 +231,13 @@ export function useMapData() {
             unit: 'devices',
             status: baseStatus,
             lastUpdate: client.last_seen,
-            location: { 
-              lat: 40.7128 + (hash % 100) * 0.0012,
-              lng: -74.006 + ((hash * 6) % 100) * 0.0012
-            }
+            location: clientGps
           });
         }
         
         // Add Bluetooth sensors
         const bluetooth = config.bluetooth;
-        if (bluetooth?.enabled) {
+        if (bluetooth?.enabled && clientGps) {
           markers.push({
             id: `${client.client_id}-bluetooth`,
             name: `${client.hostname} Bluetooth`,
@@ -169,16 +246,13 @@ export function useMapData() {
             unit: 'devices',
             status: baseStatus,
             lastUpdate: client.last_seen,
-            location: { 
-              lat: 40.7128 + (hash % 100) * 0.0014,
-              lng: -74.006 + ((hash * 8) % 100) * 0.0014
-            }
+            location: clientGps
           });
         }
         
         // Add Thermal Probe sensors
         const thermal = config.thermal_probe;
-        if (thermal?.enabled) {
+        if (thermal?.enabled && clientGps) {
           markers.push({
             id: `${client.client_id}-thermal`,
             name: `${client.hostname} Thermal`,
@@ -187,33 +261,43 @@ export function useMapData() {
             unit: '°C',
             status: baseStatus,
             lastUpdate: client.last_seen,
-            location: { 
-              lat: 40.7128 + (hash % 100) * 0.0016,
-              lng: -74.006 + ((hash * 9) % 100) * 0.0016
-            }
+            location: clientGps
           });
         }
       });
     }
     
     return markers;
-  }, [sensors, clients]);
+  }, [sensors, clients, gpsCoordinates]);
 
   // Get client markers for the clients filter
   const clientMarkers = useMemo<ClientMarker[]>(() => {
     if (!clients) return [];
-    return clients.map(c => {
-      const hash = c.client_id.split('').reduce((a, b) => a + b.charCodeAt(0), 0);
-      return {
-        client_id: c.client_id,
-        hostname: c.hostname,
-        location: { 
-          lat: 40.7128 + (hash % 100) * 0.001, 
-          lng: -74.006 + ((hash * 7) % 100) * 0.001 
+    
+    return clients
+      .map(c => {
+        // Try to find GPS coordinates for this client from readings
+        const clientSensors = c.sensors || [];
+        let clientGps: { lat: number; lng: number } | null = null;
+        
+        for (const sensorId of clientSensors) {
+          if (gpsCoordinates[sensorId]) {
+            clientGps = gpsCoordinates[sensorId];
+            break;
+          }
         }
-      };
-    });
-  }, [clients]);
+        
+        // Only include clients with actual GPS coordinates
+        if (!clientGps) return null;
+        
+        return {
+          client_id: c.client_id,
+          hostname: c.hostname,
+          location: clientGps
+        };
+      })
+      .filter((c): c is ClientMarker => c !== null);
+  }, [clients, gpsCoordinates]);
 
   // All marker positions for bounds fitting
   const allPositions = useMemo<LatLngExpression[]>(() => {
@@ -233,7 +317,7 @@ export function useMapData() {
     lora: sensorMarkers.filter(s => s.type === 'lora').length,
   }), [aircraftMarkers, sensorMarkers, clientMarkers]);
 
-  const isLoading = aircraftLoading || sensorsLoading || clientsLoading;
+  const isLoading = aircraftLoading || sensorsLoading || clientsLoading || readingsLoading;
 
   // Format time ago
   const timeAgo = useMemo(() => {
