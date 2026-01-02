@@ -5,7 +5,7 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
-const AURORA_ENDPOINT = "http://128.136.131.89:9150";
+const AURORA_ENDPOINT = "http://128.136.131.89:9151";
 
 serve(async (req) => {
   // Handle CORS preflight requests
