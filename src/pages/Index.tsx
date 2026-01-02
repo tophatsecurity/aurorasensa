@@ -1,68 +1,30 @@
-import { Cpu, HardDrive, Network, Clock, Plus, RefreshCw } from "lucide-react";
+import { Cpu, HardDrive, Network, Clock, Plus, RefreshCw, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import AuroraBackground from "@/components/AuroraBackground";
 import Header from "@/components/Header";
 import StatCard from "@/components/StatCard";
 import ServerCard from "@/components/ServerCard";
-
-const servers = [
-  {
-    name: "Production-01",
-    location: "Frankfurt, DE",
-    status: "online" as const,
-    cpu: 45,
-    memory: 62,
-    disk: 38,
-    ip: "192.168.1.101",
-  },
-  {
-    name: "Production-02",
-    location: "New York, US",
-    status: "online" as const,
-    cpu: 78,
-    memory: 85,
-    disk: 55,
-    ip: "192.168.1.102",
-  },
-  {
-    name: "Staging-01",
-    location: "London, UK",
-    status: "warning" as const,
-    cpu: 92,
-    memory: 88,
-    disk: 72,
-    ip: "192.168.1.103",
-  },
-  {
-    name: "Development-01",
-    location: "Tokyo, JP",
-    status: "online" as const,
-    cpu: 23,
-    memory: 41,
-    disk: 29,
-    ip: "192.168.1.104",
-  },
-  {
-    name: "Backup-01",
-    location: "Sydney, AU",
-    status: "offline" as const,
-    cpu: 0,
-    memory: 0,
-    disk: 85,
-    ip: "192.168.1.105",
-  },
-  {
-    name: "Database-01",
-    location: "Singapore, SG",
-    status: "online" as const,
-    cpu: 56,
-    memory: 71,
-    disk: 63,
-    ip: "192.168.1.106",
-  },
-];
+import { useServers } from "@/hooks/useServers";
+import { useQueryClient } from "@tanstack/react-query";
 
 const Index = () => {
+  const { data: servers, isLoading, error } = useServers();
+  const queryClient = useQueryClient();
+
+  const handleRefresh = () => {
+    queryClient.invalidateQueries({ queryKey: ["servers"] });
+  };
+
+  // Calculate stats from real data
+  const onlineCount = servers?.filter(s => s.status === 'online').length ?? 0;
+  const totalCount = servers?.length ?? 0;
+  const avgCpu = servers?.length 
+    ? Math.round(servers.reduce((acc, s) => acc + s.cpu, 0) / servers.length) 
+    : 0;
+  const avgMemory = servers?.length 
+    ? Math.round(servers.reduce((acc, s) => acc + s.memory, 0) / servers.length) 
+    : 0;
+
   return (
     <div className="min-h-screen relative">
       <AuroraBackground />
@@ -81,8 +43,14 @@ const Index = () => {
               </p>
             </div>
             <div className="flex items-center gap-3">
-              <Button variant="outline" size="sm" className="gap-2 border-border/50 hover:border-primary/50">
-                <RefreshCw className="w-4 h-4" />
+              <Button 
+                variant="outline" 
+                size="sm" 
+                className="gap-2 border-border/50 hover:border-primary/50"
+                onClick={handleRefresh}
+                disabled={isLoading}
+              >
+                <RefreshCw className={`w-4 h-4 ${isLoading ? 'animate-spin' : ''}`} />
                 Refresh
               </Button>
               <Button size="sm" className="gap-2 bg-gradient-to-r from-aurora-cyan to-aurora-purple hover:opacity-90 text-primary-foreground">
@@ -96,7 +64,7 @@ const Index = () => {
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
             <StatCard
               title="CPU Usage"
-              value="58%"
+              value={`${avgCpu}%`}
               subtitle="Average across all servers"
               icon={Cpu}
               color="cyan"
@@ -104,8 +72,8 @@ const Index = () => {
             />
             <StatCard
               title="Memory"
-              value="12.4 GB"
-              subtitle="of 32 GB allocated"
+              value={`${avgMemory}%`}
+              subtitle="Average usage"
               icon={HardDrive}
               color="purple"
               trend={{ value: "1.8%", positive: true }}
@@ -134,7 +102,7 @@ const Index = () => {
             <div>
               <h3 className="text-xl font-semibold mb-1">Active Servers</h3>
               <p className="text-sm text-muted-foreground">
-                {servers.filter(s => s.status === 'online').length} of {servers.length} servers online
+                {onlineCount} of {totalCount} servers online
               </p>
             </div>
             <div className="flex items-center gap-4 text-sm">
@@ -153,11 +121,21 @@ const Index = () => {
             </div>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {servers.map((server) => (
-              <ServerCard key={server.name} {...server} />
-            ))}
-          </div>
+          {isLoading ? (
+            <div className="flex items-center justify-center py-12">
+              <Loader2 className="w-8 h-8 animate-spin text-primary" />
+            </div>
+          ) : error ? (
+            <div className="text-center py-12 text-destructive">
+              Failed to load servers. Please try again.
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              {servers?.map((server) => (
+                <ServerCard key={server.id} {...server} />
+              ))}
+            </div>
+          )}
         </section>
 
         {/* Footer */}
