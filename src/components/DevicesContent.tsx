@@ -21,9 +21,10 @@ import {
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { useClients, useAdsbAircraft, Client } from "@/hooks/useAuroraApi";
+import { useClients, useAdsbAircraft, useAdoptClient, Client } from "@/hooks/useAuroraApi";
 import { useQueryClient } from "@tanstack/react-query";
 import DeviceDetailDialog from "./DeviceDetailDialog";
+import { toast } from "sonner";
 
 type DeviceType = 'all' | 'client' | 'adsb';
 
@@ -42,6 +43,9 @@ interface DeviceCardProps {
   details?: Record<string, string | number>;
   sensors?: SensorBadge[];
   onViewDetails?: () => void;
+  onAdopt?: () => void;
+  isAdopting?: boolean;
+  needsAdoption?: boolean;
 }
 
 const getSensorIcon = (sensorId: string) => {
@@ -70,7 +74,7 @@ const getSensorColor = (sensorId: string) => {
   return 'bg-primary/20 text-primary border-primary/30';
 };
 
-const DeviceCard = ({ name, type, status, lastSeen, icon, details, sensors, onViewDetails }: DeviceCardProps) => {
+const DeviceCard = ({ name, type, status, lastSeen, icon, details, sensors, onViewDetails, onAdopt, isAdopting, needsAdoption }: DeviceCardProps) => {
   const getStatusIcon = () => {
     switch (status.toLowerCase()) {
       case 'online':
@@ -115,6 +119,17 @@ const DeviceCard = ({ name, type, status, lastSeen, icon, details, sensors, onVi
             {getStatusIcon()}
             <span className="ml-1 capitalize">{status}</span>
           </Badge>
+          {needsAdoption && onAdopt && (
+            <Button 
+              variant="default" 
+              size="sm" 
+              className="h-7 px-3 text-xs bg-primary hover:bg-primary/90"
+              onClick={(e) => { e.stopPropagation(); onAdopt(); }}
+              disabled={isAdopting}
+            >
+              {isAdopting ? <Loader2 className="w-3 h-3 animate-spin" /> : "Adopt"}
+            </Button>
+          )}
           {onViewDetails && (
             <Button 
               variant="ghost" 
@@ -199,6 +214,7 @@ const DevicesContent = () => {
   const [detailsOpen, setDetailsOpen] = useState(false);
   const { data: clients, isLoading: clientsLoading } = useClients();
   const { data: aircraft, isLoading: aircraftLoading } = useAdsbAircraft();
+  const adoptMutation = useAdoptClient();
   const queryClient = useQueryClient();
 
   const handleRefresh = () => {
@@ -208,6 +224,21 @@ const DevicesContent = () => {
   const handleViewDetails = (client: Client) => {
     setSelectedClient(client);
     setDetailsOpen(true);
+  };
+
+  const handleAdopt = (client: Client) => {
+    adoptMutation.mutate(client.client_id, {
+      onSuccess: () => {
+        toast.success(`${client.hostname || client.client_id} adopted successfully`);
+      },
+      onError: (error) => {
+        toast.error(`Failed to adopt device: ${error.message}`);
+      },
+    });
+  };
+
+  const isNeedsAdoption = (client: Client) => {
+    return client.auto_registered && !client.adopted_at;
   };
 
   const isLoading = clientsLoading || aircraftLoading;
@@ -226,10 +257,12 @@ const DevicesContent = () => {
       enabled: true,
     }));
 
+    const needsAdoption = isNeedsAdoption(client);
+
     devices.push({
       name: client.hostname || client.client_id,
       type: 'client',
-      status,
+      status: needsAdoption ? 'pending' : status,
       lastSeen: formatLastSeen(client.last_seen),
       icon: <Server className="w-6 h-6 text-cyan-400" />,
       sensors: sensorList,
@@ -240,6 +273,7 @@ const DevicesContent = () => {
         ...(system?.memory_percent !== undefined && { 'Memory': `${system.memory_percent.toFixed(1)}%` }),
       },
       client,
+      needsAdoption,
     });
   });
 
@@ -344,6 +378,8 @@ const DevicesContent = () => {
               key={`${device.name}-${index}`} 
               {...device}
               onViewDetails={device.client ? () => handleViewDetails(device.client!) : undefined}
+              onAdopt={device.client && device.needsAdoption ? () => handleAdopt(device.client!) : undefined}
+              isAdopting={adoptMutation.isPending && adoptMutation.variables === device.client?.client_id}
             />
           ))}
         </div>

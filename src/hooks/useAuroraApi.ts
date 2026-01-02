@@ -1,4 +1,4 @@
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 
 const AURORA_API_URL = "http://aurora.tophatsecurity.com:9151";
 
@@ -430,5 +430,19 @@ export function useStarlinkStats() {
     queryFn: () => callAuroraApi<StarlinkStats>("/api/starlink/stats"),
     refetchInterval: 15000,
     retry: 2,
+  });
+}
+
+// Adopt client mutation
+export function useAdoptClient() {
+  const queryClient = useQueryClient();
+  
+  return useMutation({
+    mutationFn: async (clientId: string) => {
+      return callAuroraApi<{ success: boolean; message: string }>(`/api/clients/${clientId}/adopt`, "POST");
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["aurora", "clients"] });
+    },
   });
 }
