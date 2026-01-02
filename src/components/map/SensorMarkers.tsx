@@ -1,4 +1,4 @@
-import { memo } from "react";
+import { memo, Fragment } from "react";
 import { Marker, Popup } from "react-leaflet";
 import { Navigation } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
@@ -55,20 +55,24 @@ export const SensorMarkers = memo(function SensorMarkers({
 
   if (filteredSensors.length === 0) return null;
 
-  return filteredSensors.map((sensor) => {
-    const sensorType = sensor.type.toLowerCase();
-    const icon = mapIcons[sensorType as IconType] || mapIcons.gps;
-    
-    return (
-      <Marker
-        key={sensor.id}
-        position={[sensor.location.lat, sensor.location.lng]}
-        icon={icon}
-      >
-        <Popup className="custom-popup">
-          <SensorPopup sensor={sensor} />
-        </Popup>
-      </Marker>
-    );
-  });
+  return (
+    <Fragment>
+      {filteredSensors.map((sensor) => {
+        const sensorType = sensor.type.toLowerCase();
+        const icon = mapIcons[sensorType as IconType] || mapIcons.gps;
+        
+        return (
+          <Marker
+            key={sensor.id}
+            position={[sensor.location.lat, sensor.location.lng]}
+            icon={icon}
+          >
+            <Popup className="custom-popup">
+              <SensorPopup sensor={sensor} />
+            </Popup>
+          </Marker>
+        );
+      })}
+    </Fragment>
+  );
 });
