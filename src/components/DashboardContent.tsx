@@ -126,20 +126,20 @@ const DashboardContent = () => {
           ) : (
             <div className="space-y-2 text-sm">
               <div className="flex justify-between">
-                <span className="text-muted-foreground">Total Aircraft:</span>
-                <span className="font-medium">{adsbStats?.total ?? "—"}</span>
+                <span className="text-muted-foreground">Active Aircraft:</span>
+                <span className="font-medium">{adsbStats?.aircraft_active ?? "—"}</span>
               </div>
               <div className="flex justify-between">
-                <span className="text-muted-foreground">Tracked:</span>
-                <span className="font-medium">{adsbStats?.tracked ?? "—"}</span>
+                <span className="text-muted-foreground">Total Tracked:</span>
+                <span className="font-medium">{adsbStats?.aircraft_tracked_total?.toLocaleString() ?? "—"}</span>
               </div>
               <div className="flex justify-between">
                 <span className="text-muted-foreground">Messages:</span>
-                <span className="font-medium">{adsbStats?.messages?.toLocaleString() ?? "—"}</span>
+                <span className="font-medium">{adsbStats?.messages_decoded?.toLocaleString() ?? "—"}</span>
               </div>
               <div className="flex justify-between">
                 <span className="text-muted-foreground">Positions:</span>
-                <span className="font-medium">{adsbStats?.positions?.toLocaleString() ?? "—"}</span>
+                <span className="font-medium">{adsbStats?.positions_received?.toLocaleString() ?? "—"}</span>
               </div>
             </div>
           )}

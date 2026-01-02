@@ -76,17 +76,29 @@ export interface AdsbAircraft {
 }
 
 export interface AdsbStats {
-  total: number;
-  tracked: number;
-  messages: number;
-  positions: number;
+  device_id?: string;
+  sdr_type?: string;
+  messages_decoded?: number;
+  aircraft_tracked_total?: number;
+  aircraft_active?: number;
+  positions_received?: number;
+  uptime_seconds?: number;
+}
+
+// Sensors list response from Aurora API
+interface SensorsListResponse {
+  count: number;
+  sensors: SensorData[];
 }
 
 // Hooks
 export function useSensors() {
   return useQuery({
     queryKey: ["aurora", "sensors"],
-    queryFn: () => callAuroraProxy<SensorData[]>("/api/v1/sensors"),
+    queryFn: async () => {
+      const response = await callAuroraProxy<SensorsListResponse>("/api/sensors/list");
+      return response.sensors || [];
+    },
     refetchInterval: 10000,
     retry: 2,
   });
