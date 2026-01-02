@@ -48,26 +48,27 @@ export const SensorMarkers = memo(function SensorMarkers({
   sensors, 
   filter 
 }: SensorMarkersProps) {
-  return (
-    <>
-      {sensors.map((sensor) => {
-        const sensorType = sensor.type.toLowerCase();
-        if (filter !== 'all' && sensorType !== filter) return null;
-        
-        const icon = mapIcons[sensorType as IconType] || mapIcons.gps;
-        
-        return (
-          <Marker
-            key={sensor.id}
-            position={[sensor.location.lat, sensor.location.lng]}
-            icon={icon}
-          >
-            <Popup className="custom-popup">
-              <SensorPopup sensor={sensor} />
-            </Popup>
-          </Marker>
-        );
-      })}
-    </>
-  );
+  const filteredSensors = sensors.filter((sensor) => {
+    const sensorType = sensor.type.toLowerCase();
+    return filter === 'all' || sensorType === filter;
+  });
+
+  if (filteredSensors.length === 0) return null;
+
+  return filteredSensors.map((sensor) => {
+    const sensorType = sensor.type.toLowerCase();
+    const icon = mapIcons[sensorType as IconType] || mapIcons.gps;
+    
+    return (
+      <Marker
+        key={sensor.id}
+        position={[sensor.location.lat, sensor.location.lng]}
+        icon={icon}
+      >
+        <Popup className="custom-popup">
+          <SensorPopup sensor={sensor} />
+        </Popup>
+      </Marker>
+    );
+  });
 });
