@@ -8,11 +8,18 @@ import {
   Zap,
   TrendingUp,
   TrendingDown,
-  Minus
+  Minus,
+  Radio,
+  Cpu,
+  Wifi,
+  Bluetooth,
+  Plane,
+  Satellite,
+  Monitor
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { useSensors, useDashboardStats, useDashboardTimeseries } from "@/hooks/useAuroraApi";
+import { useComprehensiveStats, useDashboardTimeseries } from "@/hooks/useAuroraApi";
 import { useQueryClient } from "@tanstack/react-query";
 import {
   AreaChart,
@@ -146,9 +153,54 @@ const MiniChart = ({ title, data, color, unit, icon }: MiniChartProps) => {
   );
 };
 
+const getSensorIcon = (deviceType: string) => {
+  switch (deviceType) {
+    case 'arduino_sensor_kit':
+      return <Cpu className="w-5 h-5 text-orange-400" />;
+    case 'thermal_probe':
+      return <Thermometer className="w-5 h-5 text-amber-400" />;
+    case 'wifi_scanner':
+      return <Wifi className="w-5 h-5 text-blue-400" />;
+    case 'bluetooth_scanner':
+      return <Bluetooth className="w-5 h-5 text-indigo-400" />;
+    case 'adsb_detector':
+      return <Plane className="w-5 h-5 text-cyan-400" />;
+    case 'lora_detector':
+      return <Radio className="w-5 h-5 text-red-400" />;
+    case 'starlink_dish_comprehensive':
+      return <Satellite className="w-5 h-5 text-violet-400" />;
+    case 'system_monitor':
+      return <Monitor className="w-5 h-5 text-slate-400" />;
+    default:
+      return <Signal className="w-5 h-5 text-primary" />;
+  }
+};
+
+const getSensorColor = (deviceType: string) => {
+  switch (deviceType) {
+    case 'arduino_sensor_kit':
+      return 'bg-orange-500/20 border-orange-500/30';
+    case 'thermal_probe':
+      return 'bg-amber-500/20 border-amber-500/30';
+    case 'wifi_scanner':
+      return 'bg-blue-500/20 border-blue-500/30';
+    case 'bluetooth_scanner':
+      return 'bg-indigo-500/20 border-indigo-500/30';
+    case 'adsb_detector':
+      return 'bg-cyan-500/20 border-cyan-500/30';
+    case 'lora_detector':
+      return 'bg-red-500/20 border-red-500/30';
+    case 'starlink_dish_comprehensive':
+      return 'bg-violet-500/20 border-violet-500/30';
+    case 'system_monitor':
+      return 'bg-slate-500/20 border-slate-500/30';
+    default:
+      return 'bg-primary/20 border-primary/30';
+  }
+};
+
 const SensorsContent = () => {
-  const { data: sensors, isLoading: sensorsLoading } = useSensors();
-  const { data: stats, isLoading: statsLoading } = useDashboardStats();
+  const { data: stats, isLoading: statsLoading } = useComprehensiveStats();
   const { data: timeseries, isLoading: timeseriesLoading } = useDashboardTimeseries(24);
   const queryClient = useQueryClient();
 
@@ -156,7 +208,13 @@ const SensorsContent = () => {
     queryClient.invalidateQueries({ queryKey: ["aurora"] });
   };
 
-  const isLoading = sensorsLoading || statsLoading || timeseriesLoading;
+  const isLoading = statsLoading || timeseriesLoading;
+
+  const global = stats?.global;
+  const sensorTypes = stats?.sensors_summary?.sensor_types || [];
+  const totalReadings = global?.database?.total_readings ?? 0;
+  const totalDevices = global?.devices?.total_unique_devices ?? 0;
+  const activeDevices1h = global?.activity?.last_1_hour?.active_devices_1h ?? 0;
 
   const formatData = (points: { timestamp: string; value: number }[] | undefined) => {
     if (!points || points.length === 0) return [];
@@ -202,32 +260,32 @@ const SensorsContent = () => {
         <h2 className="text-lg font-semibold mb-4">Sensor Statistics</h2>
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
           <StatCard
-            title="Avg Temperature"
-            value={stats?.avg_temp_c !== null ? `${stats?.avg_temp_c?.toFixed(1)}°C` : '—'}
-            subtitle="Across all sensors"
-            icon={<Thermometer className="w-6 h-6" style={{ color: '#ef4444' }} />}
-            color="#ef4444"
-          />
-          <StatCard
-            title="Avg Humidity"
-            value={stats?.avg_humidity !== null ? `${stats?.avg_humidity?.toFixed(1)}%` : '—'}
-            subtitle="Relative humidity"
-            icon={<Droplets className="w-6 h-6" style={{ color: '#3b82f6' }} />}
+            title="Total Devices"
+            value={statsLoading ? "..." : totalDevices.toString()}
+            subtitle={`${activeDevices1h} active in last hour`}
+            icon={<Cpu className="w-6 h-6" style={{ color: '#3b82f6' }} />}
             color="#3b82f6"
           />
           <StatCard
-            title="Avg Signal"
-            value={stats?.avg_signal_dbm !== null ? `${stats?.avg_signal_dbm?.toFixed(0)} dBm` : '—'}
-            subtitle="Signal strength"
+            title="Total Readings"
+            value={statsLoading ? "..." : totalReadings.toLocaleString()}
+            subtitle="All sensor data"
             icon={<Signal className="w-6 h-6" style={{ color: '#a855f7' }} />}
             color="#a855f7"
           />
           <StatCard
-            title="Avg Power"
-            value={stats?.avg_power_w !== null ? `${stats?.avg_power_w?.toFixed(1)}W` : '—'}
-            subtitle="Power consumption"
-            icon={<Zap className="w-6 h-6" style={{ color: '#f97316' }} />}
+            title="Sensor Types"
+            value={statsLoading ? "..." : sensorTypes.length.toString()}
+            subtitle="Unique device types"
+            icon={<Radio className="w-6 h-6" style={{ color: '#f97316' }} />}
             color="#f97316"
+          />
+          <StatCard
+            title="Avg/Hour"
+            value={statsLoading ? "..." : (global?.activity?.avg_readings_per_hour?.toFixed(0) ?? "—")}
+            subtitle="Readings per hour"
+            icon={<TrendingUp className="w-6 h-6" style={{ color: '#22c55e' }} />}
+            color="#22c55e"
           />
         </div>
       </div>
@@ -273,47 +331,53 @@ const SensorsContent = () => {
         )}
       </div>
 
-      {/* Sensor List */}
+      {/* Sensor Types List */}
       <div>
         <h2 className="text-lg font-semibold mb-4">
-          Active Sensors ({stats?.total_sensors ?? sensors?.length ?? 0})
+          Active Sensor Types ({sensorTypes.length})
         </h2>
-        {sensorsLoading ? (
+        {statsLoading ? (
           <div className="flex items-center justify-center py-12">
             <Loader2 className="w-6 h-6 animate-spin text-primary" />
           </div>
-        ) : sensors && sensors.length > 0 ? (
+        ) : sensorTypes.length > 0 ? (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {sensors.map((sensor) => (
+            {sensorTypes.map((sensor) => (
               <div 
-                key={sensor.id}
-                className="glass-card rounded-xl p-5 border border-border/50 hover:border-primary/30 transition-all"
+                key={sensor.device_type}
+                className={`glass-card rounded-xl p-5 border border-border/50 hover:border-primary/30 transition-all ${getSensorColor(sensor.device_type)}`}
               >
                 <div className="flex items-start justify-between mb-4">
                   <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 rounded-lg bg-primary/20 flex items-center justify-center">
-                      <Thermometer className="w-5 h-5 text-primary" />
+                    <div className="w-10 h-10 rounded-lg bg-background/50 flex items-center justify-center">
+                      {getSensorIcon(sensor.device_type)}
                     </div>
                     <div>
-                      <h3 className="font-semibold">{sensor.name}</h3>
-                      <p className="text-xs text-muted-foreground">{sensor.type}</p>
+                      <h3 className="font-semibold capitalize">
+                        {sensor.device_type.replace(/_/g, ' ')}
+                      </h3>
+                      <p className="text-xs text-muted-foreground">
+                        {sensor.device_count} device{sensor.device_count !== 1 ? 's' : ''}
+                      </p>
                     </div>
                   </div>
                   <Badge 
-                    variant={sensor.status === 'online' ? 'default' : 'secondary'}
-                    className={sensor.status === 'online' ? 'bg-success/20 text-success' : ''}
+                    variant={sensor.active_last_hour ? 'default' : 'secondary'}
+                    className={sensor.active_last_hour ? 'bg-success/20 text-success' : ''}
                   >
-                    {sensor.status}
+                    {sensor.active_last_hour ? 'Active' : 'Inactive'}
                   </Badge>
                 </div>
                 <div className="space-y-2">
                   <div className="flex justify-between text-sm">
-                    <span className="text-muted-foreground">Value:</span>
-                    <span className="font-medium">{sensor.value} {sensor.unit}</span>
+                    <span className="text-muted-foreground">Total Readings:</span>
+                    <span className="font-medium">{sensor.total_readings.toLocaleString()}</span>
                   </div>
                   <div className="flex justify-between text-sm">
-                    <span className="text-muted-foreground">Last Update:</span>
-                    <span className="text-xs text-muted-foreground">{sensor.lastUpdate}</span>
+                    <span className="text-muted-foreground">Last Seen:</span>
+                    <span className="text-xs text-muted-foreground">
+                      {new Date(sensor.last_seen).toLocaleString()}
+                    </span>
                   </div>
                 </div>
               </div>

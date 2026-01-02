@@ -5,13 +5,13 @@ import {
   LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, 
   AreaChart, Area, Legend 
 } from "recharts";
-import { useClients, useDashboardStats } from "@/hooks/useAuroraApi";
+import { useClients, useComprehensiveStats } from "@/hooks/useAuroraApi";
 import { useMetricsHistory } from "@/hooks/useMetricsHistory";
 import { Skeleton } from "@/components/ui/skeleton";
 
 const PerformanceContent = () => {
   const { data: clients, isLoading: clientsLoading } = useClients();
-  const { data: dashboardStats, isLoading: statsLoading } = useDashboardStats();
+  const { data: stats, isLoading: statsLoading } = useComprehensiveStats();
   const { history: metricsHistory, isLoading: historyLoading } = useMetricsHistory(30000);
 
   // Aggregate system metrics from all clients
@@ -143,7 +143,7 @@ const PerformanceContent = () => {
                 <Server className="w-4 h-4 text-blue-500" />
                 <span className="text-sm font-medium">Clients</span>
               </div>
-              <span className="text-lg font-bold">{dashboardStats?.total_clients || clients?.length || 0}</span>
+              <span className="text-lg font-bold">{stats?.global?.database?.total_clients || clients?.length || 0}</span>
             </div>
             <Progress value={100} className="h-2" />
           </CardContent>
@@ -299,15 +299,15 @@ const PerformanceContent = () => {
             <div className="space-y-3">
               <div className="flex justify-between">
                 <span className="text-muted-foreground">Total Clients</span>
-                <span className="font-mono text-sm">{dashboardStats?.total_clients || clients?.length || 0}</span>
+                <span className="font-mono text-sm">{stats?.global?.database?.total_clients || clients?.length || 0}</span>
               </div>
               <div className="flex justify-between">
                 <span className="text-muted-foreground">With System Metrics</span>
                 <span className="font-mono text-sm">{systemMetrics.clientsWithMetrics}</span>
               </div>
               <div className="flex justify-between">
-                <span className="text-muted-foreground">Total Sensors</span>
-                <span className="font-mono text-sm">{dashboardStats?.total_sensors || 0}</span>
+                <span className="text-muted-foreground">Total Devices</span>
+                <span className="font-mono text-sm">{stats?.global?.devices?.total_unique_devices || 0}</span>
               </div>
             </div>
             <div className="space-y-3">
@@ -316,22 +316,22 @@ const PerformanceContent = () => {
                 <span className="font-mono text-sm">{formatUptime(avgUptime)}</span>
               </div>
               <div className="flex justify-between">
-                <span className="text-muted-foreground">Avg Signal</span>
-                <span className="font-mono text-sm">{dashboardStats?.avg_signal_dbm?.toFixed(1) || '--'} dBm</span>
+                <span className="text-muted-foreground">Readings (1h)</span>
+                <span className="font-mono text-sm">{stats?.global?.activity?.last_1_hour?.readings_1h?.toLocaleString() || '--'}</span>
               </div>
               <div className="flex justify-between">
-                <span className="text-muted-foreground">Avg Power</span>
-                <span className="font-mono text-sm">{dashboardStats?.avg_power_w?.toFixed(1) || '--'} W</span>
+                <span className="text-muted-foreground">Readings (24h)</span>
+                <span className="font-mono text-sm">{stats?.global?.activity?.last_24_hours?.readings_24h?.toLocaleString() || '--'}</span>
               </div>
             </div>
             <div className="space-y-3">
               <div className="flex justify-between">
-                <span className="text-muted-foreground flex items-center gap-1"><Thermometer className="w-3 h-3" /> Avg Temp</span>
-                <span className="font-mono text-sm text-green-500">{dashboardStats?.avg_temp_c?.toFixed(1) || '--'}°C</span>
+                <span className="text-muted-foreground flex items-center gap-1"><Thermometer className="w-3 h-3" /> Active Devices</span>
+                <span className="font-mono text-sm text-green-500">{stats?.global?.activity?.last_1_hour?.active_devices_1h || '--'}</span>
               </div>
               <div className="flex justify-between">
-                <span className="text-muted-foreground">Avg Humidity</span>
-                <span className="font-mono text-sm">{dashboardStats?.avg_humidity?.toFixed(1) || '--'}%</span>
+                <span className="text-muted-foreground">Avg/Hour</span>
+                <span className="font-mono text-sm">{stats?.global?.activity?.avg_readings_per_hour?.toFixed(0) || '--'}</span>
               </div>
               <div className="flex justify-between">
                 <span className="text-muted-foreground">Fleet CPU Load</span>

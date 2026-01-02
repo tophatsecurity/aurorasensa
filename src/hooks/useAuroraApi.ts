@@ -238,6 +238,12 @@ interface SensorsListResponse {
   sensors: SensorData[];
 }
 
+// Alerts list response
+interface AlertsResponse {
+  count: number;
+  alerts: Alert[];
+}
+
 // Hooks
 export function useSensors() {
   return useQuery({
@@ -266,7 +272,10 @@ export function useClients() {
 export function useAlerts() {
   return useQuery({
     queryKey: ["aurora", "alerts"],
-    queryFn: () => callAuroraProxy<Alert[]>("/api/alerts"),
+    queryFn: async () => {
+      const response = await callAuroraProxy<AlertsResponse>("/api/alerts");
+      return response.alerts || [];
+    },
     refetchInterval: 30000,
     retry: 2,
   });
@@ -323,6 +332,60 @@ export function useDeviceStats() {
   return useQuery({
     queryKey: ["aurora", "stats", "devices"],
     queryFn: () => callAuroraProxy<{ total_devices: number; devices: DeviceSummary[] }>("/api/stats/devices"),
+    refetchInterval: 10000,
+    retry: 2,
+  });
+}
+
+// Alert Rules types and hook
+export interface AlertRule {
+  id: number;
+  name: string;
+  description: string;
+  rule_type: string;
+  sensor_type_filter: string;
+  severity: string;
+  enabled: boolean;
+  conditions: {
+    field: string;
+    operator?: string | null;
+    threshold: string;
+  };
+}
+
+interface AlertRulesResponse {
+  count: number;
+  rules: AlertRule[];
+}
+
+export function useAlertRules() {
+  return useQuery({
+    queryKey: ["aurora", "alerts", "rules"],
+    queryFn: async () => {
+      const response = await callAuroraProxy<AlertRulesResponse>("/api/alerts/rules");
+      return response;
+    },
+    refetchInterval: 60000,
+    retry: 2,
+  });
+}
+
+// Power stats hook
+export interface PowerStats {
+  count: number;
+  readings: Array<{
+    timestamp: string;
+    power_w?: number;
+    voltage?: number;
+    current?: number;
+  }>;
+  timestamp: string;
+}
+
+export function usePowerStats() {
+  return useQuery({
+    queryKey: ["aurora", "power", "stats"],
+    queryFn: () => callAuroraProxy<PowerStats>("/api/power/stats"),
     refetchInterval: 10000,
     retry: 2,
   });

@@ -3,13 +3,13 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
 import { Button } from "@/components/ui/button";
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, AreaChart, Area } from "recharts";
-import { useDashboardStats, useDashboardTimeseries } from "@/hooks/useAuroraApi";
+import { useDashboardTimeseries, useComprehensiveStats } from "@/hooks/useAuroraApi";
 import { useQueryClient } from "@tanstack/react-query";
 import { format } from "date-fns";
 
 const PowerContent = () => {
   const queryClient = useQueryClient();
-  const { data: stats, isLoading: statsLoading } = useDashboardStats();
+  const { data: stats, isLoading: statsLoading } = useComprehensiveStats();
   const { data: timeseries, isLoading: timeseriesLoading } = useDashboardTimeseries(24);
 
   const isLoading = statsLoading || timeseriesLoading;
@@ -24,9 +24,10 @@ const PowerContent = () => {
     power: point.value,
   })) || [];
 
-  // Calculate current values from latest data or stats
-  const currentPower = stats?.avg_power_w ?? (powerChartData.length > 0 ? powerChartData[powerChartData.length - 1]?.power : null);
+  // Calculate current values from latest data
+  const currentPower = powerChartData.length > 0 ? powerChartData[powerChartData.length - 1]?.power : null;
   const hasPowerData = powerChartData.length > 0 || currentPower !== null;
+  const totalReadings = stats?.global?.database?.total_readings ?? 0;
 
   // Mock voltage/current derived from power (P = V * I, assuming ~12V system)
   const estimatedVoltage = 12.3;
