@@ -3,39 +3,32 @@ import {
   Radio, 
   Zap, 
   BarChart3, 
-  Droplets, 
-  Signal,
   MapPin,
   Loader2,
-  TrendingUp
+  TrendingUp,
+  Activity,
+  Database,
+  Clock
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import SensorCard from "./SensorCard";
 import SensorCharts from "./SensorCharts";
-import { useSensors, useAlerts, useAdsbStats } from "@/hooks/useAuroraApi";
+import { useComprehensiveStats, useAlerts } from "@/hooks/useAuroraApi";
 
 const DashboardContent = () => {
-  const { data: sensors, isLoading: sensorsLoading } = useSensors();
-  const { data: alerts, isLoading: alertsLoading } = useAlerts();
-  const { data: adsbStats, isLoading: adsbLoading } = useAdsbStats();
+  const { data: stats, isLoading: statsLoading } = useComprehensiveStats();
+  const { data: alerts } = useAlerts();
 
-  // Calculate averages from sensor data
-  const tempSensors = sensors?.filter(s => s.type === 'temperature') || [];
-  const avgTemp = tempSensors.length 
-    ? (tempSensors.reduce((acc, s) => acc + s.value, 0) / tempSensors.length).toFixed(1)
-    : null;
+  // Extract key metrics from comprehensive stats
+  const global = stats?.global;
+  const devicesSummary = stats?.devices_summary;
+  const sensorsSummary = stats?.sensors_summary;
 
-  const signalSensors = sensors?.filter(s => s.type === 'signal' || s.type === 'rssi') || [];
-  const avgSignal = signalSensors.length
-    ? Math.round(signalSensors.reduce((acc, s) => acc + s.value, 0) / signalSensors.length)
-    : null;
-
-  const powerSensors = sensors?.filter(s => s.type === 'power') || [];
-  const avgPower = powerSensors.length
-    ? Math.round(powerSensors.reduce((acc, s) => acc + s.value, 0) / powerSensors.length)
-    : null;
-
-  const totalSensors = sensors?.length || 0;
+  const totalReadings = global?.database?.total_readings ?? 0;
+  const totalDevices = global?.devices?.total_unique_devices ?? 0;
+  const activeDevices1h = global?.activity?.last_1_hour?.active_devices_1h ?? 0;
+  const readings1h = global?.activity?.last_1_hour?.readings_1h ?? 0;
+  const totalSensorTypes = sensorsSummary?.total_sensor_types ?? 0;
 
   return (
     <div className="flex-1 overflow-y-auto p-8">
@@ -50,30 +43,30 @@ const DashboardContent = () => {
       {/* Top Stats */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
         <SensorCard
-          title="AVG TEMPERATURE"
-          value={avgTemp !== null ? `${avgTemp}°C` : "—"}
-          subtitle="Last hour average"
-          icon={Thermometer}
-          iconBgColor="bg-orange-500/20"
+          title="TOTAL DEVICES"
+          value={statsLoading ? "..." : totalDevices.toString()}
+          subtitle={`${activeDevices1h} active last hour`}
+          icon={Activity}
+          iconBgColor="bg-green-500/20"
         />
         <SensorCard
-          title="AVG SIGNAL"
-          value={avgSignal !== null ? `${avgSignal}` : "—"}
-          subtitle="RSSI (dBm)"
-          icon={Radio}
+          title="TOTAL READINGS"
+          value={statsLoading ? "..." : totalReadings.toLocaleString()}
+          subtitle={`${readings1h.toLocaleString()} last hour`}
+          icon={Database}
           iconBgColor="bg-blue-500/20"
         />
         <SensorCard
-          title="AVG POWER"
-          value={avgPower !== null ? `${avgPower}` : "—"}
-          subtitle="Watts (W)"
-          icon={Zap}
+          title="SENSOR TYPES"
+          value={statsLoading ? "..." : totalSensorTypes.toString()}
+          subtitle="Unique device types"
+          icon={Radio}
           iconBgColor="bg-purple-500/20"
         />
         <SensorCard
-          title="TOTAL SENSORS"
-          value={sensorsLoading ? "..." : totalSensors.toString()}
-          subtitle="Active sensors"
+          title="DATA BATCHES"
+          value={statsLoading ? "..." : (global?.database?.total_batches ?? 0).toLocaleString()}
+          subtitle={`${global?.activity?.last_24_hours?.batches_24h ?? 0} last 24h`}
           icon={BarChart3}
           iconBgColor="bg-cyan-500/20"
         />
@@ -88,58 +81,66 @@ const DashboardContent = () => {
         <SensorCharts />
       </div>
 
-      {/* GPS Position */}
+      {/* GPS Position & Device Activity */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-8">
         <SensorCard
-          title="GPS POSITION"
-          icon={MapPin}
+          title="DATA TIME RANGE"
+          icon={Clock}
           iconBgColor="bg-green-500/20"
           className="min-h-[200px]"
         >
           <div className="space-y-2 text-sm">
             <div className="flex justify-between">
-              <span className="text-muted-foreground">Satellites:</span>
-              <span className="font-medium">—</span>
+              <span className="text-muted-foreground">Data Span:</span>
+              <span className="font-medium">{global?.time_ranges?.data_span_days?.toFixed(1) ?? "—"} days</span>
             </div>
             <div className="flex justify-between">
-              <span className="text-muted-foreground">Altitude:</span>
-              <span className="font-medium">— m</span>
+              <span className="text-muted-foreground">Earliest Reading:</span>
+              <span className="font-medium text-xs">
+                {global?.time_ranges?.earliest_reading 
+                  ? new Date(global.time_ranges.earliest_reading).toLocaleDateString() 
+                  : "—"}
+              </span>
             </div>
             <div className="flex justify-between">
-              <span className="text-muted-foreground">Speed:</span>
-              <span className="font-medium">— km/h</span>
+              <span className="text-muted-foreground">Latest Reading:</span>
+              <span className="font-medium text-xs">
+                {global?.time_ranges?.latest_reading 
+                  ? new Date(global.time_ranges.latest_reading).toLocaleString() 
+                  : "—"}
+              </span>
             </div>
           </div>
         </SensorCard>
 
-        {/* ADS-B Stats */}
+        {/* Device Activity */}
         <SensorCard
-          title="ADS-B TRACKING"
-          icon={Radio}
+          title="DEVICE ACTIVITY"
+          icon={Activity}
           iconBgColor="bg-cyan-500/20"
           className="min-h-[200px]"
         >
-          {adsbLoading ? (
+          {statsLoading ? (
             <div className="flex items-center justify-center py-4">
               <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
             </div>
           ) : (
             <div className="space-y-2 text-sm">
               <div className="flex justify-between">
-                <span className="text-muted-foreground">Active Aircraft:</span>
-                <span className="font-medium">{adsbStats?.aircraft_active ?? "—"}</span>
+                <span className="text-muted-foreground">Active (1h):</span>
+                <span className="font-medium text-success">{activeDevices1h} devices</span>
               </div>
               <div className="flex justify-between">
-                <span className="text-muted-foreground">Total Tracked:</span>
-                <span className="font-medium">{adsbStats?.aircraft_tracked_total?.toLocaleString() ?? "—"}</span>
+                <span className="text-muted-foreground">Active (24h):</span>
+                <span className="font-medium">{global?.activity?.last_24_hours?.active_devices_24h ?? "—"} devices</span>
               </div>
               <div className="flex justify-between">
-                <span className="text-muted-foreground">Messages:</span>
-                <span className="font-medium">{adsbStats?.messages_decoded?.toLocaleString() ?? "—"}</span>
+                <span className="text-muted-foreground">Readings (24h):</span>
+                <span className="font-medium">{global?.activity?.last_24_hours?.readings_24h?.toLocaleString() ?? "—"}</span>
               </div>
               <div className="flex justify-between">
-                <span className="text-muted-foreground">Positions:</span>
-                <span className="font-medium">{adsbStats?.positions_received?.toLocaleString() ?? "—"}</span>
+                <span className="text-muted-foreground">Avg/Hour:</span>
+                <span className="font-medium">{global?.activity?.avg_readings_per_hour?.toFixed(1) ?? "—"}</span>
               </div>
             </div>
           )}
