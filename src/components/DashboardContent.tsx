@@ -25,7 +25,7 @@ const DashboardContent = () => {
   const sensorsSummary = stats?.sensors_summary;
 
   const totalReadings = global?.database?.total_readings ?? 0;
-  const totalDevices = global?.devices?.total_unique_devices ?? 0;
+  const totalClients = global?.database?.total_clients ?? 0;
   const activeDevices1h = global?.activity?.last_1_hour?.active_devices_1h ?? 0;
   const readings1h = global?.activity?.last_1_hour?.readings_1h ?? 0;
   const totalSensorTypes = sensorsSummary?.total_sensor_types ?? 0;
@@ -43,9 +43,9 @@ const DashboardContent = () => {
       {/* Top Stats */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
         <SensorCard
-          title="TOTAL DEVICES"
-          value={statsLoading ? "..." : totalDevices.toString()}
-          subtitle={`${activeDevices1h} active last hour`}
+          title="CONNECTED CLIENTS"
+          value={statsLoading ? "..." : totalClients.toString()}
+          subtitle={`${activeDevices1h} sensor types active`}
           icon={Activity}
           iconBgColor="bg-green-500/20"
         />
