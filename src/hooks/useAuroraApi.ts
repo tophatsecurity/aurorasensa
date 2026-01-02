@@ -85,6 +85,30 @@ export interface AdsbStats {
   uptime_seconds?: number;
 }
 
+export interface DashboardStats {
+  avg_humidity: number | null;
+  avg_power_w: number | null;
+  avg_signal_dbm: number | null;
+  avg_temp_aht: number | null;
+  avg_temp_bmt: number | null;
+  avg_temp_c: number | null;
+  avg_temp_f: number | null;
+  total_clients: number;
+  total_sensors: number;
+}
+
+export interface TimeseriesPoint {
+  timestamp: string;
+  value: number;
+}
+
+export interface DashboardTimeseries {
+  humidity: TimeseriesPoint[];
+  power: TimeseriesPoint[];
+  signal: TimeseriesPoint[];
+  temperature: TimeseriesPoint[];
+}
+
 // Sensors list response from Aurora API
 interface SensorsListResponse {
   count: number;
@@ -127,6 +151,24 @@ export function useAdsbStats() {
     queryKey: ["aurora", "adsb", "stats"],
     queryFn: () => callAuroraProxy<AdsbStats>("/api/adsb/stats"),
     refetchInterval: 10000,
+    retry: 2,
+  });
+}
+
+export function useDashboardStats() {
+  return useQuery({
+    queryKey: ["aurora", "dashboard", "stats"],
+    queryFn: () => callAuroraProxy<DashboardStats>("/api/dashboard/sensor-stats"),
+    refetchInterval: 10000,
+    retry: 2,
+  });
+}
+
+export function useDashboardTimeseries(hours: number = 24) {
+  return useQuery({
+    queryKey: ["aurora", "dashboard", "timeseries", hours],
+    queryFn: () => callAuroraProxy<DashboardTimeseries>(`/api/dashboard/sensor-timeseries?hours=${hours}`),
+    refetchInterval: 30000,
     retry: 2,
   });
 }
