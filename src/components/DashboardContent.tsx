@@ -6,10 +6,12 @@ import {
   Droplets, 
   Signal,
   MapPin,
-  Loader2
+  Loader2,
+  TrendingUp
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import SensorCard from "./SensorCard";
+import SensorCharts from "./SensorCharts";
 import { useSensors, useAlerts, useAdsbStats } from "@/hooks/useAuroraApi";
 
 const DashboardContent = () => {
@@ -77,42 +79,13 @@ const DashboardContent = () => {
         />
       </div>
 
-      {/* Sensor Trends */}
+      {/* Realtime Sensor Charts */}
       <div className="mb-8">
         <h2 className="text-lg font-semibold mb-4 flex items-center gap-2">
-          <BarChart3 className="w-5 h-5 text-primary" />
-          Sensor Trends (Last Hour)
+          <TrendingUp className="w-5 h-5 text-primary" />
+          Sensor Trends (Realtime)
         </h2>
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-          <SensorCard
-            title="TEMPERATURE"
-            value={avgTemp !== null ? `${avgTemp}°C` : "—"}
-            icon={Thermometer}
-            iconBgColor="bg-red-500/20"
-            className="min-h-[180px]"
-          />
-          <SensorCard
-            title="HUMIDITY"
-            value="—"
-            icon={Droplets}
-            iconBgColor="bg-blue-400/20"
-            className="min-h-[180px]"
-          />
-          <SensorCard
-            title="SIGNAL STRENGTH"
-            value={avgSignal !== null ? `${avgSignal} dBm` : "—"}
-            icon={Signal}
-            iconBgColor="bg-purple-400/20"
-            className="min-h-[180px]"
-          />
-          <SensorCard
-            title="POWER"
-            value={avgPower !== null ? `${avgPower}W` : "—"}
-            icon={Zap}
-            iconBgColor="bg-orange-400/20"
-            className="min-h-[180px]"
-          />
-        </div>
+        <SensorCharts />
       </div>
 
       {/* GPS Position */}

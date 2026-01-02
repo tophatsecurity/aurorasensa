@@ -4,6 +4,8 @@ import Sidebar from "@/components/Sidebar";
 import DashboardContent from "@/components/DashboardContent";
 import SensorsContent from "@/components/SensorsContent";
 import AlertsContent from "@/components/AlertsContent";
+import MapContent from "@/components/MapContent";
+import DevicesContent from "@/components/DevicesContent";
 
 const Index = () => {
   const [activeItem, setActiveItem] = useState("dashboard");
@@ -17,7 +19,9 @@ const Index = () => {
       case "alerts":
         return <AlertsContent />;
       case "map":
+        return <MapContent />;
       case "devices":
+        return <DevicesContent />;
       case "rules":
       case "power":
       case "data-batches":
@@ -41,7 +45,7 @@ const Index = () => {
     <div className="min-h-screen flex relative">
       <AuroraBackground />
       <Sidebar activeItem={activeItem} onNavigate={setActiveItem} />
-      <main className="flex-1 relative z-10">
+      <main className="flex-1 relative z-10 overflow-hidden">
         {renderContent()}
       </main>
     </div>
