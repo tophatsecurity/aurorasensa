@@ -13,6 +13,7 @@ import {
 import { Badge } from "@/components/ui/badge";
 import SensorCard from "./SensorCard";
 import SensorCharts from "./SensorCharts";
+import MiniMapPreview from "./MiniMapPreview";
 import { useComprehensiveStats, useAlerts } from "@/hooks/useAuroraApi";
 
 const DashboardContent = () => {
@@ -147,7 +148,7 @@ const DashboardContent = () => {
         </SensorCard>
       </div>
 
-      {/* Sensor Map Placeholder */}
+      {/* Sensor Map Preview */}
       <div className="mb-8">
         <h2 className="text-lg font-semibold mb-4 flex items-center gap-2">
           <MapPin className="w-5 h-5 text-primary" />
@@ -155,16 +156,13 @@ const DashboardContent = () => {
         </h2>
         <div className="glass-card rounded-xl p-6 border border-border/50">
           <div className="flex items-center gap-2 mb-4">
-            <span className="text-sm text-muted-foreground">Show:</span>
-            <Badge variant="default" className="bg-primary text-primary-foreground">All</Badge>
+            <span className="text-sm text-muted-foreground">Showing:</span>
             <Badge variant="outline" className="border-green-500 text-green-500">🛰 GPS</Badge>
             <Badge variant="outline" className="border-cyan-500 text-cyan-500">✈ ADS-B</Badge>
-            <Badge variant="outline" className="border-blue-500 text-blue-500">📡 Starlink</Badge>
-            <Badge variant="outline" className="border-orange-500 text-orange-500">📻 LoRa</Badge>
+            <Badge variant="outline" className="border-violet-500 text-violet-500">📡 Starlink</Badge>
+            <Badge variant="outline" className="border-red-500 text-red-500">📻 LoRa</Badge>
           </div>
-          <div className="h-64 bg-muted/20 rounded-lg flex items-center justify-center text-muted-foreground">
-            Map visualization coming soon...
-          </div>
+          <MiniMapPreview />
         </div>
       </div>
 
