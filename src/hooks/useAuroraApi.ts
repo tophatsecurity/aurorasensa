@@ -11,10 +11,18 @@ async function callAuroraApi<T>(path: string, method: string = "GET", body?: unk
   });
 
   if (error) {
+    console.error(`Aurora API error for ${path}:`, error.message);
     throw new Error(`Aurora API error: ${error.message}`);
   }
 
+  // Handle backend errors returned in the response body
+  if (data && typeof data === 'object' && 'detail' in data) {
+    console.error(`Aurora backend error for ${path}:`, data.detail);
+    throw new Error(String(data.detail));
+  }
+
   if ((data as AuroraProxyResponse)?.error) {
+    console.error(`Aurora API response error for ${path}:`, (data as AuroraProxyResponse).error);
     throw new Error((data as AuroraProxyResponse).error);
   }
 
@@ -399,11 +407,16 @@ export function useLatestReadings() {
   return useQuery({
     queryKey: ["aurora", "readings", "latest"],
     queryFn: async () => {
-      const response = await callAuroraApi<LatestReadingsResponse>("/api/readings/latest");
-      return response.readings || [];
+      try {
+        const response = await callAuroraApi<LatestReadingsResponse>("/api/readings/latest");
+        return response.readings || [];
+      } catch (error) {
+        console.warn("Failed to fetch latest readings, returning empty array:", error);
+        return [];
+      }
     },
     refetchInterval: 10000,
-    retry: 2,
+    retry: 1,
   });
 }
 
