@@ -259,10 +259,23 @@ const DevicesContent = () => {
     });
   });
 
+  // Sort devices: "to be adopted" first, then by status
+  const sortedDevices = [...devices].sort((a, b) => {
+    const aAdopted = a.status.toLowerCase() === 'pending' || a.status.toLowerCase() === 'to adopt' || a.status.toLowerCase() === 'stale';
+    const bAdopted = b.status.toLowerCase() === 'pending' || b.status.toLowerCase() === 'to adopt' || b.status.toLowerCase() === 'stale';
+    if (aAdopted && !bAdopted) return -1;
+    if (!aAdopted && bAdopted) return 1;
+    // Then sort by status: offline > stale > online
+    const statusOrder = { 'offline': 0, 'stale': 1, 'pending': 2, 'to adopt': 3, 'online': 4, 'active': 5 };
+    const aOrder = statusOrder[a.status.toLowerCase() as keyof typeof statusOrder] ?? 3;
+    const bOrder = statusOrder[b.status.toLowerCase() as keyof typeof statusOrder] ?? 3;
+    return aOrder - bOrder;
+  });
+
   // Filter devices
   const filteredDevices = filter === 'all' 
-    ? devices 
-    : devices.filter(d => d.type.toLowerCase() === filter);
+    ? sortedDevices 
+    : sortedDevices.filter(d => d.type.toLowerCase() === filter);
 
   // Device counts
   const counts = {
