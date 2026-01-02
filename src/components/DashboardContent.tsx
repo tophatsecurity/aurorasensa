@@ -8,12 +8,13 @@ import {
   TrendingUp,
   Activity,
   Database,
-  Clock
+  Clock,
+  ExternalLink
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import SensorCard from "./SensorCard";
 import SensorCharts from "./SensorCharts";
-import MiniMapPreview from "./MiniMapPreview";
 import { useComprehensiveStats, useAlerts } from "@/hooks/useAuroraApi";
 
 const DashboardContent = () => {
@@ -162,7 +163,27 @@ const DashboardContent = () => {
             <Badge variant="outline" className="border-violet-500 text-violet-500">📡 Starlink</Badge>
             <Badge variant="outline" className="border-red-500 text-red-500">📻 LoRa</Badge>
           </div>
-          <MiniMapPreview />
+          <div 
+            className="h-64 rounded-lg overflow-hidden relative bg-slate-900 flex items-center justify-center cursor-pointer group"
+            style={{
+              backgroundImage: 'url(https://api.mapbox.com/styles/v1/mapbox/dark-v11/static/-74.006,40.7128,8,0/800x400?access_token=pk.placeholder)',
+              backgroundSize: 'cover',
+              backgroundPosition: 'center'
+            }}
+          >
+            <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent" />
+            <div className="text-center z-10">
+              <MapPin className="w-12 h-12 text-primary mx-auto mb-2 opacity-80" />
+              <p className="text-white/80 text-sm mb-3">View interactive sensor & aircraft map</p>
+              <Badge className="bg-primary/90 text-primary-foreground gap-1">
+                <ExternalLink className="w-3 h-3" />
+                Open Full Map
+              </Badge>
+            </div>
+          </div>
+          <p className="text-xs text-muted-foreground mt-3 text-center">
+            Click "Map" in the sidebar to view the full interactive map with real-time tracking
+          </p>
         </div>
       </div>
 
