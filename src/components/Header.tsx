@@ -11,7 +11,7 @@ const Header = () => {
   const getConnectionStatus = () => {
     if (isLoading) return { status: 'connecting', label: 'Connecting...', color: 'bg-warning', icon: Wifi };
     if (isError) return { status: 'offline', label: 'Offline', color: 'bg-destructive', icon: WifiOff };
-    return { status: 'online', label: 'Online', color: 'bg-success', icon: Wifi };
+    return { status: 'online', label: 'Live', color: 'bg-success', icon: Wifi };
   };
   
   const connection = getConnectionStatus();
