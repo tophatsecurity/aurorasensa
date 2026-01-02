@@ -1,6 +1,7 @@
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect } from "react";
 import { MapContainer, TileLayer, useMap } from "react-leaflet";
 import { ZoomIn, ZoomOut, Maximize2 } from "lucide-react";
+import L from "leaflet";
 import "leaflet/dist/leaflet.css";
 
 // Types and utilities
@@ -63,6 +64,22 @@ const MapControlsInner = () => {
   );
 };
 
+// Component to invalidate map size after mount
+const MapResizer = () => {
+  const map = useMap();
+  
+  useEffect(() => {
+    // Invalidate size after a short delay to ensure container is rendered
+    const timer = setTimeout(() => {
+      map.invalidateSize();
+    }, 100);
+    
+    return () => clearTimeout(timer);
+  }, [map]);
+  
+  return null;
+};
+
 const MapContent = () => {
   const [filter, setFilter] = useState<FilterType>('all');
   
@@ -83,9 +100,9 @@ const MapContent = () => {
   const showAircraft = filter === 'all' || filter === 'adsb';
 
   return (
-    <div className="flex-1 flex flex-col h-screen overflow-hidden">
+    <div className="flex flex-col h-full w-full">
       {/* Header */}
-      <div className="p-6 pb-4 border-b border-border/50">
+      <div className="p-6 pb-4 border-b border-border/50 shrink-0">
         <MapHeader 
           stats={stats}
           timeAgo={timeAgo}
@@ -100,11 +117,11 @@ const MapContent = () => {
       </div>
 
       {/* Map Container */}
-      <div className="flex-1 relative">
+      <div className="flex-1 relative min-h-0">
         <MapContainer
           center={MAP_CONFIG.defaultCenter}
           zoom={MAP_CONFIG.defaultZoom}
-          className="h-full w-full"
+          className="absolute inset-0"
           style={{ background: MAP_CONFIG.backgroundColor }}
           zoomControl={false}
         >
@@ -113,6 +130,7 @@ const MapContent = () => {
             url={MAP_CONFIG.tileUrl}
           />
 
+          <MapResizer />
           <MapControlsInner />
           
           {allPositions.length > 0 && <FitBounds markers={allPositions} />}
