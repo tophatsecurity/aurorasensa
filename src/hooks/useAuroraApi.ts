@@ -109,6 +109,82 @@ export interface DashboardTimeseries {
   temperature: TimeseriesPoint[];
 }
 
+// Comprehensive stats from /api/stats/comprehensive
+export interface DeviceSummary {
+  device_id: string;
+  device_type: string;
+  status: string;
+  total_readings: number;
+  first_seen: string;
+  last_seen: string;
+  active_last_hour: boolean;
+  active_last_24h: boolean;
+  minutes_since_last_seen: number;
+}
+
+export interface SensorTypeSummary {
+  device_type: string;
+  device_count: number;
+  total_readings: number;
+  first_seen: string;
+  last_seen: string;
+  active_last_hour: boolean;
+}
+
+export interface ComprehensiveStats {
+  timestamp: string;
+  global: {
+    timestamp: string;
+    database: {
+      total_readings: number;
+      total_batches: number;
+      total_clients: number;
+      active_alerts: number;
+      total_alert_rules: number;
+    };
+    devices: {
+      total_unique_devices: number;
+      total_device_types: number;
+    };
+    activity: {
+      avg_readings_per_hour: number;
+      last_1_hour: {
+        readings_1h: number;
+        batches_1h: number;
+        active_devices_1h: number;
+      };
+      last_24_hours: {
+        readings_24h: number;
+        batches_24h: number;
+        active_devices_24h: number;
+      };
+    };
+    time_ranges: {
+      earliest_reading: string;
+      latest_reading: string;
+      data_span_seconds: number;
+      data_span_days: number;
+    };
+    sensors: {
+      by_type: Array<{
+        device_type: string;
+        device_count: number;
+        reading_count: number;
+        first_seen: string;
+        last_seen: string;
+      }>;
+    };
+  };
+  devices_summary: {
+    total_devices: number;
+    devices: DeviceSummary[];
+  };
+  sensors_summary: {
+    total_sensor_types: number;
+    sensor_types: SensorTypeSummary[];
+  };
+}
+
 // Client/Device data types
 export interface ClientSensorConfig {
   device_id: string;
@@ -228,6 +304,26 @@ export function useDashboardTimeseries(hours: number = 24) {
     queryKey: ["aurora", "dashboard", "timeseries", hours],
     queryFn: () => callAuroraProxy<DashboardTimeseries>(`/api/dashboard/sensor-timeseries?hours=${hours}`),
     refetchInterval: 30000,
+    retry: 2,
+  });
+}
+
+// New comprehensive stats hook - provides all stats in one call
+export function useComprehensiveStats() {
+  return useQuery({
+    queryKey: ["aurora", "stats", "comprehensive"],
+    queryFn: () => callAuroraProxy<ComprehensiveStats>("/api/stats/comprehensive"),
+    refetchInterval: 10000,
+    retry: 2,
+  });
+}
+
+// Device stats hook
+export function useDeviceStats() {
+  return useQuery({
+    queryKey: ["aurora", "stats", "devices"],
+    queryFn: () => callAuroraProxy<{ total_devices: number; devices: DeviceSummary[] }>("/api/stats/devices"),
+    refetchInterval: 10000,
     retry: 2,
   });
 }
