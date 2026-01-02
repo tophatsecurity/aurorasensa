@@ -1,5 +1,5 @@
 import { useState, useCallback, useEffect, useRef } from "react";
-import { ZoomIn, ZoomOut, Maximize2, RefreshCw } from "lucide-react";
+import { ZoomIn, ZoomOut, Maximize2, Play, Pause } from "lucide-react";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
 
@@ -18,11 +18,38 @@ import { MapHeader } from "@/components/map/MapHeader";
 import { MapFilters } from "@/components/map/MapFilters";
 import { Button } from "@/components/ui/button";
 
+// Animate marker to new position
+const animateMarker = (marker: L.Marker, targetLat: number, targetLng: number, duration: number = 1000) => {
+  const startPos = marker.getLatLng();
+  const startTime = performance.now();
+  
+  const animate = (currentTime: number) => {
+    const elapsed = currentTime - startTime;
+    const progress = Math.min(elapsed / duration, 1);
+    
+    // Easing function (ease-out-cubic)
+    const eased = 1 - Math.pow(1 - progress, 3);
+    
+    const newLat = startPos.lat + (targetLat - startPos.lat) * eased;
+    const newLng = startPos.lng + (targetLng - startPos.lng) * eased;
+    
+    marker.setLatLng([newLat, newLng]);
+    
+    if (progress < 1) {
+      requestAnimationFrame(animate);
+    }
+  };
+  
+  requestAnimationFrame(animate);
+};
+
 const MapContent = () => {
   const mapContainerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<L.Map | null>(null);
-  const markersLayerRef = useRef<L.LayerGroup | null>(null);
+  const markersRef = useRef<Map<string, L.Marker>>(new Map());
   const [filter, setFilter] = useState<FilterType>('all');
+  const [isLiveTracking, setIsLiveTracking] = useState(true);
+  const [hasInitialFit, setHasInitialFit] = useState(false);
   
   const {
     aircraftMarkers,
@@ -49,7 +76,6 @@ const MapContent = () => {
       attribution: MAP_CONFIG.attribution,
     }).addTo(map);
 
-    markersLayerRef.current = L.layerGroup().addTo(map);
     mapRef.current = map;
 
     // Force resize after mount
@@ -60,22 +86,23 @@ const MapContent = () => {
     return () => {
       map.remove();
       mapRef.current = null;
-      markersLayerRef.current = null;
+      markersRef.current.clear();
     };
   }, []);
 
-  // Update markers when data or filter changes
+  // Update markers with animations
   useEffect(() => {
-    if (!markersLayerRef.current) return;
+    if (!mapRef.current) return;
 
-    // Clear existing markers
-    markersLayerRef.current.clearLayers();
-
+    const existingMarkerIds = new Set<string>();
     const showAircraft = filter === 'all' || filter === 'adsb';
 
-    // Add aircraft markers
+    // Update/add aircraft markers
     if (showAircraft) {
       aircraftMarkers.forEach((ac) => {
+        const markerId = `aircraft-${ac.hex}`;
+        existingMarkerIds.add(markerId);
+        
         const popupContent = `
           <div class="p-2 min-w-[200px]">
             <div class="font-bold text-lg mb-2">${ac.flight?.trim() || ac.hex}</div>
@@ -87,17 +114,44 @@ const MapContent = () => {
             </div>
           </div>
         `;
-        L.marker([ac.lat, ac.lon], { icon: mapIcons.adsb })
-          .bindPopup(popupContent)
-          .addTo(markersLayerRef.current!);
+
+        const existingMarker = markersRef.current.get(markerId);
+        
+        if (existingMarker) {
+          // Animate to new position
+          animateMarker(existingMarker, ac.lat, ac.lon);
+          existingMarker.setPopupContent(popupContent);
+        } else {
+          // Create new marker with fade-in animation
+          const marker = L.marker([ac.lat, ac.lon], { 
+            icon: mapIcons.adsb,
+            opacity: 0 
+          })
+            .bindPopup(popupContent)
+            .addTo(mapRef.current!);
+          
+          // Fade in animation
+          let opacity = 0;
+          const fadeIn = () => {
+            opacity += 0.1;
+            marker.setOpacity(Math.min(opacity, 1));
+            if (opacity < 1) requestAnimationFrame(fadeIn);
+          };
+          requestAnimationFrame(fadeIn);
+          
+          markersRef.current.set(markerId, marker);
+        }
       });
     }
 
-    // Add sensor markers based on filter
+    // Update/add sensor markers
     sensorMarkers.forEach((sensor) => {
       const sensorType = sensor.type.toLowerCase();
       if (filter !== 'all' && sensorType !== filter) return;
 
+      const markerId = `sensor-${sensor.id}`;
+      existingMarkerIds.add(markerId);
+      
       const icon = mapIcons[sensorType as IconType] || mapIcons.gps;
       
       const popupContent = `
@@ -111,14 +165,38 @@ const MapContent = () => {
           </div>
         </div>
       `;
-      L.marker([sensor.location.lat, sensor.location.lng], { icon })
-        .bindPopup(popupContent)
-        .addTo(markersLayerRef.current!);
+
+      const existingMarker = markersRef.current.get(markerId);
+      
+      if (existingMarker) {
+        animateMarker(existingMarker, sensor.location.lat, sensor.location.lng);
+        existingMarker.setPopupContent(popupContent);
+      } else {
+        const marker = L.marker([sensor.location.lat, sensor.location.lng], { 
+          icon,
+          opacity: 0 
+        })
+          .bindPopup(popupContent)
+          .addTo(mapRef.current!);
+        
+        let opacity = 0;
+        const fadeIn = () => {
+          opacity += 0.1;
+          marker.setOpacity(Math.min(opacity, 1));
+          if (opacity < 1) requestAnimationFrame(fadeIn);
+        };
+        requestAnimationFrame(fadeIn);
+        
+        markersRef.current.set(markerId, marker);
+      }
     });
 
-    // Add client device markers when filter is 'all' or 'clients'
+    // Update/add client markers
     if (filter === 'all' || filter === 'clients') {
       clientMarkers.forEach((client) => {
+        const markerId = `client-${client.client_id}`;
+        existingMarkerIds.add(markerId);
+        
         const popupContent = `
           <div class="p-2 min-w-[180px]">
             <div class="font-bold mb-2">${client.hostname}</div>
@@ -128,18 +206,69 @@ const MapContent = () => {
             </div>
           </div>
         `;
-        L.marker([client.location.lat, client.location.lng], { icon: mapIcons.client })
-          .bindPopup(popupContent)
-          .addTo(markersLayerRef.current!);
+
+        const existingMarker = markersRef.current.get(markerId);
+        
+        if (existingMarker) {
+          animateMarker(existingMarker, client.location.lat, client.location.lng);
+          existingMarker.setPopupContent(popupContent);
+        } else {
+          const marker = L.marker([client.location.lat, client.location.lng], { 
+            icon: mapIcons.client,
+            opacity: 0 
+          })
+            .bindPopup(popupContent)
+            .addTo(mapRef.current!);
+          
+          let opacity = 0;
+          const fadeIn = () => {
+            opacity += 0.1;
+            marker.setOpacity(Math.min(opacity, 1));
+            if (opacity < 1) requestAnimationFrame(fadeIn);
+          };
+          requestAnimationFrame(fadeIn);
+          
+          markersRef.current.set(markerId, marker);
+        }
       });
     }
 
-    // Fit bounds if we have positions
-    if (allPositions.length > 0 && mapRef.current) {
+    // Remove markers that no longer exist with fade-out animation
+    markersRef.current.forEach((marker, id) => {
+      if (!existingMarkerIds.has(id)) {
+        let opacity = 1;
+        const fadeOut = () => {
+          opacity -= 0.1;
+          marker.setOpacity(Math.max(opacity, 0));
+          if (opacity > 0) {
+            requestAnimationFrame(fadeOut);
+          } else {
+            marker.remove();
+            markersRef.current.delete(id);
+          }
+        };
+        requestAnimationFrame(fadeOut);
+      }
+    });
+
+    // Initial fit bounds (only once)
+    if (!hasInitialFit && allPositions.length > 0 && mapRef.current) {
       const bounds = L.latLngBounds(allPositions);
       mapRef.current.fitBounds(bounds, { padding: [50, 50], maxZoom: 12 });
+      setHasInitialFit(true);
     }
-  }, [aircraftMarkers, sensorMarkers, clientMarkers, filter, allPositions]);
+  }, [aircraftMarkers, sensorMarkers, clientMarkers, filter, allPositions, hasInitialFit]);
+
+  // Auto-refresh for live tracking
+  useEffect(() => {
+    if (!isLiveTracking) return;
+    
+    const interval = setInterval(() => {
+      handleRefresh();
+    }, MAP_CONFIG.autoRefreshInterval);
+    
+    return () => clearInterval(interval);
+  }, [isLiveTracking, handleRefresh]);
 
   const handleFilterChange = useCallback((newFilter: FilterType) => {
     setFilter(newFilter);
@@ -154,7 +283,16 @@ const MapContent = () => {
   }, []);
 
   const handleRecenter = useCallback(() => {
-    mapRef.current?.setView(MAP_CONFIG.defaultCenter, MAP_CONFIG.defaultZoom);
+    if (allPositions.length > 0 && mapRef.current) {
+      const bounds = L.latLngBounds(allPositions);
+      mapRef.current.fitBounds(bounds, { padding: [50, 50], maxZoom: 12 });
+    } else {
+      mapRef.current?.setView(MAP_CONFIG.defaultCenter, MAP_CONFIG.defaultZoom);
+    }
+  }, [allPositions]);
+
+  const toggleLiveTracking = useCallback(() => {
+    setIsLiveTracking(prev => !prev);
   }, []);
 
   return (
@@ -208,7 +346,27 @@ const MapContent = () => {
           >
             <Maximize2 className="w-4 h-4" />
           </Button>
+          <Button 
+            variant={isLiveTracking ? "default" : "outline"}
+            size="icon"
+            className={isLiveTracking 
+              ? "bg-primary hover:bg-primary/90" 
+              : "bg-card/90 backdrop-blur border-border/50 hover:bg-card"
+            }
+            onClick={toggleLiveTracking}
+            title={isLiveTracking ? "Pause live tracking" : "Resume live tracking"}
+          >
+            {isLiveTracking ? <Pause className="w-4 h-4" /> : <Play className="w-4 h-4" />}
+          </Button>
         </div>
+
+        {/* Live indicator */}
+        {isLiveTracking && (
+          <div className="absolute top-4 left-1/2 -translate-x-1/2 z-[1000] flex items-center gap-2 px-3 py-1.5 rounded-full bg-card/90 backdrop-blur border border-border/50">
+            <div className="w-2 h-2 rounded-full bg-green-500 animate-pulse" />
+            <span className="text-xs font-medium">LIVE</span>
+          </div>
+        )}
 
         <MapLegend />
         <MapStatistics stats={stats} />
