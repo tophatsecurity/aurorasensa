@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { 
   Cpu, 
   Wifi, 
@@ -13,7 +14,11 @@ import {
   Server,
   Clock,
   Settings,
-  Activity
+  Activity,
+  ChevronDown,
+  ChevronUp,
+  Eye,
+  Database
 } from "lucide-react";
 import {
   Dialog,
@@ -22,7 +27,9 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { ScrollArea } from "@/components/ui/scroll-area";
 import { Client } from "@/hooks/useAuroraApi";
 
 interface DeviceDetailDialogProps {
@@ -68,38 +75,86 @@ const getSensorColor = (sensorType: string) => {
   }
 };
 
-const SensorCard = ({ sensorId, config, type }: { sensorId: string; config: SensorConfig | null; type: string }) => {
+const formatValue = (key: string, value: unknown): string => {
+  if (value === null || value === undefined) return '—';
+  if (typeof value === 'boolean') return value ? 'Yes' : 'No';
+  if (typeof value === 'number') {
+    if (key.includes('frequency')) return `${(value / 1000000).toFixed(2)} MHz`;
+    if (key.includes('seconds') || key.includes('interval') || key.includes('timeout')) return `${value}s`;
+    if (key.includes('bytes')) return `${(value / 1024 / 1024).toFixed(2)} MB`;
+    if (key.includes('percent')) return `${value.toFixed(1)}%`;
+    return value.toString();
+  }
+  if (typeof value === 'object') return JSON.stringify(value);
+  return String(value);
+};
+
+const formatLabel = (key: string): string => {
+  return key
+    .replace(/_/g, ' ')
+    .replace(/([A-Z])/g, ' $1')
+    .replace(/^./, str => str.toUpperCase())
+    .trim();
+};
+
+interface SensorCardProps {
+  sensorId: string;
+  config: SensorConfig | null;
+  type: string;
+  onViewAll: () => void;
+  isExpanded: boolean;
+}
+
+const SensorCard = ({ sensorId, config, type, onViewAll, isExpanded }: SensorCardProps) => {
   const color = getSensorColor(type);
   const enabled = config?.enabled ?? true;
 
-  const getConfigDetails = () => {
+  // Get summary metrics (first 4 important values)
+  const getSummaryMetrics = () => {
     if (!config) return [];
-    const details: { label: string; value: string }[] = [];
+    const metrics: { label: string; value: string }[] = [];
     
-    // Common fields to display
-    if ('frequency' in config && config.frequency) {
-      const freq = config.frequency as number;
-      details.push({ label: 'Frequency', value: `${(freq / 1000000).toFixed(1)} MHz` });
-    }
-    if ('gain' in config) details.push({ label: 'Gain', value: `${config.gain}` });
-    if ('sample_rate' in config) details.push({ label: 'Sample Rate', value: `${config.sample_rate}` });
-    if ('interface' in config) details.push({ label: 'Interface', value: `${config.interface}` });
-    if ('serial_port' in config) details.push({ label: 'Serial Port', value: `${config.serial_port}` });
-    if ('baud_rate' in config) details.push({ label: 'Baud Rate', value: `${config.baud_rate}` });
-    if ('scan_interval' in config) details.push({ label: 'Scan Interval', value: `${config.scan_interval}s` });
-    if ('host' in config) details.push({ label: 'Host', value: `${config.host}` });
-    if ('port' in config) details.push({ label: 'Port', value: `${config.port}` });
-    if ('coverage_radius_km' in config) details.push({ label: 'Coverage', value: `${config.coverage_radius_km} km` });
-    if ('sdr_type' in config) details.push({ label: 'SDR Type', value: `${config.sdr_type}` });
-    if ('rssi_threshold' in config) details.push({ label: 'RSSI Threshold', value: `${config.rssi_threshold} dBm` });
+    const priorityKeys = [
+      'frequency', 'gain', 'sample_rate', 'interface', 'serial_port', 
+      'baud_rate', 'scan_interval', 'host', 'port', 'coverage_radius_km',
+      'sdr_type', 'rssi_threshold', 'refresh_interval', 'max_range_km'
+    ];
 
-    return details.slice(0, 6); // Limit to 6 details
+    for (const key of priorityKeys) {
+      if (key in config && config[key] !== undefined && config[key] !== null) {
+        metrics.push({ label: formatLabel(key), value: formatValue(key, config[key]) });
+        if (metrics.length >= 4) break;
+      }
+    }
+
+    return metrics;
   };
 
-  const details = getConfigDetails();
+  // Get all properties (excluding common ones for the detailed view)
+  const getAllProperties = () => {
+    if (!config) return [];
+    const properties: { key: string; label: string; value: string }[] = [];
+    
+    const excludeKeys = ['device_id', 'enabled'];
+    
+    Object.entries(config).forEach(([key, value]) => {
+      if (!excludeKeys.includes(key) && value !== undefined && value !== null) {
+        properties.push({
+          key,
+          label: formatLabel(key),
+          value: formatValue(key, value)
+        });
+      }
+    });
+
+    return properties.sort((a, b) => a.label.localeCompare(b.label));
+  };
+
+  const summaryMetrics = getSummaryMetrics();
+  const allProperties = getAllProperties();
 
   return (
-    <div className="glass-card rounded-xl p-4 border border-border/50">
+    <div className="glass-card rounded-xl p-4 border border-border/50 transition-all">
       <div className="flex items-start justify-between mb-3">
         <div className="flex items-center gap-3">
           <div 
@@ -122,14 +177,58 @@ const SensorCard = ({ sensorId, config, type }: { sensorId: string; config: Sens
         </Badge>
       </div>
 
-      {details.length > 0 && (
+      {/* Summary Metrics */}
+      {summaryMetrics.length > 0 && (
         <div className="grid grid-cols-2 gap-2 mt-3 pt-3 border-t border-border/30">
-          {details.map((detail, idx) => (
+          {summaryMetrics.map((metric, idx) => (
             <div key={idx} className="text-xs">
-              <span className="text-muted-foreground">{detail.label}: </span>
-              <span className="font-medium">{detail.value}</span>
+              <span className="text-muted-foreground">{metric.label}: </span>
+              <span className="font-medium">{metric.value}</span>
             </div>
           ))}
+        </div>
+      )}
+
+      {/* Expand/Collapse Button */}
+      {allProperties.length > 0 && (
+        <div className="mt-3 pt-3 border-t border-border/30">
+          <Button 
+            variant="ghost" 
+            size="sm" 
+            className="w-full text-xs gap-2"
+            onClick={onViewAll}
+          >
+            {isExpanded ? (
+              <>
+                <ChevronUp className="w-3 h-3" />
+                Hide Details
+              </>
+            ) : (
+              <>
+                <Eye className="w-3 h-3" />
+                View All Data ({allProperties.length} properties)
+              </>
+            )}
+          </Button>
+
+          {/* Expanded Details */}
+          {isExpanded && (
+            <div className="mt-3 p-3 rounded-lg bg-muted/30 max-h-64 overflow-y-auto">
+              <div className="grid grid-cols-1 gap-2">
+                {allProperties.map((prop) => (
+                  <div 
+                    key={prop.key} 
+                    className="flex justify-between items-start py-1 border-b border-border/20 last:border-0"
+                  >
+                    <span className="text-xs text-muted-foreground">{prop.label}</span>
+                    <span className="text-xs font-mono text-right max-w-[60%] break-all">
+                      {prop.value}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
       )}
     </div>
@@ -141,11 +240,26 @@ const formatDate = (dateString: string) => {
 };
 
 const DeviceDetailDialog = ({ client, open, onOpenChange }: DeviceDetailDialogProps) => {
+  const [expandedSensors, setExpandedSensors] = useState<Set<string>>(new Set());
+
   if (!client) return null;
 
   const config = client.metadata?.config;
   const sensors = config?.sensors || {};
   const system = client.metadata?.system;
+
+  // Toggle sensor expansion
+  const toggleSensorExpanded = (sensorId: string) => {
+    setExpandedSensors(prev => {
+      const next = new Set(prev);
+      if (next.has(sensorId)) {
+        next.delete(sensorId);
+      } else {
+        next.add(sensorId);
+      }
+      return next;
+    });
+  };
 
   // Build sensor list from config
   const sensorItems: { id: string; type: string; config: SensorConfig | null }[] = [];
@@ -174,6 +288,13 @@ const DeviceDetailDialog = ({ client, open, onOpenChange }: DeviceDetailDialogPr
     }
   });
 
+  // Calculate sensor data summary
+  const sensorSummary = {
+    total: sensorItems.length,
+    active: sensorItems.filter(s => s.config?.enabled !== false).length,
+    types: [...new Set(sensorItems.map(s => s.type))].length,
+  };
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-3xl max-h-[85vh] overflow-hidden flex flex-col">
@@ -193,7 +314,7 @@ const DeviceDetailDialog = ({ client, open, onOpenChange }: DeviceDetailDialogPr
           <TabsList className="grid w-full grid-cols-3">
             <TabsTrigger value="sensors" className="gap-2">
               <Activity className="w-4 h-4" />
-              Sensors
+              Sensors ({sensorSummary.total})
             </TabsTrigger>
             <TabsTrigger value="info" className="gap-2">
               <Server className="w-4 h-4" />
@@ -205,8 +326,34 @@ const DeviceDetailDialog = ({ client, open, onOpenChange }: DeviceDetailDialogPr
             </TabsTrigger>
           </TabsList>
 
-          <div className="flex-1 overflow-y-auto mt-4">
+          <ScrollArea className="flex-1 mt-4">
             <TabsContent value="sensors" className="m-0">
+              {/* Sensor Summary Bar */}
+              {sensorItems.length > 0 && (
+                <div className="glass-card rounded-xl p-4 mb-4 border border-border/50">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <Database className="w-4 h-4 text-primary" />
+                      <span className="text-sm font-medium">Sensor Summary</span>
+                    </div>
+                    <div className="flex gap-4">
+                      <div className="text-center">
+                        <p className="text-lg font-bold text-primary">{sensorSummary.total}</p>
+                        <p className="text-xs text-muted-foreground">Total</p>
+                      </div>
+                      <div className="text-center">
+                        <p className="text-lg font-bold text-success">{sensorSummary.active}</p>
+                        <p className="text-xs text-muted-foreground">Active</p>
+                      </div>
+                      <div className="text-center">
+                        <p className="text-lg font-bold text-blue-400">{sensorSummary.types}</p>
+                        <p className="text-xs text-muted-foreground">Types</p>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+
               {sensorItems.length > 0 ? (
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                   {sensorItems.map((sensor) => (
@@ -215,6 +362,8 @@ const DeviceDetailDialog = ({ client, open, onOpenChange }: DeviceDetailDialogPr
                       sensorId={sensor.id} 
                       config={sensor.config}
                       type={sensor.type}
+                      onViewAll={() => toggleSensorExpanded(sensor.id)}
+                      isExpanded={expandedSensors.has(sensor.id)}
                     />
                   ))}
                 </div>
@@ -345,7 +494,7 @@ const DeviceDetailDialog = ({ client, open, onOpenChange }: DeviceDetailDialogPr
                 )}
               </div>
             </TabsContent>
-          </div>
+          </ScrollArea>
         </Tabs>
       </DialogContent>
     </Dialog>
