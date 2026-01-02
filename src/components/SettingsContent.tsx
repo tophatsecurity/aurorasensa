@@ -1,4 +1,4 @@
-import { Settings, Bell, Wifi, Database, Shield, Palette, Globe, Save } from "lucide-react";
+import { Settings, Bell, Wifi, Database, Shield, Palette, Globe, Save, CheckCircle, XCircle, Loader2 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -6,8 +6,19 @@ import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Separator } from "@/components/ui/separator";
+import { Badge } from "@/components/ui/badge";
+import { useComprehensiveStats, useClients } from "@/hooks/useAuroraApi";
+
+const AURORA_API_URL = "http://aurora.tophatsecurity.com:9151";
 
 const SettingsContent = () => {
+  const { data: stats, isLoading: statsLoading, error: statsError } = useComprehensiveStats();
+  const { data: clients, isLoading: clientsLoading } = useClients();
+
+  const isConnected = !statsError && stats;
+  const totalClients = stats?.global?.database?.total_clients ?? 0;
+  const totalReadings = stats?.global?.database?.total_readings ?? 0;
+
   return (
     <div className="flex-1 p-6 overflow-y-auto">
       <div className="flex items-center justify-between mb-6">
@@ -22,6 +33,55 @@ const SettingsContent = () => {
       </div>
 
       <div className="grid gap-6 max-w-4xl">
+        {/* API Status Card */}
+        <Card className="bg-card/50 backdrop-blur-sm border-border/50">
+          <CardHeader>
+            <CardTitle className="text-lg flex items-center gap-2">
+              <Wifi className="w-5 h-5" />
+              API Connection Status
+            </CardTitle>
+            <CardDescription>Current connection to Aurora API server</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="flex items-center justify-between p-4 rounded-lg bg-muted/30">
+              <div className="flex items-center gap-3">
+                {statsLoading ? (
+                  <Loader2 className="w-5 h-5 animate-spin text-muted-foreground" />
+                ) : isConnected ? (
+                  <CheckCircle className="w-5 h-5 text-success" />
+                ) : (
+                  <XCircle className="w-5 h-5 text-destructive" />
+                )}
+                <div>
+                  <p className="font-medium">
+                    {statsLoading ? "Connecting..." : isConnected ? "Connected" : "Disconnected"}
+                  </p>
+                  <p className="text-sm text-muted-foreground font-mono">{AURORA_API_URL}</p>
+                </div>
+              </div>
+              <Badge className={isConnected ? "bg-success/20 text-success border-success/30" : "bg-destructive/20 text-destructive border-destructive/30"}>
+                {isConnected ? "Online" : "Offline"}
+              </Badge>
+            </div>
+            {isConnected && (
+              <div className="grid grid-cols-3 gap-4">
+                <div className="text-center p-3 rounded-lg bg-muted/20">
+                  <p className="text-lg font-bold text-primary">{totalClients}</p>
+                  <p className="text-xs text-muted-foreground">Clients</p>
+                </div>
+                <div className="text-center p-3 rounded-lg bg-muted/20">
+                  <p className="text-lg font-bold">{totalReadings.toLocaleString()}</p>
+                  <p className="text-xs text-muted-foreground">Readings</p>
+                </div>
+                <div className="text-center p-3 rounded-lg bg-muted/20">
+                  <p className="text-lg font-bold text-success">{stats?.global?.activity?.last_1_hour?.active_devices_1h ?? 0}</p>
+                  <p className="text-xs text-muted-foreground">Active (1h)</p>
+                </div>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+
         <Card className="bg-card/50 backdrop-blur-sm border-border/50">
           <CardHeader>
             <CardTitle className="text-lg flex items-center gap-2">
@@ -34,11 +94,11 @@ const SettingsContent = () => {
             <div className="grid grid-cols-2 gap-4">
               <div>
                 <Label>API Endpoint</Label>
-                <Input defaultValue="https://aurora.vanguardsat.com" className="mt-1" />
+                <Input defaultValue={AURORA_API_URL} className="mt-1 font-mono text-sm" readOnly />
               </div>
               <div>
                 <Label>API Key</Label>
-                <Input type="password" defaultValue="••••••••••••••••" className="mt-1" />
+                <Input type="password" defaultValue="••••••••••••••••" className="mt-1" disabled />
               </div>
             </div>
             <div className="grid grid-cols-2 gap-4">
