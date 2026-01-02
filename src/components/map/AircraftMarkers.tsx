@@ -1,4 +1,4 @@
-import { memo } from "react";
+import { memo, Fragment } from "react";
 import { Marker, Popup } from "react-leaflet";
 import { Plane } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
@@ -61,15 +61,19 @@ export const AircraftMarkers = memo(function AircraftMarkers({
 }: AircraftMarkersProps) {
   if (!visible || aircraft.length === 0) return null;
 
-  return aircraft.map((ac) => (
-    <Marker
-      key={ac.hex}
-      position={[ac.lat, ac.lon]}
-      icon={mapIcons.adsb}
-    >
-      <Popup className="custom-popup">
-        <AircraftPopup ac={ac} />
-      </Popup>
-    </Marker>
-  ));
+  return (
+    <Fragment>
+      {aircraft.map((ac) => (
+        <Marker
+          key={ac.hex}
+          position={[ac.lat, ac.lon]}
+          icon={mapIcons.adsb}
+        >
+          <Popup className="custom-popup">
+            <AircraftPopup ac={ac} />
+          </Popup>
+        </Marker>
+      ))}
+    </Fragment>
+  );
 });
