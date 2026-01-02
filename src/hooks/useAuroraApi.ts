@@ -439,3 +439,44 @@ export function useAdoptClient() {
     },
   });
 }
+
+// Update alert rule mutation (enable/disable or edit)
+export interface UpdateAlertRulePayload {
+  name?: string;
+  description?: string;
+  enabled?: boolean;
+  severity?: string;
+  sensor_type_filter?: string;
+  conditions?: {
+    field: string;
+    operator?: string | null;
+    threshold: string;
+  };
+}
+
+export function useUpdateAlertRule() {
+  const queryClient = useQueryClient();
+  
+  return useMutation({
+    mutationFn: async ({ ruleId, updates }: { ruleId: number; updates: UpdateAlertRulePayload }) => {
+      return callAuroraApi<{ success: boolean; message: string }>(`/api/alerts/rules/${ruleId}`, "PUT", updates);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["aurora", "alerts", "rules"] });
+    },
+  });
+}
+
+// Delete alert rule mutation
+export function useDeleteAlertRule() {
+  const queryClient = useQueryClient();
+  
+  return useMutation({
+    mutationFn: async (ruleId: number) => {
+      return callAuroraApi<{ success: boolean; message: string }>(`/api/alerts/rules/${ruleId}`, "DELETE");
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["aurora", "alerts", "rules"] });
+    },
+  });
+}
