@@ -1,9 +1,8 @@
 import { useState, useEffect, useMemo } from "react";
-import { MapContainer, TileLayer, Marker, Popup, useMap, Circle, Polyline } from "react-leaflet";
+import { MapContainer, TileLayer, Marker, Popup, useMap } from "react-leaflet";
 import { Icon, LatLngExpression, divIcon } from "leaflet";
-import MarkerClusterGroup from "react-leaflet-cluster";
 import { 
-  RefreshCw, MapPin, Navigation, Plane, Radio, Wifi, Loader2, 
+  RefreshCw, MapPin, Navigation, Plane, Radio, Wifi, Loader2,
   Maximize2, ZoomIn, ZoomOut, Layers, Clock, Activity, Signal
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
@@ -69,25 +68,6 @@ const icons = {
 };
 
 type FilterType = 'all' | 'gps' | 'adsb' | 'starlink' | 'clients' | 'lora';
-
-// Custom cluster icon
-const createClusterCustomIcon = (cluster: any) => {
-  const count = cluster.getChildCount();
-  let size = 'small';
-  let bg = 'bg-primary';
-  
-  if (count >= 10) { size = 'medium'; bg = 'bg-cyan-500'; }
-  if (count >= 50) { size = 'large'; bg = 'bg-purple-500'; }
-  
-  const sizeClass = size === 'small' ? 'w-8 h-8 text-xs' : size === 'medium' ? 'w-10 h-10 text-sm' : 'w-12 h-12 text-base';
-  
-  return divIcon({
-    html: `<div class="${bg} ${sizeClass} rounded-full flex items-center justify-center text-white font-bold shadow-lg border-2 border-white/30">${count}</div>`,
-    className: 'custom-cluster-icon',
-    iconSize: [40, 40],
-    iconAnchor: [20, 20],
-  });
-};
 
 // Map Controls Component
 function MapControls({ onRecenter }: { onRecenter: () => void }) {
@@ -293,121 +273,105 @@ const MapContent = () => {
           
           {allPositions.length > 0 && <FitBounds markers={allPositions} />}
 
-          {/* Aircraft markers with clustering */}
-          {(filter === 'all' || filter === 'adsb') && aircraftMarkers.length > 0 && (
-            <MarkerClusterGroup
-              chunkedLoading
-              iconCreateFunction={createClusterCustomIcon}
-              maxClusterRadius={60}
-              spiderfyOnMaxZoom
-              showCoverageOnHover={false}
+          {/* Aircraft markers */}
+          {(filter === 'all' || filter === 'adsb') && aircraftMarkers.map((ac) => (
+            <Marker
+              key={ac.hex}
+              position={[ac.lat!, ac.lon!]}
+              icon={icons.adsb}
             >
-              {aircraftMarkers.map((ac) => (
-                <Marker
-                  key={ac.hex}
-                  position={[ac.lat!, ac.lon!]}
-                  icon={icons.adsb}
-                >
-                  <Popup className="custom-popup">
-                    <div className="p-2 min-w-[200px]">
-                      <div className="flex items-center gap-2 mb-3 pb-2 border-b border-border/50">
-                        <Plane className="w-5 h-5 text-cyan-400" />
-                        <span className="font-bold text-lg">{ac.flight?.trim() || ac.hex}</span>
-                      </div>
-                      <div className="space-y-2 text-sm">
-                        <div className="flex justify-between">
-                          <span className="text-muted-foreground">Callsign</span>
-                          <span className="font-mono">{ac.flight?.trim() || '—'}</span>
-                        </div>
-                        <div className="flex justify-between">
-                          <span className="text-muted-foreground">Hex Code</span>
-                          <span className="font-mono uppercase">{ac.hex}</span>
-                        </div>
-                        <div className="flex justify-between">
-                          <span className="text-muted-foreground">Altitude</span>
-                          <span className="font-medium">{ac.alt_baro?.toLocaleString() || '—'} ft</span>
-                        </div>
-                        <div className="flex justify-between">
-                          <span className="text-muted-foreground">Ground Speed</span>
-                          <span className="font-medium">{ac.gs?.toFixed(0) || '—'} kts</span>
-                        </div>
-                        <div className="flex justify-between">
-                          <span className="text-muted-foreground">Track</span>
-                          <span className="font-medium">{ac.track?.toFixed(0) || '—'}°</span>
-                        </div>
-                        {ac.squawk && (
-                          <div className="flex justify-between">
-                            <span className="text-muted-foreground">Squawk</span>
-                            <Badge variant="outline" className="font-mono">{ac.squawk}</Badge>
-                          </div>
-                        )}
-                        {ac.rssi && (
-                          <div className="flex justify-between">
-                            <span className="text-muted-foreground">Signal</span>
-                            <span className="font-medium">{ac.rssi.toFixed(1)} dBm</span>
-                          </div>
-                        )}
-                      </div>
+              <Popup className="custom-popup">
+                <div className="p-2 min-w-[200px]">
+                  <div className="flex items-center gap-2 mb-3 pb-2 border-b border-border/50">
+                    <Plane className="w-5 h-5 text-cyan-400" />
+                    <span className="font-bold text-lg">{ac.flight?.trim() || ac.hex}</span>
+                  </div>
+                  <div className="space-y-2 text-sm">
+                    <div className="flex justify-between">
+                      <span className="text-muted-foreground">Callsign</span>
+                      <span className="font-mono">{ac.flight?.trim() || '—'}</span>
                     </div>
-                  </Popup>
-                </Marker>
-              ))}
-            </MarkerClusterGroup>
-          )}
+                    <div className="flex justify-between">
+                      <span className="text-muted-foreground">Hex Code</span>
+                      <span className="font-mono uppercase">{ac.hex}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-muted-foreground">Altitude</span>
+                      <span className="font-medium">{ac.alt_baro?.toLocaleString() || '—'} ft</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-muted-foreground">Ground Speed</span>
+                      <span className="font-medium">{ac.gs?.toFixed(0) || '—'} kts</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-muted-foreground">Track</span>
+                      <span className="font-medium">{ac.track?.toFixed(0) || '—'}°</span>
+                    </div>
+                    {ac.squawk && (
+                      <div className="flex justify-between">
+                        <span className="text-muted-foreground">Squawk</span>
+                        <Badge variant="outline" className="font-mono">{ac.squawk}</Badge>
+                      </div>
+                    )}
+                    {ac.rssi && (
+                      <div className="flex justify-between">
+                        <span className="text-muted-foreground">Signal</span>
+                        <span className="font-medium">{ac.rssi.toFixed(1)} dBm</span>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </Popup>
+            </Marker>
+          ))}
 
-          {/* Sensor markers with clustering */}
-          <MarkerClusterGroup
-            chunkedLoading
-            iconCreateFunction={createClusterCustomIcon}
-            maxClusterRadius={40}
-          >
-            {sensorMarkers.map((sensor) => {
-              const sensorType = sensor.type.toLowerCase();
-              if (filter !== 'all' && sensorType !== filter) return null;
-              
-              const icon = icons[sensorType as keyof typeof icons] || icons.gps;
-              
-              return (
-                <Marker
-                  key={sensor.id}
-                  position={[sensor.location!.lat, sensor.location!.lng]}
-                  icon={icon}
-                >
-                  <Popup className="custom-popup">
-                    <div className="p-2 min-w-[180px]">
-                      <div className="flex items-center gap-2 mb-3 pb-2 border-b border-border/50">
-                        <Navigation className="w-5 h-5 text-green-400" />
-                        <span className="font-bold">{sensor.name}</span>
+          {/* Sensor markers */}
+          {sensorMarkers.map((sensor) => {
+            const sensorType = sensor.type.toLowerCase();
+            if (filter !== 'all' && sensorType !== filter) return null;
+            
+            const icon = icons[sensorType as keyof typeof icons] || icons.gps;
+            
+            return (
+              <Marker
+                key={sensor.id}
+                position={[sensor.location!.lat, sensor.location!.lng]}
+                icon={icon}
+              >
+                <Popup className="custom-popup">
+                  <div className="p-2 min-w-[180px]">
+                    <div className="flex items-center gap-2 mb-3 pb-2 border-b border-border/50">
+                      <Navigation className="w-5 h-5 text-green-400" />
+                      <span className="font-bold">{sensor.name}</span>
+                    </div>
+                    <div className="space-y-2 text-sm">
+                      <div className="flex justify-between">
+                        <span className="text-muted-foreground">Type</span>
+                        <Badge variant="secondary" className="capitalize">{sensor.type}</Badge>
                       </div>
-                      <div className="space-y-2 text-sm">
-                        <div className="flex justify-between">
-                          <span className="text-muted-foreground">Type</span>
-                          <Badge variant="secondary" className="capitalize">{sensor.type}</Badge>
-                        </div>
-                        <div className="flex justify-between">
-                          <span className="text-muted-foreground">Value</span>
-                          <span className="font-medium">{sensor.value} {sensor.unit}</span>
-                        </div>
-                        <div className="flex justify-between">
-                          <span className="text-muted-foreground">Status</span>
-                          <Badge 
-                            variant="outline" 
-                            className={sensor.status === 'active' ? 'bg-success/20 text-success' : 'bg-warning/20 text-warning'}
-                          >
-                            {sensor.status}
-                          </Badge>
-                        </div>
-                        <div className="flex justify-between text-xs">
-                          <span className="text-muted-foreground">Updated</span>
-                          <span>{new Date(sensor.lastUpdate).toLocaleTimeString()}</span>
-                        </div>
+                      <div className="flex justify-between">
+                        <span className="text-muted-foreground">Value</span>
+                        <span className="font-medium">{sensor.value} {sensor.unit}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-muted-foreground">Status</span>
+                        <Badge 
+                          variant="outline" 
+                          className={sensor.status === 'active' ? 'bg-success/20 text-success' : 'bg-warning/20 text-warning'}
+                        >
+                          {sensor.status}
+                        </Badge>
+                      </div>
+                      <div className="flex justify-between text-xs">
+                        <span className="text-muted-foreground">Updated</span>
+                        <span>{new Date(sensor.lastUpdate).toLocaleTimeString()}</span>
                       </div>
                     </div>
-                  </Popup>
-                </Marker>
-              );
-            })}
-          </MarkerClusterGroup>
+                  </div>
+                </Popup>
+              </Marker>
+            );
+          })}
         </MapContainer>
 
         {/* Sensor Types Legend */}
