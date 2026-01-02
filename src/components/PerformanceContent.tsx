@@ -1,13 +1,18 @@
-import { Activity, Cpu, HardDrive, Wifi, Clock, Thermometer, Server } from "lucide-react";
+import { Activity, Cpu, HardDrive, Clock, Thermometer, Server, TrendingUp } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
-import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
+import { 
+  LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, 
+  AreaChart, Area, Legend 
+} from "recharts";
 import { useClients, useDashboardStats } from "@/hooks/useAuroraApi";
+import { useMetricsHistory } from "@/hooks/useMetricsHistory";
 import { Skeleton } from "@/components/ui/skeleton";
 
 const PerformanceContent = () => {
   const { data: clients, isLoading: clientsLoading } = useClients();
   const { data: dashboardStats, isLoading: statsLoading } = useDashboardStats();
+  const { history: metricsHistory, isLoading: historyLoading } = useMetricsHistory(30000);
 
   // Aggregate system metrics from all clients
   const systemMetrics = clients?.reduce(
@@ -144,6 +149,94 @@ const PerformanceContent = () => {
           </CardContent>
         </Card>
       </div>
+
+      {/* NEW: Time-series history charts */}
+      <Card className="bg-card/50 backdrop-blur-sm border-border/50 mb-6">
+        <CardHeader className="pb-2">
+          <CardTitle className="text-lg flex items-center gap-2">
+            <TrendingUp className="w-5 h-5 text-primary" />
+            System Metrics History
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="h-64">
+            {metricsHistory.length > 1 ? (
+              <ResponsiveContainer width="100%" height="100%">
+                <AreaChart data={metricsHistory}>
+                  <defs>
+                    <linearGradient id="cpuGradient" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="5%" stopColor="hsl(var(--primary))" stopOpacity={0.3} />
+                      <stop offset="95%" stopColor="hsl(var(--primary))" stopOpacity={0} />
+                    </linearGradient>
+                    <linearGradient id="memoryGradient" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="5%" stopColor="hsl(var(--chart-2))" stopOpacity={0.3} />
+                      <stop offset="95%" stopColor="hsl(var(--chart-2))" stopOpacity={0} />
+                    </linearGradient>
+                    <linearGradient id="diskGradient" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="5%" stopColor="hsl(var(--chart-3))" stopOpacity={0.3} />
+                      <stop offset="95%" stopColor="hsl(var(--chart-3))" stopOpacity={0} />
+                    </linearGradient>
+                  </defs>
+                  <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
+                  <XAxis 
+                    dataKey="time" 
+                    stroke="hsl(var(--muted-foreground))" 
+                    fontSize={11} 
+                    tickLine={false}
+                  />
+                  <YAxis 
+                    stroke="hsl(var(--muted-foreground))" 
+                    fontSize={11} 
+                    domain={[0, 100]}
+                    tickFormatter={(v) => `${v}%`}
+                  />
+                  <Tooltip 
+                    contentStyle={{ 
+                      background: 'hsl(var(--card))', 
+                      border: '1px solid hsl(var(--border))',
+                      borderRadius: '8px'
+                    }} 
+                    formatter={(value: number, name: string) => [`${value}%`, name]}
+                  />
+                  <Legend />
+                  <Area 
+                    type="monotone" 
+                    dataKey="avgCpu" 
+                    name="CPU" 
+                    stroke="hsl(var(--primary))" 
+                    fill="url(#cpuGradient)"
+                    strokeWidth={2}
+                  />
+                  <Area 
+                    type="monotone" 
+                    dataKey="avgMemory" 
+                    name="Memory" 
+                    stroke="hsl(var(--chart-2))" 
+                    fill="url(#memoryGradient)"
+                    strokeWidth={2}
+                  />
+                  <Area 
+                    type="monotone" 
+                    dataKey="avgDisk" 
+                    name="Disk" 
+                    stroke="hsl(var(--chart-3))" 
+                    fill="url(#diskGradient)"
+                    strokeWidth={2}
+                  />
+                </AreaChart>
+              </ResponsiveContainer>
+            ) : (
+              <div className="flex items-center justify-center h-full text-muted-foreground">
+                <div className="text-center">
+                  <TrendingUp className="w-8 h-8 mx-auto mb-2 opacity-50" />
+                  <p>Collecting metrics history...</p>
+                  <p className="text-xs">Data updates every 30 seconds</p>
+                </div>
+              </div>
+            )}
+          </div>
+        </CardContent>
+      </Card>
 
       <div className="grid grid-cols-2 gap-6 mb-6">
         <Card className="bg-card/50 backdrop-blur-sm border-border/50">
