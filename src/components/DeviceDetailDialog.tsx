@@ -328,32 +328,93 @@ const DeviceDetailDialog = ({ client, open, onOpenChange }: DeviceDetailDialogPr
 
           <ScrollArea className="flex-1 mt-4">
             <TabsContent value="sensors" className="m-0">
-              {/* Sensor Summary Bar */}
+              {/* Sensor Data Summary Page */}
               {sensorItems.length > 0 && (
-                <div className="glass-card rounded-xl p-4 mb-4 border border-border/50">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                      <Database className="w-4 h-4 text-primary" />
-                      <span className="text-sm font-medium">Sensor Summary</span>
+                <div className="space-y-4 mb-6">
+                  {/* Overview Card */}
+                  <div className="glass-card rounded-xl p-5 border border-border/50">
+                    <div className="flex items-center gap-2 mb-4">
+                      <Database className="w-5 h-5 text-primary" />
+                      <h3 className="font-semibold">Sensor Overview</h3>
                     </div>
-                    <div className="flex gap-4">
-                      <div className="text-center">
-                        <p className="text-lg font-bold text-primary">{sensorSummary.total}</p>
-                        <p className="text-xs text-muted-foreground">Total</p>
+                    <div className="grid grid-cols-3 gap-4 mb-4">
+                      <div className="text-center p-4 rounded-lg bg-primary/10 border border-primary/20">
+                        <p className="text-3xl font-bold text-primary">{sensorSummary.total}</p>
+                        <p className="text-xs text-muted-foreground mt-1">Total Sensors</p>
                       </div>
-                      <div className="text-center">
-                        <p className="text-lg font-bold text-success">{sensorSummary.active}</p>
-                        <p className="text-xs text-muted-foreground">Active</p>
+                      <div className="text-center p-4 rounded-lg bg-success/10 border border-success/20">
+                        <p className="text-3xl font-bold text-success">{sensorSummary.active}</p>
+                        <p className="text-xs text-muted-foreground mt-1">Active</p>
                       </div>
-                      <div className="text-center">
-                        <p className="text-lg font-bold text-blue-400">{sensorSummary.types}</p>
-                        <p className="text-xs text-muted-foreground">Types</p>
+                      <div className="text-center p-4 rounded-lg bg-warning/10 border border-warning/20">
+                        <p className="text-3xl font-bold text-warning">{sensorSummary.total - sensorSummary.active}</p>
+                        <p className="text-xs text-muted-foreground mt-1">Disabled</p>
                       </div>
+                    </div>
+                    
+                    {/* Sensor Types Breakdown */}
+                    <div className="pt-4 border-t border-border/30">
+                      <p className="text-xs text-muted-foreground mb-3">Sensor Types</p>
+                      <div className="flex flex-wrap gap-2">
+                        {Object.entries(
+                          sensorItems.reduce((acc, s) => {
+                            acc[s.type] = (acc[s.type] || 0) + 1;
+                            return acc;
+                          }, {} as Record<string, number>)
+                        ).map(([type, count]) => (
+                          <div 
+                            key={type} 
+                            className="flex items-center gap-2 px-3 py-2 rounded-lg border border-border/50"
+                            style={{ backgroundColor: `${getSensorColor(type)}15` }}
+                          >
+                            <span style={{ color: getSensorColor(type) }}>{getSensorIcon(type)}</span>
+                            <span className="text-sm font-medium capitalize">{type}</span>
+                            <Badge variant="secondary" className="text-xs">{count}</Badge>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Key Metrics Card */}
+                  <div className="glass-card rounded-xl p-5 border border-border/50">
+                    <div className="flex items-center gap-2 mb-4">
+                      <Activity className="w-5 h-5 text-cyan-400" />
+                      <h3 className="font-semibold">Key Sensor Data</h3>
+                    </div>
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                      {sensorItems.slice(0, 4).map((sensor) => {
+                        const metrics = sensor.config ? 
+                          Object.entries(sensor.config)
+                            .filter(([k, v]) => !['device_id', 'enabled'].includes(k) && v !== undefined && v !== null)
+                            .slice(0, 2) : [];
+                        return (
+                          <div 
+                            key={sensor.id} 
+                            className="p-3 rounded-lg bg-muted/30 border border-border/30"
+                          >
+                            <div className="flex items-center gap-2 mb-2">
+                              <span style={{ color: getSensorColor(sensor.type) }}>{getSensorIcon(sensor.type)}</span>
+                              <span className="text-xs font-medium truncate capitalize">{sensor.type}</span>
+                            </div>
+                            {metrics.map(([key, value]) => (
+                              <div key={key} className="text-xs">
+                                <span className="text-muted-foreground">{formatLabel(key)}: </span>
+                                <span className="font-mono">{formatValue(key, value)}</span>
+                              </div>
+                            ))}
+                          </div>
+                        );
+                      })}
                     </div>
                   </div>
                 </div>
               )}
 
+              {/* Sensor Cards */}
+              <div className="mb-4">
+                <h4 className="text-sm font-medium text-muted-foreground mb-3">All Sensors</h4>
+              </div>
               {sensorItems.length > 0 ? (
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                   {sensorItems.map((sensor) => (
