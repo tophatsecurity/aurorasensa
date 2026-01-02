@@ -110,6 +110,12 @@ export interface DashboardTimeseries {
 }
 
 // Client/Device data types
+export interface ClientSensorConfig {
+  device_id: string;
+  enabled: boolean;
+  [key: string]: unknown;
+}
+
 export interface Client {
   client_id: string;
   hostname: string;
@@ -119,10 +125,22 @@ export interface Client {
   adopted_at: string;
   batches_received: number;
   auto_registered: boolean;
+  status?: string;
+  sensors?: string[];
   metadata?: {
     config?: {
       project?: { name: string; version: string };
-      sdr_modes?: Record<string, { enabled: boolean }>;
+      sensors?: {
+        arduino_devices?: ClientSensorConfig[];
+        adsb_devices?: ClientSensorConfig[];
+        lora?: ClientSensorConfig;
+        starlink?: ClientSensorConfig;
+        wifi?: ClientSensorConfig;
+        bluetooth?: ClientSensorConfig;
+        gps?: ClientSensorConfig;
+        thermal_probe?: ClientSensorConfig;
+        system_monitor?: ClientSensorConfig;
+      };
     };
     system?: {
       cpu_percent?: number;
