@@ -1,17 +1,116 @@
-import { FileText, Plus, Trash2, Edit, Loader2, RefreshCw } from "lucide-react";
+import { useState } from "react";
+import { FileText, Plus, Trash2, Edit, Loader2, RefreshCw, Save, X } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Switch } from "@/components/ui/switch";
-import { useAlertRules } from "@/hooks/useAuroraApi";
+import { Input } from "@/components/ui/input";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+import { Label } from "@/components/ui/label";
+import { useAlertRules, useUpdateAlertRule, useDeleteAlertRule, AlertRule } from "@/hooks/useAuroraApi";
 import { useQueryClient } from "@tanstack/react-query";
+import { toast } from "@/hooks/use-toast";
 
 const RulesContent = () => {
   const { data: rulesData, isLoading, error } = useAlertRules();
   const queryClient = useQueryClient();
+  const updateMutation = useUpdateAlertRule();
+  const deleteMutation = useDeleteAlertRule();
+  
+  const [editingRule, setEditingRule] = useState<AlertRule | null>(null);
+  const [editForm, setEditForm] = useState({
+    name: "",
+    description: "",
+    severity: "",
+    sensor_type_filter: "",
+    field: "",
+    operator: "",
+    threshold: "",
+  });
 
   const handleRefresh = () => {
     queryClient.invalidateQueries({ queryKey: ["aurora", "alerts", "rules"] });
+  };
+
+  const handleToggleEnabled = async (rule: AlertRule) => {
+    try {
+      await updateMutation.mutateAsync({
+        ruleId: rule.id,
+        updates: { enabled: !rule.enabled },
+      });
+      toast({
+        title: rule.enabled ? "Rule disabled" : "Rule enabled",
+        description: `${rule.name} has been ${rule.enabled ? "disabled" : "enabled"}.`,
+      });
+    } catch (err) {
+      toast({
+        title: "Error",
+        description: `Failed to update rule: ${err instanceof Error ? err.message : "Unknown error"}`,
+        variant: "destructive",
+      });
+    }
+  };
+
+  const handleEditClick = (rule: AlertRule) => {
+    setEditingRule(rule);
+    setEditForm({
+      name: rule.name,
+      description: rule.description,
+      severity: rule.severity,
+      sensor_type_filter: rule.sensor_type_filter,
+      field: rule.conditions.field,
+      operator: rule.conditions.operator || ">",
+      threshold: rule.conditions.threshold,
+    });
+  };
+
+  const handleSaveEdit = async () => {
+    if (!editingRule) return;
+    
+    try {
+      await updateMutation.mutateAsync({
+        ruleId: editingRule.id,
+        updates: {
+          name: editForm.name,
+          description: editForm.description,
+          severity: editForm.severity,
+          sensor_type_filter: editForm.sensor_type_filter,
+          conditions: {
+            field: editForm.field,
+            operator: editForm.operator,
+            threshold: editForm.threshold,
+          },
+        },
+      });
+      toast({
+        title: "Rule updated",
+        description: `${editForm.name} has been updated successfully.`,
+      });
+      setEditingRule(null);
+    } catch (err) {
+      toast({
+        title: "Error",
+        description: `Failed to update rule: ${err instanceof Error ? err.message : "Unknown error"}`,
+        variant: "destructive",
+      });
+    }
+  };
+
+  const handleDelete = async (rule: AlertRule) => {
+    try {
+      await deleteMutation.mutateAsync(rule.id);
+      toast({
+        title: "Rule deleted",
+        description: `${rule.name} has been deleted.`,
+      });
+    } catch (err) {
+      toast({
+        title: "Error",
+        description: `Failed to delete rule: ${err instanceof Error ? err.message : "Unknown error"}`,
+        variant: "destructive",
+      });
+    }
   };
 
   const getSeverityColor = (severity: string) => {
@@ -58,7 +157,6 @@ const RulesContent = () => {
 
   const rules = rulesData?.rules || [];
   const enabledRules = rules.filter(r => r.enabled);
-  const disabledRules = rules.filter(r => !r.enabled);
   const criticalRules = rules.filter(r => r.severity === 'critical');
   const warningRules = rules.filter(r => r.severity === 'warning');
 
@@ -169,12 +267,27 @@ const RulesContent = () => {
                       {formatCondition(rule.conditions)}
                     </code>
                   </div>
-                  <Switch checked={rule.enabled} />
+                  <Switch 
+                    checked={rule.enabled} 
+                    onCheckedChange={() => handleToggleEnabled(rule)}
+                    disabled={updateMutation.isPending}
+                  />
                   <div className="flex gap-1">
-                    <Button variant="ghost" size="icon" className="h-8 w-8">
+                    <Button 
+                      variant="ghost" 
+                      size="icon" 
+                      className="h-8 w-8"
+                      onClick={() => handleEditClick(rule)}
+                    >
                       <Edit className="w-4 h-4" />
                     </Button>
-                    <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive">
+                    <Button 
+                      variant="ghost" 
+                      size="icon" 
+                      className="h-8 w-8 text-destructive"
+                      onClick={() => handleDelete(rule)}
+                      disabled={deleteMutation.isPending}
+                    >
                       <Trash2 className="w-4 h-4" />
                     </Button>
                   </div>
@@ -190,6 +303,100 @@ const RulesContent = () => {
           Showing 20 of {rules.length} rules
         </p>
       )}
+
+      {/* Edit Rule Dialog */}
+      <Dialog open={!!editingRule} onOpenChange={(open) => !open && setEditingRule(null)}>
+        <DialogContent className="sm:max-w-[500px]">
+          <DialogHeader>
+            <DialogTitle>Edit Rule</DialogTitle>
+          </DialogHeader>
+          <div className="grid gap-4 py-4">
+            <div className="grid gap-2">
+              <Label htmlFor="name">Name</Label>
+              <Input
+                id="name"
+                value={editForm.name}
+                onChange={(e) => setEditForm({ ...editForm, name: e.target.value })}
+              />
+            </div>
+            <div className="grid gap-2">
+              <Label htmlFor="description">Description</Label>
+              <Input
+                id="description"
+                value={editForm.description}
+                onChange={(e) => setEditForm({ ...editForm, description: e.target.value })}
+              />
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <div className="grid gap-2">
+                <Label htmlFor="severity">Severity</Label>
+                <Select value={editForm.severity} onValueChange={(v) => setEditForm({ ...editForm, severity: v })}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select severity" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="info">Info</SelectItem>
+                    <SelectItem value="warning">Warning</SelectItem>
+                    <SelectItem value="critical">Critical</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="grid gap-2">
+                <Label htmlFor="sensor_type">Sensor Type</Label>
+                <Input
+                  id="sensor_type"
+                  value={editForm.sensor_type_filter}
+                  onChange={(e) => setEditForm({ ...editForm, sensor_type_filter: e.target.value })}
+                />
+              </div>
+            </div>
+            <div className="grid gap-2">
+              <Label>Condition</Label>
+              <div className="flex gap-2">
+                <Input
+                  placeholder="Field"
+                  value={editForm.field}
+                  onChange={(e) => setEditForm({ ...editForm, field: e.target.value })}
+                  className="flex-1"
+                />
+                <Select value={editForm.operator} onValueChange={(v) => setEditForm({ ...editForm, operator: v })}>
+                  <SelectTrigger className="w-20">
+                    <SelectValue placeholder="Op" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value=">">{">"}</SelectItem>
+                    <SelectItem value="<">{"<"}</SelectItem>
+                    <SelectItem value=">=">{">="}</SelectItem>
+                    <SelectItem value="<=">{"<="}</SelectItem>
+                    <SelectItem value="==">{"=="}</SelectItem>
+                    <SelectItem value="!=">{"!="}</SelectItem>
+                  </SelectContent>
+                </Select>
+                <Input
+                  placeholder="Threshold"
+                  value={editForm.threshold}
+                  onChange={(e) => setEditForm({ ...editForm, threshold: e.target.value })}
+                  className="w-24"
+                />
+              </div>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setEditingRule(null)}>
+              <X className="w-4 h-4 mr-2" />
+              Cancel
+            </Button>
+            <Button onClick={handleSaveEdit} disabled={updateMutation.isPending}>
+              {updateMutation.isPending ? (
+                <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+              ) : (
+                <Save className="w-4 h-4 mr-2" />
+              )}
+              Save Changes
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };
