@@ -1,6 +1,7 @@
 import { useState } from "react";
 import AuroraBackground from "@/components/AuroraBackground";
 import Sidebar from "@/components/Sidebar";
+import Navbar from "@/components/Navbar";
 import DashboardContent from "@/components/DashboardContent";
 import SensorsContent from "@/components/SensorsContent";
 import AlertsContent from "@/components/AlertsContent";
@@ -15,6 +16,7 @@ import SettingsContent from "@/components/SettingsContent";
 
 const Index = () => {
   const [activeItem, setActiveItem] = useState("dashboard");
+  const [sidebarOpen, setSidebarOpen] = useState(true);
 
   const renderContent = () => {
     switch (activeItem) {
@@ -49,9 +51,12 @@ const Index = () => {
     <div className="min-h-screen flex relative">
       <AuroraBackground />
       <Sidebar activeItem={activeItem} onNavigate={setActiveItem} />
-      <main className="flex-1 relative z-10 overflow-hidden">
-        {renderContent()}
-      </main>
+      <div className="flex-1 flex flex-col relative z-10 overflow-hidden">
+        <Navbar onMenuToggle={() => setSidebarOpen(!sidebarOpen)} />
+        <main className="flex-1 overflow-hidden">
+          {renderContent()}
+        </main>
+      </div>
     </div>
   );
 };
