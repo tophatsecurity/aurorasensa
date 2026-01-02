@@ -166,7 +166,7 @@ const DashboardContent = () => {
           <div 
             className="h-64 rounded-lg overflow-hidden relative bg-slate-900 flex items-center justify-center cursor-pointer group"
             style={{
-              backgroundImage: 'url(https://tile.openstreetmap.org/4/8/5.png)',
+              backgroundImage: 'url(https://a.basemaps.cartocdn.com/dark_all/8/75/96.png)',
               backgroundSize: 'cover',
               backgroundPosition: 'center'
             }}
