@@ -9,14 +9,17 @@ import {
   Loader2,
   CheckCircle,
   XCircle,
-  AlertCircle
+  AlertCircle,
+  Server,
+  HardDrive,
+  Clock
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { useSensors, useAdsbAircraft } from "@/hooks/useAuroraApi";
+import { useClients, useAdsbAircraft, Client } from "@/hooks/useAuroraApi";
 import { useQueryClient } from "@tanstack/react-query";
 
-type DeviceType = 'all' | 'arduino' | 'lora' | 'starlink' | 'adsb' | 'gps';
+type DeviceType = 'all' | 'client' | 'adsb';
 
 interface DeviceCardProps {
   name: string;
@@ -82,7 +85,8 @@ const DeviceCard = ({ name, type, status, lastSeen, icon, details }: DeviceCardP
       )}
 
       {lastSeen && (
-        <p className="text-xs text-muted-foreground mt-4">
+        <p className="text-xs text-muted-foreground mt-4 flex items-center gap-1">
+          <Clock className="w-3 h-3" />
           Last seen: {lastSeen}
         </p>
       )}
@@ -90,9 +94,34 @@ const DeviceCard = ({ name, type, status, lastSeen, icon, details }: DeviceCardP
   );
 };
 
+const formatLastSeen = (dateString: string) => {
+  const date = new Date(dateString);
+  const now = new Date();
+  const diffMs = now.getTime() - date.getTime();
+  const diffMins = Math.floor(diffMs / 60000);
+  const diffHours = Math.floor(diffMins / 60);
+  const diffDays = Math.floor(diffHours / 24);
+
+  if (diffMins < 1) return 'Just now';
+  if (diffMins < 60) return `${diffMins}m ago`;
+  if (diffHours < 24) return `${diffHours}h ago`;
+  return `${diffDays}d ago`;
+};
+
+const getClientStatus = (lastSeen: string) => {
+  const date = new Date(lastSeen);
+  const now = new Date();
+  const diffMs = now.getTime() - date.getTime();
+  const diffMins = Math.floor(diffMs / 60000);
+  
+  if (diffMins < 5) return 'online';
+  if (diffMins < 60) return 'stale';
+  return 'offline';
+};
+
 const DevicesContent = () => {
   const [filter, setFilter] = useState<DeviceType>('all');
-  const { data: sensors, isLoading: sensorsLoading } = useSensors();
+  const { data: clients, isLoading: clientsLoading } = useClients();
   const { data: aircraft, isLoading: aircraftLoading } = useAdsbAircraft();
   const queryClient = useQueryClient();
 
@@ -100,29 +129,28 @@ const DevicesContent = () => {
     queryClient.invalidateQueries({ queryKey: ["aurora"] });
   };
 
-  const isLoading = sensorsLoading || aircraftLoading;
+  const isLoading = clientsLoading || aircraftLoading;
 
   // Transform data into devices
   const devices: DeviceCardProps[] = [];
 
-  // Add sensors as devices
-  sensors?.forEach((sensor) => {
-    const iconMap: Record<string, React.ReactNode> = {
-      temperature: <Cpu className="w-6 h-6 text-orange-400" />,
-      gps: <Navigation className="w-6 h-6 text-green-400" />,
-      lora: <Radio className="w-6 h-6 text-red-400" />,
-      starlink: <Wifi className="w-6 h-6 text-violet-400" />,
-      signal: <Radio className="w-6 h-6 text-blue-400" />,
-    };
-
+  // Add clients as devices
+  clients?.forEach((client: Client) => {
+    const status = getClientStatus(client.last_seen);
+    const system = client.metadata?.system;
+    
     devices.push({
-      name: sensor.name,
-      type: sensor.type,
-      status: sensor.status,
-      lastSeen: sensor.lastUpdate,
-      icon: iconMap[sensor.type.toLowerCase()] || <Cpu className="w-6 h-6 text-primary" />,
+      name: client.hostname || client.client_id,
+      type: 'client',
+      status,
+      lastSeen: formatLastSeen(client.last_seen),
+      icon: <Server className="w-6 h-6 text-cyan-400" />,
       details: {
-        value: `${sensor.value} ${sensor.unit}`,
+        'IP': client.ip_address,
+        'MAC': client.mac_address,
+        'Batches': client.batches_received.toLocaleString(),
+        ...(system?.cpu_percent !== undefined && { 'CPU': `${system.cpu_percent.toFixed(1)}%` }),
+        ...(system?.memory_percent !== undefined && { 'Memory': `${system.memory_percent.toFixed(1)}%` }),
       },
     });
   });
@@ -133,12 +161,12 @@ const DevicesContent = () => {
       name: ac.flight?.trim() || ac.hex,
       type: 'adsb',
       status: (ac.seen ?? 0) < 60 ? 'online' : 'stale',
-      icon: <Plane className="w-6 h-6 text-cyan-400" />,
+      icon: <Plane className="w-6 h-6 text-violet-400" />,
       details: {
-        hex: ac.hex,
-        altitude: ac.alt_baro ? `${ac.alt_baro.toLocaleString()} ft` : '—',
-        speed: ac.gs ? `${ac.gs.toFixed(0)} kts` : '—',
-        rssi: ac.rssi ? `${ac.rssi.toFixed(1)} dBm` : '—',
+        'Hex': ac.hex,
+        'Altitude': ac.alt_baro ? `${ac.alt_baro.toLocaleString()} ft` : '—',
+        'Speed': ac.gs ? `${ac.gs.toFixed(0)} kts` : '—',
+        'RSSI': ac.rssi ? `${ac.rssi.toFixed(1)} dBm` : '—',
       },
     });
   });
@@ -151,20 +179,14 @@ const DevicesContent = () => {
   // Device counts
   const counts = {
     all: devices.length,
-    arduino: devices.filter(d => d.type === 'temperature').length,
-    lora: devices.filter(d => d.type === 'lora').length,
-    starlink: devices.filter(d => d.type === 'starlink').length,
+    client: devices.filter(d => d.type === 'client').length,
     adsb: devices.filter(d => d.type === 'adsb').length,
-    gps: devices.filter(d => d.type === 'gps').length,
   };
 
   const filterButtons: { id: DeviceType; label: string; icon: React.ReactNode }[] = [
-    { id: 'all', label: `All (${counts.all})`, icon: null },
-    { id: 'arduino', label: `Arduino (${counts.arduino})`, icon: <Cpu className="w-3 h-3" /> },
-    { id: 'lora', label: `LoRa (${counts.lora})`, icon: <Radio className="w-3 h-3" /> },
-    { id: 'starlink', label: `Starlink (${counts.starlink})`, icon: <Wifi className="w-3 h-3" /> },
+    { id: 'all', label: `All (${counts.all})`, icon: <HardDrive className="w-3 h-3" /> },
+    { id: 'client', label: `Clients (${counts.client})`, icon: <Server className="w-3 h-3" /> },
     { id: 'adsb', label: `ADS-B (${counts.adsb})`, icon: <Plane className="w-3 h-3" /> },
-    { id: 'gps', label: `GPS (${counts.gps})`, icon: <Navigation className="w-3 h-3" /> },
   ];
 
   return (

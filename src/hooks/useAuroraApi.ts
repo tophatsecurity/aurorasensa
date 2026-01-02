@@ -109,6 +109,35 @@ export interface DashboardTimeseries {
   temperature: TimeseriesPoint[];
 }
 
+// Client/Device data types
+export interface Client {
+  client_id: string;
+  hostname: string;
+  ip_address: string;
+  mac_address: string;
+  last_seen: string;
+  adopted_at: string;
+  batches_received: number;
+  auto_registered: boolean;
+  metadata?: {
+    config?: {
+      project?: { name: string; version: string };
+      sdr_modes?: Record<string, { enabled: boolean }>;
+    };
+    system?: {
+      cpu_percent?: number;
+      memory_percent?: number;
+      disk_percent?: number;
+      uptime_seconds?: number;
+    };
+  };
+}
+
+interface ClientsListResponse {
+  count: number;
+  clients: Client[];
+}
+
 // Sensors list response from Aurora API
 interface SensorsListResponse {
   count: number;
@@ -124,6 +153,18 @@ export function useSensors() {
       return response.sensors || [];
     },
     refetchInterval: 10000,
+    retry: 2,
+  });
+}
+
+export function useClients() {
+  return useQuery({
+    queryKey: ["aurora", "clients"],
+    queryFn: async () => {
+      const response = await callAuroraProxy<ClientsListResponse>("/api/clients/list");
+      return response.clients || [];
+    },
+    refetchInterval: 15000,
     retry: 2,
   });
 }
