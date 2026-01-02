@@ -46,10 +46,10 @@ const Index = () => {
   };
 
   return (
-    <div className="min-h-screen flex relative">
+    <div className="h-screen flex relative overflow-hidden">
       <AuroraBackground />
       <Sidebar activeItem={activeItem} onNavigate={setActiveItem} />
-      <main className="flex-1 relative z-10 overflow-hidden">
+      <main className="flex-1 relative z-10 flex flex-col h-full overflow-hidden">
         {renderContent()}
       </main>
     </div>
