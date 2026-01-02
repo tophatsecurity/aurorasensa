@@ -6,6 +6,12 @@ import SensorsContent from "@/components/SensorsContent";
 import AlertsContent from "@/components/AlertsContent";
 import MapContent from "@/components/MapContent";
 import DevicesContent from "@/components/DevicesContent";
+import RulesContent from "@/components/RulesContent";
+import PowerContent from "@/components/PowerContent";
+import DataBatchesContent from "@/components/DataBatchesContent";
+import ExportContent from "@/components/ExportContent";
+import PerformanceContent from "@/components/PerformanceContent";
+import SettingsContent from "@/components/SettingsContent";
 
 const Index = () => {
   const [activeItem, setActiveItem] = useState("dashboard");
@@ -23,19 +29,17 @@ const Index = () => {
       case "devices":
         return <DevicesContent />;
       case "rules":
+        return <RulesContent />;
       case "power":
+        return <PowerContent />;
       case "data-batches":
+        return <DataBatchesContent />;
       case "export":
+        return <ExportContent />;
       case "performance":
+        return <PerformanceContent />;
       case "settings":
-        return (
-          <div className="flex-1 flex items-center justify-center p-8">
-            <div className="text-center">
-              <h2 className="text-2xl font-bold mb-2 capitalize">{activeItem.replace("-", " ")}</h2>
-              <p className="text-muted-foreground">This section is coming soon...</p>
-            </div>
-          </div>
-        );
+        return <SettingsContent />;
       default:
         return <DashboardContent />;
     }
