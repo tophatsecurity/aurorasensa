@@ -12,7 +12,11 @@ import {
   AlertCircle,
   Server,
   HardDrive,
-  Clock
+  Clock,
+  Thermometer,
+  Bluetooth,
+  Monitor,
+  Satellite
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -21,6 +25,12 @@ import { useQueryClient } from "@tanstack/react-query";
 
 type DeviceType = 'all' | 'client' | 'adsb';
 
+interface SensorBadge {
+  id: string;
+  type: string;
+  enabled: boolean;
+}
+
 interface DeviceCardProps {
   name: string;
   type: string;
@@ -28,9 +38,36 @@ interface DeviceCardProps {
   lastSeen?: string;
   icon: React.ReactNode;
   details?: Record<string, string | number>;
+  sensors?: SensorBadge[];
 }
 
-const DeviceCard = ({ name, type, status, lastSeen, icon, details }: DeviceCardProps) => {
+const getSensorIcon = (sensorId: string) => {
+  if (sensorId.includes('arduino')) return <Cpu className="w-3 h-3" />;
+  if (sensorId.includes('lora')) return <Radio className="w-3 h-3" />;
+  if (sensorId.includes('starlink')) return <Satellite className="w-3 h-3" />;
+  if (sensorId.includes('wifi')) return <Wifi className="w-3 h-3" />;
+  if (sensorId.includes('bluetooth')) return <Bluetooth className="w-3 h-3" />;
+  if (sensorId.includes('adsb')) return <Plane className="w-3 h-3" />;
+  if (sensorId.includes('gps')) return <Navigation className="w-3 h-3" />;
+  if (sensorId.includes('thermal')) return <Thermometer className="w-3 h-3" />;
+  if (sensorId.includes('system')) return <Monitor className="w-3 h-3" />;
+  return <Cpu className="w-3 h-3" />;
+};
+
+const getSensorColor = (sensorId: string) => {
+  if (sensorId.includes('arduino')) return 'bg-orange-500/20 text-orange-400 border-orange-500/30';
+  if (sensorId.includes('lora')) return 'bg-red-500/20 text-red-400 border-red-500/30';
+  if (sensorId.includes('starlink')) return 'bg-violet-500/20 text-violet-400 border-violet-500/30';
+  if (sensorId.includes('wifi')) return 'bg-blue-500/20 text-blue-400 border-blue-500/30';
+  if (sensorId.includes('bluetooth')) return 'bg-indigo-500/20 text-indigo-400 border-indigo-500/30';
+  if (sensorId.includes('adsb')) return 'bg-cyan-500/20 text-cyan-400 border-cyan-500/30';
+  if (sensorId.includes('gps')) return 'bg-green-500/20 text-green-400 border-green-500/30';
+  if (sensorId.includes('thermal')) return 'bg-amber-500/20 text-amber-400 border-amber-500/30';
+  if (sensorId.includes('system')) return 'bg-slate-500/20 text-slate-400 border-slate-500/30';
+  return 'bg-primary/20 text-primary border-primary/30';
+};
+
+const DeviceCard = ({ name, type, status, lastSeen, icon, details, sensors }: DeviceCardProps) => {
   const getStatusIcon = () => {
     switch (status.toLowerCase()) {
       case 'online':
@@ -73,8 +110,27 @@ const DeviceCard = ({ name, type, status, lastSeen, icon, details }: DeviceCardP
         </Badge>
       </div>
 
+      {/* Sensors */}
+      {sensors && sensors.length > 0 && (
+        <div className="mb-4">
+          <p className="text-xs text-muted-foreground mb-2">Sensors ({sensors.length})</p>
+          <div className="flex flex-wrap gap-1.5">
+            {sensors.map((sensor) => (
+              <Badge 
+                key={sensor.id} 
+                variant="outline" 
+                className={`text-[10px] px-2 py-0.5 gap-1 ${getSensorColor(sensor.id)}`}
+              >
+                {getSensorIcon(sensor.id)}
+                {sensor.id.replace(/_/g, ' ').replace(/\d+$/, '').trim()}
+              </Badge>
+            ))}
+          </div>
+        </div>
+      )}
+
       {details && (
-        <div className="space-y-2 mt-4 pt-4 border-t border-border/30">
+        <div className="space-y-2 pt-3 border-t border-border/30">
           {Object.entries(details).map(([key, value]) => (
             <div key={key} className="flex justify-between text-sm">
               <span className="text-muted-foreground capitalize">{key.replace(/_/g, ' ')}</span>
@@ -108,8 +164,9 @@ const formatLastSeen = (dateString: string) => {
   return `${diffDays}d ago`;
 };
 
-const getClientStatus = (lastSeen: string) => {
-  const date = new Date(lastSeen);
+const getClientStatus = (client: Client) => {
+  if (client.status === 'active') return 'online';
+  const date = new Date(client.last_seen);
   const now = new Date();
   const diffMs = now.getTime() - date.getTime();
   const diffMins = Math.floor(diffMs / 60000);
@@ -134,20 +191,27 @@ const DevicesContent = () => {
   // Transform data into devices
   const devices: DeviceCardProps[] = [];
 
-  // Add clients as devices
+  // Add clients as devices with their sensors
   clients?.forEach((client: Client) => {
-    const status = getClientStatus(client.last_seen);
+    const status = getClientStatus(client);
     const system = client.metadata?.system;
     
+    // Extract sensors from the client
+    const sensorList: SensorBadge[] = (client.sensors || []).map(sensorId => ({
+      id: sensorId,
+      type: sensorId.split('_')[0],
+      enabled: true,
+    }));
+
     devices.push({
       name: client.hostname || client.client_id,
       type: 'client',
       status,
       lastSeen: formatLastSeen(client.last_seen),
       icon: <Server className="w-6 h-6 text-cyan-400" />,
+      sensors: sensorList,
       details: {
         'IP': client.ip_address,
-        'MAC': client.mac_address,
         'Batches': client.batches_received.toLocaleString(),
         ...(system?.cpu_percent !== undefined && { 'CPU': `${system.cpu_percent.toFixed(1)}%` }),
         ...(system?.memory_percent !== undefined && { 'Memory': `${system.memory_percent.toFixed(1)}%` }),
@@ -183,6 +247,9 @@ const DevicesContent = () => {
     adsb: devices.filter(d => d.type === 'adsb').length,
   };
 
+  // Count total sensors across all clients
+  const totalSensors = clients?.reduce((acc, client) => acc + (client.sensors?.length || 0), 0) || 0;
+
   const filterButtons: { id: DeviceType; label: string; icon: React.ReactNode }[] = [
     { id: 'all', label: `All (${counts.all})`, icon: <HardDrive className="w-3 h-3" /> },
     { id: 'client', label: `Clients (${counts.client})`, icon: <Server className="w-3 h-3" /> },
@@ -196,7 +263,10 @@ const DevicesContent = () => {
         <div className="flex items-center gap-4">
           <h1 className="text-3xl font-bold text-foreground">Devices</h1>
           <Badge className="bg-primary/20 text-primary border-primary/30 px-3 py-1">
-            {devices.length} Connected
+            {counts.client} Clients
+          </Badge>
+          <Badge className="bg-cyan-500/20 text-cyan-400 border-cyan-500/30 px-3 py-1">
+            {totalSensors} Sensors
           </Badge>
         </div>
         <Button 
