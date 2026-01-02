@@ -83,7 +83,7 @@ const MapContent = () => {
   const showAircraft = filter === 'all' || filter === 'adsb';
 
   return (
-    <div className="flex-1 flex flex-col h-full overflow-hidden">
+    <div className="flex-1 flex flex-col h-screen overflow-hidden">
       {/* Header */}
       <div className="p-6 pb-4 border-b border-border/50">
         <MapHeader 
