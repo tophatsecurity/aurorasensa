@@ -878,6 +878,13 @@ const ClientActions = ({ client, clientState, onAction, onPermanentDelete, onVie
                 <Ban className="w-4 h-4 mr-2" />
                 Suspend
               </DropdownMenuItem>
+              <DropdownMenuItem 
+                onClick={() => onAction(client.client_id, "delete", client.hostname)}
+                className="text-destructive"
+              >
+                <Trash2 className="w-4 h-4 mr-2" />
+                Delete (Soft)
+              </DropdownMenuItem>
             </>
           )}
           
