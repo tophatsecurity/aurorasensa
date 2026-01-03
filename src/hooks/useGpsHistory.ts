@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from "react";
-import type { AircraftMarker, SensorMarker, ClientMarker } from "@/types/map";
+import type { SensorMarker, ClientMarker } from "@/types/map";
 
 interface GpsPoint {
   lat: number;
@@ -9,23 +9,24 @@ interface GpsPoint {
 
 interface EntityHistory {
   id: string;
-  type: 'aircraft' | 'sensor' | 'client';
+  type: 'sensor' | 'client';
   name: string;
   points: GpsPoint[];
 }
 
 interface GpsHistoryConfig {
-  retentionMinutes: number;
+  sensorRetentionMinutes: number;
+  clientRetentionMinutes: number;
   maxPointsPerEntity: number;
 }
 
 const DEFAULT_CONFIG: GpsHistoryConfig = {
-  retentionMinutes: 60, // 1 hour default
+  sensorRetentionMinutes: 60,
+  clientRetentionMinutes: 60,
   maxPointsPerEntity: 500,
 };
 
 export function useGpsHistory(
-  aircraft: AircraftMarker[],
   sensors: SensorMarker[],
   clients: ClientMarker[],
   config: Partial<GpsHistoryConfig> = {}
@@ -34,12 +35,14 @@ export function useGpsHistory(
   const [history, setHistory] = useState<Map<string, EntityHistory>>(new Map());
   const lastUpdateRef = useRef<number>(0);
   
-  // Clean old points based on retention time
+  // Clean old points based on retention time per type
   const cleanOldPoints = useCallback((historyMap: Map<string, EntityHistory>) => {
-    const cutoffTime = Date.now() - (mergedConfig.retentionMinutes * 60 * 1000);
+    const sensorCutoff = Date.now() - (mergedConfig.sensorRetentionMinutes * 60 * 1000);
+    const clientCutoff = Date.now() - (mergedConfig.clientRetentionMinutes * 60 * 1000);
     const newMap = new Map<string, EntityHistory>();
     
     historyMap.forEach((entity, id) => {
+      const cutoffTime = entity.type === 'sensor' ? sensorCutoff : clientCutoff;
       const filteredPoints = entity.points.filter(p => p.timestamp >= cutoffTime);
       if (filteredPoints.length > 0) {
         newMap.set(id, { ...entity, points: filteredPoints });
@@ -47,7 +50,7 @@ export function useGpsHistory(
     });
     
     return newMap;
-  }, [mergedConfig.retentionMinutes]);
+  }, [mergedConfig.sensorRetentionMinutes, mergedConfig.clientRetentionMinutes]);
 
   // Add new GPS points to history
   const updateHistory = useCallback(() => {
@@ -59,34 +62,6 @@ export function useGpsHistory(
     
     setHistory(prev => {
       const newHistory = cleanOldPoints(new Map(prev));
-      
-      // Add aircraft points
-      aircraft.forEach(ac => {
-        const id = `aircraft-${ac.hex}`;
-        const existing = newHistory.get(id);
-        const newPoint: GpsPoint = { lat: ac.lat, lng: ac.lon, timestamp: now };
-        
-        // Skip if position hasn't changed
-        if (existing && existing.points.length > 0) {
-          const lastPoint = existing.points[existing.points.length - 1];
-          if (lastPoint.lat === newPoint.lat && lastPoint.lng === newPoint.lng) {
-            // Position unchanged, skip adding duplicate point
-          } else {
-            const points = [...existing.points, newPoint].slice(-mergedConfig.maxPointsPerEntity);
-            newHistory.set(id, { ...existing, points });
-          }
-        } else if (existing) {
-          const points = [...existing.points, newPoint].slice(-mergedConfig.maxPointsPerEntity);
-          newHistory.set(id, { ...existing, points });
-        } else {
-          newHistory.set(id, {
-            id,
-            type: 'aircraft',
-            name: ac.flight?.trim() || ac.hex,
-            points: [newPoint],
-          });
-        }
-      });
       
       // Add sensor points
       sensors.forEach(sensor => {
@@ -144,7 +119,7 @@ export function useGpsHistory(
       
       return newHistory;
     });
-  }, [aircraft, sensors, clients, cleanOldPoints, mergedConfig.maxPointsPerEntity]);
+  }, [sensors, clients, cleanOldPoints, mergedConfig.maxPointsPerEntity]);
 
   // Update history when data changes
   useEffect(() => {
@@ -164,7 +139,7 @@ export function useGpsHistory(
   const getTrails = useCallback(() => {
     const trails: Array<{
       id: string;
-      type: 'aircraft' | 'sensor' | 'client';
+      type: 'sensor' | 'client';
       name: string;
       coordinates: Array<[number, number]>;
     }> = [];

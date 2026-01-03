@@ -1,12 +1,11 @@
 import { LatLngExpression } from "leaflet";
 import type { LucideIcon } from "lucide-react";
 
-export type FilterType = 'all' | 'gps' | 'adsb' | 'starlink' | 'clients' | 'lora';
+export type FilterType = 'all' | 'gps' | 'starlink' | 'clients' | 'lora';
 
 export interface MapStats {
   total: number;
   gps: number;
-  adsb: number;
   starlink: number;
   clients: number;
   lora: number;
@@ -18,18 +17,6 @@ export interface FilterButton {
   icon: React.ReactNode;
   color: string;
   count: number;
-}
-
-export interface AircraftMarker {
-  hex: string;
-  flight?: string;
-  lat: number;
-  lon: number;
-  alt_baro?: number;
-  gs?: number;
-  track?: number;
-  squawk?: string;
-  rssi?: number;
 }
 
 export interface SensorMarker {

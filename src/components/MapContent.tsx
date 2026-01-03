@@ -55,10 +55,10 @@ const MapContent = () => {
   const [isLiveTracking, setIsLiveTracking] = useState(true);
   const [hasInitialFit, setHasInitialFit] = useState(false);
   const [showTrails, setShowTrails] = useState(true);
-  const [retentionMinutes, setRetentionMinutes] = useState(60);
+  const [sensorRetentionMinutes, setSensorRetentionMinutes] = useState(60);
+  const [clientRetentionMinutes, setClientRetentionMinutes] = useState(60);
   
   const {
-    aircraftMarkers,
     sensorMarkers,
     clientMarkers,
     allPositions,
@@ -66,16 +66,13 @@ const MapContent = () => {
     isLoading,
     timeAgo,
     handleRefresh,
-    isHistoricalAdsb,
-    adsbSource,
-  } = useMapData(retentionMinutes);
+  } = useMapData();
 
   // GPS history tracking
   const { trails, clearHistory } = useGpsHistory(
-    aircraftMarkers,
     sensorMarkers,
     clientMarkers,
-    { retentionMinutes }
+    { sensorRetentionMinutes, clientRetentionMinutes }
   );
 
   // Initialize map
@@ -112,54 +109,6 @@ const MapContent = () => {
     if (!mapRef.current) return;
 
     const existingMarkerIds = new Set<string>();
-    const showAircraft = filter === 'all' || filter === 'adsb';
-
-    // Update/add aircraft markers
-    if (showAircraft) {
-      aircraftMarkers.forEach((ac) => {
-        const markerId = `aircraft-${ac.hex}`;
-        existingMarkerIds.add(markerId);
-        
-        const popupContent = `
-          <div class="p-2 min-w-[200px]">
-            <div class="font-bold text-lg mb-2">${ac.flight?.trim() || ac.hex}</div>
-            <div class="text-sm space-y-1">
-              <div><span class="text-gray-500">Hex:</span> ${ac.hex}</div>
-              <div><span class="text-gray-500">Altitude:</span> ${ac.alt_baro?.toLocaleString() || '—'} ft</div>
-              <div><span class="text-gray-500">Speed:</span> ${ac.gs?.toFixed(0) || '—'} kts</div>
-              <div><span class="text-gray-500">Track:</span> ${ac.track?.toFixed(0) || '—'}°</div>
-            </div>
-          </div>
-        `;
-
-        const existingMarker = markersRef.current.get(markerId);
-        
-        if (existingMarker) {
-          // Animate to new position
-          animateMarker(existingMarker, ac.lat, ac.lon);
-          existingMarker.setPopupContent(popupContent);
-        } else {
-          // Create new marker with fade-in animation
-          const marker = L.marker([ac.lat, ac.lon], { 
-            icon: mapIcons.adsb,
-            opacity: 0 
-          })
-            .bindPopup(popupContent)
-            .addTo(mapRef.current!);
-          
-          // Fade in animation
-          let opacity = 0;
-          const fadeIn = () => {
-            opacity += 0.1;
-            marker.setOpacity(Math.min(opacity, 1));
-            if (opacity < 1) requestAnimationFrame(fadeIn);
-          };
-          requestAnimationFrame(fadeIn);
-          
-          markersRef.current.set(markerId, marker);
-        }
-      });
-    }
 
     // Update/add sensor markers
     sensorMarkers.forEach((sensor) => {
@@ -274,14 +223,13 @@ const MapContent = () => {
       mapRef.current.fitBounds(bounds, { padding: [50, 50], maxZoom: 12 });
       setHasInitialFit(true);
     }
-  }, [aircraftMarkers, sensorMarkers, clientMarkers, filter, allPositions, hasInitialFit]);
+  }, [sensorMarkers, clientMarkers, filter, allPositions, hasInitialFit]);
 
   // Update trail polylines
   useEffect(() => {
     if (!mapRef.current) return;
 
     const trailColors = {
-      aircraft: '#f59e0b', // amber
       sensor: '#22c55e',   // green
       client: '#3b82f6',   // blue
     };
@@ -307,7 +255,6 @@ const MapContent = () => {
     trails.forEach(trail => {
       // Filter based on current filter
       const shouldShow = filter === 'all' || 
-        (filter === 'adsb' && trail.type === 'aircraft') ||
         (filter === 'clients' && trail.type === 'client') ||
         (trail.type === 'sensor');
 
@@ -392,8 +339,10 @@ const MapContent = () => {
             onFilterChange={handleFilterChange}
           />
           <GpsHistorySettings
-            retentionMinutes={retentionMinutes}
-            onRetentionChange={setRetentionMinutes}
+            sensorRetentionMinutes={sensorRetentionMinutes}
+            clientRetentionMinutes={clientRetentionMinutes}
+            onSensorRetentionChange={setSensorRetentionMinutes}
+            onClientRetentionChange={setClientRetentionMinutes}
             showTrails={showTrails}
             onShowTrailsChange={setShowTrails}
             trailCount={trails.length}
@@ -459,7 +408,7 @@ const MapContent = () => {
         )}
 
         <MapLegend />
-        <MapStatistics stats={stats} isHistoricalAdsb={isHistoricalAdsb} adsbSource={adsbSource} adsbHistoryMinutes={retentionMinutes} />
+        <MapStatistics stats={stats} />
         <MapLoadingOverlay isLoading={isLoading} />
       </div>
     </div>

@@ -1,8 +1,7 @@
 import { memo } from "react";
 
-const LEGEND_ITEMS: { color: string; shadow: string; label: string; pulse?: boolean }[] = [
+const LEGEND_ITEMS: { color: string; shadow: string; label: string }[] = [
   { color: 'bg-green-500', shadow: 'shadow-green-500/30', label: 'GPS Sensors' },
-  { color: 'bg-cyan-500', shadow: 'shadow-cyan-500/30', label: 'ADS-B Aircraft', pulse: true },
   { color: 'bg-violet-500', shadow: 'shadow-violet-500/30', label: 'Starlink Dishes' },
   { color: 'bg-orange-500', shadow: 'shadow-orange-500/30', label: 'Client Devices' },
   { color: 'bg-red-500', shadow: 'shadow-red-500/30', label: 'LoRa Devices' },
@@ -18,7 +17,7 @@ export const MapLegend = memo(function MapLegend() {
         {LEGEND_ITEMS.map((item) => (
           <div key={item.label} className="flex items-center gap-3">
             <div 
-              className={`w-3 h-3 rounded-full ${item.color} shadow-lg ${item.shadow} ${item.pulse ? 'animate-pulse' : ''}`} 
+              className={`w-3 h-3 rounded-full ${item.color} shadow-lg ${item.shadow}`} 
             />
             <span>{item.label}</span>
           </div>

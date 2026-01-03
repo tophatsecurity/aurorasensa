@@ -1,7 +1,6 @@
 import { useMemo, useState, useEffect, useCallback } from "react";
 import { LatLngExpression } from "leaflet";
 import { 
-  useAdsbAircraftWithHistory, 
   useSensors, 
   useClients, 
   useLatestReadings,
@@ -11,7 +10,7 @@ import {
   GeoLocation
 } from "@/hooks/useAuroraApi";
 import { useQueryClient } from "@tanstack/react-query";
-import type { MapStats, AircraftMarker, SensorMarker, ClientMarker } from "@/types/map";
+import type { MapStats, SensorMarker, ClientMarker } from "@/types/map";
 
 // Helper to extract GPS coordinates from various data sources
 function extractGpsFromReadings(readings: Array<{ device_id: string; device_type: string; data: Record<string, unknown> }>) {
@@ -116,17 +115,9 @@ function mergeGpsData(
   return merged;
 }
 
-export function useMapData(adsbHistoryMinutes: number = 60) {
+export function useMapData() {
   const [lastUpdate, setLastUpdate] = useState<Date>(new Date());
   const queryClient = useQueryClient();
-
-  const { 
-    aircraft, 
-    isLoading: aircraftLoading, 
-    dataUpdatedAt: aircraftUpdated,
-    isHistorical: isHistoricalAdsb,
-    source: adsbSource
-  } = useAdsbAircraftWithHistory(adsbHistoryMinutes);
   
   const { 
     data: sensors, 
@@ -159,7 +150,7 @@ export function useMapData(adsbHistoryMinutes: number = 60) {
   // Update last refresh time
   useEffect(() => {
     setLastUpdate(new Date());
-  }, [aircraftUpdated, sensorsUpdated, geoUpdated]);
+  }, [sensorsUpdated, geoUpdated]);
 
   const handleRefresh = useCallback(() => {
     queryClient.invalidateQueries({ queryKey: ["aurora"] });
@@ -221,18 +212,6 @@ export function useMapData(adsbHistoryMinutes: number = 60) {
     return merged;
   }, [geoLocations, readingsGps, starlinkGps]);
 
-  // Filter and prepare aircraft markers
-  const aircraftMarkers = useMemo<AircraftMarker[]>(() => {
-    const validAircraft = (aircraft || []).filter(a => 
-      a.lat !== undefined && 
-      a.lon !== undefined && 
-      a.lat >= -90 && a.lat <= 90 &&
-      a.lon >= -180 && a.lon <= 180 &&
-      !(a.lat === 0 && a.lon === 0)
-    );
-    return validAircraft as AircraftMarker[];
-  }, [aircraft]);
-  
   // Build sensor markers from sensors API, geo locations, and clients with GPS
   const sensorMarkers = useMemo<SensorMarker[]>(() => {
     const markers: SensorMarker[] = [];
@@ -414,29 +393,6 @@ export function useMapData(adsbHistoryMinutes: number = 60) {
           }
         }
         
-        // Add ADS-B receivers as sensor markers
-        const adsbDevices = config.adsb_devices;
-        if (adsbDevices && Array.isArray(adsbDevices)) {
-          adsbDevices.forEach((adsb, idx) => {
-            if (adsb.enabled) {
-              const id = `${client.client_id}-adsb-receiver-${idx}`;
-              if (!addedIds.has(id)) {
-                markers.push({
-                  id,
-                  name: `${client.hostname} ADS-B Receiver`,
-                  type: 'adsb',
-                  value: 0,
-                  unit: 'aircraft',
-                  status: baseStatus,
-                  lastUpdate: client.last_seen,
-                  location: clientGps!
-                });
-                addedIds.add(id);
-              }
-            }
-          });
-        }
-        
         // Add WiFi sensors
         const wifi = config.wifi;
         if (wifi?.enabled) {
@@ -562,23 +518,21 @@ export function useMapData(adsbHistoryMinutes: number = 60) {
   // All marker positions for bounds fitting
   const allPositions = useMemo<LatLngExpression[]>(() => {
     const positions: LatLngExpression[] = [];
-    aircraftMarkers.forEach(a => positions.push([a.lat, a.lon]));
     sensorMarkers.forEach(s => positions.push([s.location.lat, s.location.lng]));
     clientMarkers.forEach(c => positions.push([c.location.lat, c.location.lng]));
     return positions;
-  }, [aircraftMarkers, sensorMarkers, clientMarkers]);
+  }, [sensorMarkers, clientMarkers]);
 
   // Calculate statistics
   const stats = useMemo<MapStats>(() => ({
-    total: aircraftMarkers.length + sensorMarkers.length + clientMarkers.length,
+    total: sensorMarkers.length + clientMarkers.length,
     gps: sensorMarkers.filter(s => s.type === 'gps').length,
-    adsb: aircraftMarkers.length,
     starlink: sensorMarkers.filter(s => s.type === 'starlink').length,
     clients: clientMarkers.length,
     lora: sensorMarkers.filter(s => s.type === 'lora').length,
-  }), [aircraftMarkers, sensorMarkers, clientMarkers]);
+  }), [sensorMarkers, clientMarkers]);
 
-  const isLoading = aircraftLoading || sensorsLoading || clientsLoading || readingsLoading || geoLoading;
+  const isLoading = sensorsLoading || clientsLoading || readingsLoading || geoLoading;
 
   // Format time ago
   const timeAgo = useMemo(() => {
@@ -588,7 +542,6 @@ export function useMapData(adsbHistoryMinutes: number = 60) {
   }, [lastUpdate]);
 
   return {
-    aircraftMarkers,
     sensorMarkers,
     clientMarkers,
     allPositions,
@@ -598,7 +551,5 @@ export function useMapData(adsbHistoryMinutes: number = 60) {
     handleRefresh,
     lastUpdate,
     geoLocations, // Expose raw geo locations for debugging
-    isHistoricalAdsb, // Whether ADSB data is from historical readings
-    adsbSource, // Source of ADSB data: 'live', 'historical', or 'none'
   };
 }
