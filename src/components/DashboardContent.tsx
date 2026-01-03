@@ -277,11 +277,11 @@ const DashboardContent = () => {
         <PowerConsumptionCharts />
       </div>
 
-      {/* Thermal Probe by Device */}
+      {/* Thermal - All Temperature Sources */}
       <div className="mb-8">
         <h2 className="text-lg font-semibold mb-4 flex items-center gap-2">
           <Thermometer className="w-5 h-5 text-red-500" />
-          Thermal Probe (°F / °C)
+          Thermal (°F / °C)
         </h2>
         <ThermalProbeDeviceChart />
       </div>

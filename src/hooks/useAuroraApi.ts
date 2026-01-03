@@ -1613,6 +1613,154 @@ export function useThermalProbeTimeseries(hours: number = 24) {
 }
 
 // =============================================
+// HOOKS - AHT SENSOR TIMESERIES
+// =============================================
+
+export interface AhtSensorReading {
+  timestamp: string;
+  device_id?: string;
+  aht_temp_c?: number;
+  aht_humidity?: number;
+  temp_c?: number;
+  humidity?: number;
+}
+
+export interface AhtSensorTimeseriesResponse {
+  count: number;
+  readings: AhtSensorReading[];
+}
+
+export function useAhtSensorTimeseries(hours: number = 24) {
+  return useQuery({
+    queryKey: ["aurora", "aht_sensor", "timeseries", hours],
+    queryFn: async () => {
+      try {
+        interface RawReading {
+          timestamp: string;
+          device_id?: string;
+          device_type?: string;
+          data?: {
+            aht_temp_c?: number;
+            aht_humidity?: number;
+            temp_c?: number;
+            humidity?: number;
+          };
+          aht_temp_c?: number;
+          aht_humidity?: number;
+          temp_c?: number;
+          humidity?: number;
+        }
+        
+        interface RawResponse {
+          count?: number;
+          readings?: RawReading[];
+          sensor_type?: string;
+        }
+        
+        const response = await callAuroraApi<RawResponse>(`/api/readings/sensor/aht_sensor?hours=${hours}`);
+        
+        const transformedReadings: AhtSensorReading[] = (response.readings || []).map(r => ({
+          timestamp: r.timestamp,
+          device_id: r.device_id,
+          aht_temp_c: r.data?.aht_temp_c ?? r.aht_temp_c ?? r.data?.temp_c ?? r.temp_c,
+          aht_humidity: r.data?.aht_humidity ?? r.aht_humidity ?? r.data?.humidity ?? r.humidity,
+          temp_c: r.data?.temp_c ?? r.temp_c ?? r.data?.aht_temp_c ?? r.aht_temp_c,
+          humidity: r.data?.humidity ?? r.humidity ?? r.data?.aht_humidity ?? r.aht_humidity,
+        }));
+        
+        return { 
+          count: response.count ?? transformedReadings.length, 
+          readings: transformedReadings 
+        };
+      } catch (error) {
+        console.warn("Failed to fetch AHT sensor timeseries:", error);
+        return { count: 0, readings: [] };
+      }
+    },
+    refetchInterval: 30000,
+    retry: 1,
+  });
+}
+
+// =============================================
+// HOOKS - BMT SENSOR TIMESERIES
+// =============================================
+
+export interface BmtSensorReading {
+  timestamp: string;
+  device_id?: string;
+  bme280_temp_c?: number;
+  bme280_humidity?: number;
+  bme280_pressure_hpa?: number;
+  temp_c?: number;
+  humidity?: number;
+  pressure_hpa?: number;
+}
+
+export interface BmtSensorTimeseriesResponse {
+  count: number;
+  readings: BmtSensorReading[];
+}
+
+export function useBmtSensorTimeseries(hours: number = 24) {
+  return useQuery({
+    queryKey: ["aurora", "bmt_sensor", "timeseries", hours],
+    queryFn: async () => {
+      try {
+        interface RawReading {
+          timestamp: string;
+          device_id?: string;
+          device_type?: string;
+          data?: {
+            bme280_temp_c?: number;
+            bme280_humidity?: number;
+            bme280_pressure_hpa?: number;
+            temp_c?: number;
+            humidity?: number;
+            pressure_hpa?: number;
+          };
+          bme280_temp_c?: number;
+          bme280_humidity?: number;
+          bme280_pressure_hpa?: number;
+          temp_c?: number;
+          humidity?: number;
+          pressure_hpa?: number;
+        }
+        
+        interface RawResponse {
+          count?: number;
+          readings?: RawReading[];
+          sensor_type?: string;
+        }
+        
+        const response = await callAuroraApi<RawResponse>(`/api/readings/sensor/bmt_sensor?hours=${hours}`);
+        
+        const transformedReadings: BmtSensorReading[] = (response.readings || []).map(r => ({
+          timestamp: r.timestamp,
+          device_id: r.device_id,
+          bme280_temp_c: r.data?.bme280_temp_c ?? r.bme280_temp_c ?? r.data?.temp_c ?? r.temp_c,
+          bme280_humidity: r.data?.bme280_humidity ?? r.bme280_humidity ?? r.data?.humidity ?? r.humidity,
+          bme280_pressure_hpa: r.data?.bme280_pressure_hpa ?? r.bme280_pressure_hpa ?? r.data?.pressure_hpa ?? r.pressure_hpa,
+          temp_c: r.data?.temp_c ?? r.temp_c ?? r.data?.bme280_temp_c ?? r.bme280_temp_c,
+          humidity: r.data?.humidity ?? r.humidity ?? r.data?.bme280_humidity ?? r.bme280_humidity,
+          pressure_hpa: r.data?.pressure_hpa ?? r.pressure_hpa ?? r.data?.bme280_pressure_hpa ?? r.bme280_pressure_hpa,
+        }));
+        
+        return { 
+          count: response.count ?? transformedReadings.length, 
+          readings: transformedReadings 
+        };
+      } catch (error) {
+        console.warn("Failed to fetch BMT sensor timeseries:", error);
+        return { count: 0, readings: [] };
+      }
+    },
+    refetchInterval: 30000,
+    retry: 1,
+  });
+}
+
+// =============================================
 // HOOKS - SYSTEM MONITOR
 // =============================================
 
