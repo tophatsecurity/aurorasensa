@@ -8,8 +8,9 @@ import { FilterType, MAP_CONFIG } from "@/types/map";
 import { mapIcons, IconType } from "@/utils/mapIcons";
 import { formatDateTime } from "@/utils/dateUtils";
 
-// Custom hook for map data
+// Custom hooks
 import { useMapData } from "@/hooks/useMapData";
+import { useGpsHistory } from "@/hooks/useGpsHistory";
 
 // Map components (non-leaflet)
 import { MapLegend } from "@/components/map/MapLegend";
@@ -17,6 +18,7 @@ import { MapStatistics } from "@/components/map/MapStatistics";
 import { MapLoadingOverlay } from "@/components/map/MapLoadingOverlay";
 import { MapHeader } from "@/components/map/MapHeader";
 import { MapFilters } from "@/components/map/MapFilters";
+import { GpsHistorySettings } from "@/components/map/GpsHistorySettings";
 import { Button } from "@/components/ui/button";
 
 // Animate marker to new position
@@ -48,9 +50,12 @@ const MapContent = () => {
   const mapContainerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<L.Map | null>(null);
   const markersRef = useRef<Map<string, L.Marker>>(new Map());
+  const trailsRef = useRef<Map<string, L.Polyline>>(new Map());
   const [filter, setFilter] = useState<FilterType>('all');
   const [isLiveTracking, setIsLiveTracking] = useState(true);
   const [hasInitialFit, setHasInitialFit] = useState(false);
+  const [showTrails, setShowTrails] = useState(true);
+  const [retentionMinutes, setRetentionMinutes] = useState(60);
   
   const {
     aircraftMarkers,
@@ -62,6 +67,14 @@ const MapContent = () => {
     timeAgo,
     handleRefresh,
   } = useMapData();
+
+  // GPS history tracking
+  const { trails, clearHistory } = useGpsHistory(
+    aircraftMarkers,
+    sensorMarkers,
+    clientMarkers,
+    { retentionMinutes }
+  );
 
   // Initialize map
   useEffect(() => {
@@ -88,6 +101,7 @@ const MapContent = () => {
       map.remove();
       mapRef.current = null;
       markersRef.current.clear();
+      trailsRef.current.clear();
     };
   }, []);
 
@@ -260,6 +274,69 @@ const MapContent = () => {
     }
   }, [aircraftMarkers, sensorMarkers, clientMarkers, filter, allPositions, hasInitialFit]);
 
+  // Update trail polylines
+  useEffect(() => {
+    if (!mapRef.current) return;
+
+    const trailColors = {
+      aircraft: '#f59e0b', // amber
+      sensor: '#22c55e',   // green
+      client: '#3b82f6',   // blue
+    };
+
+    // Remove trails that are no longer visible or if trails are disabled
+    if (!showTrails) {
+      trailsRef.current.forEach(polyline => polyline.remove());
+      trailsRef.current.clear();
+      return;
+    }
+
+    const activeTrailIds = new Set(trails.map(t => t.id));
+
+    // Remove old trails
+    trailsRef.current.forEach((polyline, id) => {
+      if (!activeTrailIds.has(id)) {
+        polyline.remove();
+        trailsRef.current.delete(id);
+      }
+    });
+
+    // Update or add trails
+    trails.forEach(trail => {
+      // Filter based on current filter
+      const shouldShow = filter === 'all' || 
+        (filter === 'adsb' && trail.type === 'aircraft') ||
+        (filter === 'clients' && trail.type === 'client') ||
+        (trail.type === 'sensor');
+
+      if (!shouldShow) {
+        const existing = trailsRef.current.get(trail.id);
+        if (existing) {
+          existing.remove();
+          trailsRef.current.delete(trail.id);
+        }
+        return;
+      }
+
+      const existing = trailsRef.current.get(trail.id);
+      const color = trailColors[trail.type];
+
+      if (existing) {
+        existing.setLatLngs(trail.coordinates);
+      } else {
+        const polyline = L.polyline(trail.coordinates, {
+          color,
+          weight: 2,
+          opacity: 0.7,
+          dashArray: '5, 5',
+        }).addTo(mapRef.current!);
+
+        polyline.bindTooltip(trail.name, { permanent: false, direction: 'top' });
+        trailsRef.current.set(trail.id, polyline);
+      }
+    });
+  }, [trails, showTrails, filter]);
+
   // Auto-refresh for live tracking
   useEffect(() => {
     if (!isLiveTracking) return;
@@ -306,11 +383,21 @@ const MapContent = () => {
           isLoading={isLoading}
           onRefresh={handleRefresh}
         />
-        <MapFilters 
-          filter={filter}
-          stats={stats}
-          onFilterChange={handleFilterChange}
-        />
+        <div className="flex items-center justify-between gap-4">
+          <MapFilters 
+            filter={filter}
+            stats={stats}
+            onFilterChange={handleFilterChange}
+          />
+          <GpsHistorySettings
+            retentionMinutes={retentionMinutes}
+            onRetentionChange={setRetentionMinutes}
+            showTrails={showTrails}
+            onShowTrailsChange={setShowTrails}
+            trailCount={trails.length}
+            onClearHistory={clearHistory}
+          />
+        </div>
       </div>
 
       {/* Map Container */}
