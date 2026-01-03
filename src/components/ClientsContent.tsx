@@ -294,8 +294,8 @@ const ClientsContent = () => {
     setDetailsOpen(true);
   };
 
-  // Combine all clients from all states
-  const allClients: Client[] = clientsData ? [
+  // Combine all clients from all states (excluding deleted for main datasets)
+  const allClientsIncludingDeleted: Client[] = clientsData ? [
     ...(clientsData.clients_by_state?.pending || []),
     ...(clientsData.clients_by_state?.registered || []),
     ...(clientsData.clients_by_state?.adopted || []),
@@ -304,8 +304,14 @@ const ClientsContent = () => {
     ...(clientsData.clients_by_state?.deleted || []),
   ] : [];
 
-  // Filter clients
-  const filteredClients = allClients.filter((client) => {
+  // Active clients (excluding deleted) for stats and general use
+  const allClients = allClientsIncludingDeleted.filter(c => c.state !== "deleted");
+  
+  // Deleted clients only shown when specifically viewing deleted tab
+  const deletedClients = clientsData?.clients_by_state?.deleted || [];
+
+  // Filter clients based on current view
+  const filteredClients = (activeTab === "deleted" ? deletedClients : allClients).filter((client) => {
     const matchesSearch = 
       client.hostname?.toLowerCase().includes(searchQuery.toLowerCase()) ||
       client.client_id?.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -314,12 +320,6 @@ const ClientsContent = () => {
       client.sensors?.some(s => s.toLowerCase().includes(searchQuery.toLowerCase()));
     
     const clientState = client.state || "pending";
-    
-    // Don't show deleted clients in pending tab
-    if (activeTab === "pending" && clientState === "deleted") {
-      return false;
-    }
-    
     const matchesState = stateFilter === "all" || clientState === stateFilter;
     const matchesTab = activeTab === "all" || clientState === activeTab;
 
@@ -336,10 +336,11 @@ const ClientsContent = () => {
     deleted: clientsData?.clients_by_state?.deleted?.length || 0,
   };
 
-  const totalClients = statistics?.total || allClients.length;
+  // Stats exclude deleted clients
+  const totalClients = statistics?.total ? (statistics.total - (stateCounts.deleted || 0)) : allClients.length;
   const activeClients = statistics?.summary?.active || stateCounts.adopted || 0;
   const needsAttention = statistics?.summary?.needs_attention || (stateCounts.pending + stateCounts.registered) || 0;
-  const inactiveClients = statistics?.summary?.inactive || (stateCounts.disabled + stateCounts.suspended + stateCounts.deleted) || 0;
+  const inactiveClients = (stateCounts.disabled + stateCounts.suspended) || 0;
   const totalSensors = allClients.reduce((acc, client) => acc + (client.sensors?.length || 0), 0);
 
   if (isLoading) {
