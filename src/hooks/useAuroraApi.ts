@@ -479,6 +479,99 @@ export interface SystemInfo {
 }
 
 // =============================================
+// USER MANAGEMENT TYPES
+// =============================================
+
+export interface User {
+  username: string;
+  role: string;
+  created_at?: string;
+  last_login?: string;
+}
+
+// =============================================
+// AUDIT TYPES
+// =============================================
+
+export interface AuditLog {
+  id: string;
+  timestamp: string;
+  user: string;
+  action: string;
+  resource: string;
+  details?: Record<string, unknown>;
+  ip_address?: string;
+}
+
+export interface AuditStats {
+  total_logs: number;
+  actions_by_type: Record<string, number>;
+  actions_last_24h: number;
+  unique_users: number;
+}
+
+// =============================================
+// CONFIGURATION TYPES
+// =============================================
+
+export interface ServerConfig {
+  [key: string]: unknown;
+}
+
+// =============================================
+// WIFI MANAGEMENT TYPES
+// =============================================
+
+export interface WifiMode {
+  mode: string;
+  description?: string;
+}
+
+export interface WifiConfig {
+  ssid?: string;
+  password?: string;
+  channel?: number;
+  mode?: string;
+  [key: string]: unknown;
+}
+
+export interface WifiStatus {
+  connected: boolean;
+  ssid?: string;
+  signal_strength?: number;
+  ip_address?: string;
+  mac_address?: string;
+}
+
+export interface WifiNetwork {
+  ssid: string;
+  bssid?: string;
+  signal_strength?: number;
+  channel?: number;
+  security?: string;
+}
+
+export interface WifiClient {
+  mac: string;
+  ip?: string;
+  hostname?: string;
+  connected_at?: string;
+}
+
+// =============================================
+// NETSTAT TYPES
+// =============================================
+
+export interface NetstatEntry {
+  protocol: string;
+  local_address: string;
+  foreign_address: string;
+  state?: string;
+  pid?: number;
+  program?: string;
+}
+
+// =============================================
 // EXPORT TYPES
 // =============================================
 
@@ -1260,6 +1353,350 @@ export function useHealth() {
 }
 
 // =============================================
+// HOOKS - USER MANAGEMENT
+// =============================================
+
+export function useUsers() {
+  return useQuery({
+    queryKey: ["aurora", "users"],
+    queryFn: () => callAuroraApi<{ users: User[] }>("/api/users"),
+    refetchInterval: 60000,
+    retry: 2,
+  });
+}
+
+export function useCurrentUser() {
+  return useQuery({
+    queryKey: ["aurora", "auth", "me"],
+    queryFn: () => callAuroraApi<User>("/api/auth/me"),
+    retry: 2,
+  });
+}
+
+// =============================================
+// HOOKS - AUDIT
+// =============================================
+
+export function useAuditLogs(limit: number = 100) {
+  return useQuery({
+    queryKey: ["aurora", "audit", "logs", limit],
+    queryFn: () => callAuroraApi<{ logs: AuditLog[] }>(`/api/audit/logs?limit=${limit}`),
+    refetchInterval: 30000,
+    retry: 2,
+  });
+}
+
+export function useAuditStats() {
+  return useQuery({
+    queryKey: ["aurora", "audit", "stats"],
+    queryFn: () => callAuroraApi<AuditStats>("/api/audit/stats"),
+    refetchInterval: 60000,
+    retry: 2,
+  });
+}
+
+// =============================================
+// HOOKS - CONFIGURATION
+// =============================================
+
+export function useConfig() {
+  return useQuery({
+    queryKey: ["aurora", "config"],
+    queryFn: () => callAuroraApi<ServerConfig>("/api/config"),
+    refetchInterval: 60000,
+    retry: 2,
+  });
+}
+
+export function useClientConfig(clientId: string) {
+  return useQuery({
+    queryKey: ["aurora", "clients", clientId, "config"],
+    queryFn: () => callAuroraApi<ServerConfig>(`/api/clients/${clientId}/config`),
+    refetchInterval: 60000,
+    retry: 2,
+    enabled: !!clientId,
+  });
+}
+
+export function useAllClientConfigs() {
+  return useQuery({
+    queryKey: ["aurora", "clients", "configs", "all"],
+    queryFn: () => callAuroraApi<{ configs: Record<string, ServerConfig> }>("/api/clients/configs/all"),
+    refetchInterval: 60000,
+    retry: 2,
+  });
+}
+
+// =============================================
+// HOOKS - WIFI MANAGEMENT
+// =============================================
+
+export function useWifiMode(clientId: string) {
+  return useQuery({
+    queryKey: ["aurora", "clients", clientId, "wifi", "mode"],
+    queryFn: () => callAuroraApi<WifiMode>(`/api/clients/${clientId}/wifi/mode`),
+    refetchInterval: 30000,
+    retry: 2,
+    enabled: !!clientId,
+  });
+}
+
+export function useWifiConfig(clientId: string) {
+  return useQuery({
+    queryKey: ["aurora", "clients", clientId, "wifi", "config"],
+    queryFn: () => callAuroraApi<WifiConfig>(`/api/clients/${clientId}/wifi/config`),
+    refetchInterval: 60000,
+    retry: 2,
+    enabled: !!clientId,
+  });
+}
+
+export function useWifiStatus(clientId: string) {
+  return useQuery({
+    queryKey: ["aurora", "clients", clientId, "wifi", "status"],
+    queryFn: () => callAuroraApi<WifiStatus>(`/api/clients/${clientId}/wifi/status`),
+    refetchInterval: 15000,
+    retry: 2,
+    enabled: !!clientId,
+  });
+}
+
+export function useWifiScan(clientId: string) {
+  return useQuery({
+    queryKey: ["aurora", "clients", clientId, "wifi", "scan"],
+    queryFn: () => callAuroraApi<{ networks: WifiNetwork[] }>(`/api/clients/${clientId}/wifi/scan`),
+    retry: 2,
+    enabled: !!clientId,
+    refetchOnWindowFocus: false,
+  });
+}
+
+export function useWifiClients(clientId: string) {
+  return useQuery({
+    queryKey: ["aurora", "clients", clientId, "wifi", "clients"],
+    queryFn: () => callAuroraApi<{ clients: WifiClient[] }>(`/api/clients/${clientId}/wifi/clients`),
+    refetchInterval: 30000,
+    retry: 2,
+    enabled: !!clientId,
+  });
+}
+
+// =============================================
+// HOOKS - ADDITIONAL SYSTEM INFO
+// =============================================
+
+export function useSystemNetstat() {
+  return useQuery({
+    queryKey: ["aurora", "system", "netstat"],
+    queryFn: () => callAuroraApi<{ connections: NetstatEntry[] }>("/api/system/netstat"),
+    refetchInterval: 30000,
+    retry: 2,
+  });
+}
+
+export function useSystemHostname() {
+  return useQuery({
+    queryKey: ["aurora", "system", "hostname"],
+    queryFn: () => callAuroraApi<{ hostname: string }>("/api/system/hostname"),
+    refetchInterval: 300000,
+    retry: 2,
+  });
+}
+
+export function useSystemIp() {
+  return useQuery({
+    queryKey: ["aurora", "system", "ip"],
+    queryFn: () => callAuroraApi<{ ip: string }>("/api/system/ip"),
+    refetchInterval: 60000,
+    retry: 2,
+  });
+}
+
+export function useSystemUptime() {
+  return useQuery({
+    queryKey: ["aurora", "system", "uptime"],
+    queryFn: () => callAuroraApi<{ uptime: string; uptime_seconds: number }>("/api/system/uptime"),
+    refetchInterval: 60000,
+    retry: 2,
+  });
+}
+
+export function useSystemCpuLoad() {
+  return useQuery({
+    queryKey: ["aurora", "system", "load"],
+    queryFn: () => callAuroraApi<{ load: number[] }>("/api/system/load"),
+    refetchInterval: 15000,
+    retry: 2,
+  });
+}
+
+export function useSystemMemory() {
+  return useQuery({
+    queryKey: ["aurora", "system", "memory"],
+    queryFn: () => callAuroraApi<{ total: number; used: number; percent: number }>("/api/system/memory"),
+    refetchInterval: 15000,
+    retry: 2,
+  });
+}
+
+export function useSystemDisk() {
+  return useQuery({
+    queryKey: ["aurora", "system", "disk"],
+    queryFn: () => callAuroraApi<{ total: number; used: number; percent: number }>("/api/system/disk"),
+    refetchInterval: 60000,
+    retry: 2,
+  });
+}
+
+export function useServiceStatus(serviceName: string) {
+  return useQuery({
+    queryKey: ["aurora", "systemctl", serviceName],
+    queryFn: () => callAuroraApi<{ active: boolean; status: string }>(`/api/systemctl/${serviceName}`),
+    refetchInterval: 30000,
+    retry: 2,
+    enabled: !!serviceName,
+  });
+}
+
+// =============================================
+// HOOKS - GENERAL STATS
+// =============================================
+
+export function useGeneralStats() {
+  return useQuery({
+    queryKey: ["aurora", "stats"],
+    queryFn: () => callAuroraApi<Record<string, unknown>>("/api/stats"),
+    refetchInterval: 15000,
+    retry: 2,
+  });
+}
+
+export function useEndpointStatsHistory() {
+  return useQuery({
+    queryKey: ["aurora", "stats", "endpoints", "history"],
+    queryFn: () => callAuroraApi<Array<{ timestamp: string; endpoint: string; count: number }>>("/api/stats/endpoints/history"),
+    refetchInterval: 60000,
+    retry: 2,
+  });
+}
+
+// =============================================
+// HOOKS - DATA FILES
+// =============================================
+
+export function useStarlinkStatusFile() {
+  return useQuery({
+    queryKey: ["aurora", "files", "starlink_status"],
+    queryFn: () => callAuroraApi<string>("/starlink_status.jsonl"),
+    refetchInterval: 30000,
+    retry: 2,
+  });
+}
+
+export function useGpsdStatusFile() {
+  return useQuery({
+    queryKey: ["aurora", "files", "gpsd_status"],
+    queryFn: () => callAuroraApi<string>("/gpsd_status.jsonl"),
+    refetchInterval: 30000,
+    retry: 2,
+  });
+}
+
+export function useBandwidthFile() {
+  return useQuery({
+    queryKey: ["aurora", "files", "bandwidth"],
+    queryFn: () => callAuroraApi<string>("/bandwidth.jsonl"),
+    refetchInterval: 30000,
+    retry: 2,
+  });
+}
+
+export function useArduinoDataFile() {
+  return useQuery({
+    queryKey: ["aurora", "files", "arduino_data"],
+    queryFn: () => callAuroraApi<string>("/arduino_data.jsonl"),
+    refetchInterval: 30000,
+    retry: 2,
+  });
+}
+
+export function useVisibleSatsFile() {
+  return useQuery({
+    queryKey: ["aurora", "files", "visible_sats"],
+    queryFn: () => callAuroraApi<string>("/visible_sats.jsonl"),
+    refetchInterval: 30000,
+    retry: 2,
+  });
+}
+
+export function usePingStatsFile() {
+  return useQuery({
+    queryKey: ["aurora", "files", "ping_stats"],
+    queryFn: () => callAuroraApi<string>("/ping_stats.jsonl"),
+    refetchInterval: 30000,
+    retry: 2,
+  });
+}
+
+// =============================================
+// HOOKS - ANALYTICS
+// =============================================
+
+export function useMovingAverage(sensorType?: string, field?: string, window?: number) {
+  return useQuery({
+    queryKey: ["aurora", "data", "moving_average", sensorType, field, window],
+    queryFn: () => {
+      const params = new URLSearchParams();
+      if (sensorType) params.append("sensor_type", sensorType);
+      if (field) params.append("field", field);
+      if (window) params.append("window", window.toString());
+      const queryString = params.toString();
+      return callAuroraApi<Record<string, unknown>>(`/api/v1/data/moving_average${queryString ? `?${queryString}` : ""}`);
+    },
+    refetchInterval: 30000,
+    retry: 2,
+  });
+}
+
+// =============================================
+// MUTATIONS - USER MANAGEMENT
+// =============================================
+
+export function useCreateUser() {
+  const queryClient = useQueryClient();
+  
+  return useMutation({
+    mutationFn: async (user: { username: string; password: string; role?: string }) => {
+      return callAuroraApi<{ success: boolean; message: string }>("/api/users", "POST", user);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["aurora", "users"] });
+    },
+  });
+}
+
+export function useDeleteUser() {
+  const queryClient = useQueryClient();
+  
+  return useMutation({
+    mutationFn: async (username: string) => {
+      return callAuroraApi<{ success: boolean; message: string }>(`/api/users/${username}`, "DELETE");
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["aurora", "users"] });
+    },
+  });
+}
+
+export function useChangePassword() {
+  return useMutation({
+    mutationFn: async (data: { current_password: string; new_password: string }) => {
+      return callAuroraApi<{ success: boolean; message: string }>("/api/auth/change-password", "POST", data);
+    },
+  });
+}
+
+// =============================================
 // MUTATIONS - CLIENT
 // =============================================
 
@@ -1285,6 +1722,88 @@ export function useDeleteClient() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["aurora", "clients"] });
+    },
+  });
+}
+
+export function useClientHeartbeat() {
+  return useMutation({
+    mutationFn: async (clientId: string) => {
+      return callAuroraApi<{ success: boolean }>(`/api/clients/${clientId}/heartbeat`, "POST");
+    },
+  });
+}
+
+export function useUpdateClientConfig() {
+  const queryClient = useQueryClient();
+  
+  return useMutation({
+    mutationFn: async ({ clientId, config }: { clientId: string; config: ServerConfig }) => {
+      return callAuroraApi<{ success: boolean; message: string }>(`/api/clients/${clientId}/config`, "PUT", config);
+    },
+    onSuccess: (_, variables) => {
+      queryClient.invalidateQueries({ queryKey: ["aurora", "clients", variables.clientId, "config"] });
+      queryClient.invalidateQueries({ queryKey: ["aurora", "clients", "configs", "all"] });
+    },
+  });
+}
+
+// =============================================
+// MUTATIONS - WIFI
+// =============================================
+
+export function useSetWifiMode() {
+  const queryClient = useQueryClient();
+  
+  return useMutation({
+    mutationFn: async ({ clientId, mode }: { clientId: string; mode: string }) => {
+      return callAuroraApi<{ success: boolean }>(`/api/clients/${clientId}/wifi/mode`, "POST", { mode });
+    },
+    onSuccess: (_, variables) => {
+      queryClient.invalidateQueries({ queryKey: ["aurora", "clients", variables.clientId, "wifi", "mode"] });
+    },
+  });
+}
+
+export function useUpdateWifiConfig() {
+  const queryClient = useQueryClient();
+  
+  return useMutation({
+    mutationFn: async ({ clientId, config }: { clientId: string; config: WifiConfig }) => {
+      return callAuroraApi<{ success: boolean }>(`/api/clients/${clientId}/wifi/config`, "POST", config);
+    },
+    onSuccess: (_, variables) => {
+      queryClient.invalidateQueries({ queryKey: ["aurora", "clients", variables.clientId, "wifi", "config"] });
+    },
+  });
+}
+
+export function useDisconnectWifiClient() {
+  const queryClient = useQueryClient();
+  
+  return useMutation({
+    mutationFn: async ({ clientId, mac }: { clientId: string; mac: string }) => {
+      return callAuroraApi<{ success: boolean }>(`/api/clients/${clientId}/wifi/clients/${mac}/disconnect`, "POST");
+    },
+    onSuccess: (_, variables) => {
+      queryClient.invalidateQueries({ queryKey: ["aurora", "clients", variables.clientId, "wifi", "clients"] });
+    },
+  });
+}
+
+// =============================================
+// MUTATIONS - CONFIGURATION
+// =============================================
+
+export function useUpdateConfig() {
+  const queryClient = useQueryClient();
+  
+  return useMutation({
+    mutationFn: async (config: ServerConfig) => {
+      return callAuroraApi<{ success: boolean }>("/api/config", "POST", config);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["aurora", "config"] });
     },
   });
 }
@@ -1345,6 +1864,20 @@ export function useCreateAlertRule() {
   });
 }
 
+export function useAddAlertRule() {
+  const queryClient = useQueryClient();
+  
+  return useMutation({
+    mutationFn: async (rule: Omit<AlertRule, 'id'>) => {
+      return callAuroraApi<{ success: boolean; message: string; id?: number }>("/api/alerts/add", "POST", rule);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["aurora", "alerts", "rules"] });
+      queryClient.invalidateQueries({ queryKey: ["aurora", "alerts", "list"] });
+    },
+  });
+}
+
 export function useAcknowledgeAlert() {
   const queryClient = useQueryClient();
   
@@ -1384,6 +1917,14 @@ export function useUpdateAlertSettings() {
   });
 }
 
+export function useTestAlert() {
+  return useMutation({
+    mutationFn: async () => {
+      return callAuroraApi<{ success: boolean; message: string }>("/api/alerts/test", "POST");
+    },
+  });
+}
+
 // =============================================
 // MUTATIONS - BASELINES
 // =============================================
@@ -1397,6 +1938,32 @@ export function useCreateBaselineProfile() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["aurora", "baselines", "profiles"] });
+    },
+  });
+}
+
+export function useAddBaselineEntry() {
+  const queryClient = useQueryClient();
+  
+  return useMutation({
+    mutationFn: async ({ profileId, entry }: { profileId: number; entry: Partial<BaselineEntry> }) => {
+      return callAuroraApi<{ success: boolean; id?: number }>(`/api/baselines/profiles/${profileId}/entries`, "POST", entry);
+    },
+    onSuccess: (_, variables) => {
+      queryClient.invalidateQueries({ queryKey: ["aurora", "baselines", "profiles", variables.profileId, "entries"] });
+    },
+  });
+}
+
+export function useRemoveBaselineEntry() {
+  const queryClient = useQueryClient();
+  
+  return useMutation({
+    mutationFn: async (entryId: number) => {
+      return callAuroraApi<{ success: boolean }>(`/api/baselines/entries/${entryId}`, "DELETE");
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["aurora", "baselines"] });
     },
   });
 }
@@ -1423,6 +1990,19 @@ export function useWhitelistViolation() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["aurora", "baselines", "violations"] });
+    },
+  });
+}
+
+export function useAutoLearnBaseline() {
+  const queryClient = useQueryClient();
+  
+  return useMutation({
+    mutationFn: async (profileId: number) => {
+      return callAuroraApi<{ success: boolean; entries_added?: number }>(`/api/baselines/profiles/${profileId}/auto-learn`, "POST");
+    },
+    onSuccess: (_, profileId) => {
+      queryClient.invalidateQueries({ queryKey: ["aurora", "baselines", "profiles", profileId, "entries"] });
     },
   });
 }
