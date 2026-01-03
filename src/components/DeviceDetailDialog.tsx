@@ -525,7 +525,7 @@ const DeviceDetailDialog = ({ client, open, onOpenChange }: DeviceDetailDialogPr
                     </div>
                     <div>
                       <p className="text-xs text-muted-foreground">Batches Received</p>
-                      <p className="text-sm font-semibold">{client.batches_received.toLocaleString()}</p>
+                      <p className="text-sm font-semibold">{(client.batches_received ?? 0).toLocaleString()}</p>
                     </div>
                     <div>
                       <p className="text-xs text-muted-foreground">Auto Registered</p>
