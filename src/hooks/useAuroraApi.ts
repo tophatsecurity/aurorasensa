@@ -316,7 +316,8 @@ export interface Client {
   ip_address: string;
   mac_address: string;
   last_seen: string;
-  adopted_at: string;
+  adopted_at: string | null;
+  registered_at?: string;
   batches_received: number;
   auto_registered: boolean;
   status?: string;
@@ -342,6 +343,9 @@ export interface Client {
       disk_percent?: number;
       uptime_seconds?: number;
     };
+    registered_at?: string;
+    last_seen?: string;
+    last_config_update?: string;
   };
 }
 

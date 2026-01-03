@@ -182,8 +182,12 @@ const DeviceCard = ({ name, type, status, lastSeen, icon, details, sensors, onVi
   );
 };
 
-const formatLastSeen = (dateString: string) => {
+const formatLastSeen = (dateString: string | undefined | null) => {
+  if (!dateString) return 'Unknown';
+  
   const date = new Date(dateString);
+  if (isNaN(date.getTime())) return 'Unknown';
+  
   const now = new Date();
   const diffMs = now.getTime() - date.getTime();
   const diffMins = Math.floor(diffMs / 60000);
@@ -197,8 +201,14 @@ const formatLastSeen = (dateString: string) => {
 };
 
 const getClientStatus = (client: Client) => {
+  // Use direct status field if available
   if (client.status === 'active') return 'online';
-  const date = new Date(client.last_seen);
+  
+  // Get last_seen from metadata if main field is outdated
+  const lastSeenStr = client.metadata?.last_seen || client.last_seen;
+  if (!lastSeenStr) return 'offline';
+  
+  const date = new Date(lastSeenStr);
   const now = new Date();
   const diffMs = now.getTime() - date.getTime();
   const diffMins = Math.floor(diffMs / 60000);
@@ -238,7 +248,8 @@ const DevicesContent = () => {
   };
 
   const isNeedsAdoption = (client: Client) => {
-    return client.auto_registered && !client.adopted_at;
+    // Client needs adoption if it was auto-registered and hasn't been adopted yet
+    return client.auto_registered === true && (!client.adopted_at || client.adopted_at === null);
   };
 
   const isLoading = clientsLoading || aircraftLoading;
@@ -259,11 +270,14 @@ const DevicesContent = () => {
 
     const needsAdoption = isNeedsAdoption(client);
 
+    // Get the most recent last_seen value
+    const lastSeenStr = client.metadata?.last_seen || client.last_seen;
+    
     devices.push({
       name: client.hostname || client.client_id,
       type: 'client',
       status: needsAdoption ? 'pending' : status,
-      lastSeen: formatLastSeen(client.last_seen),
+      lastSeen: formatLastSeen(lastSeenStr),
       icon: <Server className="w-6 h-6 text-cyan-400" />,
       sensors: sensorList,
       details: {
@@ -271,6 +285,7 @@ const DevicesContent = () => {
         'Batches': client.batches_received.toLocaleString(),
         ...(system?.cpu_percent !== undefined && { 'CPU': `${system.cpu_percent.toFixed(1)}%` }),
         ...(system?.memory_percent !== undefined && { 'Memory': `${system.memory_percent.toFixed(1)}%` }),
+        ...(client.adopted_at && { 'Adopted': 'Yes' }),
       },
       client,
       needsAdoption,
