@@ -32,6 +32,7 @@ import { Button } from "@/components/ui/button";
 import SensorCard from "./SensorCard";
 import SensorCharts from "./SensorCharts";
 import StarlinkCharts from "./StarlinkCharts";
+import ThermalProbeCharts from "./ThermalProbeCharts";
 import { 
   useComprehensiveStats, 
   useAlerts, 
@@ -402,6 +403,15 @@ const DashboardContent = () => {
           Starlink Trends (24h)
         </h2>
         <StarlinkCharts />
+      </div>
+
+      {/* Thermal Probe Trends */}
+      <div className="mb-8">
+        <h2 className="text-lg font-semibold mb-4 flex items-center gap-2">
+          <Thermometer className="w-5 h-5 text-red-500" />
+          Thermal Probe Trends (24h)
+        </h2>
+        <ThermalProbeCharts />
       </div>
 
       {/* Sensor Types Summary */}

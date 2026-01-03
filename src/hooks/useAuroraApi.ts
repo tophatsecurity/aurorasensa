@@ -583,6 +583,45 @@ export function useThermalProbeStats() {
   });
 }
 
+// Thermal probe timeseries for charts
+export interface ThermalProbeTimeseriesPoint {
+  timestamp: string;
+  temp_c?: number;
+  temp_f?: number;
+  ambient_c?: number;
+  probe_c?: number;
+  device_id?: string;
+}
+
+export interface ThermalProbeTimeseriesResponse {
+  count: number;
+  readings: ThermalProbeTimeseriesPoint[];
+}
+
+export function useThermalProbeTimeseries(hours: number = 24) {
+  return useQuery({
+    queryKey: ["aurora", "thermal_probe", "timeseries", hours],
+    queryFn: async () => {
+      try {
+        // Try thermal_probe specific endpoint
+        const response = await callAuroraApi<ThermalProbeTimeseriesResponse>(`/api/readings/sensor/thermal_probe?hours=${hours}`);
+        return response;
+      } catch {
+        // Fallback to stats endpoint
+        try {
+          const fallback = await callAuroraApi<ThermalProbeTimeseriesResponse>(`/api/stats/sensors/thermal_probe`);
+          return fallback;
+        } catch (error) {
+          console.warn("Failed to fetch thermal probe timeseries:", error);
+          return { count: 0, readings: [] };
+        }
+      }
+    },
+    refetchInterval: 30000,
+    retry: 1,
+  });
+}
+
 // Adopt client mutation
 export function useAdoptClient() {
   const queryClient = useQueryClient();
