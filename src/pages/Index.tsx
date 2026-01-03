@@ -14,6 +14,7 @@ import PerformanceContent from "@/components/PerformanceContent";
 import SettingsContent from "@/components/SettingsContent";
 import StarlinkContent from "@/components/StarlinkContent";
 import AuditLogsContent from "@/components/AuditLogsContent";
+import ConfigurationContent from "@/components/ConfigurationContent";
 
 const Index = () => {
   const [activeItem, setActiveItem] = useState("dashboard");
@@ -46,6 +47,8 @@ const Index = () => {
         return <StarlinkContent />;
       case "audit-logs":
         return <AuditLogsContent />;
+      case "configuration":
+        return <ConfigurationContent />;
       default:
         return <DashboardContent />;
     }
