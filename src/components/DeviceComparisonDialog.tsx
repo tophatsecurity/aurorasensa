@@ -9,6 +9,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   Select,
   SelectContent,
@@ -17,6 +18,17 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Client, useClients, useClientSystemInfo } from "@/hooks/useAuroraApi";
+import { useClientMetricsHistory } from "@/hooks/useClientMetricsHistory";
+import {
+  LineChart,
+  Line,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+  ResponsiveContainer,
+  Legend,
+} from "recharts";
 import {
   ArrowLeftRight,
   Cpu,
@@ -35,6 +47,7 @@ import {
   Bluetooth,
   CheckCircle,
   XCircle,
+  TrendingUp,
 } from "lucide-react";
 
 interface DeviceComparisonDialogProps {
@@ -207,6 +220,42 @@ const DeviceComparisonDialog = ({ open, onOpenChange, initialDevice }: DeviceCom
   const systemInfo1 = extractMetrics(system1Raw, device1?.metadata?.system);
   const systemInfo2 = extractMetrics(system2Raw, device2?.metadata?.system);
 
+  // Historical metrics
+  const { history: history1 } = useClientMetricsHistory(device1Id, 10000);
+  const { history: history2 } = useClientMetricsHistory(device2Id, 10000);
+
+  // Merge histories for chart
+  const mergedHistory = useMemo(() => {
+    const timeMap = new Map<string, { time: string; cpu1?: number; cpu2?: number; mem1?: number; mem2?: number; disk1?: number; disk2?: number }>();
+    
+    history1.forEach(h => {
+      timeMap.set(h.time, { 
+        time: h.time, 
+        cpu1: h.cpu, 
+        mem1: h.memory, 
+        disk1: h.disk 
+      });
+    });
+    
+    history2.forEach(h => {
+      const existing = timeMap.get(h.time);
+      if (existing) {
+        existing.cpu2 = h.cpu;
+        existing.mem2 = h.memory;
+        existing.disk2 = h.disk;
+      } else {
+        timeMap.set(h.time, { 
+          time: h.time, 
+          cpu2: h.cpu, 
+          mem2: h.memory, 
+          disk2: h.disk 
+        });
+      }
+    });
+    
+    return Array.from(timeMap.values()).sort((a, b) => a.time.localeCompare(b.time));
+  }, [history1, history2]);
+
   const sensors1 = getSensorList(device1);
   const sensors2 = getSensorList(device2);
 
@@ -318,6 +367,105 @@ const DeviceComparisonDialog = ({ open, onOpenChange, initialDevice }: DeviceCom
                   value2={systemInfo2?.disk_percent}
                 />
               </div>
+
+              {/* Historical Charts */}
+              {mergedHistory.length > 0 && (
+                <div className="space-y-4">
+                  <h3 className="text-sm font-semibold flex items-center gap-2">
+                    <TrendingUp className="w-4 h-4 text-primary" />
+                    Historical Trends
+                  </h3>
+                  
+                  <Tabs defaultValue="cpu" className="w-full">
+                    <TabsList className="grid w-full grid-cols-3">
+                      <TabsTrigger value="cpu" className="gap-1">
+                        <Cpu className="w-3 h-3" />
+                        CPU
+                      </TabsTrigger>
+                      <TabsTrigger value="memory" className="gap-1">
+                        <Monitor className="w-3 h-3" />
+                        Memory
+                      </TabsTrigger>
+                      <TabsTrigger value="disk" className="gap-1">
+                        <HardDrive className="w-3 h-3" />
+                        Disk
+                      </TabsTrigger>
+                    </TabsList>
+
+                    <TabsContent value="cpu" className="mt-4">
+                      <div className="h-48 w-full">
+                        <ResponsiveContainer width="100%" height="100%">
+                          <LineChart data={mergedHistory} margin={{ top: 5, right: 20, left: 0, bottom: 5 }}>
+                            <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" opacity={0.3} />
+                            <XAxis dataKey="time" tick={{ fontSize: 10 }} stroke="hsl(var(--muted-foreground))" />
+                            <YAxis domain={[0, 100]} tick={{ fontSize: 10 }} stroke="hsl(var(--muted-foreground))" tickFormatter={(v) => `${v}%`} />
+                            <Tooltip 
+                              contentStyle={{ 
+                                backgroundColor: 'hsl(var(--popover))', 
+                                border: '1px solid hsl(var(--border))',
+                                borderRadius: '8px',
+                                fontSize: '12px'
+                              }} 
+                              formatter={(value: number) => [`${value?.toFixed(1)}%`]}
+                            />
+                            <Legend wrapperStyle={{ fontSize: '12px' }} />
+                            <Line type="monotone" dataKey="cpu1" name={device1.hostname} stroke="#06b6d4" strokeWidth={2} dot={false} />
+                            <Line type="monotone" dataKey="cpu2" name={device2.hostname} stroke="#a855f7" strokeWidth={2} dot={false} />
+                          </LineChart>
+                        </ResponsiveContainer>
+                      </div>
+                    </TabsContent>
+
+                    <TabsContent value="memory" className="mt-4">
+                      <div className="h-48 w-full">
+                        <ResponsiveContainer width="100%" height="100%">
+                          <LineChart data={mergedHistory} margin={{ top: 5, right: 20, left: 0, bottom: 5 }}>
+                            <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" opacity={0.3} />
+                            <XAxis dataKey="time" tick={{ fontSize: 10 }} stroke="hsl(var(--muted-foreground))" />
+                            <YAxis domain={[0, 100]} tick={{ fontSize: 10 }} stroke="hsl(var(--muted-foreground))" tickFormatter={(v) => `${v}%`} />
+                            <Tooltip 
+                              contentStyle={{ 
+                                backgroundColor: 'hsl(var(--popover))', 
+                                border: '1px solid hsl(var(--border))',
+                                borderRadius: '8px',
+                                fontSize: '12px'
+                              }} 
+                              formatter={(value: number) => [`${value?.toFixed(1)}%`]}
+                            />
+                            <Legend wrapperStyle={{ fontSize: '12px' }} />
+                            <Line type="monotone" dataKey="mem1" name={device1.hostname} stroke="#06b6d4" strokeWidth={2} dot={false} />
+                            <Line type="monotone" dataKey="mem2" name={device2.hostname} stroke="#a855f7" strokeWidth={2} dot={false} />
+                          </LineChart>
+                        </ResponsiveContainer>
+                      </div>
+                    </TabsContent>
+
+                    <TabsContent value="disk" className="mt-4">
+                      <div className="h-48 w-full">
+                        <ResponsiveContainer width="100%" height="100%">
+                          <LineChart data={mergedHistory} margin={{ top: 5, right: 20, left: 0, bottom: 5 }}>
+                            <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" opacity={0.3} />
+                            <XAxis dataKey="time" tick={{ fontSize: 10 }} stroke="hsl(var(--muted-foreground))" />
+                            <YAxis domain={[0, 100]} tick={{ fontSize: 10 }} stroke="hsl(var(--muted-foreground))" tickFormatter={(v) => `${v}%`} />
+                            <Tooltip 
+                              contentStyle={{ 
+                                backgroundColor: 'hsl(var(--popover))', 
+                                border: '1px solid hsl(var(--border))',
+                                borderRadius: '8px',
+                                fontSize: '12px'
+                              }} 
+                              formatter={(value: number) => [`${value?.toFixed(1)}%`]}
+                            />
+                            <Legend wrapperStyle={{ fontSize: '12px' }} />
+                            <Line type="monotone" dataKey="disk1" name={device1.hostname} stroke="#06b6d4" strokeWidth={2} dot={false} />
+                            <Line type="monotone" dataKey="disk2" name={device2.hostname} stroke="#a855f7" strokeWidth={2} dot={false} />
+                          </LineChart>
+                        </ResponsiveContainer>
+                      </div>
+                    </TabsContent>
+                  </Tabs>
+                </div>
+              )}
 
               {/* Connection Stats */}
               <div className="space-y-1">
