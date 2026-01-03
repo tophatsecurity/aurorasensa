@@ -5,7 +5,7 @@ import "leaflet/dist/leaflet.css";
 
 // Types and utilities
 import { FilterType, MAP_CONFIG, AdsbMarker } from "@/types/map";
-import { mapIcons, IconType } from "@/utils/mapIcons";
+import { mapIcons, IconType, createAircraftIcon, getAircraftType, getAircraftColor } from "@/utils/mapIcons";
 import { formatDateTime } from "@/utils/dateUtils";
 
 // Custom hooks
@@ -337,14 +337,22 @@ const MapContent = () => {
           </div>
         `;
 
+        // Create dynamic aircraft icon based on type and heading
+        const aircraftType = getAircraftType(aircraft.category);
+        const aircraftColor = getAircraftColor(aircraft);
+        const heading = aircraft.track ?? 0;
+        const aircraftIcon = createAircraftIcon(aircraftType, heading, aircraftColor);
+
         const existingMarker = markersRef.current.get(markerId);
         
         if (existingMarker) {
+          // Update icon with new heading
+          existingMarker.setIcon(aircraftIcon);
           animateMarker(existingMarker, aircraft.location.lat, aircraft.location.lng);
           existingMarker.setPopupContent(popupContent);
         } else {
           const marker = L.marker([aircraft.location.lat, aircraft.location.lng], { 
-            icon: mapIcons.adsb,
+            icon: aircraftIcon,
             opacity: 0 
           })
             .bindPopup(popupContent)
