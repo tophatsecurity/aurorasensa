@@ -41,6 +41,18 @@ export interface AdsbMarker extends SensorMarker {
   squawk?: string;
   rssi?: number;
   category?: string;
+  // Extended fields
+  registration?: string;
+  operator?: string;
+  aircraftType?: string;
+  country?: string;
+  military?: boolean;
+  altGeom?: number;
+  baroRate?: number;
+  ias?: number;
+  tas?: number;
+  emergency?: string;
+  messages?: number;
 }
 
 export interface ClientMarker {

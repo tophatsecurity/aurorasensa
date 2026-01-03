@@ -76,14 +76,52 @@ export interface AdsbAircraft {
   flight?: string;
   alt_baro?: number;
   alt_geom?: number;
-  gs?: number;
-  track?: number;
+  gs?: number;              // Ground speed in knots
+  track?: number;           // Track angle in degrees
   lat?: number;
   lon?: number;
   squawk?: string;
-  category?: string;
-  seen?: number;
-  rssi?: number;
+  category?: string;        // Aircraft category (A0-D7)
+  seen?: number;            // Seconds since last message
+  rssi?: number;            // Signal strength in dBFS
+  // Extended fields from API
+  baro_rate?: number;       // Barometric altitude rate (ft/min)
+  geom_rate?: number;       // Geometric altitude rate (ft/min)
+  ias?: number;             // Indicated airspeed (knots)
+  tas?: number;             // True airspeed (knots)
+  mach?: number;            // Mach number
+  mag_heading?: number;     // Magnetic heading (degrees)
+  true_heading?: number;    // True heading (degrees)
+  nav_altitude_mcp?: number; // Selected altitude (MCP/FCU)
+  nav_altitude_fms?: number; // Selected altitude (FMS)
+  nav_qnh?: number;         // Altimeter setting (hPa)
+  nav_heading?: number;     // Selected heading (degrees)
+  nic?: number;             // Navigation Integrity Category
+  rc?: number;              // Radius of containment (meters)
+  version?: number;         // ADS-B version
+  nic_baro?: number;        // NIC Baro supplement
+  nac_p?: number;           // Navigation Accuracy Category - Position
+  nac_v?: number;           // Navigation Accuracy Category - Velocity
+  sil?: number;             // Source Integrity Level
+  sil_type?: string;        // SIL supplement
+  gva?: number;             // Geometric Vertical Accuracy
+  sda?: number;             // System Design Assurance
+  emergency?: string;       // Emergency status
+  messages?: number;        // Message count
+  seen_pos?: number;        // Seconds since last position
+  mlat?: string[];          // MLAT data sources
+  tisb?: string[];          // TIS-B data sources
+  type?: string;            // Aircraft type code
+  registration?: string;    // Aircraft registration
+  operator?: string;        // Aircraft operator/airline
+  operator_icao?: string;   // ICAO operator code
+  operator_callsign?: string; // Operator callsign
+  owner?: string;           // Aircraft owner
+  year_built?: number;      // Year aircraft was built
+  description?: string;     // Aircraft description
+  dbFlags?: number;         // Database flags
+  country?: string;         // Registration country
+  military?: boolean;       // Is military aircraft
 }
 
 export interface AdsbStats {
@@ -94,6 +132,12 @@ export interface AdsbStats {
   aircraft_active?: number;
   positions_received?: number;
   uptime_seconds?: number;
+  // Extended stats from API
+  messages_per_second?: number;
+  max_range_nm?: number;
+  local_receiver?: boolean;
+  sample_rate?: number;
+  gain?: number;
 }
 
 export interface AdsbEmergency {
@@ -105,6 +149,9 @@ export interface AdsbEmergency {
   lon?: number;
   alt_baro?: number;
   timestamp?: string;
+  // Extended fields
+  description?: string;
+  severity?: string;
 }
 
 export interface AdsbCoverage {
@@ -113,6 +160,11 @@ export interface AdsbCoverage {
   max_range_km?: number;
   avg_altitude_ft?: number;
   coverage_area_km2?: number;
+  // Extended coverage stats
+  min_range_km?: number;
+  avg_range_km?: number;
+  positions_per_hour?: number;
+  distinct_squawks?: number;
 }
 
 export interface AdsbDevice {
@@ -122,6 +174,13 @@ export interface AdsbDevice {
   frequency?: number;
   gain?: number;
   sdr_type?: string;
+  // Extended device info
+  sample_rate?: number;
+  ppm_error?: number;
+  bias_tee?: boolean;
+  agc?: boolean;
+  last_seen?: string;
+  status?: string;
 }
 
 // =============================================

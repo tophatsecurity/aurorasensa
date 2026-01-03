@@ -225,21 +225,52 @@ const MapContent = () => {
                            aircraft.status === 'historical' ? 'Historical' : 'Stale';
         
         const popupContent = `
-          <div class="p-3 min-w-[220px]">
+          <div class="p-3 min-w-[260px] max-w-[320px]">
             <div class="font-bold mb-2 flex items-center gap-2 text-base border-b pb-2">
               ✈️ ${aircraft.name}
               <span class="text-xs font-normal text-gray-500">(${aircraft.hex})</span>
               ${isHistorical ? '<span class="text-xs bg-blue-500/20 text-blue-400 px-1.5 py-0.5 rounded">Historical</span>' : ''}
+              ${aircraft.military ? '<span class="text-xs bg-red-500/20 text-red-400 px-1.5 py-0.5 rounded">MIL</span>' : ''}
+              ${aircraft.emergency ? '<span class="text-xs bg-red-600/30 text-red-500 px-1.5 py-0.5 rounded font-bold animate-pulse">⚠ ' + aircraft.emergency + '</span>' : ''}
             </div>
-            <div class="text-sm space-y-1.5">
+            <div class="text-sm space-y-1">
+              ${aircraft.registration ? `
               <div class="flex justify-between">
-                <span class="text-gray-500">Altitude:</span>
-                <span class="font-medium">${aircraft.value.toLocaleString()} ${aircraft.unit}</span>
+                <span class="text-gray-500">Registration:</span>
+                <span class="font-medium">${aircraft.registration}${aircraft.country ? ' (' + aircraft.country + ')' : ''}</span>
               </div>
+              ` : ''}
+              ${aircraft.operator ? `
+              <div class="flex justify-between">
+                <span class="text-gray-500">Operator:</span>
+                <span class="font-medium">${aircraft.operator}</span>
+              </div>
+              ` : ''}
+              ${aircraft.aircraftType ? `
+              <div class="flex justify-between">
+                <span class="text-gray-500">Type:</span>
+                <span class="font-medium">${aircraft.aircraftType}${aircraft.category ? ' (' + aircraft.category + ')' : ''}</span>
+              </div>
+              ` : aircraft.category ? `
+              <div class="flex justify-between">
+                <span class="text-gray-500">Category:</span>
+                <span class="font-medium">${aircraft.category}</span>
+              </div>
+              ` : ''}
+              <div class="flex justify-between pt-1 border-t mt-1">
+                <span class="text-gray-500">Altitude:</span>
+                <span class="font-medium">${aircraft.value.toLocaleString()} ${aircraft.unit}${aircraft.altGeom && aircraft.altGeom !== aircraft.value ? ' (geo: ' + aircraft.altGeom.toLocaleString() + ')' : ''}</span>
+              </div>
+              ${aircraft.baroRate !== undefined ? `
+              <div class="flex justify-between">
+                <span class="text-gray-500">Climb Rate:</span>
+                <span class="font-medium ${aircraft.baroRate > 0 ? 'text-green-400' : aircraft.baroRate < 0 ? 'text-orange-400' : ''}">${aircraft.baroRate > 0 ? '+' : ''}${aircraft.baroRate.toLocaleString()} ft/min</span>
+              </div>
+              ` : ''}
               ${aircraft.speed !== undefined ? `
               <div class="flex justify-between">
-                <span class="text-gray-500">Speed:</span>
-                <span class="font-medium">${Math.round(aircraft.speed)} kts</span>
+                <span class="text-gray-500">Ground Speed:</span>
+                <span class="font-medium">${Math.round(aircraft.speed)} kts${aircraft.ias ? ' (IAS: ' + Math.round(aircraft.ias) + ')' : aircraft.tas ? ' (TAS: ' + Math.round(aircraft.tas) + ')' : ''}</span>
               </div>
               ` : ''}
               ${aircraft.track !== undefined ? `
@@ -251,13 +282,18 @@ const MapContent = () => {
               ${aircraft.squawk ? `
               <div class="flex justify-between">
                 <span class="text-gray-500">Squawk:</span>
-                <span class="font-medium ${aircraft.squawk === '7500' || aircraft.squawk === '7600' || aircraft.squawk === '7700' ? 'text-red-500 font-bold' : ''}">${aircraft.squawk}</span>
+                <span class="font-medium ${aircraft.squawk === '7500' || aircraft.squawk === '7600' || aircraft.squawk === '7700' ? 'text-red-500 font-bold' : ''}">${aircraft.squawk}${aircraft.squawk === '7500' ? ' (Hijack)' : aircraft.squawk === '7600' ? ' (Radio Fail)' : aircraft.squawk === '7700' ? ' (Emergency)' : ''}</span>
               </div>
               ` : ''}
               ${aircraft.rssi !== undefined ? `
               <div class="flex justify-between">
                 <span class="text-gray-500">Signal:</span>
-                <span class="font-medium">${aircraft.rssi.toFixed(1)} dBFS</span>
+                <span class="font-medium">${aircraft.rssi.toFixed(1)} dBFS${aircraft.messages ? ' (' + aircraft.messages.toLocaleString() + ' msgs)' : ''}</span>
+              </div>
+              ` : aircraft.messages ? `
+              <div class="flex justify-between">
+                <span class="text-gray-500">Messages:</span>
+                <span class="font-medium">${aircraft.messages.toLocaleString()}</span>
               </div>
               ` : ''}
               <div class="flex justify-between pt-1 border-t mt-1">
