@@ -186,15 +186,12 @@ const DashboardContent = () => {
               </div>
               <div className="flex-1">
                 <p className="text-xs text-muted-foreground">Temperature</p>
-                <p className="text-2xl font-bold text-red-400">
-                  {dashboardStatsLoading ? "..." : avgTemp !== null && avgTemp !== undefined ? `${avgTemp.toFixed(1)}°C` : "—"}
+                <p className="text-xl font-bold text-red-400">
+                  {dashboardStatsLoading ? "..." : avgTemp !== null && avgTemp !== undefined 
+                    ? `${avgTemp.toFixed(1)}°C / ${((avgTemp * 9/5) + 32).toFixed(1)}°F` 
+                    : "—"}
                 </p>
               </div>
-            </div>
-            <div className="text-xs text-muted-foreground mt-1">
-              {avgTemp !== null && avgTemp !== undefined && (
-                <span className="text-red-400/70">{((avgTemp * 9/5) + 32).toFixed(1)}°F</span>
-              )}
             </div>
           </div>
           <div className="glass-card rounded-xl p-4 border border-border/50 hover:border-blue-500/30 transition-colors">
@@ -276,8 +273,12 @@ const DashboardContent = () => {
               </div>
               <div className="flex-1">
                 <p className="text-xs text-muted-foreground">Thermal Probe Temp</p>
-                <p className="text-2xl font-bold text-red-400">
-                  {thermalLoading ? "..." : thermalAvgTemp !== null && thermalAvgTemp !== undefined ? `${thermalAvgTemp.toFixed(1)}°C` : avgTemp !== null && avgTemp !== undefined ? `${avgTemp.toFixed(1)}°C` : "—"}
+                <p className="text-lg font-bold text-red-400">
+                  {thermalLoading ? "..." : thermalAvgTemp !== null && thermalAvgTemp !== undefined 
+                    ? `${thermalAvgTemp.toFixed(1)}°C / ${((thermalAvgTemp * 9/5) + 32).toFixed(1)}°F` 
+                    : avgTemp !== null && avgTemp !== undefined 
+                      ? `${avgTemp.toFixed(1)}°C / ${((avgTemp * 9/5) + 32).toFixed(1)}°F` 
+                      : "—"}
                 </p>
               </div>
             </div>
@@ -286,10 +287,16 @@ const DashboardContent = () => {
                 <span>Source:</span>
                 <span className="text-red-400/70">Thermal Probe / BH / AMT</span>
               </div>
-              {thermalMinTemp !== undefined && (
+              {thermalMinTemp !== undefined && thermalMaxTemp !== undefined && (
                 <div className="flex justify-between text-muted-foreground">
-                  <span>Min/Max:</span>
-                  <span>{thermalMinTemp?.toFixed(1)}°C / {thermalMaxTemp?.toFixed(1)}°C</span>
+                  <span>Min:</span>
+                  <span>{thermalMinTemp.toFixed(1)}°C / {((thermalMinTemp * 9/5) + 32).toFixed(1)}°F</span>
+                </div>
+              )}
+              {thermalMinTemp !== undefined && thermalMaxTemp !== undefined && (
+                <div className="flex justify-between text-muted-foreground">
+                  <span>Max:</span>
+                  <span>{thermalMaxTemp.toFixed(1)}°C / {((thermalMaxTemp * 9/5) + 32).toFixed(1)}°F</span>
                 </div>
               )}
               {thermalProbeStats?.total_readings !== undefined && (
