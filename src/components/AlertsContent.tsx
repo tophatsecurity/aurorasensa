@@ -3,6 +3,8 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { useAlerts } from "@/hooks/useAuroraApi";
 import { useQueryClient } from "@tanstack/react-query";
+import { usePagination } from "@/hooks/usePagination";
+import { TablePagination } from "@/components/TablePagination";
 
 const AlertsContent = () => {
   const { data: alerts, isLoading, error } = useAlerts();
@@ -11,6 +13,24 @@ const AlertsContent = () => {
   const handleRefresh = () => {
     queryClient.invalidateQueries({ queryKey: ["aurora", "alerts"] });
   };
+
+  const alertsList = alerts || [];
+
+  const {
+    currentPage,
+    totalPages,
+    itemsPerPage,
+    startIndex,
+    endIndex,
+    setCurrentPage,
+    setItemsPerPage,
+    paginateData,
+  } = usePagination<typeof alertsList[number]>({
+    totalItems: alertsList.length,
+    itemsPerPage: 10,
+  });
+
+  const paginatedAlerts = paginateData(alertsList);
 
   const getSeverityColor = (severity: string) => {
     switch (severity.toLowerCase()) {
@@ -60,35 +80,47 @@ const AlertsContent = () => {
             Try Again
           </Button>
         </div>
-      ) : alerts && alerts.length > 0 ? (
-        <div className="space-y-3">
-          {alerts.map((alert) => (
-            <div 
-              key={alert.id}
-              className="glass-card rounded-xl p-5 border border-border/50 hover:border-primary/30 transition-all"
-            >
-              <div className="flex items-start justify-between">
-                <div className="flex items-start gap-4">
-                  <div className="w-10 h-10 rounded-lg bg-warning/20 flex items-center justify-center flex-shrink-0">
-                    <Bell className="w-5 h-5 text-warning" />
-                  </div>
-                  <div>
-                    <div className="flex items-center gap-2 mb-2">
-                      <Badge className={getSeverityColor(alert.severity)}>
-                        {alert.severity.toUpperCase()}
-                      </Badge>
-                      <span className="text-xs text-muted-foreground">{alert.type}</span>
+      ) : alertsList.length > 0 ? (
+        <>
+          <div className="space-y-3">
+            {paginatedAlerts.map((alert) => (
+              <div 
+                key={alert.id}
+                className="glass-card rounded-xl p-5 border border-border/50 hover:border-primary/30 transition-all"
+              >
+                <div className="flex items-start justify-between">
+                  <div className="flex items-start gap-4">
+                    <div className="w-10 h-10 rounded-lg bg-warning/20 flex items-center justify-center flex-shrink-0">
+                      <Bell className="w-5 h-5 text-warning" />
                     </div>
-                    <p className="text-foreground">{alert.message}</p>
+                    <div>
+                      <div className="flex items-center gap-2 mb-2">
+                        <Badge className={getSeverityColor(alert.severity)}>
+                          {alert.severity.toUpperCase()}
+                        </Badge>
+                        <span className="text-xs text-muted-foreground">{alert.type}</span>
+                      </div>
+                      <p className="text-foreground">{alert.message}</p>
+                    </div>
                   </div>
+                  <span className="text-xs text-muted-foreground whitespace-nowrap ml-4">
+                    {alert.timestamp}
+                  </span>
                 </div>
-                <span className="text-xs text-muted-foreground whitespace-nowrap ml-4">
-                  {alert.timestamp}
-                </span>
               </div>
-            </div>
-          ))}
-        </div>
+            ))}
+          </div>
+          <TablePagination
+            currentPage={currentPage}
+            totalPages={totalPages}
+            totalItems={alertsList.length}
+            itemsPerPage={itemsPerPage}
+            startIndex={startIndex}
+            endIndex={endIndex}
+            onPageChange={setCurrentPage}
+            onItemsPerPageChange={setItemsPerPage}
+          />
+        </>
       ) : (
         <div className="glass-card rounded-xl p-12 text-center border border-border/50">
           <Bell className="w-16 h-16 mx-auto mb-4 text-muted-foreground/50" />
