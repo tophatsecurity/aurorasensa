@@ -998,9 +998,25 @@ export function useClientStateHistory(clientId: string) {
 export function useClientSystemInfo(clientId: string) {
   return useQuery({
     queryKey: ["aurora", "clients", clientId, "system-info"],
-    queryFn: () => callAuroraApi<SystemInfo>(`/api/clients/${clientId}/system-info`),
+    queryFn: async () => {
+      try {
+        return await callAuroraApi<SystemInfo>(`/api/clients/${clientId}/system-info`);
+      } catch (error) {
+        // Return null for 404 errors (client has no system info)
+        if (error instanceof Error && (error.message.includes('No system info found') || error.message.includes('404'))) {
+          return null;
+        }
+        throw error;
+      }
+    },
     refetchInterval: 30000,
-    retry: 2,
+    retry: (failureCount, error) => {
+      // Don't retry on 404 (no system info)
+      if (error instanceof Error && (error.message.includes('No system info found') || error.message.includes('404'))) {
+        return false;
+      }
+      return failureCount < 2;
+    },
     enabled: !!clientId,
   });
 }
