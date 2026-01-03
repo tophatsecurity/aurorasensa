@@ -122,8 +122,11 @@ const DashboardContent = () => {
   const sensorsSummary = stats?.sensors_summary;
 
   const totalReadings = global?.database?.total_readings ?? 0;
-  // Use actual clients count from clients list for accuracy
-  const totalClients = clients?.length ?? 0;
+  // Filter out deleted/disabled/suspended clients for dashboard display
+  const activeClients = clients?.filter((c: Client) => 
+    !['deleted', 'disabled', 'suspended'].includes(c.state || '')
+  ) || [];
+  const totalClients = activeClients.length;
   const activeDevices1h = global?.activity?.last_1_hour?.active_devices_1h ?? 0;
   const readings1h = global?.activity?.last_1_hour?.readings_1h ?? 0;
   const totalSensorTypes = sensorsSummary?.total_sensor_types ?? 0;
@@ -228,7 +231,7 @@ const DashboardContent = () => {
           icon={Server}
           iconBgColor="bg-green-500/20"
           isLoading={clientsLoading}
-          devices={(clients || []).map((c, idx) => ({
+          devices={activeClients.map((c, idx) => ({
             device_id: c.hostname || c.client_id,
             device_type: 'client',
             color: ['#22c55e', '#3b82f6', '#f59e0b', '#ec4899'][idx % 4],
