@@ -167,9 +167,13 @@ const StarlinkChart = ({ title, icon, color, unit, data, isLoading, chartType = 
   );
 };
 
-const StarlinkCharts = () => {
-  const { data: starlinkData, isLoading: starlinkLoading } = useStarlinkTimeseries(24);
-  const { data: dashboardTimeseries, isLoading: dashboardLoading } = useDashboardTimeseries(24);
+interface StarlinkChartsProps {
+  hours?: number;
+}
+
+const StarlinkCharts = ({ hours = 24 }: StarlinkChartsProps) => {
+  const { data: starlinkData, isLoading: starlinkLoading } = useStarlinkTimeseries(hours);
+  const { data: dashboardTimeseries, isLoading: dashboardLoading } = useDashboardTimeseries(hours);
 
   const isLoading = starlinkLoading || dashboardLoading;
 

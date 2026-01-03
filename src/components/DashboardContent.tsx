@@ -217,6 +217,10 @@ const DashboardContent = () => {
   // Time period state for stats tabs
   const [timePeriod, setTimePeriod] = useState<'hourly' | 'daily' | 'monthly'>('hourly');
   
+  // Convert time period to hours for API calls
+  const periodHours = timePeriod === 'hourly' ? 24 : timePeriod === 'daily' ? 168 : 720;
+  const periodLabel = timePeriod === 'hourly' ? '24h' : timePeriod === 'daily' ? '7d' : '30d';
+  
   return (
     <div className="flex-1 overflow-y-auto p-8">
       {/* Header */}
@@ -289,18 +293,18 @@ const DashboardContent = () => {
       <div className="mb-8">
         <h2 className="text-lg font-semibold mb-4 flex items-center gap-2">
           <Zap className="w-5 h-5 text-orange-500" />
-          Power Consumption (24h)
+          Power Consumption ({periodLabel})
         </h2>
-        <PowerConsumptionCharts />
+        <PowerConsumptionCharts hours={periodHours} />
       </div>
 
       {/* Thermal - All Temperature Sources */}
       <div className="mb-8">
         <h2 className="text-lg font-semibold mb-4 flex items-center gap-2">
           <Thermometer className="w-5 h-5 text-red-500" />
-          Thermal (°F / °C)
+          Thermal ({periodLabel}) (°F / °C)
         </h2>
-        <ThermalProbeDeviceChart />
+        <ThermalProbeDeviceChart hours={periodHours} />
       </div>
 
       {/* Starlink - Full Width Section */}
@@ -355,7 +359,7 @@ const DashboardContent = () => {
             }]}
           />
         </div>
-        <StarlinkCharts />
+        <StarlinkCharts hours={periodHours} />
       </div>
 
       {/* System Monitor - Local System Stats */}
@@ -486,15 +490,15 @@ const DashboardContent = () => {
             </div>
           </div>
         )}
-        <SystemMonitorCharts />
+        <SystemMonitorCharts hours={periodHours} />
       </div>
 
       <div className="mb-8">
         <h2 className="text-lg font-semibold mb-4 flex items-center gap-2">
           <Droplets className="w-5 h-5 text-blue-500" />
-          Humidity Trends (24h)
+          Humidity Trends ({periodLabel})
         </h2>
-        <HumidityCharts />
+        <HumidityCharts hours={periodHours} />
       </div>
 
       {/* Sensor Types Summary */}

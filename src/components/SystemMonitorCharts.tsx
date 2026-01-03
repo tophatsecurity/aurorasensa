@@ -201,8 +201,12 @@ const SystemChart = ({ title, icon, color, unit, data, isLoading, chartType = 'a
   );
 };
 
-const SystemMonitorCharts = () => {
-  const { data: systemData, isLoading } = useSystemMonitorTimeseries(24);
+interface SystemMonitorChartsProps {
+  hours?: number;
+}
+
+const SystemMonitorCharts = ({ hours = 24 }: SystemMonitorChartsProps) => {
+  const { data: systemData, isLoading } = useSystemMonitorTimeseries(hours);
 
   // Extract nested data from system_monitor readings
   const extractData = (

@@ -37,9 +37,13 @@ interface ThresholdConfig {
   alertsEnabled: boolean;
 }
 
-const PowerConsumptionCharts = () => {
-  const { data: timeseries, isLoading: dashboardLoading } = useDashboardTimeseries(24);
-  const { data: starlinkTimeseries, isLoading: starlinkLoading } = useStarlinkTimeseries(24);
+interface PowerConsumptionChartsProps {
+  hours?: number;
+}
+
+const PowerConsumptionCharts = ({ hours = 24 }: PowerConsumptionChartsProps) => {
+  const { data: timeseries, isLoading: dashboardLoading } = useDashboardTimeseries(hours);
+  const { data: starlinkTimeseries, isLoading: starlinkLoading } = useStarlinkTimeseries(hours);
   
   const isLoading = dashboardLoading || starlinkLoading;
   

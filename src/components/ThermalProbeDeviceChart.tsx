@@ -35,9 +35,13 @@ const DEVICE_COLORS = [
   '#06b6d4', // cyan
 ];
 
-const ThermalDeviceChart = () => {
-  const { data: thermalData, isLoading: thermalLoading } = useThermalProbeTimeseries(24);
-  const { data: arduinoData, isLoading: arduinoLoading } = useArduinoSensorTimeseries(24);
+interface ThermalDeviceChartProps {
+  hours?: number;
+}
+
+const ThermalDeviceChart = ({ hours = 24 }: ThermalDeviceChartProps) => {
+  const { data: thermalData, isLoading: thermalLoading } = useThermalProbeTimeseries(hours);
+  const { data: arduinoData, isLoading: arduinoLoading } = useArduinoSensorTimeseries(hours);
 
   const isLoading = thermalLoading || arduinoLoading;
 

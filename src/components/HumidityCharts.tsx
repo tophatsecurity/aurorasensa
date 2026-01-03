@@ -25,8 +25,12 @@ const COMFORT_ZONES = {
   humid: { min: 60, max: 100, color: '#3b82f6', label: 'Humid' },
 };
 
-const HumidityCharts = () => {
-  const { data: timeseries, isLoading } = useDashboardTimeseries(24);
+interface HumidityChartsProps {
+  hours?: number;
+}
+
+const HumidityCharts = ({ hours = 24 }: HumidityChartsProps) => {
+  const { data: timeseries, isLoading } = useDashboardTimeseries(hours);
 
   const formatData = (points: { timestamp: string; value: number }[] | undefined): ChartData[] => {
     if (!points || points.length === 0) return [];
