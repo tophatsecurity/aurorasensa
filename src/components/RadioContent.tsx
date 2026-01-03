@@ -18,7 +18,9 @@ import {
   LayoutGrid,
   Table2,
   Search,
-  X
+  X,
+  Plane,
+  Navigation
 } from "lucide-react";
 import {
   Table,
@@ -58,7 +60,7 @@ import {
   Bar,
   Legend
 } from "recharts";
-import { useClients, useLatestReadings, useSensorTypeStats, useAllSensorStats, useWifiScannerTimeseries, useBluetoothScannerTimeseries } from "@/hooks/useAuroraApi";
+import { useClients, useLatestReadings, useSensorTypeStats, useAllSensorStats, useWifiScannerTimeseries, useBluetoothScannerTimeseries, useAdsbAircraftWithHistory } from "@/hooks/useAuroraApi";
 import { formatDistanceToNow } from "date-fns";
 
 // Helper function to format signal strength
@@ -154,14 +156,18 @@ const StatCard = ({
 
 const RadioContent = () => {
   const [mainView, setMainView] = useState<"dashboard" | "tabular">("dashboard");
-  const [tabularTab, setTabularTab] = useState<"wifi" | "bluetooth">("wifi");
+  const [tabularTab, setTabularTab] = useState<"wifi" | "bluetooth" | "adsb" | "lora">("wifi");
   const [timeRange, setTimeRange] = useState("24h");
   const [selectedDevice, setSelectedDevice] = useState<string>("all");
   const [expandedSections, setExpandedSections] = useState<string[]>(["wifi", "bluetooth"]);
   const [wifiViewMode, setWifiViewMode] = useState<"cards" | "table">("table");
   const [bluetoothViewMode, setBluetoothViewMode] = useState<"cards" | "table">("table");
+  const [adsbViewMode, setAdsbViewMode] = useState<"cards" | "table">("table");
+  const [loraViewMode, setLoraViewMode] = useState<"cards" | "table">("table");
   const [wifiSearch, setWifiSearch] = useState("");
   const [bluetoothSearch, setBluetoothSearch] = useState("");
+  const [adsbSearch, setAdsbSearch] = useState("");
+  const [loraSearch, setLoraSearch] = useState("");
   
   // Convert timeRange to hours for API calls
   const hoursForTimeRange = useMemo(() => {
@@ -184,6 +190,9 @@ const RadioContent = () => {
   // Fetch timeseries data
   const { data: wifiTimeseries, isLoading: wifiTimeseriesLoading } = useWifiScannerTimeseries(hoursForTimeRange);
   const { data: bluetoothTimeseries, isLoading: bluetoothTimeseriesLoading } = useBluetoothScannerTimeseries(hoursForTimeRange);
+  
+  // Fetch ADSB data
+  const { aircraft: adsbAircraft, isLoading: adsbLoading } = useAdsbAircraftWithHistory(hoursForTimeRange * 60);
 
   // Get unique devices from readings - fixed to match actual device_type values
   const availableDevices = useMemo(() => {
@@ -368,6 +377,71 @@ const RadioContent = () => {
       (device.manufacturer?.toLowerCase().includes(searchLower))
     );
   }, [bleDevices, bluetoothSearch]);
+
+  // Process LoRa readings from latest readings
+  const loraReadings = useMemo(() => {
+    if (!latestReadings) return [];
+    return latestReadings.filter(r => {
+      const deviceType = r.device_type?.toLowerCase() || '';
+      const isLora = deviceType === 'lora_detector' || deviceType.includes('lora');
+      const matchesDevice = selectedDevice === "all" || r.device_id === selectedDevice;
+      return isLora && matchesDevice;
+    });
+  }, [latestReadings, selectedDevice]);
+
+  // Extract LoRa packets from readings
+  const loraPackets = useMemo(() => {
+    const packets: Array<{
+      deviceId: string;
+      frequency?: number;
+      rssi: number;
+      snr?: number;
+      bandwidth?: number;
+      spreadingFactor?: number;
+      payload?: string;
+      lastSeen: string;
+    }> = [];
+
+    loraReadings.forEach(reading => {
+      const data = reading.data as Record<string, unknown>;
+      packets.push({
+        deviceId: reading.device_id,
+        frequency: data.frequency as number | undefined,
+        rssi: Number(data.rssi || data.signal_strength || -100),
+        snr: data.snr as number | undefined,
+        bandwidth: data.bandwidth as number | undefined,
+        spreadingFactor: data.spreading_factor as number | undefined,
+        payload: data.payload as string | undefined,
+        lastSeen: reading.timestamp,
+      });
+    });
+
+    return packets.sort((a, b) => new Date(b.lastSeen).getTime() - new Date(a.lastSeen).getTime());
+  }, [loraReadings]);
+
+  // Filtered ADSB aircraft based on search
+  const filteredAdsbAircraft = useMemo(() => {
+    const aircraft = adsbAircraft || [];
+    if (!adsbSearch.trim()) return aircraft;
+    const searchLower = adsbSearch.toLowerCase().trim();
+    return aircraft.filter(ac =>
+      (ac.hex?.toLowerCase().includes(searchLower)) ||
+      (ac.flight?.toLowerCase().includes(searchLower)) ||
+      (ac.registration?.toLowerCase().includes(searchLower)) ||
+      (ac.operator?.toLowerCase().includes(searchLower)) ||
+      (ac.type?.toLowerCase().includes(searchLower))
+    );
+  }, [adsbAircraft, adsbSearch]);
+
+  // Filtered LoRa packets based on search
+  const filteredLoraPackets = useMemo(() => {
+    if (!loraSearch.trim()) return loraPackets;
+    const searchLower = loraSearch.toLowerCase().trim();
+    return loraPackets.filter(packet =>
+      (packet.deviceId?.toLowerCase().includes(searchLower)) ||
+      (packet.payload?.toLowerCase().includes(searchLower))
+    );
+  }, [loraPackets, loraSearch]);
 
   // Calculate overall stats
   const overallStats = useMemo(() => {
@@ -923,8 +997,8 @@ const RadioContent = () => {
 
             {/* Tabular View */}
             <TabsContent value="tabular" className="space-y-6">
-              <Tabs value={tabularTab} onValueChange={(v) => setTabularTab(v as "wifi" | "bluetooth")}>
-                <TabsList className="grid w-full grid-cols-2 lg:w-auto lg:inline-grid">
+              <Tabs value={tabularTab} onValueChange={(v) => setTabularTab(v as "wifi" | "bluetooth" | "adsb" | "lora")}>
+                <TabsList className="grid w-full grid-cols-4 lg:w-auto lg:inline-grid">
                   <TabsTrigger value="wifi" className="gap-2">
                     <Wifi className="w-4 h-4" />
                     WiFi ({wifiNetworks.length})
@@ -932,6 +1006,14 @@ const RadioContent = () => {
                   <TabsTrigger value="bluetooth" className="gap-2">
                     <Bluetooth className="w-4 h-4" />
                     Bluetooth ({bleDevices.length})
+                  </TabsTrigger>
+                  <TabsTrigger value="adsb" className="gap-2">
+                    <Plane className="w-4 h-4" />
+                    ADS-B ({adsbAircraft?.length || 0})
+                  </TabsTrigger>
+                  <TabsTrigger value="lora" className="gap-2">
+                    <Radio className="w-4 h-4" />
+                    LoRa ({loraPackets.length})
                   </TabsTrigger>
                 </TabsList>
 
@@ -1295,6 +1377,349 @@ const RadioContent = () => {
                               </div>
                             );
                           })}
+                        </div>
+                      )}
+                    </CardContent>
+                  </Card>
+                </TabsContent>
+
+                {/* ADS-B Tab */}
+                <TabsContent value="adsb" className="space-y-6">
+                  <Card>
+                    <CardHeader className="space-y-4">
+                      <CardTitle className="flex items-center justify-between">
+                        <span className="flex items-center gap-2">
+                          <Plane className="w-5 h-5 text-cyan-400" />
+                          All Aircraft ({filteredAdsbAircraft.length}{adsbSearch && ` of ${adsbAircraft?.length || 0}`})
+                        </span>
+                        <div className="flex items-center gap-1 border rounded-lg p-1">
+                          <Button
+                            variant={adsbViewMode === "cards" ? "secondary" : "ghost"}
+                            size="sm"
+                            className="h-8 w-8 p-0"
+                            onClick={() => setAdsbViewMode("cards")}
+                          >
+                            <LayoutGrid className="w-4 h-4" />
+                          </Button>
+                          <Button
+                            variant={adsbViewMode === "table" ? "secondary" : "ghost"}
+                            size="sm"
+                            className="h-8 w-8 p-0"
+                            onClick={() => setAdsbViewMode("table")}
+                          >
+                            <Table2 className="w-4 h-4" />
+                          </Button>
+                        </div>
+                      </CardTitle>
+                      <div className="relative">
+                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                        <Input
+                          placeholder="Search by hex, flight, registration, operator..."
+                          value={adsbSearch}
+                          onChange={(e) => setAdsbSearch(e.target.value)}
+                          className="pl-10 pr-10 bg-background"
+                        />
+                        {adsbSearch && (
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="absolute right-1 top-1/2 -translate-y-1/2 h-7 w-7 p-0"
+                            onClick={() => setAdsbSearch("")}
+                          >
+                            <X className="h-4 w-4" />
+                          </Button>
+                        )}
+                      </div>
+                    </CardHeader>
+                    <CardContent>
+                      {!adsbAircraft || adsbAircraft.length === 0 ? (
+                        <div className="text-center py-12 text-muted-foreground">
+                          <Plane className="w-16 h-16 mx-auto mb-4 opacity-50" />
+                          <h3 className="text-lg font-medium mb-2">No Aircraft Detected</h3>
+                          <p>ADS-B receivers may be offline or no aircraft in range.</p>
+                        </div>
+                      ) : filteredAdsbAircraft.length === 0 ? (
+                        <div className="text-center py-12 text-muted-foreground">
+                          <Search className="w-12 h-12 mx-auto mb-3 opacity-50" />
+                          <p>No aircraft match "{adsbSearch}"</p>
+                          <Button variant="ghost" size="sm" onClick={() => setAdsbSearch("")} className="mt-2">
+                            Clear search
+                          </Button>
+                        </div>
+                      ) : adsbViewMode === "table" ? (
+                        <div className="rounded-md border">
+                          <Table>
+                            <TableHeader>
+                              <TableRow>
+                                <TableHead>Hex</TableHead>
+                                <TableHead>Flight</TableHead>
+                                <TableHead>Registration</TableHead>
+                                <TableHead>Altitude</TableHead>
+                                <TableHead>Speed</TableHead>
+                                <TableHead>Squawk</TableHead>
+                                <TableHead>Operator</TableHead>
+                                <TableHead>Last Seen</TableHead>
+                              </TableRow>
+                            </TableHeader>
+                            <TableBody>
+                              {filteredAdsbAircraft.map((aircraft, index) => (
+                                <TableRow key={`${aircraft.hex}-${index}`}>
+                                  <TableCell className="font-mono text-xs font-medium">
+                                    {aircraft.hex}
+                                  </TableCell>
+                                  <TableCell className="font-medium">
+                                    {aircraft.flight?.trim() || 'N/A'}
+                                  </TableCell>
+                                  <TableCell>
+                                    {aircraft.registration || 'N/A'}
+                                  </TableCell>
+                                  <TableCell>
+                                    {aircraft.alt_baro ? `${aircraft.alt_baro.toLocaleString()} ft` : 'N/A'}
+                                  </TableCell>
+                                  <TableCell>
+                                    {aircraft.gs ? `${Math.round(aircraft.gs)} kts` : 'N/A'}
+                                  </TableCell>
+                                  <TableCell>
+                                    <Badge variant="outline" className="text-xs">
+                                      {aircraft.squawk || 'N/A'}
+                                    </Badge>
+                                  </TableCell>
+                                  <TableCell className="text-xs">
+                                    {aircraft.operator || aircraft.operator_icao || 'N/A'}
+                                  </TableCell>
+                                  <TableCell className="text-xs text-muted-foreground">
+                                    {aircraft.seen != null ? `${aircraft.seen}s ago` : 'N/A'}
+                                  </TableCell>
+                                </TableRow>
+                              ))}
+                            </TableBody>
+                          </Table>
+                        </div>
+                      ) : (
+                        <div className="space-y-3">
+                          {filteredAdsbAircraft.map((aircraft, index) => (
+                            <div 
+                              key={`${aircraft.hex}-${index}`}
+                              className="flex items-center justify-between p-4 rounded-lg border border-border hover:bg-muted/50 transition-colors"
+                            >
+                              <div className="flex items-center gap-4">
+                                <div className="w-12 h-12 rounded-lg bg-cyan-500/20 flex items-center justify-center">
+                                  <Plane className="w-6 h-6 text-cyan-400" />
+                                </div>
+                                <div>
+                                  <p className="font-semibold text-lg">{aircraft.flight?.trim() || aircraft.hex}</p>
+                                  <div className="flex items-center gap-3 text-sm text-muted-foreground">
+                                    <span className="font-mono">{aircraft.hex}</span>
+                                    {aircraft.registration && (
+                                      <>
+                                        <span>•</span>
+                                        <span>{aircraft.registration}</span>
+                                      </>
+                                    )}
+                                  </div>
+                                  <div className="flex items-center gap-2 mt-1">
+                                    {aircraft.squawk && (
+                                      <Badge variant="secondary" className="text-xs bg-cyan-500/20 text-cyan-400 border-cyan-500/30">
+                                        Squawk: {aircraft.squawk}
+                                      </Badge>
+                                    )}
+                                    {aircraft.category && (
+                                      <Badge variant="outline" className="text-xs">
+                                        {aircraft.category}
+                                      </Badge>
+                                    )}
+                                  </div>
+                                </div>
+                              </div>
+                              <div className="text-right">
+                                <div className="flex items-center gap-2 mb-1">
+                                  <Navigation className="w-4 h-4 text-cyan-400" />
+                                  <span className="font-bold text-lg text-cyan-400">
+                                    {aircraft.alt_baro ? `${aircraft.alt_baro.toLocaleString()} ft` : 'N/A'}
+                                  </span>
+                                </div>
+                                <div className="flex items-center gap-2 justify-end text-muted-foreground">
+                                  <span className="text-xs">
+                                    {aircraft.gs ? `${Math.round(aircraft.gs)} kts` : ''}
+                                    {aircraft.track ? ` @ ${Math.round(aircraft.track)}°` : ''}
+                                  </span>
+                                </div>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </CardContent>
+                  </Card>
+                </TabsContent>
+
+                {/* LoRa Tab */}
+                <TabsContent value="lora" className="space-y-6">
+                  <Card>
+                    <CardHeader className="space-y-4">
+                      <CardTitle className="flex items-center justify-between">
+                        <span className="flex items-center gap-2">
+                          <Radio className="w-5 h-5 text-red-400" />
+                          All LoRa Packets ({filteredLoraPackets.length}{loraSearch && ` of ${loraPackets.length}`})
+                        </span>
+                        <div className="flex items-center gap-1 border rounded-lg p-1">
+                          <Button
+                            variant={loraViewMode === "cards" ? "secondary" : "ghost"}
+                            size="sm"
+                            className="h-8 w-8 p-0"
+                            onClick={() => setLoraViewMode("cards")}
+                          >
+                            <LayoutGrid className="w-4 h-4" />
+                          </Button>
+                          <Button
+                            variant={loraViewMode === "table" ? "secondary" : "ghost"}
+                            size="sm"
+                            className="h-8 w-8 p-0"
+                            onClick={() => setLoraViewMode("table")}
+                          >
+                            <Table2 className="w-4 h-4" />
+                          </Button>
+                        </div>
+                      </CardTitle>
+                      <div className="relative">
+                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                        <Input
+                          placeholder="Search by device ID or payload..."
+                          value={loraSearch}
+                          onChange={(e) => setLoraSearch(e.target.value)}
+                          className="pl-10 pr-10 bg-background"
+                        />
+                        {loraSearch && (
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="absolute right-1 top-1/2 -translate-y-1/2 h-7 w-7 p-0"
+                            onClick={() => setLoraSearch("")}
+                          >
+                            <X className="h-4 w-4" />
+                          </Button>
+                        )}
+                      </div>
+                    </CardHeader>
+                    <CardContent>
+                      {loraPackets.length === 0 ? (
+                        <div className="text-center py-12 text-muted-foreground">
+                          <Radio className="w-16 h-16 mx-auto mb-4 opacity-50" />
+                          <h3 className="text-lg font-medium mb-2">No LoRa Packets Detected</h3>
+                          <p>LoRa receivers may be offline or no packets received.</p>
+                        </div>
+                      ) : filteredLoraPackets.length === 0 ? (
+                        <div className="text-center py-12 text-muted-foreground">
+                          <Search className="w-12 h-12 mx-auto mb-3 opacity-50" />
+                          <p>No packets match "{loraSearch}"</p>
+                          <Button variant="ghost" size="sm" onClick={() => setLoraSearch("")} className="mt-2">
+                            Clear search
+                          </Button>
+                        </div>
+                      ) : loraViewMode === "table" ? (
+                        <div className="rounded-md border">
+                          <Table>
+                            <TableHeader>
+                              <TableRow>
+                                <TableHead>Device ID</TableHead>
+                                <TableHead>Frequency</TableHead>
+                                <TableHead>RSSI</TableHead>
+                                <TableHead>SNR</TableHead>
+                                <TableHead>Bandwidth</TableHead>
+                                <TableHead>SF</TableHead>
+                                <TableHead>Payload</TableHead>
+                                <TableHead>Last Seen</TableHead>
+                              </TableRow>
+                            </TableHeader>
+                            <TableBody>
+                              {filteredLoraPackets.map((packet, index) => (
+                                <TableRow key={`${packet.deviceId}-${index}`}>
+                                  <TableCell className="font-mono text-xs font-medium">
+                                    {packet.deviceId}
+                                  </TableCell>
+                                  <TableCell>
+                                    {packet.frequency ? `${(packet.frequency / 1000000).toFixed(3)} MHz` : 'N/A'}
+                                  </TableCell>
+                                  <TableCell>
+                                    <span className={`font-medium ${getSignalColor(packet.rssi)}`}>
+                                      {packet.rssi} dBm
+                                    </span>
+                                  </TableCell>
+                                  <TableCell>
+                                    {packet.snr != null ? `${packet.snr} dB` : 'N/A'}
+                                  </TableCell>
+                                  <TableCell>
+                                    {packet.bandwidth ? `${packet.bandwidth / 1000} kHz` : 'N/A'}
+                                  </TableCell>
+                                  <TableCell>
+                                    {packet.spreadingFactor || 'N/A'}
+                                  </TableCell>
+                                  <TableCell className="font-mono text-xs max-w-32 truncate">
+                                    {packet.payload || 'N/A'}
+                                  </TableCell>
+                                  <TableCell className="text-xs text-muted-foreground">
+                                    {formatDistanceToNow(new Date(packet.lastSeen), { addSuffix: true })}
+                                  </TableCell>
+                                </TableRow>
+                              ))}
+                            </TableBody>
+                          </Table>
+                        </div>
+                      ) : (
+                        <div className="space-y-3">
+                          {filteredLoraPackets.map((packet, index) => (
+                            <div 
+                              key={`${packet.deviceId}-${index}`}
+                              className="flex items-center justify-between p-4 rounded-lg border border-border hover:bg-muted/50 transition-colors"
+                            >
+                              <div className="flex items-center gap-4">
+                                <div className="w-12 h-12 rounded-lg bg-red-500/20 flex items-center justify-center">
+                                  <Radio className="w-6 h-6 text-red-400" />
+                                </div>
+                                <div>
+                                  <p className="font-semibold text-lg font-mono">{packet.deviceId}</p>
+                                  <div className="flex items-center gap-3 text-sm text-muted-foreground">
+                                    {packet.frequency && (
+                                      <span>{(packet.frequency / 1000000).toFixed(3)} MHz</span>
+                                    )}
+                                    {packet.spreadingFactor && (
+                                      <>
+                                        <span>•</span>
+                                        <span>SF{packet.spreadingFactor}</span>
+                                      </>
+                                    )}
+                                    {packet.bandwidth && (
+                                      <>
+                                        <span>•</span>
+                                        <span>{packet.bandwidth / 1000} kHz</span>
+                                      </>
+                                    )}
+                                  </div>
+                                  {packet.payload && (
+                                    <div className="mt-1">
+                                      <Badge variant="secondary" className="text-xs font-mono max-w-48 truncate">
+                                        {packet.payload}
+                                      </Badge>
+                                    </div>
+                                  )}
+                                </div>
+                              </div>
+                              <div className="text-right">
+                                <div className="flex items-center gap-2 mb-1">
+                                  <Signal className={`w-4 h-4 ${getSignalColor(packet.rssi)}`} />
+                                  <span className={`font-bold text-lg ${getSignalColor(packet.rssi)}`}>
+                                    {packet.rssi} dBm
+                                  </span>
+                                </div>
+                                <div className="flex items-center gap-2 justify-end">
+                                  <Clock className="w-3 h-3 text-muted-foreground" />
+                                  <span className="text-xs text-muted-foreground">
+                                    {formatDistanceToNow(new Date(packet.lastSeen), { addSuffix: true })}
+                                  </span>
+                                </div>
+                              </div>
+                            </div>
+                          ))}
                         </div>
                       )}
                     </CardContent>
