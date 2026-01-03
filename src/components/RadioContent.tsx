@@ -153,12 +153,13 @@ const StatCard = ({
 };
 
 const RadioContent = () => {
-  const [activeTab, setActiveTab] = useState("overview");
+  const [mainView, setMainView] = useState<"dashboard" | "tabular">("dashboard");
+  const [tabularTab, setTabularTab] = useState<"wifi" | "bluetooth">("wifi");
   const [timeRange, setTimeRange] = useState("24h");
   const [selectedDevice, setSelectedDevice] = useState<string>("all");
   const [expandedSections, setExpandedSections] = useState<string[]>(["wifi", "bluetooth"]);
-  const [wifiViewMode, setWifiViewMode] = useState<"cards" | "table">("cards");
-  const [bluetoothViewMode, setBluetoothViewMode] = useState<"cards" | "table">("cards");
+  const [wifiViewMode, setWifiViewMode] = useState<"cards" | "table">("table");
+  const [bluetoothViewMode, setBluetoothViewMode] = useState<"cards" | "table">("table");
   const [wifiSearch, setWifiSearch] = useState("");
   const [bluetoothSearch, setBluetoothSearch] = useState("");
   
@@ -561,16 +562,21 @@ const RadioContent = () => {
             )}
           </div>
 
-          {/* Tabs */}
-          <Tabs value={activeTab} onValueChange={setActiveTab}>
-            <TabsList className="grid w-full grid-cols-3 lg:w-auto lg:inline-grid">
-              <TabsTrigger value="overview">Overview</TabsTrigger>
-              <TabsTrigger value="wifi">WiFi</TabsTrigger>
-              <TabsTrigger value="bluetooth">Bluetooth/BLE</TabsTrigger>
+          {/* Main View Toggle */}
+          <Tabs value={mainView} onValueChange={(v) => setMainView(v as "dashboard" | "tabular")}>
+            <TabsList className="grid w-full grid-cols-2 lg:w-auto lg:inline-grid">
+              <TabsTrigger value="dashboard" className="gap-2">
+                <LayoutGrid className="w-4 h-4" />
+                Dashboard
+              </TabsTrigger>
+              <TabsTrigger value="tabular" className="gap-2">
+                <Table2 className="w-4 h-4" />
+                Tabular View
+              </TabsTrigger>
             </TabsList>
 
-            {/* Overview Tab */}
-            <TabsContent value="overview" className="space-y-6">
+            {/* Dashboard View */}
+            <TabsContent value="dashboard" className="space-y-6">
               {/* Activity Chart */}
               <Card>
                 <CardHeader>
@@ -751,7 +757,7 @@ const RadioContent = () => {
                               <Button 
                                 variant="ghost" 
                                 className="w-full" 
-                                onClick={() => setActiveTab("wifi")}
+                                onClick={() => { setMainView("tabular"); setTabularTab("wifi"); }}
                               >
                                 View all {wifiNetworks.length} networks
                               </Button>
@@ -828,7 +834,7 @@ const RadioContent = () => {
                               <Button 
                                 variant="ghost" 
                                 className="w-full" 
-                                onClick={() => setActiveTab("bluetooth")}
+                                onClick={() => { setMainView("tabular"); setTabularTab("bluetooth"); }}
                               >
                                 View all {bleDevices.length} devices
                               </Button>
@@ -840,442 +846,461 @@ const RadioContent = () => {
                   </Card>
                 </Collapsible>
               </div>
+
+              {/* Signal Distribution Charts */}
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                {/* WiFi Signal Distribution */}
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="flex items-center gap-2">
+                      <Signal className="w-5 h-5 text-aurora-cyan" />
+                      WiFi Signal Distribution
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="h-64">
+                      <ResponsiveContainer width="100%" height="100%">
+                        <BarChart data={[
+                          { range: 'Excellent', count: wifiNetworks.filter(n => n.rssi >= -50).length },
+                          { range: 'Good', count: wifiNetworks.filter(n => n.rssi >= -60 && n.rssi < -50).length },
+                          { range: 'Fair', count: wifiNetworks.filter(n => n.rssi >= -70 && n.rssi < -60).length },
+                          { range: 'Weak', count: wifiNetworks.filter(n => n.rssi >= -80 && n.rssi < -70).length },
+                          { range: 'Poor', count: wifiNetworks.filter(n => n.rssi < -80).length },
+                        ]}>
+                          <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
+                          <XAxis dataKey="range" stroke="hsl(var(--muted-foreground))" fontSize={11} />
+                          <YAxis stroke="hsl(var(--muted-foreground))" fontSize={12} />
+                          <Tooltip 
+                            contentStyle={{ 
+                              backgroundColor: 'hsl(var(--card))', 
+                              border: '1px solid hsl(var(--border))',
+                              borderRadius: '8px'
+                            }}
+                          />
+                          <Bar dataKey="count" fill="hsl(187, 100%, 55%)" radius={[4, 4, 0, 0]} />
+                        </BarChart>
+                      </ResponsiveContainer>
+                    </div>
+                  </CardContent>
+                </Card>
+
+                {/* BLE Signal Distribution */}
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="flex items-center gap-2">
+                      <Signal className="w-5 h-5 text-aurora-purple" />
+                      BLE Signal Distribution
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="h-64">
+                      <ResponsiveContainer width="100%" height="100%">
+                        <BarChart data={[
+                          { range: 'Excellent', count: bleDevices.filter(d => d.rssi >= -50).length },
+                          { range: 'Good', count: bleDevices.filter(d => d.rssi >= -60 && d.rssi < -50).length },
+                          { range: 'Fair', count: bleDevices.filter(d => d.rssi >= -70 && d.rssi < -60).length },
+                          { range: 'Weak', count: bleDevices.filter(d => d.rssi >= -80 && d.rssi < -70).length },
+                          { range: 'Poor', count: bleDevices.filter(d => d.rssi < -80).length },
+                        ]}>
+                          <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
+                          <XAxis dataKey="range" stroke="hsl(var(--muted-foreground))" fontSize={11} />
+                          <YAxis stroke="hsl(var(--muted-foreground))" fontSize={12} />
+                          <Tooltip 
+                            contentStyle={{ 
+                              backgroundColor: 'hsl(var(--card))', 
+                              border: '1px solid hsl(var(--border))',
+                              borderRadius: '8px'
+                            }}
+                          />
+                          <Bar dataKey="count" fill="hsl(280, 100%, 70%)" radius={[4, 4, 0, 0]} />
+                        </BarChart>
+                      </ResponsiveContainer>
+                    </div>
+                  </CardContent>
+                </Card>
+              </div>
             </TabsContent>
 
-            {/* WiFi Tab */}
-            <TabsContent value="wifi" className="space-y-6">
-              <Card>
-                <CardHeader className="space-y-4">
-                  <CardTitle className="flex items-center justify-between">
-                    <span className="flex items-center gap-2">
-                      <Wifi className="w-5 h-5 text-aurora-cyan" />
-                      All WiFi Networks ({filteredWifiNetworks.length}{wifiSearch && ` of ${wifiNetworks.length}`})
-                    </span>
-                    <div className="flex items-center gap-1 border rounded-lg p-1">
-                      <Button
-                        variant={wifiViewMode === "cards" ? "secondary" : "ghost"}
-                        size="sm"
-                        className="h-8 w-8 p-0"
-                        onClick={() => setWifiViewMode("cards")}
-                      >
-                        <LayoutGrid className="w-4 h-4" />
-                      </Button>
-                      <Button
-                        variant={wifiViewMode === "table" ? "secondary" : "ghost"}
-                        size="sm"
-                        className="h-8 w-8 p-0"
-                        onClick={() => setWifiViewMode("table")}
-                      >
-                        <Table2 className="w-4 h-4" />
-                      </Button>
-                    </div>
-                  </CardTitle>
-                  <div className="relative">
-                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                    <Input
-                      placeholder="Search by SSID, BSSID, or device..."
-                      value={wifiSearch}
-                      onChange={(e) => setWifiSearch(e.target.value)}
-                      className="pl-10 pr-10 bg-background"
-                    />
-                    {wifiSearch && (
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        className="absolute right-1 top-1/2 -translate-y-1/2 h-7 w-7 p-0"
-                        onClick={() => setWifiSearch("")}
-                      >
-                        <X className="h-4 w-4" />
-                      </Button>
-                    )}
-                  </div>
-                </CardHeader>
-                <CardContent>
-                  {wifiNetworks.length === 0 ? (
-                    <div className="text-center py-12 text-muted-foreground">
-                      <Wifi className="w-16 h-16 mx-auto mb-4 opacity-50" />
-                      <h3 className="text-lg font-medium mb-2">No WiFi Networks Detected</h3>
-                      <p>WiFi scanning devices may be offline or not configured.</p>
-                    </div>
-                  ) : filteredWifiNetworks.length === 0 ? (
-                    <div className="text-center py-12 text-muted-foreground">
-                      <Search className="w-12 h-12 mx-auto mb-3 opacity-50" />
-                      <p>No networks match "{wifiSearch}"</p>
-                      <Button variant="ghost" size="sm" onClick={() => setWifiSearch("")} className="mt-2">
-                        Clear search
-                      </Button>
-                    </div>
-                  ) : wifiViewMode === "table" ? (
-                    <div className="rounded-md border">
-                      <Table>
-                        <TableHeader>
-                          <TableRow>
-                            <TableHead>SSID</TableHead>
-                            <TableHead>BSSID</TableHead>
-                            <TableHead>Channel</TableHead>
-                            <TableHead>Security</TableHead>
-                            <TableHead>Signal</TableHead>
-                            <TableHead>Quality</TableHead>
-                            <TableHead>Device</TableHead>
-                            <TableHead>Last Seen</TableHead>
-                          </TableRow>
-                        </TableHeader>
-                        <TableBody>
-                          {filteredWifiNetworks.map((network, index) => (
-                            <TableRow key={`${network.bssid}-${index}`}>
-                              <TableCell className="font-medium">
-                                {network.ssid || 'Hidden Network'}
-                              </TableCell>
-                              <TableCell className="font-mono text-xs">
-                                {network.bssid}
-                              </TableCell>
-                              <TableCell>{network.channel || 'N/A'}</TableCell>
-                              <TableCell>
-                                <Badge variant="outline" className="text-xs">
-                                  {network.security}
-                                </Badge>
-                              </TableCell>
-                              <TableCell>
-                                <span className={`font-medium ${getSignalColor(network.rssi)}`}>
-                                  {network.rssi} dBm
-                                </span>
-                              </TableCell>
-                              <TableCell>
-                                <Badge 
-                                  variant="secondary" 
-                                  className={`text-xs ${
-                                    network.rssi >= -50 ? 'bg-success/20 text-success' :
-                                    network.rssi >= -70 ? 'bg-yellow-500/20 text-yellow-600' :
-                                    'bg-destructive/20 text-destructive'
-                                  }`}
-                                >
-                                  {formatSignalStrength(network.rssi)}
-                                </Badge>
-                              </TableCell>
-                              <TableCell>
-                                <Badge variant="secondary" className="text-xs bg-aurora-cyan/20 text-aurora-cyan">
-                                  {network.deviceId}
-                                </Badge>
-                              </TableCell>
-                              <TableCell className="text-xs text-muted-foreground">
-                                {formatDistanceToNow(new Date(network.lastSeen), { addSuffix: true })}
-                              </TableCell>
-                            </TableRow>
-                          ))}
-                        </TableBody>
-                      </Table>
-                    </div>
-                  ) : (
-                    <div className="space-y-3">
-                      {filteredWifiNetworks.map((network, index) => (
-                        <div 
-                          key={`${network.bssid}-${index}`}
-                          className="flex items-center justify-between p-4 rounded-lg border border-border hover:bg-muted/50 transition-colors"
-                        >
-                          <div className="flex items-center gap-4">
-                            <div className="relative">
-                              <Wifi className={`w-8 h-8 ${getSignalColor(network.rssi)}`} />
-                              {network.rssi >= -60 && (
-                                <CheckCircle2 className="w-3 h-3 text-success absolute -bottom-1 -right-1" />
-                              )}
-                            </div>
-                            <div>
-                              <p className="font-semibold text-lg">{network.ssid || 'Hidden Network'}</p>
-                                <div className="flex items-center gap-3 text-sm text-muted-foreground">
-                                  <span>{network.bssid}</span>
-                                  <span>•</span>
-                                  <span>Channel {network.channel || 'N/A'}</span>
-                                </div>
-                                <div className="flex items-center gap-2 mt-1">
-                                  <Badge variant="secondary" className="text-xs bg-aurora-cyan/20 text-aurora-cyan border-aurora-cyan/30">
-                                    Device: {network.deviceId}
-                                  </Badge>
-                                  <Badge variant="outline" className="text-xs">
-                                    wifi_scanner
-                                  </Badge>
-                                </div>
-                            </div>
-                          </div>
-                          <div className="text-right">
-                            <div className="flex items-center gap-2 mb-1">
-                              <Signal className={`w-4 h-4 ${getSignalColor(network.rssi)}`} />
-                              <span className={`font-bold text-lg ${getSignalColor(network.rssi)}`}>
-                                {network.rssi} dBm
-                              </span>
-                            </div>
-                            <div className="flex items-center gap-2">
-                              <Badge variant="outline">{network.security}</Badge>
-                              <span className="text-xs text-muted-foreground">
-                                {formatSignalStrength(network.rssi)}
-                              </span>
-                            </div>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </CardContent>
-              </Card>
+            {/* Tabular View */}
+            <TabsContent value="tabular" className="space-y-6">
+              <Tabs value={tabularTab} onValueChange={(v) => setTabularTab(v as "wifi" | "bluetooth")}>
+                <TabsList className="grid w-full grid-cols-2 lg:w-auto lg:inline-grid">
+                  <TabsTrigger value="wifi" className="gap-2">
+                    <Wifi className="w-4 h-4" />
+                    WiFi ({wifiNetworks.length})
+                  </TabsTrigger>
+                  <TabsTrigger value="bluetooth" className="gap-2">
+                    <Bluetooth className="w-4 h-4" />
+                    Bluetooth ({bleDevices.length})
+                  </TabsTrigger>
+                </TabsList>
 
-              {/* WiFi Signal Distribution Chart */}
-              <Card>
-                <CardHeader>
-                  <CardTitle className="flex items-center gap-2">
-                    <Signal className="w-5 h-5 text-aurora-cyan" />
-                    Signal Strength Distribution
-                  </CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <div className="h-64">
-                    <ResponsiveContainer width="100%" height="100%">
-                      <BarChart data={[
-                        { range: 'Excellent (>-50)', count: wifiNetworks.filter(n => n.rssi >= -50).length },
-                        { range: 'Good (-60 to -50)', count: wifiNetworks.filter(n => n.rssi >= -60 && n.rssi < -50).length },
-                        { range: 'Fair (-70 to -60)', count: wifiNetworks.filter(n => n.rssi >= -70 && n.rssi < -60).length },
-                        { range: 'Weak (-80 to -70)', count: wifiNetworks.filter(n => n.rssi >= -80 && n.rssi < -70).length },
-                        { range: 'Poor (<-80)', count: wifiNetworks.filter(n => n.rssi < -80).length },
-                      ]}>
-                        <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
-                        <XAxis dataKey="range" stroke="hsl(var(--muted-foreground))" fontSize={11} />
-                        <YAxis stroke="hsl(var(--muted-foreground))" fontSize={12} />
-                        <Tooltip 
-                          contentStyle={{ 
-                            backgroundColor: 'hsl(var(--card))', 
-                            border: '1px solid hsl(var(--border))',
-                            borderRadius: '8px'
-                          }}
-                        />
-                        <Bar dataKey="count" fill="hsl(187, 100%, 55%)" radius={[4, 4, 0, 0]} />
-                      </BarChart>
-                    </ResponsiveContainer>
-                  </div>
-                </CardContent>
-              </Card>
-            </TabsContent>
-
-            {/* Bluetooth/BLE Tab */}
-            <TabsContent value="bluetooth" className="space-y-6">
-              <Card>
-                <CardHeader className="space-y-4">
-                  <CardTitle className="flex items-center justify-between">
-                    <span className="flex items-center gap-2">
-                      <Bluetooth className="w-5 h-5 text-aurora-purple" />
-                      All BLE Devices ({filteredBleDevices.length}{bluetoothSearch && ` of ${bleDevices.length}`})
-                    </span>
-                    <div className="flex items-center gap-1 border rounded-lg p-1">
-                      <Button
-                        variant={bluetoothViewMode === "cards" ? "secondary" : "ghost"}
-                        size="sm"
-                        className="h-8 w-8 p-0"
-                        onClick={() => setBluetoothViewMode("cards")}
-                      >
-                        <LayoutGrid className="w-4 h-4" />
-                      </Button>
-                      <Button
-                        variant={bluetoothViewMode === "table" ? "secondary" : "ghost"}
-                        size="sm"
-                        className="h-8 w-8 p-0"
-                        onClick={() => setBluetoothViewMode("table")}
-                      >
-                        <Table2 className="w-4 h-4" />
-                      </Button>
-                    </div>
-                  </CardTitle>
-                  <div className="relative">
-                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                    <Input
-                      placeholder="Search by name, MAC address, or device..."
-                      value={bluetoothSearch}
-                      onChange={(e) => setBluetoothSearch(e.target.value)}
-                      className="pl-10 pr-10 bg-background"
-                    />
-                    {bluetoothSearch && (
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        className="absolute right-1 top-1/2 -translate-y-1/2 h-7 w-7 p-0"
-                        onClick={() => setBluetoothSearch("")}
-                      >
-                        <X className="h-4 w-4" />
-                      </Button>
-                    )}
-                  </div>
-                </CardHeader>
-                <CardContent>
-                  {bleDevices.length === 0 ? (
-                    <div className="text-center py-12 text-muted-foreground">
-                      <Bluetooth className="w-16 h-16 mx-auto mb-4 opacity-50" />
-                      <h3 className="text-lg font-medium mb-2">No BLE Devices Detected</h3>
-                      <p>Bluetooth scanning devices may be offline or not configured.</p>
-                    </div>
-                  ) : filteredBleDevices.length === 0 ? (
-                    <div className="text-center py-12 text-muted-foreground">
-                      <Search className="w-12 h-12 mx-auto mb-3 opacity-50" />
-                      <p>No devices match "{bluetoothSearch}"</p>
-                      <Button variant="ghost" size="sm" onClick={() => setBluetoothSearch("")} className="mt-2">
-                        Clear search
-                      </Button>
-                    </div>
-                  ) : bluetoothViewMode === "table" ? (
-                    <div className="rounded-md border">
-                      <Table>
-                        <TableHeader>
-                          <TableRow>
-                            <TableHead>Name</TableHead>
-                            <TableHead>MAC Address</TableHead>
-                            <TableHead>Manufacturer</TableHead>
-                            <TableHead>Signal</TableHead>
-                            <TableHead>Quality</TableHead>
-                            <TableHead>Device</TableHead>
-                            <TableHead>Last Seen</TableHead>
-                          </TableRow>
-                        </TableHeader>
-                        <TableBody>
-                          {filteredBleDevices.map((device, index) => (
-                            <TableRow key={`${device.mac}-${index}`}>
-                              <TableCell className="font-medium">
-                                {device.name}
-                              </TableCell>
-                              <TableCell className="font-mono text-xs">
-                                {device.mac}
-                              </TableCell>
-                              <TableCell>
-                                {device.manufacturer || 'Unknown'}
-                              </TableCell>
-                              <TableCell>
-                                <span className={`font-medium ${getSignalColor(device.rssi)}`}>
-                                  {device.rssi} dBm
-                                </span>
-                              </TableCell>
-                              <TableCell>
-                                <Badge 
-                                  variant="secondary" 
-                                  className={`text-xs ${
-                                    device.rssi >= -50 ? 'bg-success/20 text-success' :
-                                    device.rssi >= -70 ? 'bg-yellow-500/20 text-yellow-600' :
-                                    'bg-destructive/20 text-destructive'
-                                  }`}
-                                >
-                                  {formatSignalStrength(device.rssi)}
-                                </Badge>
-                              </TableCell>
-                              <TableCell>
-                                <Badge variant="secondary" className="text-xs bg-aurora-purple/20 text-aurora-purple">
-                                  {device.deviceId}
-                                </Badge>
-                              </TableCell>
-                              <TableCell className="text-xs text-muted-foreground">
-                                {formatDistanceToNow(new Date(device.lastSeen), { addSuffix: true })}
-                              </TableCell>
-                            </TableRow>
-                          ))}
-                        </TableBody>
-                      </Table>
-                    </div>
-                  ) : (
-                    <div className="space-y-3">
-                      {filteredBleDevices.map((device, index) => {
-                        const DeviceIcon = getDeviceIcon(device.type || '');
-                        return (
-                          <div 
-                            key={`${device.mac}-${index}`}
-                            className="flex items-center justify-between p-4 rounded-lg border border-border hover:bg-muted/50 transition-colors"
+                {/* WiFi Tab */}
+                <TabsContent value="wifi" className="space-y-6">
+                  <Card>
+                    <CardHeader className="space-y-4">
+                      <CardTitle className="flex items-center justify-between">
+                        <span className="flex items-center gap-2">
+                          <Wifi className="w-5 h-5 text-aurora-cyan" />
+                          All WiFi Networks ({filteredWifiNetworks.length}{wifiSearch && ` of ${wifiNetworks.length}`})
+                        </span>
+                        <div className="flex items-center gap-1 border rounded-lg p-1">
+                          <Button
+                            variant={wifiViewMode === "cards" ? "secondary" : "ghost"}
+                            size="sm"
+                            className="h-8 w-8 p-0"
+                            onClick={() => setWifiViewMode("cards")}
                           >
-                            <div className="flex items-center gap-4">
-                              <div className="w-12 h-12 rounded-lg bg-aurora-purple/20 flex items-center justify-center">
-                                <DeviceIcon className={`w-6 h-6 ${getSignalColor(device.rssi)}`} />
-                              </div>
-                              <div>
-                                <p className="font-semibold text-lg">{device.name}</p>
-                                <div className="flex items-center gap-3 text-sm text-muted-foreground">
-                                  <span>{device.mac}</span>
-                                  {device.manufacturer && (
-                                    <>
-                                      <span>•</span>
-                                      <span>{device.manufacturer}</span>
-                                    </>
+                            <LayoutGrid className="w-4 h-4" />
+                          </Button>
+                          <Button
+                            variant={wifiViewMode === "table" ? "secondary" : "ghost"}
+                            size="sm"
+                            className="h-8 w-8 p-0"
+                            onClick={() => setWifiViewMode("table")}
+                          >
+                            <Table2 className="w-4 h-4" />
+                          </Button>
+                        </div>
+                      </CardTitle>
+                      <div className="relative">
+                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                        <Input
+                          placeholder="Search by SSID, BSSID, or device..."
+                          value={wifiSearch}
+                          onChange={(e) => setWifiSearch(e.target.value)}
+                          className="pl-10 pr-10 bg-background"
+                        />
+                        {wifiSearch && (
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="absolute right-1 top-1/2 -translate-y-1/2 h-7 w-7 p-0"
+                            onClick={() => setWifiSearch("")}
+                          >
+                            <X className="h-4 w-4" />
+                          </Button>
+                        )}
+                      </div>
+                    </CardHeader>
+                    <CardContent>
+                      {wifiNetworks.length === 0 ? (
+                        <div className="text-center py-12 text-muted-foreground">
+                          <Wifi className="w-16 h-16 mx-auto mb-4 opacity-50" />
+                          <h3 className="text-lg font-medium mb-2">No WiFi Networks Detected</h3>
+                          <p>WiFi scanning devices may be offline or not configured.</p>
+                        </div>
+                      ) : filteredWifiNetworks.length === 0 ? (
+                        <div className="text-center py-12 text-muted-foreground">
+                          <Search className="w-12 h-12 mx-auto mb-3 opacity-50" />
+                          <p>No networks match "{wifiSearch}"</p>
+                          <Button variant="ghost" size="sm" onClick={() => setWifiSearch("")} className="mt-2">
+                            Clear search
+                          </Button>
+                        </div>
+                      ) : wifiViewMode === "table" ? (
+                        <div className="rounded-md border">
+                          <Table>
+                            <TableHeader>
+                              <TableRow>
+                                <TableHead>SSID</TableHead>
+                                <TableHead>BSSID</TableHead>
+                                <TableHead>Channel</TableHead>
+                                <TableHead>Security</TableHead>
+                                <TableHead>Signal</TableHead>
+                                <TableHead>Quality</TableHead>
+                                <TableHead>Device</TableHead>
+                                <TableHead>Last Seen</TableHead>
+                              </TableRow>
+                            </TableHeader>
+                            <TableBody>
+                              {filteredWifiNetworks.map((network, index) => (
+                                <TableRow key={`${network.bssid}-${index}`}>
+                                  <TableCell className="font-medium">
+                                    {network.ssid || 'Hidden Network'}
+                                  </TableCell>
+                                  <TableCell className="font-mono text-xs">
+                                    {network.bssid}
+                                  </TableCell>
+                                  <TableCell>{network.channel || 'N/A'}</TableCell>
+                                  <TableCell>
+                                    <Badge variant="outline" className="text-xs">
+                                      {network.security}
+                                    </Badge>
+                                  </TableCell>
+                                  <TableCell>
+                                    <span className={`font-medium ${getSignalColor(network.rssi)}`}>
+                                      {network.rssi} dBm
+                                    </span>
+                                  </TableCell>
+                                  <TableCell>
+                                    <Badge 
+                                      variant="secondary" 
+                                      className={`text-xs ${
+                                        network.rssi >= -50 ? 'bg-success/20 text-success' :
+                                        network.rssi >= -70 ? 'bg-yellow-500/20 text-yellow-600' :
+                                        'bg-destructive/20 text-destructive'
+                                      }`}
+                                    >
+                                      {formatSignalStrength(network.rssi)}
+                                    </Badge>
+                                  </TableCell>
+                                  <TableCell>
+                                    <Badge variant="secondary" className="text-xs bg-aurora-cyan/20 text-aurora-cyan">
+                                      {network.deviceId}
+                                    </Badge>
+                                  </TableCell>
+                                  <TableCell className="text-xs text-muted-foreground">
+                                    {formatDistanceToNow(new Date(network.lastSeen), { addSuffix: true })}
+                                  </TableCell>
+                                </TableRow>
+                              ))}
+                            </TableBody>
+                          </Table>
+                        </div>
+                      ) : (
+                        <div className="space-y-3">
+                          {filteredWifiNetworks.map((network, index) => (
+                            <div 
+                              key={`${network.bssid}-${index}`}
+                              className="flex items-center justify-between p-4 rounded-lg border border-border hover:bg-muted/50 transition-colors"
+                            >
+                              <div className="flex items-center gap-4">
+                                <div className="relative">
+                                  <Wifi className={`w-8 h-8 ${getSignalColor(network.rssi)}`} />
+                                  {network.rssi >= -60 && (
+                                    <CheckCircle2 className="w-3 h-3 text-success absolute -bottom-1 -right-1" />
                                   )}
                                 </div>
-                                <div className="flex items-center gap-2 mt-1">
-                                  <Badge variant="secondary" className="text-xs bg-aurora-purple/20 text-aurora-purple border-aurora-purple/30">
-                                    Device: {device.deviceId}
-                                  </Badge>
-                                  <Badge variant="outline" className="text-xs">
-                                    bluetooth_scanner
-                                  </Badge>
+                                <div>
+                                  <p className="font-semibold text-lg">{network.ssid || 'Hidden Network'}</p>
+                                    <div className="flex items-center gap-3 text-sm text-muted-foreground">
+                                      <span>{network.bssid}</span>
+                                      <span>•</span>
+                                      <span>Channel {network.channel || 'N/A'}</span>
+                                    </div>
+                                    <div className="flex items-center gap-2 mt-1">
+                                      <Badge variant="secondary" className="text-xs bg-aurora-cyan/20 text-aurora-cyan border-aurora-cyan/30">
+                                        Device: {network.deviceId}
+                                      </Badge>
+                                      <Badge variant="outline" className="text-xs">
+                                        wifi_scanner
+                                      </Badge>
+                                    </div>
                                 </div>
-                                {device.services && device.services.length > 0 && (
-                                  <div className="flex flex-wrap gap-1 mt-1">
-                                    {device.services.slice(0, 3).map((service, i) => (
-                                      <Badge key={i} variant="secondary" className="text-xs">
-                                        {service}
+                              </div>
+                              <div className="text-right">
+                                <div className="flex items-center gap-2 mb-1">
+                                  <Signal className={`w-4 h-4 ${getSignalColor(network.rssi)}`} />
+                                  <span className={`font-bold text-lg ${getSignalColor(network.rssi)}`}>
+                                    {network.rssi} dBm
+                                  </span>
+                                </div>
+                                <div className="flex items-center gap-2">
+                                  <Badge variant="outline">{network.security}</Badge>
+                                  <span className="text-xs text-muted-foreground">
+                                    {formatSignalStrength(network.rssi)}
+                                  </span>
+                                </div>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </CardContent>
+                  </Card>
+                </TabsContent>
+
+                {/* Bluetooth Tab */}
+                <TabsContent value="bluetooth" className="space-y-6">
+                  <Card>
+                    <CardHeader className="space-y-4">
+                      <CardTitle className="flex items-center justify-between">
+                        <span className="flex items-center gap-2">
+                          <Bluetooth className="w-5 h-5 text-aurora-purple" />
+                          All BLE Devices ({filteredBleDevices.length}{bluetoothSearch && ` of ${bleDevices.length}`})
+                        </span>
+                        <div className="flex items-center gap-1 border rounded-lg p-1">
+                          <Button
+                            variant={bluetoothViewMode === "cards" ? "secondary" : "ghost"}
+                            size="sm"
+                            className="h-8 w-8 p-0"
+                            onClick={() => setBluetoothViewMode("cards")}
+                          >
+                            <LayoutGrid className="w-4 h-4" />
+                          </Button>
+                          <Button
+                            variant={bluetoothViewMode === "table" ? "secondary" : "ghost"}
+                            size="sm"
+                            className="h-8 w-8 p-0"
+                            onClick={() => setBluetoothViewMode("table")}
+                          >
+                            <Table2 className="w-4 h-4" />
+                          </Button>
+                        </div>
+                      </CardTitle>
+                      <div className="relative">
+                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                        <Input
+                          placeholder="Search by name, MAC address, or device..."
+                          value={bluetoothSearch}
+                          onChange={(e) => setBluetoothSearch(e.target.value)}
+                          className="pl-10 pr-10 bg-background"
+                        />
+                        {bluetoothSearch && (
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="absolute right-1 top-1/2 -translate-y-1/2 h-7 w-7 p-0"
+                            onClick={() => setBluetoothSearch("")}
+                          >
+                            <X className="h-4 w-4" />
+                          </Button>
+                        )}
+                      </div>
+                    </CardHeader>
+                    <CardContent>
+                      {bleDevices.length === 0 ? (
+                        <div className="text-center py-12 text-muted-foreground">
+                          <Bluetooth className="w-16 h-16 mx-auto mb-4 opacity-50" />
+                          <h3 className="text-lg font-medium mb-2">No BLE Devices Detected</h3>
+                          <p>Bluetooth scanning devices may be offline or not configured.</p>
+                        </div>
+                      ) : filteredBleDevices.length === 0 ? (
+                        <div className="text-center py-12 text-muted-foreground">
+                          <Search className="w-12 h-12 mx-auto mb-3 opacity-50" />
+                          <p>No devices match "{bluetoothSearch}"</p>
+                          <Button variant="ghost" size="sm" onClick={() => setBluetoothSearch("")} className="mt-2">
+                            Clear search
+                          </Button>
+                        </div>
+                      ) : bluetoothViewMode === "table" ? (
+                        <div className="rounded-md border">
+                          <Table>
+                            <TableHeader>
+                              <TableRow>
+                                <TableHead>Name</TableHead>
+                                <TableHead>MAC Address</TableHead>
+                                <TableHead>Manufacturer</TableHead>
+                                <TableHead>Signal</TableHead>
+                                <TableHead>Quality</TableHead>
+                                <TableHead>Device</TableHead>
+                                <TableHead>Last Seen</TableHead>
+                              </TableRow>
+                            </TableHeader>
+                            <TableBody>
+                              {filteredBleDevices.map((device, index) => (
+                                <TableRow key={`${device.mac}-${index}`}>
+                                  <TableCell className="font-medium">
+                                    {device.name}
+                                  </TableCell>
+                                  <TableCell className="font-mono text-xs">
+                                    {device.mac}
+                                  </TableCell>
+                                  <TableCell>
+                                    {device.manufacturer || 'Unknown'}
+                                  </TableCell>
+                                  <TableCell>
+                                    <span className={`font-medium ${getSignalColor(device.rssi)}`}>
+                                      {device.rssi} dBm
+                                    </span>
+                                  </TableCell>
+                                  <TableCell>
+                                    <Badge 
+                                      variant="secondary" 
+                                      className={`text-xs ${
+                                        device.rssi >= -50 ? 'bg-success/20 text-success' :
+                                        device.rssi >= -70 ? 'bg-yellow-500/20 text-yellow-600' :
+                                        'bg-destructive/20 text-destructive'
+                                      }`}
+                                    >
+                                      {formatSignalStrength(device.rssi)}
+                                    </Badge>
+                                  </TableCell>
+                                  <TableCell>
+                                    <Badge variant="secondary" className="text-xs bg-aurora-purple/20 text-aurora-purple">
+                                      {device.deviceId}
+                                    </Badge>
+                                  </TableCell>
+                                  <TableCell className="text-xs text-muted-foreground">
+                                    {formatDistanceToNow(new Date(device.lastSeen), { addSuffix: true })}
+                                  </TableCell>
+                                </TableRow>
+                              ))}
+                            </TableBody>
+                          </Table>
+                        </div>
+                      ) : (
+                        <div className="space-y-3">
+                          {filteredBleDevices.map((device, index) => {
+                            const DeviceIcon = getDeviceIcon(device.type || '');
+                            return (
+                              <div 
+                                key={`${device.mac}-${index}`}
+                                className="flex items-center justify-between p-4 rounded-lg border border-border hover:bg-muted/50 transition-colors"
+                              >
+                                <div className="flex items-center gap-4">
+                                  <div className="w-12 h-12 rounded-lg bg-aurora-purple/20 flex items-center justify-center">
+                                    <DeviceIcon className={`w-6 h-6 ${getSignalColor(device.rssi)}`} />
+                                  </div>
+                                  <div>
+                                    <p className="font-semibold text-lg">{device.name}</p>
+                                    <div className="flex items-center gap-3 text-sm text-muted-foreground">
+                                      <span>{device.mac}</span>
+                                      {device.manufacturer && (
+                                        <>
+                                          <span>•</span>
+                                          <span>{device.manufacturer}</span>
+                                        </>
+                                      )}
+                                    </div>
+                                    <div className="flex items-center gap-2 mt-1">
+                                      <Badge variant="secondary" className="text-xs bg-aurora-purple/20 text-aurora-purple border-aurora-purple/30">
+                                        Device: {device.deviceId}
                                       </Badge>
-                                    ))}
-                                    {device.services.length > 3 && (
-                                      <Badge variant="secondary" className="text-xs">
-                                        +{device.services.length - 3} more
+                                      <Badge variant="outline" className="text-xs">
+                                        bluetooth_scanner
                                       </Badge>
+                                    </div>
+                                    {device.services && device.services.length > 0 && (
+                                      <div className="flex flex-wrap gap-1 mt-1">
+                                        {device.services.slice(0, 3).map((service, i) => (
+                                          <Badge key={i} variant="secondary" className="text-xs">
+                                            {service}
+                                          </Badge>
+                                        ))}
+                                        {device.services.length > 3 && (
+                                          <Badge variant="secondary" className="text-xs">
+                                            +{device.services.length - 3} more
+                                          </Badge>
+                                        )}
+                                      </div>
                                     )}
                                   </div>
-                                )}
+                                </div>
+                                <div className="text-right">
+                                  <div className="flex items-center gap-2 mb-1">
+                                    <Signal className={`w-4 h-4 ${getSignalColor(device.rssi)}`} />
+                                    <span className={`font-bold text-lg ${getSignalColor(device.rssi)}`}>
+                                      {device.rssi} dBm
+                                    </span>
+                                  </div>
+                                  <div className="flex items-center gap-2 justify-end">
+                                    <Clock className="w-3 h-3 text-muted-foreground" />
+                                    <span className="text-xs text-muted-foreground">
+                                      {formatDistanceToNow(new Date(device.lastSeen), { addSuffix: true })}
+                                    </span>
+                                  </div>
+                                </div>
                               </div>
-                            </div>
-                            <div className="text-right">
-                              <div className="flex items-center gap-2 mb-1">
-                                <Signal className={`w-4 h-4 ${getSignalColor(device.rssi)}`} />
-                                <span className={`font-bold text-lg ${getSignalColor(device.rssi)}`}>
-                                  {device.rssi} dBm
-                                </span>
-                              </div>
-                              <div className="flex items-center gap-2 justify-end">
-                                <Clock className="w-3 h-3 text-muted-foreground" />
-                                <span className="text-xs text-muted-foreground">
-                                  {formatDistanceToNow(new Date(device.lastSeen), { addSuffix: true })}
-                                </span>
-                              </div>
-                            </div>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  )}
-                </CardContent>
-              </Card>
-
-              {/* BLE Signal Distribution Chart */}
-              <Card>
-                <CardHeader>
-                  <CardTitle className="flex items-center gap-2">
-                    <Signal className="w-5 h-5 text-aurora-purple" />
-                    BLE Signal Strength Distribution
-                  </CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <div className="h-64">
-                    <ResponsiveContainer width="100%" height="100%">
-                      <BarChart data={[
-                        { range: 'Excellent (>-50)', count: bleDevices.filter(d => d.rssi >= -50).length },
-                        { range: 'Good (-60 to -50)', count: bleDevices.filter(d => d.rssi >= -60 && d.rssi < -50).length },
-                        { range: 'Fair (-70 to -60)', count: bleDevices.filter(d => d.rssi >= -70 && d.rssi < -60).length },
-                        { range: 'Weak (-80 to -70)', count: bleDevices.filter(d => d.rssi >= -80 && d.rssi < -70).length },
-                        { range: 'Poor (<-80)', count: bleDevices.filter(d => d.rssi < -80).length },
-                      ]}>
-                        <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
-                        <XAxis dataKey="range" stroke="hsl(var(--muted-foreground))" fontSize={11} />
-                        <YAxis stroke="hsl(var(--muted-foreground))" fontSize={12} />
-                        <Tooltip 
-                          contentStyle={{ 
-                            backgroundColor: 'hsl(var(--card))', 
-                            border: '1px solid hsl(var(--border))',
-                            borderRadius: '8px'
-                          }}
-                        />
-                        <Bar dataKey="count" fill="hsl(280, 100%, 70%)" radius={[4, 4, 0, 0]} />
-                      </BarChart>
-                    </ResponsiveContainer>
-                  </div>
-                </CardContent>
-              </Card>
+                            );
+                          })}
+                        </div>
+                      )}
+                    </CardContent>
+                  </Card>
+                </TabsContent>
+              </Tabs>
             </TabsContent>
           </Tabs>
         </div>
