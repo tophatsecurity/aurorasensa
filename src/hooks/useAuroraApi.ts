@@ -1153,33 +1153,64 @@ export function useAdsbAircraftWithHistory(historyMinutes: number = 60) {
     // Otherwise, try to use historical data
     if (historicalQuery.data?.readings && historicalQuery.data.readings.length > 0) {
       // Convert historical readings to AdsbAircraft format
-      // Group by hex/flight to get unique aircraft, keeping the most recent reading
+      // The ADSB data can be in data.aircraft_list or directly in data
       const aircraftMap = new Map<string, AdsbAircraft>();
       
       historicalQuery.data.readings.forEach(reading => {
         const data = reading.data;
-        const key = data.hex || data.flight || reading.device_id;
         
-        if (key && data.lat !== undefined && data.lon !== undefined) {
-          const existing = aircraftMap.get(key);
-          const readingTime = new Date(reading.timestamp).getTime();
-          const existingTime = existing ? new Date(existing.seen ? Date.now() - existing.seen * 1000 : 0).getTime() : 0;
+        // Check if aircraft_list exists (new format)
+        const aircraftList = (data as { aircraft_list?: Array<Record<string, unknown>> }).aircraft_list;
+        
+        if (aircraftList && Array.isArray(aircraftList)) {
+          // Process aircraft from aircraft_list
+          aircraftList.forEach(ac => {
+            const hex = String(ac.icao || ac.hex || '');
+            if (!hex) return;
+            
+            const existing = aircraftMap.get(hex);
+            if (!existing) {
+              aircraftMap.set(hex, {
+                hex,
+                flight: ac.callsign as string || ac.flight as string,
+                alt_baro: ac.altitude_ft as number || ac.alt_baro as number,
+                alt_geom: ac.alt_geom as number,
+                gs: ac.groundspeed_knots as number || ac.gs as number,
+                track: ac.track as number,
+                lat: ac.latitude as number || ac.lat as number,
+                lon: ac.longitude as number || ac.lon as number,
+                squawk: ac.squawk as string,
+                category: ac.category as string,
+                rssi: ac.rssi as number,
+                seen: ac.last_seen ? Math.floor((Date.now() - new Date(ac.last_seen as string).getTime()) / 1000) : 0,
+              });
+            }
+          });
+        } else {
+          // Old format: aircraft data directly in data object
+          const key = data.hex || data.flight || reading.device_id;
           
-          if (!existing || readingTime > existingTime) {
-            aircraftMap.set(key, {
-              hex: data.hex || key,
-              flight: data.flight,
-              alt_baro: data.alt_baro,
-              alt_geom: data.alt_geom,
-              gs: data.gs,
-              track: data.track,
-              lat: data.lat,
-              lon: data.lon,
-              squawk: data.squawk,
-              category: data.category,
-              rssi: data.rssi,
-              seen: Math.floor((Date.now() - new Date(reading.timestamp).getTime()) / 1000),
-            });
+          if (key && data.lat !== undefined && data.lon !== undefined) {
+            const existing = aircraftMap.get(key);
+            const readingTime = new Date(reading.timestamp).getTime();
+            const existingTime = existing ? new Date(existing.seen ? Date.now() - existing.seen * 1000 : 0).getTime() : 0;
+            
+            if (!existing || readingTime > existingTime) {
+              aircraftMap.set(key, {
+                hex: data.hex || key,
+                flight: data.flight,
+                alt_baro: data.alt_baro,
+                alt_geom: data.alt_geom,
+                gs: data.gs,
+                track: data.track,
+                lat: data.lat,
+                lon: data.lon,
+                squawk: data.squawk,
+                category: data.category,
+                rssi: data.rssi,
+                seen: Math.floor((Date.now() - new Date(reading.timestamp).getTime()) / 1000),
+              });
+            }
           }
         }
       });
