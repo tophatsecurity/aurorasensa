@@ -12,7 +12,8 @@ import {
   Settings,
   Server,
   Satellite,
-  ScrollText
+  ScrollText,
+  Cog
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -46,6 +47,7 @@ const menuSections = [
     title: "SYSTEM",
     items: [
       { id: "performance", label: "Performance", icon: Activity },
+      { id: "configuration", label: "Configuration", icon: Cog },
       { id: "audit-logs", label: "Audit Logs", icon: ScrollText },
       { id: "settings", label: "Settings", icon: Settings },
     ],
