@@ -37,6 +37,7 @@ import ThermalProbeCharts from "./ThermalProbeCharts";
 import ThermalProbeDeviceChart from "./ThermalProbeDeviceChart";
 import HumidityCharts from "./HumidityCharts";
 import PowerConsumptionCharts from "./PowerConsumptionCharts";
+import SystemMonitorCharts from "./SystemMonitorCharts";
 import { 
   useComprehensiveStats, 
   useAlerts, 
@@ -463,6 +464,7 @@ const DashboardContent = () => {
             </div>
           </div>
         )}
+        <SystemMonitorCharts />
       </div>
 
       <div className="mb-8">

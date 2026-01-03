@@ -1426,6 +1426,49 @@ export function useThermalProbeTimeseries(hours: number = 24) {
 }
 
 // =============================================
+// HOOKS - SYSTEM MONITOR
+// =============================================
+
+export interface SystemMonitorReading {
+  timestamp: string;
+  device_id?: string;
+  cpu_percent?: number;
+  memory_percent?: number;
+  disk_percent?: number;
+  cpu_temp_c?: number;
+  voltage?: number;
+  network_bytes_recv?: number;
+  network_bytes_sent?: number;
+}
+
+export interface SystemMonitorTimeseriesResponse {
+  count: number;
+  readings: SystemMonitorReading[];
+}
+
+export function useSystemMonitorTimeseries(hours: number = 24) {
+  return useQuery({
+    queryKey: ["aurora", "system_monitor", "timeseries", hours],
+    queryFn: async () => {
+      try {
+        const response = await callAuroraApi<SystemMonitorTimeseriesResponse>(`/api/readings/sensor/system_monitor?hours=${hours}`);
+        return response;
+      } catch {
+        try {
+          const fallback = await callAuroraApi<SystemMonitorTimeseriesResponse>(`/api/stats/sensors/system_monitor`);
+          return fallback;
+        } catch (error) {
+          console.warn("Failed to fetch system monitor timeseries:", error);
+          return { count: 0, readings: [] };
+        }
+      }
+    },
+    refetchInterval: 30000,
+    retry: 1,
+  });
+}
+
+// =============================================
 // HOOKS - LOGS
 // =============================================
 
