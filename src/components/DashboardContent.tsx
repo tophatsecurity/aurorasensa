@@ -126,6 +126,8 @@ const DashboardContent = () => {
   // Extract real sensor data from numeric_field_stats_24h
   const thermalFieldStats = thermalProbeStats?.numeric_field_stats_24h;
   const starlinkFieldStats = starlinkStats?.numeric_field_stats_24h;
+  const bmtFieldStats = bmtStats?.numeric_field_stats_24h;
+  const ahtFieldStats = ahtStats?.numeric_field_stats_24h;
   
   // Thermal probe temperature from real API data
   const thermalAvgTemp = thermalFieldStats?.temperature_c?.avg ?? thermalFieldStats?.temp_c?.avg;
@@ -139,17 +141,63 @@ const DashboardContent = () => {
   const starlinkDownlink = starlinkFieldStats?.downlink_throughput_bps?.avg;
   const starlinkUplink = starlinkFieldStats?.uplink_throughput_bps?.avg;
 
-  // Sensor averages - fallback to dashboard stats if available, otherwise use sensor-specific stats
-  const avgTemp = dashboardStats?.avg_temp_c ?? thermalAvgTemp;
-  const avgHumidity = dashboardStats?.avg_humidity;
+  // BME280/BMT sensor stats
+  const bmtTemp = bmtFieldStats?.bme280_temp_c ?? bmtFieldStats?.temp_c;
+  const bmtHumidity = bmtFieldStats?.bme280_humidity ?? bmtFieldStats?.humidity;
+  const bmtPressure = bmtFieldStats?.bme280_pressure_hpa ?? bmtFieldStats?.pressure_hpa;
+
+  // AHT sensor stats  
+  const ahtTemp = ahtFieldStats?.aht_temp_c ?? ahtFieldStats?.temp_c;
+  const ahtHumidity = ahtFieldStats?.aht_humidity ?? ahtFieldStats?.humidity;
+
+  // Sensor averages - use sensor-specific stats
+  const avgTemp = dashboardStats?.avg_temp_c ?? thermalAvgTemp ?? bmtTemp?.avg ?? ahtTemp?.avg;
+  const avgHumidity = dashboardStats?.avg_humidity ?? bmtHumidity?.avg ?? ahtHumidity?.avg;
   const avgSignal = dashboardStats?.avg_signal_dbm;
   const avgPower = dashboardStats?.avg_power_w ?? starlinkPower;
 
-  // 24h sensor statistics
-  const tempStats = useMemo(() => calcStats(timeseries?.temperature), [timeseries?.temperature]);
-  const humidityStats = useMemo(() => calcStats(timeseries?.humidity), [timeseries?.humidity]);
-  const signalStats = useMemo(() => calcStats(timeseries?.signal), [timeseries?.signal]);
-  const powerStats = useMemo(() => calcStats(timeseries?.power), [timeseries?.power]);
+  // 24h sensor statistics - use API stats instead of timeseries
+  const tempStats = useMemo((): SensorStats => {
+    // Try thermal probe first, then BMT, then AHT
+    const stats = thermalFieldStats?.temp_c ?? thermalFieldStats?.temperature_c ?? bmtTemp ?? ahtTemp;
+    if (!stats) return { min: null, max: null, avg: null, current: null, trend: 'stable' };
+    return {
+      min: stats.min ?? null,
+      max: stats.max ?? null,
+      avg: stats.avg ?? null,
+      current: stats.avg ?? null,
+      trend: 'stable'
+    };
+  }, [thermalFieldStats, bmtTemp, ahtTemp]);
+
+  const humidityStats = useMemo((): SensorStats => {
+    const stats = bmtHumidity ?? ahtHumidity;
+    if (!stats) return { min: null, max: null, avg: null, current: null, trend: 'stable' };
+    return {
+      min: stats.min ?? null,
+      max: stats.max ?? null,
+      avg: stats.avg ?? null,
+      current: stats.avg ?? null,
+      trend: 'stable'
+    };
+  }, [bmtHumidity, ahtHumidity]);
+
+  const signalStats = useMemo((): SensorStats => {
+    // No signal data from these sensors currently
+    return { min: null, max: null, avg: null, current: null, trend: 'stable' };
+  }, []);
+
+  const powerStats = useMemo((): SensorStats => {
+    const stats = starlinkFieldStats?.power_watts;
+    if (!stats) return { min: null, max: null, avg: null, current: null, trend: 'stable' };
+    return {
+      min: stats.min ?? null,
+      max: stats.max ?? null,
+      avg: stats.avg ?? null,
+      current: stats.avg ?? null,
+      trend: 'stable'
+    };
+  }, [starlinkFieldStats]);
 
   // Devices pending adoption (auto-registered but not manually adopted)
   const pendingDevices = clients?.filter((c: Client) => c.auto_registered && !c.adopted_at) || [];
