@@ -116,7 +116,7 @@ function mergeGpsData(
   return merged;
 }
 
-export function useMapData() {
+export function useMapData(adsbHistoryMinutes: number = 60) {
   const [lastUpdate, setLastUpdate] = useState<Date>(new Date());
   const queryClient = useQueryClient();
 
@@ -126,7 +126,7 @@ export function useMapData() {
     dataUpdatedAt: aircraftUpdated,
     isHistorical: isHistoricalAdsb,
     source: adsbSource
-  } = useAdsbAircraftWithHistory(60); // 60 minutes of historical data
+  } = useAdsbAircraftWithHistory(adsbHistoryMinutes);
   
   const { 
     data: sensors, 
