@@ -31,7 +31,16 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import SensorCard from "./SensorCard";
 import SensorCharts from "./SensorCharts";
-import { useComprehensiveStats, useAlerts, useClients, useDashboardStats, useDashboardTimeseries, Client } from "@/hooks/useAuroraApi";
+import { 
+  useComprehensiveStats, 
+  useAlerts, 
+  useClients, 
+  useDashboardStats, 
+  useDashboardTimeseries, 
+  useThermalProbeStats,
+  useSensorTypeStats,
+  Client 
+} from "@/hooks/useAuroraApi";
 import { formatLastSeen, formatDate, formatDateTime, getDeviceStatusFromLastSeen } from "@/utils/dateUtils";
 
 interface SensorStats {
@@ -62,6 +71,12 @@ const DashboardContent = () => {
   const { data: timeseries, isLoading: timeseriesLoading } = useDashboardTimeseries(24);
   const { data: alerts } = useAlerts();
   const { data: clients, isLoading: clientsLoading } = useClients();
+  
+  // Sensor type specific stats
+  const { data: thermalProbeStats, isLoading: thermalLoading } = useThermalProbeStats();
+  const { data: starlinkStats, isLoading: starlinkLoading } = useSensorTypeStats("starlink");
+  const { data: ahtStats } = useSensorTypeStats("aht_sensor");
+  const { data: bmtStats } = useSensorTypeStats("bmt_sensor");
 
   // Extract key metrics from comprehensive stats
   const global = stats?.global;
@@ -81,6 +96,13 @@ const DashboardContent = () => {
   const avgHumidity = dashboardStats?.avg_humidity;
   const avgSignal = dashboardStats?.avg_signal_dbm;
   const avgPower = dashboardStats?.avg_power_w;
+
+  // Thermal probe and starlink specific averages
+  const thermalAvgTemp = thermalProbeStats?.avg_temp_c;
+  const starlinkAvgSignal = starlinkStats?.avg_value;
+  const starlinkLatestReading = starlinkStats?.latest_reading;
+  const starlinkPower = starlinkLatestReading?.power_w as number | undefined;
+  const starlinkSignal = starlinkLatestReading?.signal_dbm as number | undefined ?? starlinkAvgSignal;
 
   // 24h sensor statistics
   const tempStats = useMemo(() => calcStats(timeseries?.temperature), [timeseries?.temperature]);
@@ -218,6 +240,154 @@ const DashboardContent = () => {
             <div className="text-xs text-muted-foreground mt-1">
               {avgPower !== null && avgPower !== undefined && (
                 <span className="text-orange-400/70">{(avgPower / 1000).toFixed(3)} kW</span>
+              )}
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Sensor-Specific Stats Section */}
+      <div className="mb-8">
+        <h2 className="text-lg font-semibold mb-4 flex items-center gap-2">
+          <Satellite className="w-5 h-5 text-primary" />
+          Sensor-Specific Averages
+          {(thermalLoading || starlinkLoading) && (
+            <Loader2 className="w-4 h-4 animate-spin text-muted-foreground" />
+          )}
+        </h2>
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+          {/* Thermal Probe Temperature */}
+          <div className="glass-card rounded-xl p-4 border border-border/50 hover:border-red-500/30 transition-colors">
+            <div className="flex items-center gap-3 mb-3">
+              <div className="w-10 h-10 rounded-lg bg-red-500/20 flex items-center justify-center">
+                <Thermometer className="w-5 h-5 text-red-400" />
+              </div>
+              <div className="flex-1">
+                <p className="text-xs text-muted-foreground">Thermal Probe Temp</p>
+                <p className="text-2xl font-bold text-red-400">
+                  {thermalLoading ? "..." : thermalAvgTemp !== null && thermalAvgTemp !== undefined ? `${thermalAvgTemp.toFixed(1)}°C` : avgTemp !== null && avgTemp !== undefined ? `${avgTemp.toFixed(1)}°C` : "—"}
+                </p>
+              </div>
+            </div>
+            <div className="space-y-1 text-xs">
+              <div className="flex justify-between text-muted-foreground">
+                <span>Source:</span>
+                <span className="text-red-400/70">Thermal Probe / BH / AMT</span>
+              </div>
+              {thermalProbeStats?.min_temp_c !== undefined && (
+                <div className="flex justify-between text-muted-foreground">
+                  <span>Min/Max:</span>
+                  <span>{thermalProbeStats.min_temp_c?.toFixed(1)}°C / {thermalProbeStats.max_temp_c?.toFixed(1)}°C</span>
+                </div>
+              )}
+              {thermalProbeStats?.count !== undefined && (
+                <div className="flex justify-between text-muted-foreground">
+                  <span>Readings:</span>
+                  <span>{thermalProbeStats.count.toLocaleString()}</span>
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* Average Humidity */}
+          <div className="glass-card rounded-xl p-4 border border-border/50 hover:border-blue-500/30 transition-colors">
+            <div className="flex items-center gap-3 mb-3">
+              <div className="w-10 h-10 rounded-lg bg-blue-500/20 flex items-center justify-center">
+                <Droplets className="w-5 h-5 text-blue-400" />
+              </div>
+              <div className="flex-1">
+                <p className="text-xs text-muted-foreground">Average Humidity</p>
+                <p className="text-2xl font-bold text-blue-400">
+                  {dashboardStatsLoading ? "..." : avgHumidity !== null && avgHumidity !== undefined ? `${avgHumidity.toFixed(1)}%` : "—"}
+                </p>
+              </div>
+            </div>
+            <div className="space-y-1 text-xs">
+              <div className="flex justify-between text-muted-foreground">
+                <span>Status:</span>
+                <span className={avgHumidity !== null && avgHumidity !== undefined ? (avgHumidity > 60 ? "text-warning" : avgHumidity < 30 ? "text-warning" : "text-success") : ""}>
+                  {avgHumidity !== null && avgHumidity !== undefined ? (avgHumidity > 60 ? "High Humidity" : avgHumidity < 30 ? "Low Humidity" : "Normal Range") : "—"}
+                </span>
+              </div>
+              {humidityStats.min !== null && (
+                <div className="flex justify-between text-muted-foreground">
+                  <span>24h Min/Max:</span>
+                  <span>{humidityStats.min.toFixed(1)}% / {humidityStats.max?.toFixed(1)}%</span>
+                </div>
+              )}
+              {humidityStats.avg !== null && (
+                <div className="flex justify-between text-muted-foreground">
+                  <span>24h Average:</span>
+                  <span className="text-blue-400">{humidityStats.avg.toFixed(1)}%</span>
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* Starlink Signal Strength */}
+          <div className="glass-card rounded-xl p-4 border border-border/50 hover:border-violet-500/30 transition-colors">
+            <div className="flex items-center gap-3 mb-3">
+              <div className="w-10 h-10 rounded-lg bg-violet-500/20 flex items-center justify-center">
+                <Satellite className="w-5 h-5 text-violet-400" />
+              </div>
+              <div className="flex-1">
+                <p className="text-xs text-muted-foreground">Starlink Signal</p>
+                <p className="text-2xl font-bold text-violet-400">
+                  {starlinkLoading ? "..." : starlinkSignal !== null && starlinkSignal !== undefined ? `${Number(starlinkSignal).toFixed(0)} dBm` : avgSignal !== null && avgSignal !== undefined ? `${avgSignal.toFixed(0)} dBm` : "—"}
+                </p>
+              </div>
+            </div>
+            <div className="space-y-1 text-xs">
+              <div className="flex justify-between text-muted-foreground">
+                <span>Quality:</span>
+                <span className={starlinkSignal !== undefined ? (starlinkSignal > -50 ? "text-success" : starlinkSignal > -70 ? "text-warning" : "text-destructive") : avgSignal !== undefined && avgSignal !== null ? (avgSignal > -50 ? "text-success" : avgSignal > -70 ? "text-warning" : "text-destructive") : ""}>
+                  {(starlinkSignal ?? avgSignal) !== undefined && (starlinkSignal ?? avgSignal) !== null ? ((starlinkSignal ?? avgSignal ?? 0) > -50 ? "Excellent" : (starlinkSignal ?? avgSignal ?? 0) > -70 ? "Good" : "Weak") : "—"}
+                </span>
+              </div>
+              {starlinkStats?.count !== undefined && (
+                <div className="flex justify-between text-muted-foreground">
+                  <span>Device Count:</span>
+                  <span>{starlinkStats.device_count ?? 0}</span>
+                </div>
+              )}
+              {starlinkStats?.readings_last_24h !== undefined && (
+                <div className="flex justify-between text-muted-foreground">
+                  <span>24h Readings:</span>
+                  <span>{starlinkStats.readings_last_24h.toLocaleString()}</span>
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* Starlink Power */}
+          <div className="glass-card rounded-xl p-4 border border-border/50 hover:border-cyan-500/30 transition-colors">
+            <div className="flex items-center gap-3 mb-3">
+              <div className="w-10 h-10 rounded-lg bg-cyan-500/20 flex items-center justify-center">
+                <Zap className="w-5 h-5 text-cyan-400" />
+              </div>
+              <div className="flex-1">
+                <p className="text-xs text-muted-foreground">Starlink Power</p>
+                <p className="text-2xl font-bold text-cyan-400">
+                  {starlinkLoading ? "..." : starlinkPower !== null && starlinkPower !== undefined ? `${Number(starlinkPower).toFixed(1)}W` : avgPower !== null && avgPower !== undefined ? `${avgPower.toFixed(1)}W` : "—"}
+                </p>
+              </div>
+            </div>
+            <div className="space-y-1 text-xs">
+              <div className="flex justify-between text-muted-foreground">
+                <span>Source:</span>
+                <span className="text-cyan-400/70">Starlink Terminal</span>
+              </div>
+              {starlinkPower !== undefined && starlinkPower !== null && (
+                <div className="flex justify-between text-muted-foreground">
+                  <span>kW:</span>
+                  <span>{(Number(starlinkPower) / 1000).toFixed(3)} kW</span>
+                </div>
+              )}
+              {avgPower !== undefined && avgPower !== null && (
+                <div className="flex justify-between text-muted-foreground">
+                  <span>System Average:</span>
+                  <span>{avgPower.toFixed(1)}W</span>
+                </div>
               )}
             </div>
           </div>
