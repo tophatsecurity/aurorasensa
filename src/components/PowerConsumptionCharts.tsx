@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { 
   XAxis, 
   YAxis, 
@@ -8,19 +8,43 @@ import {
   AreaChart,
   Area,
   ReferenceLine,
-  ReferenceDot
+  ReferenceDot,
+  ReferenceArea
 } from "recharts";
-import { Zap, Loader2, TrendingUp, TrendingDown } from "lucide-react";
+import { Zap, Loader2, TrendingUp, TrendingDown, Settings2, AlertTriangle, Bell, BellOff } from "lucide-react";
 import { useDashboardTimeseries } from "@/hooks/useAuroraApi";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Switch } from "@/components/ui/switch";
+import { Label } from "@/components/ui/label";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
 
 interface ChartData {
   time: string;
   value: number;
   isPeak?: boolean;
+  isAboveWarning?: boolean;
+  isAboveCritical?: boolean;
+}
+
+interface ThresholdConfig {
+  warningThreshold: number;
+  criticalThreshold: number;
+  alertsEnabled: boolean;
 }
 
 const PowerConsumptionCharts = () => {
   const { data: timeseries, isLoading } = useDashboardTimeseries(24);
+  
+  const [thresholdConfig, setThresholdConfig] = useState<ThresholdConfig>({
+    warningThreshold: 100,
+    criticalThreshold: 150,
+    alertsEnabled: true,
+  });
 
   const formatData = (points: { timestamp: string; value: number }[] | undefined): ChartData[] => {
     if (!points || points.length === 0) return [];
@@ -32,6 +56,8 @@ const PowerConsumptionCharts = () => {
       }),
       value: Number(p.value.toFixed(2)),
       isPeak: false,
+      isAboveWarning: p.value >= thresholdConfig.warningThreshold && p.value < thresholdConfig.criticalThreshold,
+      isAboveCritical: p.value >= thresholdConfig.criticalThreshold,
     }));
     
     // Mark peak values
@@ -45,14 +71,15 @@ const PowerConsumptionCharts = () => {
     return data;
   };
 
-  const chartData = useMemo(() => formatData(timeseries?.power), [timeseries?.power]);
+  const chartData = useMemo(() => formatData(timeseries?.power), [timeseries?.power, thresholdConfig.warningThreshold, thresholdConfig.criticalThreshold]);
 
   // Calculate statistics
   const stats = useMemo(() => {
     if (chartData.length === 0) return { 
       current: null, avg: null, min: null, max: null, 
       hourlyAvg: null, trend: 'stable' as const,
-      peakTime: null, totalKwh: null
+      peakTime: null, totalKwh: null,
+      warningCount: 0, criticalCount: 0
     };
     
     const values = chartData.map(d => d.value);
@@ -65,6 +92,10 @@ const PowerConsumptionCharts = () => {
     // Estimate kWh (assuming readings are evenly spaced over 24h)
     const totalKwh = (avg * 24) / 1000;
     
+    // Count threshold violations
+    const warningCount = chartData.filter(d => d.isAboveWarning).length;
+    const criticalCount = chartData.filter(d => d.isAboveCritical).length;
+    
     return {
       current,
       avg,
@@ -74,8 +105,18 @@ const PowerConsumptionCharts = () => {
       trend: current > previous + 0.5 ? 'up' as const : current < previous - 0.5 ? 'down' as const : 'stable' as const,
       peakTime: chartData[peakIndex]?.time || null,
       totalKwh,
+      warningCount,
+      criticalCount,
     };
   }, [chartData]);
+
+  // Current status based on thresholds
+  const currentStatus = useMemo(() => {
+    if (stats.current === null) return 'normal';
+    if (stats.current >= thresholdConfig.criticalThreshold) return 'critical';
+    if (stats.current >= thresholdConfig.warningThreshold) return 'warning';
+    return 'normal';
+  }, [stats.current, thresholdConfig]);
 
   const formatValue = (val: number | null) => {
     if (val === null) return '—';
@@ -87,19 +128,35 @@ const PowerConsumptionCharts = () => {
     return val.toFixed(2);
   };
 
+  const handleThresholdChange = (field: keyof ThresholdConfig, value: number | boolean) => {
+    setThresholdConfig(prev => ({ ...prev, [field]: value }));
+  };
+
   return (
     <div className="glass-card rounded-xl p-5 border border-border/50">
       <div className="flex items-center justify-between mb-4">
         <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-lg bg-orange-500/20 flex items-center justify-center">
-            <Zap className="w-5 h-5 text-orange-400" />
+          <div className={`w-10 h-10 rounded-lg flex items-center justify-center transition-colors ${
+            currentStatus === 'critical' ? 'bg-destructive/20' : 
+            currentStatus === 'warning' ? 'bg-yellow-500/20' : 
+            'bg-orange-500/20'
+          }`}>
+            <Zap className={`w-5 h-5 ${
+              currentStatus === 'critical' ? 'text-destructive' : 
+              currentStatus === 'warning' ? 'text-yellow-400' : 
+              'text-orange-400'
+            }`} />
           </div>
           <div>
             <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
               Power Consumption
             </h4>
             <div className="flex items-center gap-2">
-              <p className="text-2xl font-bold text-orange-400">
+              <p className={`text-2xl font-bold ${
+                currentStatus === 'critical' ? 'text-destructive' : 
+                currentStatus === 'warning' ? 'text-yellow-400' : 
+                'text-orange-400'
+              }`}>
                 {isLoading ? '...' : `${formatValue(stats.current)}W`}
               </p>
               {!isLoading && stats.trend !== 'stable' && (
@@ -107,24 +164,111 @@ const PowerConsumptionCharts = () => {
                   {stats.trend === 'up' ? <TrendingUp className="w-4 h-4" /> : <TrendingDown className="w-4 h-4" />}
                 </span>
               )}
+              {!isLoading && currentStatus !== 'normal' && thresholdConfig.alertsEnabled && (
+                <span className={`flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium ${
+                  currentStatus === 'critical' ? 'bg-destructive/20 text-destructive' : 'bg-yellow-500/20 text-yellow-400'
+                }`}>
+                  <AlertTriangle className="w-3 h-3" />
+                  {currentStatus === 'critical' ? 'CRITICAL' : 'WARNING'}
+                </span>
+              )}
             </div>
           </div>
         </div>
-        {!isLoading && chartData.length > 0 && (
-          <div className="text-right text-xs space-y-0.5">
-            <div className="text-muted-foreground">
-              Avg: <span className="font-medium text-orange-400">{formatValue(stats.avg)}W</span>
+        <div className="flex items-center gap-2">
+          {!isLoading && chartData.length > 0 && (
+            <div className="text-right text-xs space-y-0.5 mr-2">
+              <div className="text-muted-foreground">
+                Avg: <span className="font-medium text-orange-400">{formatValue(stats.avg)}W</span>
+              </div>
+              <div className="text-muted-foreground">
+                Est. Daily: <span className="text-cyan-400">{formatKwh(stats.totalKwh)} kWh</span>
+              </div>
             </div>
-            <div className="text-muted-foreground">
-              Est. Daily: <span className="text-cyan-400">{formatKwh(stats.totalKwh)} kWh</span>
-            </div>
-          </div>
-        )}
+          )}
+          <Popover>
+            <PopoverTrigger asChild>
+              <Button variant="ghost" size="icon" className="h-8 w-8">
+                <Settings2 className="w-4 h-4" />
+              </Button>
+            </PopoverTrigger>
+            <PopoverContent className="w-72" align="end">
+              <div className="space-y-4">
+                <div className="flex items-center justify-between">
+                  <h4 className="font-medium text-sm">Alert Thresholds</h4>
+                  <div className="flex items-center gap-2">
+                    {thresholdConfig.alertsEnabled ? (
+                      <Bell className="w-4 h-4 text-success" />
+                    ) : (
+                      <BellOff className="w-4 h-4 text-muted-foreground" />
+                    )}
+                    <Switch
+                      checked={thresholdConfig.alertsEnabled}
+                      onCheckedChange={(checked) => handleThresholdChange('alertsEnabled', checked)}
+                    />
+                  </div>
+                </div>
+                
+                <div className="space-y-3">
+                  <div className="space-y-1.5">
+                    <Label className="text-xs flex items-center gap-2">
+                      <div className="w-2 h-2 rounded-full bg-yellow-500" />
+                      Warning Threshold (W)
+                    </Label>
+                    <Input
+                      type="number"
+                      value={thresholdConfig.warningThreshold}
+                      onChange={(e) => handleThresholdChange('warningThreshold', Number(e.target.value))}
+                      className="h-8"
+                      min={0}
+                    />
+                  </div>
+                  
+                  <div className="space-y-1.5">
+                    <Label className="text-xs flex items-center gap-2">
+                      <div className="w-2 h-2 rounded-full bg-destructive" />
+                      Critical Threshold (W)
+                    </Label>
+                    <Input
+                      type="number"
+                      value={thresholdConfig.criticalThreshold}
+                      onChange={(e) => handleThresholdChange('criticalThreshold', Number(e.target.value))}
+                      className="h-8"
+                      min={0}
+                    />
+                  </div>
+                </div>
+
+                {stats.warningCount > 0 || stats.criticalCount > 0 ? (
+                  <div className="pt-2 border-t border-border text-xs space-y-1">
+                    <div className="text-muted-foreground">Last 24h violations:</div>
+                    {stats.warningCount > 0 && (
+                      <div className="flex items-center gap-2 text-yellow-400">
+                        <div className="w-2 h-2 rounded-full bg-yellow-500" />
+                        {stats.warningCount} warning events
+                      </div>
+                    )}
+                    {stats.criticalCount > 0 && (
+                      <div className="flex items-center gap-2 text-destructive">
+                        <div className="w-2 h-2 rounded-full bg-destructive" />
+                        {stats.criticalCount} critical events
+                      </div>
+                    )}
+                  </div>
+                ) : (
+                  <div className="pt-2 border-t border-border text-xs text-muted-foreground">
+                    No threshold violations in last 24h
+                  </div>
+                )}
+              </div>
+            </PopoverContent>
+          </Popover>
+        </div>
       </div>
 
       {/* Peak Usage Indicators */}
       {!isLoading && chartData.length > 0 && (
-        <div className="flex items-center gap-4 mb-3 text-xs">
+        <div className="flex items-center gap-4 mb-3 text-xs flex-wrap">
           <div className="flex items-center gap-2 px-2 py-1 rounded bg-red-500/10 border border-red-500/20">
             <div className="w-2 h-2 rounded-full bg-red-500 animate-pulse" />
             <span className="text-muted-foreground">Peak:</span>
@@ -138,6 +282,15 @@ const PowerConsumptionCharts = () => {
             <span className="text-muted-foreground">Min:</span>
             <span className="font-medium text-green-400">{formatValue(stats.min)}W</span>
           </div>
+          {thresholdConfig.alertsEnabled && (stats.warningCount > 0 || stats.criticalCount > 0) && (
+            <div className="flex items-center gap-2 px-2 py-1 rounded bg-yellow-500/10 border border-yellow-500/20">
+              <AlertTriangle className="w-3 h-3 text-yellow-400" />
+              <span className="text-muted-foreground">Alerts:</span>
+              <span className="font-medium text-yellow-400">
+                {stats.warningCount + stats.criticalCount}
+              </span>
+            </div>
+          )}
         </div>
       )}
 
@@ -176,6 +329,58 @@ const PowerConsumptionCharts = () => {
                 tickFormatter={(v) => `${v}W`}
               />
               
+              {/* Critical zone background */}
+              {thresholdConfig.alertsEnabled && (
+                <ReferenceArea
+                  y1={thresholdConfig.criticalThreshold}
+                  y2={thresholdConfig.criticalThreshold * 2}
+                  fill="hsl(var(--destructive))"
+                  fillOpacity={0.05}
+                />
+              )}
+              
+              {/* Warning zone background */}
+              {thresholdConfig.alertsEnabled && (
+                <ReferenceArea
+                  y1={thresholdConfig.warningThreshold}
+                  y2={thresholdConfig.criticalThreshold}
+                  fill="#eab308"
+                  fillOpacity={0.05}
+                />
+              )}
+              
+              {/* Warning threshold line */}
+              {thresholdConfig.alertsEnabled && (
+                <ReferenceLine 
+                  y={thresholdConfig.warningThreshold} 
+                  stroke="#eab308" 
+                  strokeDasharray="4 4" 
+                  strokeOpacity={0.7}
+                  label={{ 
+                    value: `Warning: ${thresholdConfig.warningThreshold}W`, 
+                    position: 'right',
+                    fontSize: 9,
+                    fill: '#eab308'
+                  }}
+                />
+              )}
+              
+              {/* Critical threshold line */}
+              {thresholdConfig.alertsEnabled && (
+                <ReferenceLine 
+                  y={thresholdConfig.criticalThreshold} 
+                  stroke="hsl(var(--destructive))" 
+                  strokeDasharray="4 4" 
+                  strokeOpacity={0.7}
+                  label={{ 
+                    value: `Critical: ${thresholdConfig.criticalThreshold}W`, 
+                    position: 'right',
+                    fontSize: 9,
+                    fill: 'hsl(var(--destructive))'
+                  }}
+                />
+              )}
+              
               {/* Average line */}
               {stats.avg !== null && (
                 <ReferenceLine 
@@ -185,7 +390,7 @@ const PowerConsumptionCharts = () => {
                   strokeOpacity={0.7}
                   label={{ 
                     value: `Avg: ${stats.avg.toFixed(1)}W`, 
-                    position: 'right',
+                    position: 'insideTopLeft',
                     fontSize: 9,
                     fill: '#22c55e'
                   }}
@@ -214,8 +419,14 @@ const PowerConsumptionCharts = () => {
                 labelStyle={{ color: 'hsl(var(--foreground))' }}
                 formatter={(value: number) => {
                   const isPeak = value === stats.max;
+                  const isCritical = value >= thresholdConfig.criticalThreshold;
+                  const isWarning = value >= thresholdConfig.warningThreshold && !isCritical;
+                  let suffix = '';
+                  if (isPeak) suffix = ' (PEAK)';
+                  if (isCritical && thresholdConfig.alertsEnabled) suffix += ' ⚠️ CRITICAL';
+                  else if (isWarning && thresholdConfig.alertsEnabled) suffix += ' ⚠️ WARNING';
                   return [
-                    `${value.toFixed(2)}W${isPeak ? ' (PEAK)' : ''}`, 
+                    `${value.toFixed(2)}W${suffix}`, 
                     'Power'
                   ];
                 }}
