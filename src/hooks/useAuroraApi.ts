@@ -1930,6 +1930,185 @@ export function useAhtSensorTimeseries(hours: number = 24) {
 }
 
 // =============================================
+// HOOKS - WIFI SCANNER TIMESERIES
+// =============================================
+
+export interface WifiScannerReading {
+  timestamp: string;
+  device_id?: string;
+  ssid?: string;
+  bssid?: string;
+  channel?: number;
+  rssi?: number;
+  signal_strength?: number;
+  security?: string;
+  frequency?: number;
+  band?: string;
+  networks_count?: number;
+}
+
+export interface WifiScannerTimeseriesResponse {
+  count: number;
+  readings: WifiScannerReading[];
+}
+
+export function useWifiScannerTimeseries(hours: number = 24) {
+  return useQuery({
+    queryKey: ["aurora", "wifi_scanner", "timeseries", hours],
+    queryFn: async () => {
+      try {
+        interface RawReading {
+          timestamp: string;
+          device_id?: string;
+          device_type?: string;
+          data?: {
+            ssid?: string;
+            bssid?: string;
+            channel?: number;
+            rssi?: number;
+            signal_strength?: number;
+            security?: string;
+            frequency?: number;
+            band?: string;
+            networks_count?: number;
+          };
+          ssid?: string;
+          bssid?: string;
+          channel?: number;
+          rssi?: number;
+          signal_strength?: number;
+          security?: string;
+          frequency?: number;
+          band?: string;
+          networks_count?: number;
+        }
+        
+        interface RawResponse {
+          count?: number;
+          readings?: RawReading[];
+          sensor_type?: string;
+        }
+        
+        const response = await callAuroraApi<RawResponse>(`/api/readings/sensor/wifi_scanner?hours=${hours}`);
+        
+        const transformedReadings: WifiScannerReading[] = (response.readings || []).map(r => ({
+          timestamp: r.timestamp,
+          device_id: r.device_id,
+          ssid: r.data?.ssid ?? r.ssid,
+          bssid: r.data?.bssid ?? r.bssid,
+          channel: r.data?.channel ?? r.channel,
+          rssi: r.data?.rssi ?? r.rssi ?? r.data?.signal_strength ?? r.signal_strength,
+          signal_strength: r.data?.signal_strength ?? r.signal_strength ?? r.data?.rssi ?? r.rssi,
+          security: r.data?.security ?? r.security,
+          frequency: r.data?.frequency ?? r.frequency,
+          band: r.data?.band ?? r.band,
+          networks_count: r.data?.networks_count ?? r.networks_count,
+        }));
+        
+        return { 
+          count: response.count ?? transformedReadings.length, 
+          readings: transformedReadings 
+        };
+      } catch (error) {
+        console.warn("Failed to fetch WiFi scanner timeseries:", error);
+        return { count: 0, readings: [] };
+      }
+    },
+    refetchInterval: 30000,
+    retry: 1,
+  });
+}
+
+// =============================================
+// HOOKS - BLUETOOTH SCANNER TIMESERIES
+// =============================================
+
+export interface BluetoothScannerReading {
+  timestamp: string;
+  device_id?: string;
+  mac_address?: string;
+  name?: string;
+  rssi?: number;
+  signal_strength?: number;
+  device_class?: string;
+  manufacturer?: string;
+  device_type?: string;
+  devices_count?: number;
+  is_connectable?: boolean;
+}
+
+export interface BluetoothScannerTimeseriesResponse {
+  count: number;
+  readings: BluetoothScannerReading[];
+}
+
+export function useBluetoothScannerTimeseries(hours: number = 24) {
+  return useQuery({
+    queryKey: ["aurora", "bluetooth_scanner", "timeseries", hours],
+    queryFn: async () => {
+      try {
+        interface RawReading {
+          timestamp: string;
+          device_id?: string;
+          device_type?: string;
+          data?: {
+            mac_address?: string;
+            name?: string;
+            rssi?: number;
+            signal_strength?: number;
+            device_class?: string;
+            manufacturer?: string;
+            device_type?: string;
+            devices_count?: number;
+            is_connectable?: boolean;
+          };
+          mac_address?: string;
+          name?: string;
+          rssi?: number;
+          signal_strength?: number;
+          device_class?: string;
+          manufacturer?: string;
+          devices_count?: number;
+          is_connectable?: boolean;
+        }
+        
+        interface RawResponse {
+          count?: number;
+          readings?: RawReading[];
+          sensor_type?: string;
+        }
+        
+        const response = await callAuroraApi<RawResponse>(`/api/readings/sensor/bluetooth_scanner?hours=${hours}`);
+        
+        const transformedReadings: BluetoothScannerReading[] = (response.readings || []).map(r => ({
+          timestamp: r.timestamp,
+          device_id: r.device_id,
+          mac_address: r.data?.mac_address ?? r.mac_address,
+          name: r.data?.name ?? r.name,
+          rssi: r.data?.rssi ?? r.rssi ?? r.data?.signal_strength ?? r.signal_strength,
+          signal_strength: r.data?.signal_strength ?? r.signal_strength ?? r.data?.rssi ?? r.rssi,
+          device_class: r.data?.device_class ?? r.device_class,
+          manufacturer: r.data?.manufacturer ?? r.manufacturer,
+          device_type: r.data?.device_type ?? r.device_type,
+          devices_count: r.data?.devices_count ?? r.devices_count,
+          is_connectable: r.data?.is_connectable ?? r.is_connectable,
+        }));
+        
+        return { 
+          count: response.count ?? transformedReadings.length, 
+          readings: transformedReadings 
+        };
+      } catch (error) {
+        console.warn("Failed to fetch Bluetooth scanner timeseries:", error);
+        return { count: 0, readings: [] };
+      }
+    },
+    refetchInterval: 30000,
+    retry: 1,
+  });
+}
+
+// =============================================
 // HOOKS - BMT SENSOR TIMESERIES
 // =============================================
 
