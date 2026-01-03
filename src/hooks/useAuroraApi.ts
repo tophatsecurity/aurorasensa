@@ -2490,6 +2490,19 @@ export function useUpdateClientConfig() {
   });
 }
 
+export function useRenameClient() {
+  const queryClient = useQueryClient();
+  
+  return useMutation({
+    mutationFn: async ({ clientId, hostname }: { clientId: string; hostname: string }) => {
+      return callAuroraApi<{ success: boolean; message: string }>(`/api/clients/${clientId}`, "PUT", { hostname });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["aurora", "clients"] });
+    },
+  });
+}
+
 // =============================================
 // MUTATIONS - CLIENT STATE MANAGEMENT
 // =============================================
