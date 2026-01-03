@@ -47,11 +47,13 @@ import {
   Activity,
   Globe,
   XCircle,
-  Eye
+  Eye,
+  ArrowLeftRight
 } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
 import { formatRelativeTime } from "@/utils/dateUtils";
 import DeviceDetailDialog from "@/components/DeviceDetailDialog";
+import DeviceComparisonDialog from "@/components/DeviceComparisonDialog";
 
 interface ConfigEditorProps {
   config: ServerConfig;
@@ -417,6 +419,7 @@ const formatUptime = (seconds: number) => {
 const ConfigurationContent = () => {
   const [selectedDevice, setSelectedDevice] = useState<Client | null>(null);
   const [detailDialogOpen, setDetailDialogOpen] = useState(false);
+  const [comparisonDialogOpen, setComparisonDialogOpen] = useState(false);
   
   const { data: serverConfig, isLoading: configLoading, refetch: refetchConfig } = useConfig();
   const { data: clients = [], isLoading: clientsLoading, refetch: refetchClients } = useClients();
@@ -675,6 +678,18 @@ const ConfigurationContent = () => {
             {/* Device Configurations */}
             <TabsContent value="devices" className="space-y-6">
               {/* Device Summary */}
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-lg font-semibold">Devices</h3>
+                <Button 
+                  variant="outline" 
+                  size="sm" 
+                  onClick={() => setComparisonDialogOpen(true)}
+                  disabled={clients.length < 2}
+                >
+                  <ArrowLeftRight className="w-4 h-4 mr-2" />
+                  Compare Devices
+                </Button>
+              </div>
               <div className="grid gap-4 md:grid-cols-3">
                 <Card>
                   <CardContent className="pt-6">
@@ -943,6 +958,11 @@ const ConfigurationContent = () => {
         client={selectedDevice} 
         open={detailDialogOpen} 
         onOpenChange={setDetailDialogOpen} 
+      />
+      <DeviceComparisonDialog
+        open={comparisonDialogOpen}
+        onOpenChange={setComparisonDialogOpen}
+        initialDevice={selectedDevice}
       />
     </div>
   );

@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { 
   Cpu, 
   Wifi, 
@@ -18,7 +18,9 @@ import {
   ChevronDown,
   ChevronUp,
   Eye,
-  Database
+  Database,
+  RefreshCw,
+  Loader2
 } from "lucide-react";
 import {
   Dialog,
@@ -30,7 +32,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { Client } from "@/hooks/useAuroraApi";
+import { Client, useClientSystemInfo } from "@/hooks/useAuroraApi";
 import { formatDateTime } from "@/utils/dateUtils";
 
 interface DeviceDetailDialogProps {
@@ -240,14 +242,43 @@ const formatDate = (dateString: string | null | undefined): string => {
   return formatDateTime(dateString, "—");
 };
 
+interface SystemMetrics {
+  cpu_percent?: number;
+  memory_percent?: number;
+  disk_percent?: number;
+  uptime_seconds?: number;
+}
+
 const DeviceDetailDialog = ({ client, open, onOpenChange }: DeviceDetailDialogProps) => {
   const [expandedSensors, setExpandedSensors] = useState<Set<string>>(new Set());
+  const [pollingEnabled, setPollingEnabled] = useState(true);
+  
+  // Real-time polling for system info
+  const { data: liveSystemInfo, isLoading: systemLoading, refetch: refetchSystem } = useClientSystemInfo(
+    client?.client_id || ""
+  );
+
+  // Extract metrics from SystemInfo or use client metadata
+  const extractMetrics = (systemInfo: unknown, clientMetadata: SystemMetrics | undefined): SystemMetrics => {
+    if (systemInfo && typeof systemInfo === 'object') {
+      const info = systemInfo as Record<string, unknown>;
+      return {
+        cpu_percent: info.cpu_load?.[0] as number | undefined ?? clientMetadata?.cpu_percent,
+        memory_percent: (info.memory as { percent?: number })?.percent ?? clientMetadata?.memory_percent,
+        disk_percent: (info.disk as { percent?: number })?.percent ?? clientMetadata?.disk_percent,
+        uptime_seconds: info.uptime_seconds as number | undefined ?? clientMetadata?.uptime_seconds,
+      };
+    }
+    return clientMetadata || {};
+  };
+
+  // Use live data if available, fallback to client metadata
+  const system = extractMetrics(liveSystemInfo, client?.metadata?.system);
 
   if (!client) return null;
 
   const config = client.metadata?.config;
   const sensors = config?.sensors || {};
-  const system = client.metadata?.system;
 
   // Toggle sensor expansion
   const toggleSensorExpanded = (sensorId: string) => {
@@ -300,13 +331,30 @@ const DeviceDetailDialog = ({ client, open, onOpenChange }: DeviceDetailDialogPr
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-3xl max-h-[85vh] overflow-hidden flex flex-col">
         <DialogHeader>
-          <DialogTitle className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-lg bg-cyan-500/20 flex items-center justify-center">
-              <Server className="w-5 h-5 text-cyan-400" />
+          <DialogTitle className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-lg bg-cyan-500/20 flex items-center justify-center">
+                <Server className="w-5 h-5 text-cyan-400" />
+              </div>
+              <div>
+                <span className="text-xl">{client.hostname || client.client_id}</span>
+                <p className="text-sm text-muted-foreground font-normal">{client.ip_address}</p>
+              </div>
             </div>
-            <div>
-              <span className="text-xl">{client.hostname || client.client_id}</span>
-              <p className="text-sm text-muted-foreground font-normal">{client.ip_address}</p>
+            <div className="flex items-center gap-2">
+              {systemLoading && <Loader2 className="w-4 h-4 animate-spin text-muted-foreground" />}
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => refetchSystem()}
+                className="gap-1"
+              >
+                <RefreshCw className="w-4 h-4" />
+                Refresh
+              </Button>
+              <Badge variant={pollingEnabled ? "default" : "secondary"} className="cursor-pointer" onClick={() => setPollingEnabled(!pollingEnabled)}>
+                {pollingEnabled ? "Live" : "Paused"}
+              </Badge>
             </div>
           </DialogTitle>
         </DialogHeader>
