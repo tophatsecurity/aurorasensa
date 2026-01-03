@@ -142,9 +142,9 @@ const ThermalProbeDeviceChart = () => {
                 tick={{ fontSize: 10, fill: 'hsl(var(--muted-foreground))' }}
                 tickLine={false}
                 axisLine={false}
-                tickFormatter={(v) => `${v}`}
+                tickFormatter={(v) => `${v}°F`}
                 label={{ 
-                  value: 'Readings', 
+                  value: 'Temperature (°F)', 
                   angle: -90, 
                   position: 'insideLeft',
                   style: { fontSize: 10, fill: 'hsl(var(--muted-foreground))' }
@@ -159,22 +159,20 @@ const ThermalProbeDeviceChart = () => {
                 }}
                 labelStyle={{ color: 'hsl(var(--foreground))', fontWeight: 'bold' }}
                 formatter={(value: number, name: string, props: { payload: DeviceData }) => {
-                  if (name === 'total_readings') {
+                  if (name === 'temp_f') {
                     return [
-                      <span key="readings">
-                        <div>{value.toLocaleString()} readings</div>
-                        <div className="text-red-400 mt-1">
-                          Avg: {props.payload.temp_f}°F / {props.payload.temp_c}°C
-                        </div>
+                      <span key="temp">
+                        <div className="text-red-400">{props.payload.temp_f}°F / {props.payload.temp_c}°C</div>
+                        <div className="text-muted-foreground mt-1">{props.payload.total_readings.toLocaleString()} readings</div>
                       </span>,
-                      'Data'
+                      'Temperature'
                     ];
                   }
                   return [value, name];
                 }}
               />
               <Bar 
-                dataKey="total_readings" 
+                dataKey="temp_f" 
                 radius={[4, 4, 0, 0]}
                 animationDuration={300}
               >
