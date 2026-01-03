@@ -1,7 +1,9 @@
 import { useState } from "react";
 import { 
   Users, UserPlus, UserX, Trash2, RefreshCw, Search, CheckCircle, 
-  Power, PowerOff, Ban, RotateCcw, Clock, History, ChevronDown, Pencil
+  Power, PowerOff, Ban, RotateCcw, Clock, History, ChevronDown, ChevronUp, Pencil,
+  Cpu, Wifi, Radio, Plane, Navigation, Thermometer, Bluetooth, Monitor, Satellite,
+  Server, Activity, Eye
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -18,7 +20,6 @@ import {
   AlertDialogFooter,
   AlertDialogHeader,
   AlertDialogTitle,
-  AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
 import {
   Select,
@@ -48,6 +49,11 @@ import {
   TabsList,
   TabsTrigger,
 } from "@/components/ui/tabs";
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from "@/components/ui/collapsible";
 import { 
   useClientsByState, 
   useClientStatistics,
@@ -60,11 +66,13 @@ import {
   useRestoreClient,
   useClientStateHistory,
   useRenameClient,
+  useLatestReadings,
   Client,
   ClientState
 } from "@/hooks/useAuroraApi";
 import { formatDistanceToNow } from "date-fns";
 import { toast } from "sonner";
+import DeviceDetailDialog from "./DeviceDetailDialog";
 
 const STATE_CONFIG: Record<ClientState, { label: string; color: string; icon: React.ElementType; description: string }> = {
   pending: { 
@@ -105,9 +113,39 @@ const STATE_CONFIG: Record<ClientState, { label: string; color: string; icon: Re
   },
 };
 
+// Sensor icon and color helpers
+const getSensorIcon = (sensorId: string) => {
+  const id = sensorId.toLowerCase();
+  if (id.includes('arduino')) return Cpu;
+  if (id.includes('lora')) return Radio;
+  if (id.includes('starlink')) return Satellite;
+  if (id.includes('wifi')) return Wifi;
+  if (id.includes('bluetooth') || id.includes('ble')) return Bluetooth;
+  if (id.includes('adsb')) return Plane;
+  if (id.includes('gps')) return Navigation;
+  if (id.includes('thermal')) return Thermometer;
+  if (id.includes('system')) return Monitor;
+  return Cpu;
+};
+
+const getSensorColor = (sensorId: string) => {
+  const id = sensorId.toLowerCase();
+  if (id.includes('arduino')) return 'bg-orange-500/20 text-orange-400 border-orange-500/30';
+  if (id.includes('lora')) return 'bg-red-500/20 text-red-400 border-red-500/30';
+  if (id.includes('starlink')) return 'bg-violet-500/20 text-violet-400 border-violet-500/30';
+  if (id.includes('wifi')) return 'bg-blue-500/20 text-blue-400 border-blue-500/30';
+  if (id.includes('bluetooth') || id.includes('ble')) return 'bg-indigo-500/20 text-indigo-400 border-indigo-500/30';
+  if (id.includes('adsb')) return 'bg-cyan-500/20 text-cyan-400 border-cyan-500/30';
+  if (id.includes('gps')) return 'bg-green-500/20 text-green-400 border-green-500/30';
+  if (id.includes('thermal')) return 'bg-amber-500/20 text-amber-400 border-amber-500/30';
+  if (id.includes('system')) return 'bg-slate-500/20 text-slate-400 border-slate-500/30';
+  return 'bg-primary/20 text-primary border-primary/30';
+};
+
 const ClientsContent = () => {
   const { data: clientsData, isLoading, isError, refetch } = useClientsByState();
   const { data: statistics } = useClientStatistics();
+  const { data: latestReadings } = useLatestReadings();
   
   const adoptClient = useAdoptClientDirect();
   const registerClient = useRegisterClient();
@@ -124,6 +162,9 @@ const ClientsContent = () => {
   const [historyDialogClient, setHistoryDialogClient] = useState<string | null>(null);
   const [editingClient, setEditingClient] = useState<Client | null>(null);
   const [editHostname, setEditHostname] = useState("");
+  const [expandedClients, setExpandedClients] = useState<Set<string>>(new Set());
+  const [detailClient, setDetailClient] = useState<Client | null>(null);
+  const [detailsOpen, setDetailsOpen] = useState(false);
 
   const formatLastSeen = (dateString: string | undefined | null) => {
     if (!dateString) return "Never";
@@ -150,6 +191,29 @@ const ClientsContent = () => {
     } catch {
       return "offline";
     }
+  };
+
+  // Get sensors for a client
+  const getClientSensors = (client: Client) => {
+    return client.sensors || [];
+  };
+
+  // Get latest readings for a specific client's sensors
+  const getClientSensorReadings = (clientId: string) => {
+    if (!latestReadings) return [];
+    return latestReadings.filter(r => r.device_id?.includes(clientId));
+  };
+
+  const toggleClientExpanded = (clientId: string) => {
+    setExpandedClients(prev => {
+      const next = new Set(prev);
+      if (next.has(clientId)) {
+        next.delete(clientId);
+      } else {
+        next.add(clientId);
+      }
+      return next;
+    });
   };
 
   const handleStateTransition = (
@@ -204,6 +268,11 @@ const ClientsContent = () => {
     );
   };
 
+  const handleViewDetails = (client: Client) => {
+    setDetailClient(client);
+    setDetailsOpen(true);
+  };
+
   // Combine all clients from all states
   const allClients: Client[] = clientsData ? [
     ...(clientsData.clients_by_state?.pending || []),
@@ -220,7 +289,8 @@ const ClientsContent = () => {
       client.hostname?.toLowerCase().includes(searchQuery.toLowerCase()) ||
       client.client_id?.toLowerCase().includes(searchQuery.toLowerCase()) ||
       client.mac_address?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      client.ip_address?.toLowerCase().includes(searchQuery.toLowerCase());
+      client.ip_address?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      client.sensors?.some(s => s.toLowerCase().includes(searchQuery.toLowerCase()));
     
     const clientState = client.state || "pending";
     const matchesState = stateFilter === "all" || clientState === stateFilter;
@@ -243,6 +313,7 @@ const ClientsContent = () => {
   const activeClients = statistics?.summary?.active || stateCounts.adopted || 0;
   const needsAttention = statistics?.summary?.needs_attention || (stateCounts.pending + stateCounts.registered) || 0;
   const inactiveClients = statistics?.summary?.inactive || (stateCounts.disabled + stateCounts.suspended + stateCounts.deleted) || 0;
+  const totalSensors = allClients.reduce((acc, client) => acc + (client.sensors?.length || 0), 0);
 
   if (isLoading) {
     return (
@@ -278,9 +349,17 @@ const ClientsContent = () => {
     <div className="p-6 space-y-6 overflow-y-auto h-full">
       {/* Header */}
       <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold text-foreground">Client Management</h1>
-          <p className="text-muted-foreground">Complete client lifecycle management with state tracking</p>
+        <div className="flex items-center gap-4">
+          <div>
+            <h1 className="text-2xl font-bold text-foreground">Clients & Sensors</h1>
+            <p className="text-muted-foreground">Manage clients and their attached sensors</p>
+          </div>
+          <Badge className="bg-primary/20 text-primary border-primary/30 px-3 py-1">
+            {totalClients} Clients
+          </Badge>
+          <Badge className="bg-cyan-500/20 text-cyan-400 border-cyan-500/30 px-3 py-1">
+            {totalSensors} Sensors
+          </Badge>
         </div>
         <Button variant="outline" onClick={() => refetch()}>
           <RefreshCw className="w-4 h-4 mr-2" />
@@ -335,12 +414,12 @@ const ClientsContent = () => {
         <Card className="bg-card/50 backdrop-blur-sm border-border/50">
           <CardContent className="p-4">
             <div className="flex items-center gap-3">
-              <div className="p-2 rounded-lg bg-muted">
-                <PowerOff className="w-5 h-5 text-muted-foreground" />
+              <div className="p-2 rounded-lg bg-cyan-500/10">
+                <Activity className="w-5 h-5 text-cyan-400" />
               </div>
               <div>
-                <p className="text-2xl font-bold">{inactiveClients}</p>
-                <p className="text-sm text-muted-foreground">Inactive</p>
+                <p className="text-2xl font-bold">{totalSensors}</p>
+                <p className="text-sm text-muted-foreground">Total Sensors</p>
               </div>
             </div>
           </CardContent>
@@ -378,17 +457,17 @@ const ClientsContent = () => {
             <div className="relative flex-1">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
               <Input
-                placeholder="Search by hostname, client ID, MAC, or IP..."
+                placeholder="Search by hostname, client ID, MAC, IP, or sensor..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 className="pl-9"
               />
             </div>
             <Select value={stateFilter} onValueChange={setStateFilter}>
-              <SelectTrigger className="w-full md:w-48">
+              <SelectTrigger className="w-full md:w-48 bg-background">
                 <SelectValue placeholder="Filter by state" />
               </SelectTrigger>
-              <SelectContent>
+              <SelectContent className="bg-background border border-border z-50">
                 <SelectItem value="all">All States</SelectItem>
                 {(Object.keys(STATE_CONFIG) as ClientState[]).map((state) => (
                   <SelectItem key={state} value={state}>
@@ -421,63 +500,169 @@ const ClientsContent = () => {
                 const stateConfig = STATE_CONFIG[clientState];
                 const StateIcon = stateConfig.icon;
                 const batchCount = client.batch_count ?? client.batches_received ?? 0;
+                const sensors = getClientSensors(client);
+                const isExpanded = expandedClients.has(client.client_id);
 
                 return (
-                  <div
+                  <Collapsible
                     key={client.client_id}
-                    className="flex items-center justify-between p-4 rounded-lg bg-background/50 border border-border/50 hover:border-border transition-colors"
+                    open={isExpanded}
+                    onOpenChange={() => toggleClientExpanded(client.client_id)}
                   >
-                    <div className="flex items-center gap-4 flex-1 min-w-0">
-                      <div className={`w-3 h-3 rounded-full flex-shrink-0 ${
-                        activityStatus === "online" ? "bg-success animate-pulse" :
-                        activityStatus === "warning" ? "bg-warning" : "bg-muted-foreground"
-                      }`} />
-                      <div className="min-w-0 flex-1">
-                        <div className="flex items-center gap-2 flex-wrap">
-                          <span className="font-medium truncate">{client.hostname || client.client_id}</span>
-                          <Badge variant="outline" className={`text-xs ${stateConfig.color}`}>
-                            <StateIcon className="w-3 h-3 mr-1" />
-                            {stateConfig.label}
-                          </Badge>
-                          <Badge variant="outline" className="text-xs capitalize">
-                            {activityStatus}
-                          </Badge>
-                          {batchCount > 0 && (
-                            <Badge variant="secondary" className="text-xs">
-                              {batchCount} batches
-                            </Badge>
-                          )}
+                    <div className="rounded-lg bg-background/50 border border-border/50 hover:border-border transition-colors">
+                      <div className="flex items-center justify-between p-4">
+                        <div className="flex items-center gap-4 flex-1 min-w-0">
+                          <div className={`w-3 h-3 rounded-full flex-shrink-0 ${
+                            activityStatus === "online" ? "bg-success animate-pulse" :
+                            activityStatus === "warning" ? "bg-warning" : "bg-muted-foreground"
+                          }`} />
+                          <div className="min-w-0 flex-1">
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <span className="font-medium truncate">{client.hostname || client.client_id}</span>
+                              <Badge variant="outline" className={`text-xs ${stateConfig.color}`}>
+                                <StateIcon className="w-3 h-3 mr-1" />
+                                {stateConfig.label}
+                              </Badge>
+                              <Badge variant="outline" className="text-xs capitalize">
+                                {activityStatus}
+                              </Badge>
+                              {batchCount > 0 && (
+                                <Badge variant="secondary" className="text-xs">
+                                  {batchCount} batches
+                                </Badge>
+                              )}
+                            </div>
+                            <div className="flex items-center gap-4 mt-1 text-sm text-muted-foreground flex-wrap">
+                              <span className="truncate">ID: {client.client_id}</span>
+                              {client.mac_address && <span>MAC: {client.mac_address}</span>}
+                              {client.ip_address && <span>IP: {client.ip_address}</span>}
+                              <span>Last seen: {formatLastSeen(client.last_seen)}</span>
+                            </div>
+                            
+                            {/* Sensors Badge Row */}
+                            {sensors.length > 0 && (
+                              <div className="flex items-center gap-2 mt-2 flex-wrap">
+                                <span className="text-xs text-muted-foreground">Sensors:</span>
+                                {sensors.slice(0, 5).map((sensorId) => {
+                                  const SensorIcon = getSensorIcon(sensorId);
+                                  return (
+                                    <Badge 
+                                      key={sensorId} 
+                                      variant="outline" 
+                                      className={`text-[10px] px-2 py-0.5 gap-1 ${getSensorColor(sensorId)}`}
+                                    >
+                                      <SensorIcon className="w-3 h-3" />
+                                      {sensorId.replace(/_/g, ' ').replace(/\d+$/, '').trim()}
+                                    </Badge>
+                                  );
+                                })}
+                                {sensors.length > 5 && (
+                                  <Badge variant="secondary" className="text-[10px]">
+                                    +{sensors.length - 5} more
+                                  </Badge>
+                                )}
+                              </div>
+                            )}
+                          </div>
                         </div>
-                        <div className="flex items-center gap-4 mt-1 text-sm text-muted-foreground flex-wrap">
-                          <span className="truncate">ID: {client.client_id}</span>
-                          {client.mac_address && <span>MAC: {client.mac_address}</span>}
-                          {client.ip_address && <span>IP: {client.ip_address}</span>}
-                          <span>Last seen: {formatLastSeen(client.last_seen)}</span>
+
+                        <div className="flex items-center gap-2 flex-shrink-0">
+                          {/* Expand/Collapse for sensors */}
+                          {sensors.length > 0 && (
+                            <CollapsibleTrigger asChild>
+                              <Button variant="ghost" size="sm" className="gap-1">
+                                <Activity className="w-4 h-4" />
+                                {sensors.length}
+                                {isExpanded ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+                              </Button>
+                            </CollapsibleTrigger>
+                          )}
+
+                          {/* View Details */}
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            onClick={() => handleViewDetails(client)}
+                            className="text-muted-foreground hover:text-foreground"
+                          >
+                            <Eye className="w-4 h-4" />
+                          </Button>
+
+                          {/* Client Actions */}
+                          <ClientActions 
+                            client={client} 
+                            clientState={clientState}
+                            onAction={handleStateTransition}
+                            onViewHistory={() => setHistoryDialogClient(client.client_id)}
+                            onEdit={() => handleEditClient(client)}
+                            isLoading={
+                              adoptClient.isPending || 
+                              registerClient.isPending || 
+                              disableClient.isPending ||
+                              enableClient.isPending ||
+                              suspendClient.isPending ||
+                              softDeleteClient.isPending ||
+                              restoreClient.isPending ||
+                              renameClient.isPending
+                            }
+                          />
                         </div>
                       </div>
-                    </div>
 
-                    <div className="flex items-center gap-2 flex-shrink-0">
-                      {/* Quick Actions based on state */}
-                      <ClientActions 
-                        client={client} 
-                        clientState={clientState}
-                        onAction={handleStateTransition}
-                        onViewHistory={() => setHistoryDialogClient(client.client_id)}
-                        onEdit={() => handleEditClient(client)}
-                        isLoading={
-                          adoptClient.isPending || 
-                          registerClient.isPending || 
-                          disableClient.isPending ||
-                          enableClient.isPending ||
-                          suspendClient.isPending ||
-                          softDeleteClient.isPending ||
-                          restoreClient.isPending ||
-                          renameClient.isPending
-                        }
-                      />
+                      {/* Expanded Sensors Section */}
+                      <CollapsibleContent>
+                        <div className="px-4 pb-4 border-t border-border/50 pt-4">
+                          <h4 className="text-sm font-medium mb-3 flex items-center gap-2">
+                            <Activity className="w-4 h-4 text-primary" />
+                            Attached Sensors ({sensors.length})
+                          </h4>
+                          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+                            {sensors.map((sensorId) => {
+                              const SensorIcon = getSensorIcon(sensorId);
+                              const readings = getClientSensorReadings(client.client_id).filter(r => 
+                                r.device_type?.toLowerCase().includes(sensorId.split('_')[0]?.toLowerCase() || '')
+                              );
+                              const latestReading = readings[0];
+
+                              return (
+                                <div 
+                                  key={sensorId}
+                                  className={`p-3 rounded-lg border ${getSensorColor(sensorId)} bg-card/30`}
+                                >
+                                  <div className="flex items-center gap-2 mb-2">
+                                    <SensorIcon className="w-4 h-4" />
+                                    <span className="font-medium text-sm">
+                                      {sensorId.replace(/_/g, ' ')}
+                                    </span>
+                                  </div>
+                                  {latestReading ? (
+                                    <div className="space-y-1 text-xs text-muted-foreground">
+                                      <p>Device: {latestReading.device_id}</p>
+                                      <p>Last reading: {formatLastSeen(latestReading.timestamp)}</p>
+                                      {latestReading.data && typeof latestReading.data === 'object' && (
+                                        <div className="mt-2 pt-2 border-t border-border/30">
+                                          {Object.entries(latestReading.data as Record<string, unknown>).slice(0, 3).map(([key, value]) => (
+                                            <p key={key} className="truncate">
+                                              <span className="capitalize">{key.replace(/_/g, ' ')}:</span>{' '}
+                                              <span className="text-foreground">
+                                                {typeof value === 'number' ? value.toFixed(2) : String(value)}
+                                              </span>
+                                            </p>
+                                          ))}
+                                        </div>
+                                      )}
+                                    </div>
+                                  ) : (
+                                    <p className="text-xs text-muted-foreground">No recent readings</p>
+                                  )}
+                                </div>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      </CollapsibleContent>
                     </div>
-                  </div>
+                  </Collapsible>
                 );
               })}
             </div>
@@ -489,6 +674,13 @@ const ClientsContent = () => {
       <ClientStateHistoryDialog 
         clientId={historyDialogClient} 
         onClose={() => setHistoryDialogClient(null)} 
+      />
+
+      {/* Device Detail Dialog */}
+      <DeviceDetailDialog 
+        client={detailClient}
+        open={detailsOpen}
+        onOpenChange={setDetailsOpen}
       />
 
       {/* Edit Client Dialog */}
@@ -609,7 +801,7 @@ const ClientActions = ({ client, clientState, onAction, onViewHistory, onEdit, i
             <ChevronDown className="w-4 h-4" />
           </Button>
         </DropdownMenuTrigger>
-        <DropdownMenuContent align="end" className="bg-popover border border-border shadow-lg">
+        <DropdownMenuContent align="end" className="bg-popover border border-border shadow-lg z-50">
           <DropdownMenuItem onClick={onEdit}>
             <Pencil className="w-4 h-4 mr-2" />
             Edit Name

@@ -5,7 +5,6 @@ import DashboardContent from "@/components/DashboardContent";
 import SensorsContent from "@/components/SensorsContent";
 import AlertsContent from "@/components/AlertsContent";
 import MapContent from "@/components/MapContent";
-import DevicesContent from "@/components/DevicesContent";
 import ClientsContent from "@/components/ClientsContent";
 import RulesContent from "@/components/RulesContent";
 import PowerContent from "@/components/PowerContent";
@@ -31,8 +30,6 @@ const Index = () => {
         return <AlertsContent />;
       case "map":
         return <MapContent />;
-      case "devices":
-        return <DevicesContent />;
       case "clients":
         return <ClientsContent />;
       case "rules":
