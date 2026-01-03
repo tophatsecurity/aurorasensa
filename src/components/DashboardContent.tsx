@@ -1,4 +1,5 @@
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { 
   Thermometer, 
   Radio, 
@@ -212,14 +213,27 @@ const DashboardContent = () => {
   // Devices pending adoption (auto-registered but not manually adopted)
   const pendingDevices = clients?.filter((c: Client) => c.auto_registered && !c.adopted_at) || [];
   const adoptedDevices = clients?.filter((c: Client) => c.adopted_at) || [];
+  
+  // Time period state for stats tabs
+  const [timePeriod, setTimePeriod] = useState<'hourly' | 'daily' | 'monthly'>('hourly');
+  
   return (
     <div className="flex-1 overflow-y-auto p-8">
       {/* Header */}
-      <div className="flex items-center gap-4 mb-8">
-        <h1 className="text-3xl font-bold text-foreground">AURORASENSE Server</h1>
-        <Badge className="bg-success/20 text-success border-success/30 px-3 py-1">
-          LIVE
-        </Badge>
+      <div className="flex items-center justify-between mb-8">
+        <div className="flex items-center gap-4">
+          <h1 className="text-3xl font-bold text-foreground">AURORASENSE Server</h1>
+          <Badge className="bg-success/20 text-success border-success/30 px-3 py-1">
+            LIVE
+          </Badge>
+        </div>
+        <Tabs value={timePeriod} onValueChange={(v) => setTimePeriod(v as 'hourly' | 'daily' | 'monthly')}>
+          <TabsList className="bg-muted/50">
+            <TabsTrigger value="hourly" className="text-xs">Hourly</TabsTrigger>
+            <TabsTrigger value="daily" className="text-xs">Daily</TabsTrigger>
+            <TabsTrigger value="monthly" className="text-xs">Monthly</TabsTrigger>
+          </TabsList>
+        </Tabs>
       </div>
 
       {/* Top Stats with Charts */}
