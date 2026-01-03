@@ -2140,6 +2140,92 @@ export function useBluetoothScannerTimeseries(hours: number = 24) {
 }
 
 // =============================================
+// HOOKS - LORA DETECTOR TIMESERIES
+// =============================================
+
+export interface LoraDetectorReading {
+  timestamp: string;
+  device_id?: string;
+  frequency?: number;
+  rssi?: number;
+  snr?: number;
+  bandwidth?: number;
+  spreading_factor?: number;
+  payload?: string;
+  packet_count?: number;
+  packets_detected?: number;
+}
+
+export interface LoraDetectorTimeseriesResponse {
+  count: number;
+  readings: LoraDetectorReading[];
+}
+
+export function useLoraDetectorTimeseries(hours: number = 24) {
+  return useQuery({
+    queryKey: ["aurora", "lora_detector", "timeseries", hours],
+    queryFn: async () => {
+      try {
+        interface RawReading {
+          timestamp: string;
+          device_id?: string;
+          device_type?: string;
+          data?: {
+            frequency?: number;
+            rssi?: number;
+            snr?: number;
+            bandwidth?: number;
+            spreading_factor?: number;
+            payload?: string;
+            packet_count?: number;
+            packets_detected?: number;
+          };
+          frequency?: number;
+          rssi?: number;
+          snr?: number;
+          bandwidth?: number;
+          spreading_factor?: number;
+          payload?: string;
+          packet_count?: number;
+          packets_detected?: number;
+        }
+        
+        interface RawResponse {
+          count?: number;
+          readings?: RawReading[];
+          sensor_type?: string;
+        }
+        
+        const response = await callAuroraApi<RawResponse>(`/api/readings/sensor/lora_detector?hours=${hours}`);
+        
+        const transformedReadings: LoraDetectorReading[] = (response.readings || []).map(r => ({
+          timestamp: r.timestamp,
+          device_id: r.device_id,
+          frequency: r.data?.frequency ?? r.frequency,
+          rssi: r.data?.rssi ?? r.rssi,
+          snr: r.data?.snr ?? r.snr,
+          bandwidth: r.data?.bandwidth ?? r.bandwidth,
+          spreading_factor: r.data?.spreading_factor ?? r.spreading_factor,
+          payload: r.data?.payload ?? r.payload,
+          packet_count: r.data?.packet_count ?? r.packet_count,
+          packets_detected: r.data?.packets_detected ?? r.packets_detected,
+        }));
+        
+        return { 
+          count: response.count ?? transformedReadings.length, 
+          readings: transformedReadings 
+        };
+      } catch (error) {
+        console.warn("Failed to fetch LoRa detector timeseries:", error);
+        return { count: 0, readings: [] };
+      }
+    },
+    refetchInterval: 30000,
+    retry: 1,
+  });
+}
+
+// =============================================
 // HOOKS - BMT SENSOR TIMESERIES
 // =============================================
 

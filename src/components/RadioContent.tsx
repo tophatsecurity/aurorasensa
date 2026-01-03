@@ -60,7 +60,7 @@ import {
   Bar,
   Legend
 } from "recharts";
-import { useClients, useLatestReadings, useSensorTypeStats, useAllSensorStats, useWifiScannerTimeseries, useBluetoothScannerTimeseries, useAdsbAircraftWithHistory } from "@/hooks/useAuroraApi";
+import { useClients, useLatestReadings, useSensorTypeStats, useAllSensorStats, useWifiScannerTimeseries, useBluetoothScannerTimeseries, useLoraDetectorTimeseries, useAdsbAircraftWithHistory } from "@/hooks/useAuroraApi";
 import { formatDistanceToNow } from "date-fns";
 
 // Helper function to format signal strength
@@ -190,6 +190,7 @@ const RadioContent = () => {
   // Fetch timeseries data
   const { data: wifiTimeseries, isLoading: wifiTimeseriesLoading } = useWifiScannerTimeseries(hoursForTimeRange);
   const { data: bluetoothTimeseries, isLoading: bluetoothTimeseriesLoading } = useBluetoothScannerTimeseries(hoursForTimeRange);
+  const { data: loraTimeseries, isLoading: loraTimeseriesLoading } = useLoraDetectorTimeseries(hoursForTimeRange);
   
   // Fetch ADSB data
   const { aircraft: adsbAircraft, isLoading: adsbLoading } = useAdsbAircraftWithHistory(hoursForTimeRange * 60);
@@ -378,16 +379,53 @@ const RadioContent = () => {
     );
   }, [bleDevices, bluetoothSearch]);
 
-  // Process LoRa readings from latest readings
+  // Process LoRa readings from latest readings AND timeseries
   const loraReadings = useMemo(() => {
-    if (!latestReadings) return [];
-    return latestReadings.filter(r => {
-      const deviceType = r.device_type?.toLowerCase() || '';
-      const isLora = deviceType === 'lora_detector' || deviceType.includes('lora');
-      const matchesDevice = selectedDevice === "all" || r.device_id === selectedDevice;
-      return isLora && matchesDevice;
-    });
-  }, [latestReadings, selectedDevice]);
+    const readings: Array<{device_id: string; device_type: string; timestamp: string; data: Record<string, unknown>}> = [];
+    
+    // Add from latest readings
+    if (latestReadings) {
+      latestReadings.forEach(r => {
+        const deviceType = r.device_type?.toLowerCase() || '';
+        const isLora = deviceType === 'lora_detector' || deviceType.includes('lora');
+        const matchesDevice = selectedDevice === "all" || r.device_id === selectedDevice;
+        if (isLora && matchesDevice) {
+          readings.push({
+            device_id: r.device_id,
+            device_type: r.device_type,
+            timestamp: r.timestamp,
+            data: r.data as Record<string, unknown>
+          });
+        }
+      });
+    }
+    
+    // Add from timeseries (these are historical readings)
+    if (loraTimeseries?.readings) {
+      loraTimeseries.readings.forEach(r => {
+        const matchesDevice = selectedDevice === "all" || r.device_id === selectedDevice;
+        if (matchesDevice) {
+          readings.push({
+            device_id: r.device_id || 'unknown',
+            device_type: 'lora_detector',
+            timestamp: r.timestamp,
+            data: {
+              frequency: r.frequency,
+              rssi: r.rssi,
+              snr: r.snr,
+              bandwidth: r.bandwidth,
+              spreading_factor: r.spreading_factor,
+              payload: r.payload,
+              packet_count: r.packet_count,
+              packets_detected: r.packets_detected,
+            }
+          });
+        }
+      });
+    }
+    
+    return readings;
+  }, [latestReadings, loraTimeseries, selectedDevice]);
 
   // Extract LoRa packets from readings
   const loraPackets = useMemo(() => {
@@ -399,11 +437,19 @@ const RadioContent = () => {
       bandwidth?: number;
       spreadingFactor?: number;
       payload?: string;
+      packetsDetected?: number;
       lastSeen: string;
     }> = [];
 
+    // Dedupe by timestamp to avoid duplicates between latest and timeseries
+    const seenTimestamps = new Set<string>();
+    
     loraReadings.forEach(reading => {
-      const data = reading.data as Record<string, unknown>;
+      const key = `${reading.device_id}-${reading.timestamp}`;
+      if (seenTimestamps.has(key)) return;
+      seenTimestamps.add(key);
+      
+      const data = reading.data;
       packets.push({
         deviceId: reading.device_id,
         frequency: data.frequency as number | undefined,
@@ -412,6 +458,7 @@ const RadioContent = () => {
         bandwidth: data.bandwidth as number | undefined,
         spreadingFactor: data.spreading_factor as number | undefined,
         payload: data.payload as string | undefined,
+        packetsDetected: data.packets_detected as number | undefined,
         lastSeen: reading.timestamp,
       });
     });
