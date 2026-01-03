@@ -1,9 +1,10 @@
 import { memo } from "react";
-import { Activity, Clock } from "lucide-react";
+import { Activity, Clock, History } from "lucide-react";
 import type { MapStats } from "@/types/map";
 
 interface MapStatisticsProps {
   stats: MapStats;
+  adsbIsHistorical?: boolean;
 }
 
 const STAT_ITEMS: { key: keyof MapStats; color: string; label: string }[] = [
@@ -14,7 +15,7 @@ const STAT_ITEMS: { key: keyof MapStats; color: string; label: string }[] = [
   { key: 'lora', color: 'bg-red-500', label: 'LoRa' },
 ];
 
-export const MapStatistics = memo(function MapStatistics({ stats }: MapStatisticsProps) {
+export const MapStatistics = memo(function MapStatistics({ stats, adsbIsHistorical }: MapStatisticsProps) {
   return (
     <div className="absolute top-4 right-4 glass-card rounded-xl p-4 z-[1000] min-w-[200px] backdrop-blur-md border border-border/50">
       <div className="flex items-center gap-2 mb-3">
@@ -30,10 +31,16 @@ export const MapStatistics = memo(function MapStatistics({ stats }: MapStatistic
         </div>
         <div className="h-px bg-border/50 my-2" />
         {STAT_ITEMS.map((item) => (
-          <div key={item.key} className="flex justify-between">
+          <div key={item.key} className="flex justify-between items-center">
             <span className="text-muted-foreground flex items-center gap-2">
               <div className={`w-2 h-2 rounded-full ${item.color}`} />
               {item.label}
+              {item.key === 'adsb' && adsbIsHistorical && stats.adsb > 0 && (
+                <span className="text-[10px] bg-blue-500/20 text-blue-400 px-1 py-0.5 rounded flex items-center gap-0.5">
+                  <History className="w-2.5 h-2.5" />
+                  Historical
+                </span>
+              )}
             </span>
             <span className="font-medium">{stats[item.key]}</span>
           </div>

@@ -7,12 +7,16 @@ import {
   useGeoLocations,
   useDeviceLatest,
   useSensorTypeStats,
-  useAdsbAircraft,
+  useAdsbAircraftWithHistory,
   GeoLocation,
   AdsbAircraft
 } from "@/hooks/useAuroraApi";
 import { useQueryClient } from "@tanstack/react-query";
 import type { MapStats, SensorMarker, ClientMarker, AdsbMarker } from "@/types/map";
+
+export interface UseMapDataOptions {
+  adsbHistoryMinutes?: number;
+}
 
 // Helper to extract GPS coordinates from various data sources
 function extractGpsFromReadings(readings: Array<{ device_id: string; device_type: string; data: Record<string, unknown> }>) {
@@ -117,7 +121,8 @@ function mergeGpsData(
   return merged;
 }
 
-export function useMapData() {
+export function useMapData(options: UseMapDataOptions = {}) {
+  const { adsbHistoryMinutes = 60 } = options;
   const [lastUpdate, setLastUpdate] = useState<Date>(new Date());
   const queryClient = useQueryClient();
   
@@ -149,8 +154,13 @@ export function useMapData() {
   // Get the Starlink device latest reading for real-time GPS
   const { data: starlinkLatest } = useDeviceLatest('starlink_dish_1');
 
-  // Get ADS-B aircraft data
-  const { data: adsbAircraft, isLoading: adsbLoading } = useAdsbAircraft();
+  // Get ADS-B aircraft data with historical fallback based on timeframe
+  const { 
+    aircraft: adsbAircraft, 
+    isLoading: adsbLoading,
+    isHistorical: adsbIsHistorical,
+    source: adsbSource
+  } = useAdsbAircraftWithHistory(adsbHistoryMinutes);
 
   // Update last refresh time
   useEffect(() => {
@@ -531,26 +541,36 @@ export function useMapData() {
         aircraft.lat >= -90 && aircraft.lat <= 90 &&
         aircraft.lon >= -180 && aircraft.lon <= 180
       )
-      .map((aircraft: AdsbAircraft) => ({
-        id: `adsb-${aircraft.hex}`,
-        hex: aircraft.hex,
-        name: aircraft.flight?.trim() || aircraft.hex,
-        type: 'adsb',
-        value: aircraft.alt_baro || aircraft.alt_geom || 0,
-        unit: 'ft',
-        status: (aircraft.seen !== undefined && aircraft.seen < 60) ? 'active' : 'stale',
-        lastUpdate: new Date().toISOString(),
-        location: {
-          lat: aircraft.lat!,
-          lng: aircraft.lon!
-        },
-        speed: aircraft.gs,
-        track: aircraft.track,
-        squawk: aircraft.squawk,
-        rssi: aircraft.rssi,
-        category: aircraft.category,
-      }));
-  }, [adsbAircraft]);
+      .map((aircraft: AdsbAircraft) => {
+        // For historical data, mark as 'historical' status; for live, use seen time
+        let status = 'active';
+        if (adsbIsHistorical) {
+          status = 'historical';
+        } else if (aircraft.seen !== undefined && aircraft.seen >= 60) {
+          status = 'stale';
+        }
+        
+        return {
+          id: `adsb-${aircraft.hex}`,
+          hex: aircraft.hex,
+          name: aircraft.flight?.trim() || aircraft.hex,
+          type: 'adsb',
+          value: aircraft.alt_baro || aircraft.alt_geom || 0,
+          unit: 'ft',
+          status,
+          lastUpdate: new Date().toISOString(),
+          location: {
+            lat: aircraft.lat!,
+            lng: aircraft.lon!
+          },
+          speed: aircraft.gs,
+          track: aircraft.track,
+          squawk: aircraft.squawk,
+          rssi: aircraft.rssi,
+          category: aircraft.category,
+        };
+      });
+  }, [adsbAircraft, adsbIsHistorical]);
 
   // All marker positions for bounds fitting
   const allPositions = useMemo<LatLngExpression[]>(() => {
@@ -591,5 +611,7 @@ export function useMapData() {
     handleRefresh,
     lastUpdate,
     geoLocations, // Expose raw geo locations for debugging
+    adsbIsHistorical,
+    adsbSource,
   };
 }
