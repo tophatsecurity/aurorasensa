@@ -424,10 +424,12 @@ const MapContent = () => {
       client: '#3b82f6',   // blue
     };
 
-    // Remove trails that are no longer visible or if trails are disabled
+    // Remove all trails if trails are disabled
     if (!showTrails) {
       trailsRef.current.forEach(polyline => polyline.remove());
       trailsRef.current.clear();
+      adsbTrailsRef.current.forEach(polyline => polyline.remove());
+      adsbTrailsRef.current.clear();
       return;
     }
 
