@@ -41,7 +41,6 @@ import {
   useClients, 
   useDashboardStats, 
   useDashboardTimeseries, 
-  useThermalProbeStats,
   useSensorTypeStats,
   Client 
 } from "@/hooks/useAuroraApi";
@@ -76,8 +75,8 @@ const DashboardContent = () => {
   const { data: alerts } = useAlerts();
   const { data: clients, isLoading: clientsLoading } = useClients();
   
-  // Sensor type specific stats
-  const { data: thermalProbeStats, isLoading: thermalLoading } = useThermalProbeStats();
+  // Sensor type specific stats - these contain numeric_field_stats_24h with real data
+  const { data: thermalProbeStats, isLoading: thermalLoading } = useSensorTypeStats("thermal_probe");
   const { data: starlinkStats, isLoading: starlinkLoading } = useSensorTypeStats("starlink");
   const { data: ahtStats } = useSensorTypeStats("aht_sensor");
   const { data: bmtStats } = useSensorTypeStats("bmt_sensor");
@@ -95,18 +94,27 @@ const DashboardContent = () => {
   const totalDevices = devicesSummary?.total_devices ?? 0;
   const activeAlerts = global?.database?.active_alerts ?? 0;
 
-  // Sensor averages from dashboard stats
-  const avgTemp = dashboardStats?.avg_temp_c ?? dashboardStats?.avg_temp_aht;
+  // Extract real sensor data from numeric_field_stats_24h
+  const thermalFieldStats = thermalProbeStats?.numeric_field_stats_24h;
+  const starlinkFieldStats = starlinkStats?.numeric_field_stats_24h;
+  
+  // Thermal probe temperature from real API data
+  const thermalAvgTemp = thermalFieldStats?.temperature_c?.avg ?? thermalFieldStats?.temp_c?.avg;
+  const thermalMinTemp = thermalFieldStats?.temperature_c?.min ?? thermalFieldStats?.temp_c?.min;
+  const thermalMaxTemp = thermalFieldStats?.temperature_c?.max ?? thermalFieldStats?.temp_c?.max;
+  
+  // Starlink metrics from real API data
+  const starlinkPower = starlinkFieldStats?.power_watts?.avg ?? starlinkFieldStats?.power_w?.avg;
+  const starlinkLatency = starlinkFieldStats?.pop_ping_latency_ms?.avg;
+  const starlinkObstruction = starlinkFieldStats?.obstruction_percent?.avg;
+  const starlinkDownlink = starlinkFieldStats?.downlink_throughput_bps?.avg;
+  const starlinkUplink = starlinkFieldStats?.uplink_throughput_bps?.avg;
+
+  // Sensor averages - fallback to dashboard stats if available, otherwise use sensor-specific stats
+  const avgTemp = dashboardStats?.avg_temp_c ?? thermalAvgTemp;
   const avgHumidity = dashboardStats?.avg_humidity;
   const avgSignal = dashboardStats?.avg_signal_dbm;
-  const avgPower = dashboardStats?.avg_power_w;
-
-  // Thermal probe and starlink specific averages
-  const thermalAvgTemp = thermalProbeStats?.avg_temp_c;
-  const starlinkAvgSignal = starlinkStats?.avg_value;
-  const starlinkLatestReading = starlinkStats?.latest_reading;
-  const starlinkPower = starlinkLatestReading?.power_w as number | undefined;
-  const starlinkSignal = starlinkLatestReading?.signal_dbm as number | undefined ?? starlinkAvgSignal;
+  const avgPower = dashboardStats?.avg_power_w ?? starlinkPower;
 
   // 24h sensor statistics
   const tempStats = useMemo(() => calcStats(timeseries?.temperature), [timeseries?.temperature]);
@@ -278,16 +286,16 @@ const DashboardContent = () => {
                 <span>Source:</span>
                 <span className="text-red-400/70">Thermal Probe / BH / AMT</span>
               </div>
-              {thermalProbeStats?.min_temp_c !== undefined && (
+              {thermalMinTemp !== undefined && (
                 <div className="flex justify-between text-muted-foreground">
                   <span>Min/Max:</span>
-                  <span>{thermalProbeStats.min_temp_c?.toFixed(1)}°C / {thermalProbeStats.max_temp_c?.toFixed(1)}°C</span>
+                  <span>{thermalMinTemp?.toFixed(1)}°C / {thermalMaxTemp?.toFixed(1)}°C</span>
                 </div>
               )}
-              {thermalProbeStats?.count !== undefined && (
+              {thermalProbeStats?.total_readings !== undefined && (
                 <div className="flex justify-between text-muted-foreground">
                   <span>Readings:</span>
-                  <span>{thermalProbeStats.count.toLocaleString()}</span>
+                  <span>{thermalProbeStats.total_readings.toLocaleString()}</span>
                 </div>
               )}
             </div>
@@ -328,36 +336,36 @@ const DashboardContent = () => {
             </div>
           </div>
 
-          {/* Starlink Signal Strength */}
+          {/* Starlink Latency / Metrics */}
           <div className="glass-card rounded-xl p-4 border border-border/50 hover:border-violet-500/30 transition-colors">
             <div className="flex items-center gap-3 mb-3">
               <div className="w-10 h-10 rounded-lg bg-violet-500/20 flex items-center justify-center">
                 <Satellite className="w-5 h-5 text-violet-400" />
               </div>
               <div className="flex-1">
-                <p className="text-xs text-muted-foreground">Starlink Signal</p>
+                <p className="text-xs text-muted-foreground">Starlink Latency</p>
                 <p className="text-2xl font-bold text-violet-400">
-                  {starlinkLoading ? "..." : starlinkSignal !== null && starlinkSignal !== undefined ? `${Number(starlinkSignal).toFixed(0)} dBm` : avgSignal !== null && avgSignal !== undefined ? `${avgSignal.toFixed(0)} dBm` : "—"}
+                  {starlinkLoading ? "..." : starlinkLatency !== undefined ? `${starlinkLatency.toFixed(1)} ms` : "—"}
                 </p>
               </div>
             </div>
             <div className="space-y-1 text-xs">
               <div className="flex justify-between text-muted-foreground">
-                <span>Quality:</span>
-                <span className={starlinkSignal !== undefined ? (starlinkSignal > -50 ? "text-success" : starlinkSignal > -70 ? "text-warning" : "text-destructive") : avgSignal !== undefined && avgSignal !== null ? (avgSignal > -50 ? "text-success" : avgSignal > -70 ? "text-warning" : "text-destructive") : ""}>
-                  {(starlinkSignal ?? avgSignal) !== undefined && (starlinkSignal ?? avgSignal) !== null ? ((starlinkSignal ?? avgSignal ?? 0) > -50 ? "Excellent" : (starlinkSignal ?? avgSignal ?? 0) > -70 ? "Good" : "Weak") : "—"}
+                <span>Obstruction:</span>
+                <span className={starlinkObstruction !== undefined ? (starlinkObstruction < 5 ? "text-success" : starlinkObstruction < 15 ? "text-warning" : "text-destructive") : ""}>
+                  {starlinkObstruction !== undefined ? `${starlinkObstruction.toFixed(1)}%` : "—"}
                 </span>
               </div>
-              {starlinkStats?.count !== undefined && (
+              {starlinkStats?.total_readings !== undefined && (
                 <div className="flex justify-between text-muted-foreground">
-                  <span>Device Count:</span>
-                  <span>{starlinkStats.device_count ?? 0}</span>
+                  <span>Total Readings:</span>
+                  <span>{starlinkStats.total_readings.toLocaleString()}</span>
                 </div>
               )}
-              {starlinkStats?.readings_last_24h !== undefined && (
+              {starlinkStats?.device_count !== undefined && (
                 <div className="flex justify-between text-muted-foreground">
-                  <span>24h Readings:</span>
-                  <span>{starlinkStats.readings_last_24h.toLocaleString()}</span>
+                  <span>Devices:</span>
+                  <span>{starlinkStats.device_count}</span>
                 </div>
               )}
             </div>
