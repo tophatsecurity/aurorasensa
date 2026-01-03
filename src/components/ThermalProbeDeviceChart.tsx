@@ -10,7 +10,7 @@ import {
   Legend
 } from "recharts";
 import { Thermometer, Loader2 } from "lucide-react";
-import { useThermalProbeTimeseries, useAhtSensorTimeseries, useBmtSensorTimeseries } from "@/hooks/useAuroraApi";
+import { useThermalProbeTimeseries, useArduinoSensorTimeseries } from "@/hooks/useAuroraApi";
 import { format } from "date-fns";
 
 // Helper to convert Celsius to Fahrenheit
@@ -21,8 +21,8 @@ const cToF = (celsius: number): number => {
 // Color palette for different sources
 const SOURCE_COLORS: Record<string, string> = {
   'thermal_probe': '#ef4444', // red
-  'aht_sensor': '#3b82f6', // blue
-  'bmt_sensor': '#22c55e', // green
+  'arduino_th': '#3b82f6', // blue - DHT/AHT sensor
+  'arduino_bmp': '#22c55e', // green - BMP280 sensor
 };
 
 // Device-specific colors within each source type
@@ -35,22 +35,11 @@ const DEVICE_COLORS = [
   '#06b6d4', // cyan
 ];
 
-interface ThermalReading {
-  timestamp: string;
-  device_id?: string;
-  temp_c?: number;
-  probe_c?: number;
-  ambient_c?: number;
-  aht_temp_c?: number;
-  bme280_temp_c?: number;
-}
-
 const ThermalDeviceChart = () => {
   const { data: thermalData, isLoading: thermalLoading } = useThermalProbeTimeseries(24);
-  const { data: ahtData, isLoading: ahtLoading } = useAhtSensorTimeseries(24);
-  const { data: bmtData, isLoading: bmtLoading } = useBmtSensorTimeseries(24);
+  const { data: arduinoData, isLoading: arduinoLoading } = useArduinoSensorTimeseries(24);
 
-  const isLoading = thermalLoading || ahtLoading || bmtLoading;
+  const isLoading = thermalLoading || arduinoLoading;
 
   // Combine all temperature sources and format for charting
   const { chartData, sources } = useMemo(() => {
@@ -59,7 +48,7 @@ const ThermalDeviceChart = () => {
 
     // Process thermal probe data
     if (thermalData?.readings && thermalData.readings.length > 0) {
-      thermalData.readings.forEach((r: ThermalReading) => {
+      thermalData.readings.forEach((r) => {
         const timestamp = r.timestamp ? new Date(r.timestamp).getTime() : null;
         if (!timestamp) return;
         
@@ -67,7 +56,7 @@ const ThermalDeviceChart = () => {
         if (temp === undefined || temp === null) return;
 
         const deviceId = r.device_id || 'thermal_probe';
-        const sourceKey = `thermal_${deviceId}`;
+        const sourceKey = `probe_${deviceId}`;
         sourceSet.add(sourceKey);
 
         const timeKey = String(timestamp);
@@ -81,51 +70,35 @@ const ThermalDeviceChart = () => {
       });
     }
 
-    // Process AHT sensor data
-    if (ahtData?.readings && ahtData.readings.length > 0) {
-      ahtData.readings.forEach((r: ThermalReading) => {
+    // Process Arduino sensor kit data - both TH (DHT/AHT) and BMP sensors
+    if (arduinoData?.readings && arduinoData.readings.length > 0) {
+      arduinoData.readings.forEach((r) => {
         const timestamp = r.timestamp ? new Date(r.timestamp).getTime() : null;
         if (!timestamp) return;
         
-        const temp = r.aht_temp_c ?? r.temp_c;
-        if (temp === undefined || temp === null) return;
-
-        const deviceId = r.device_id || 'aht_sensor';
-        const sourceKey = `aht_${deviceId}`;
-        sourceSet.add(sourceKey);
-
+        const deviceId = r.device_id || 'arduino_1';
         const timeKey = String(timestamp);
+        
         if (!timeMap.has(timeKey)) {
           timeMap.set(timeKey, { time: timestamp });
         }
-        
         const entry = timeMap.get(timeKey)!;
-        entry[`${sourceKey}_f`] = Number(cToF(temp).toFixed(1));
-        entry[`${sourceKey}_c`] = Number(temp.toFixed(1));
-      });
-    }
 
-    // Process BMT/BME280 sensor data
-    if (bmtData?.readings && bmtData.readings.length > 0) {
-      bmtData.readings.forEach((r: ThermalReading & { bme280_temp_c?: number }) => {
-        const timestamp = r.timestamp ? new Date(r.timestamp).getTime() : null;
-        if (!timestamp) return;
-        
-        const temp = r.bme280_temp_c ?? r.temp_c;
-        if (temp === undefined || temp === null) return;
-
-        const deviceId = r.device_id || 'bmt_sensor';
-        const sourceKey = `bmt_${deviceId}`;
-        sourceSet.add(sourceKey);
-
-        const timeKey = String(timestamp);
-        if (!timeMap.has(timeKey)) {
-          timeMap.set(timeKey, { time: timestamp });
+        // DHT/AHT temperature (th.temp_c)
+        if (r.th_temp_c !== undefined && r.th_temp_c !== null) {
+          const thSourceKey = `th_${deviceId}`;
+          sourceSet.add(thSourceKey);
+          entry[`${thSourceKey}_f`] = Number(cToF(r.th_temp_c).toFixed(1));
+          entry[`${thSourceKey}_c`] = Number(r.th_temp_c.toFixed(1));
         }
-        
-        const entry = timeMap.get(timeKey)!;
-        entry[`${sourceKey}_f`] = Number(cToF(temp).toFixed(1));
-        entry[`${sourceKey}_c`] = Number(temp.toFixed(1));
+
+        // BMP280 temperature (bmp.temp_c)
+        if (r.bmp_temp_c !== undefined && r.bmp_temp_c !== null) {
+          const bmpSourceKey = `bmp_${deviceId}`;
+          sourceSet.add(bmpSourceKey);
+          entry[`${bmpSourceKey}_f`] = Number(cToF(r.bmp_temp_c).toFixed(1));
+          entry[`${bmpSourceKey}_c`] = Number(r.bmp_temp_c.toFixed(1));
+        }
       });
     }
 
@@ -134,7 +107,7 @@ const ThermalDeviceChart = () => {
       .sort((a, b) => (a.time as number) - (b.time as number));
 
     return { chartData, sources: Array.from(sourceSet) };
-  }, [thermalData?.readings, ahtData?.readings, bmtData?.readings]);
+  }, [thermalData?.readings, arduinoData?.readings]);
 
   // Calculate current stats
   const currentStats = useMemo(() => {
@@ -159,24 +132,24 @@ const ThermalDeviceChart = () => {
   }, [chartData, sources]);
 
   const getSourceColor = (sourceKey: string, index: number): string => {
-    if (sourceKey.startsWith('thermal_')) return SOURCE_COLORS['thermal_probe'];
-    if (sourceKey.startsWith('aht_')) return SOURCE_COLORS['aht_sensor'];
-    if (sourceKey.startsWith('bmt_')) return SOURCE_COLORS['bmt_sensor'];
+    if (sourceKey.startsWith('probe_')) return SOURCE_COLORS['thermal_probe'];
+    if (sourceKey.startsWith('th_')) return SOURCE_COLORS['arduino_th'];
+    if (sourceKey.startsWith('bmp_')) return SOURCE_COLORS['arduino_bmp'];
     return DEVICE_COLORS[index % DEVICE_COLORS.length];
   };
 
   const formatSourceName = (sourceKey: string): string => {
-    if (sourceKey.startsWith('thermal_')) {
-      const deviceId = sourceKey.replace('thermal_', '');
+    if (sourceKey.startsWith('probe_')) {
+      const deviceId = sourceKey.replace('probe_', '');
       return `Probe: ${deviceId.replace(/_/g, ' ')}`;
     }
-    if (sourceKey.startsWith('aht_')) {
-      const deviceId = sourceKey.replace('aht_', '');
-      return `AHT: ${deviceId.replace(/_/g, ' ')}`;
+    if (sourceKey.startsWith('th_')) {
+      const deviceId = sourceKey.replace('th_', '');
+      return `DHT: ${deviceId.replace(/_/g, ' ')}`;
     }
-    if (sourceKey.startsWith('bmt_')) {
-      const deviceId = sourceKey.replace('bmt_', '');
-      return `BME: ${deviceId.replace(/_/g, ' ')}`;
+    if (sourceKey.startsWith('bmp_')) {
+      const deviceId = sourceKey.replace('bmp_', '');
+      return `BMP: ${deviceId.replace(/_/g, ' ')}`;
     }
     return sourceKey.replace(/_/g, ' ');
   };
@@ -208,6 +181,23 @@ const ThermalDeviceChart = () => {
           </div>
         )}
       </div>
+
+      {/* Legend showing all sources */}
+      {!isLoading && sources.length > 0 && (
+        <div className="flex flex-wrap gap-3 mb-4">
+          {sources.map((source, index) => (
+            <div key={source} className="flex items-center gap-1.5">
+              <div 
+                className="w-3 h-3 rounded-full" 
+                style={{ backgroundColor: getSourceColor(source, index) }}
+              />
+              <span className="text-xs text-muted-foreground">
+                {formatSourceName(source)}
+              </span>
+            </div>
+          ))}
+        </div>
+      )}
 
       <div className="h-[280px]">
         {isLoading ? (

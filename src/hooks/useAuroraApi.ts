@@ -1891,7 +1891,110 @@ export function useThermalProbeTimeseries(hours: number = 24) {
 }
 
 // =============================================
-// HOOKS - AHT SENSOR TIMESERIES
+// HOOKS - ARDUINO SENSOR KIT TIMESERIES
+// =============================================
+
+export interface ArduinoSensorReading {
+  timestamp: string;
+  device_id?: string;
+  // DHT/AHT temperature and humidity
+  th_temp_c?: number;
+  th_humidity?: number;
+  // BMP temperature and pressure
+  bmp_temp_c?: number;
+  bmp_pressure_hpa?: number;
+  // Analog sensors
+  light_raw?: number;
+  sound_raw?: number;
+  pot_raw?: number;
+  // Accelerometer
+  accel_x?: number;
+  accel_y?: number;
+  accel_z?: number;
+}
+
+export interface ArduinoSensorTimeseriesResponse {
+  count: number;
+  readings: ArduinoSensorReading[];
+}
+
+export function useArduinoSensorTimeseries(hours: number = 24) {
+  return useQuery({
+    queryKey: ["aurora", "arduino_sensor_kit", "timeseries", hours],
+    queryFn: async () => {
+      try {
+        interface RawReading {
+          timestamp: string;
+          device_id?: string;
+          device_type?: string;
+          data?: {
+            th?: { temp_c?: number; hum_pct?: number };
+            bmp?: { temp_c?: number; press_hpa?: number };
+            analog?: { light_raw?: number; sound_raw?: number; pot_raw?: number };
+            accel?: { x_ms2?: number; y_ms2?: number; z_ms2?: number };
+            // Legacy flat fields
+            aht_temp_c?: number;
+            aht_humidity?: number;
+            bme280_temp_c?: number;
+            bme280_humidity?: number;
+            bme280_pressure_hpa?: number;
+            temp_c?: number;
+            humidity?: number;
+          };
+        }
+        
+        interface RawResponse {
+          count?: number;
+          readings?: RawReading[];
+          sensor_type?: string;
+        }
+        
+        // Try arduino_sensor_kit endpoint first, fall back to aht_sensor
+        let response: RawResponse;
+        try {
+          response = await callAuroraApi<RawResponse>(`/api/readings/sensor/arduino_sensor_kit?hours=${hours}`);
+        } catch {
+          response = await callAuroraApi<RawResponse>(`/api/readings/sensor/aht_sensor?hours=${hours}`);
+        }
+        
+        const transformedReadings: ArduinoSensorReading[] = (response.readings || []).map(r => {
+          const data = r.data;
+          return {
+            timestamp: r.timestamp,
+            device_id: r.device_id,
+            // DHT/AHT temperature from nested or legacy format
+            th_temp_c: data?.th?.temp_c ?? data?.aht_temp_c ?? data?.temp_c,
+            th_humidity: data?.th?.hum_pct ?? data?.aht_humidity ?? data?.humidity,
+            // BMP temperature from nested or legacy format
+            bmp_temp_c: data?.bmp?.temp_c ?? data?.bme280_temp_c,
+            bmp_pressure_hpa: data?.bmp?.press_hpa ?? data?.bme280_pressure_hpa,
+            // Analog sensors
+            light_raw: data?.analog?.light_raw,
+            sound_raw: data?.analog?.sound_raw,
+            pot_raw: data?.analog?.pot_raw,
+            // Accelerometer
+            accel_x: data?.accel?.x_ms2,
+            accel_y: data?.accel?.y_ms2,
+            accel_z: data?.accel?.z_ms2,
+          };
+        });
+        
+        return { 
+          count: response.count ?? transformedReadings.length, 
+          readings: transformedReadings 
+        };
+      } catch (error) {
+        console.warn("Failed to fetch Arduino sensor timeseries:", error);
+        return { count: 0, readings: [] };
+      }
+    },
+    refetchInterval: 30000,
+    retry: 1,
+  });
+}
+
+// =============================================
+// HOOKS - AHT SENSOR TIMESERIES (Legacy - wraps Arduino)
 // =============================================
 
 export interface AhtSensorReading {
@@ -1918,6 +2021,7 @@ export function useAhtSensorTimeseries(hours: number = 24) {
           device_id?: string;
           device_type?: string;
           data?: {
+            th?: { temp_c?: number; hum_pct?: number };
             aht_temp_c?: number;
             aht_humidity?: number;
             temp_c?: number;
@@ -1937,14 +2041,20 @@ export function useAhtSensorTimeseries(hours: number = 24) {
         
         const response = await callAuroraApi<RawResponse>(`/api/readings/sensor/aht_sensor?hours=${hours}`);
         
-        const transformedReadings: AhtSensorReading[] = (response.readings || []).map(r => ({
-          timestamp: r.timestamp,
-          device_id: r.device_id,
-          aht_temp_c: r.data?.aht_temp_c ?? r.aht_temp_c ?? r.data?.temp_c ?? r.temp_c,
-          aht_humidity: r.data?.aht_humidity ?? r.aht_humidity ?? r.data?.humidity ?? r.humidity,
-          temp_c: r.data?.temp_c ?? r.temp_c ?? r.data?.aht_temp_c ?? r.aht_temp_c,
-          humidity: r.data?.humidity ?? r.humidity ?? r.data?.aht_humidity ?? r.aht_humidity,
-        }));
+        const transformedReadings: AhtSensorReading[] = (response.readings || []).map(r => {
+          // Handle nested Arduino sensor kit format
+          const thTemp = r.data?.th?.temp_c;
+          const thHum = r.data?.th?.hum_pct;
+          
+          return {
+            timestamp: r.timestamp,
+            device_id: r.device_id,
+            aht_temp_c: thTemp ?? r.data?.aht_temp_c ?? r.aht_temp_c ?? r.data?.temp_c ?? r.temp_c,
+            aht_humidity: thHum ?? r.data?.aht_humidity ?? r.aht_humidity ?? r.data?.humidity ?? r.humidity,
+            temp_c: thTemp ?? r.data?.temp_c ?? r.temp_c ?? r.data?.aht_temp_c ?? r.aht_temp_c,
+            humidity: thHum ?? r.data?.humidity ?? r.humidity ?? r.data?.aht_humidity ?? r.aht_humidity,
+          };
+        });
         
         return { 
           count: response.count ?? transformedReadings.length, 
@@ -2226,7 +2336,7 @@ export function useLoraDetectorTimeseries(hours: number = 24) {
 }
 
 // =============================================
-// HOOKS - BMT SENSOR TIMESERIES
+// HOOKS - BMT SENSOR TIMESERIES (Legacy - wraps Arduino)
 // =============================================
 
 export interface BmtSensorReading {
@@ -2255,6 +2365,7 @@ export function useBmtSensorTimeseries(hours: number = 24) {
           device_id?: string;
           device_type?: string;
           data?: {
+            bmp?: { temp_c?: number; press_hpa?: number };
             bme280_temp_c?: number;
             bme280_humidity?: number;
             bme280_pressure_hpa?: number;
@@ -2278,16 +2389,22 @@ export function useBmtSensorTimeseries(hours: number = 24) {
         
         const response = await callAuroraApi<RawResponse>(`/api/readings/sensor/bmt_sensor?hours=${hours}`);
         
-        const transformedReadings: BmtSensorReading[] = (response.readings || []).map(r => ({
-          timestamp: r.timestamp,
-          device_id: r.device_id,
-          bme280_temp_c: r.data?.bme280_temp_c ?? r.bme280_temp_c ?? r.data?.temp_c ?? r.temp_c,
-          bme280_humidity: r.data?.bme280_humidity ?? r.bme280_humidity ?? r.data?.humidity ?? r.humidity,
-          bme280_pressure_hpa: r.data?.bme280_pressure_hpa ?? r.bme280_pressure_hpa ?? r.data?.pressure_hpa ?? r.pressure_hpa,
-          temp_c: r.data?.temp_c ?? r.temp_c ?? r.data?.bme280_temp_c ?? r.bme280_temp_c,
-          humidity: r.data?.humidity ?? r.humidity ?? r.data?.bme280_humidity ?? r.bme280_humidity,
-          pressure_hpa: r.data?.pressure_hpa ?? r.pressure_hpa ?? r.data?.bme280_pressure_hpa ?? r.bme280_pressure_hpa,
-        }));
+        const transformedReadings: BmtSensorReading[] = (response.readings || []).map(r => {
+          // Handle nested Arduino sensor kit format (bmp.temp_c)
+          const bmpTemp = r.data?.bmp?.temp_c;
+          const bmpPressure = r.data?.bmp?.press_hpa;
+          
+          return {
+            timestamp: r.timestamp,
+            device_id: r.device_id,
+            bme280_temp_c: bmpTemp ?? r.data?.bme280_temp_c ?? r.bme280_temp_c ?? r.data?.temp_c ?? r.temp_c,
+            bme280_humidity: r.data?.bme280_humidity ?? r.bme280_humidity ?? r.data?.humidity ?? r.humidity,
+            bme280_pressure_hpa: bmpPressure ?? r.data?.bme280_pressure_hpa ?? r.bme280_pressure_hpa ?? r.data?.pressure_hpa ?? r.pressure_hpa,
+            temp_c: bmpTemp ?? r.data?.temp_c ?? r.temp_c ?? r.data?.bme280_temp_c ?? r.bme280_temp_c,
+            humidity: r.data?.humidity ?? r.humidity ?? r.data?.bme280_humidity ?? r.bme280_humidity,
+            pressure_hpa: bmpPressure ?? r.data?.pressure_hpa ?? r.pressure_hpa ?? r.data?.bme280_pressure_hpa ?? r.bme280_pressure_hpa,
+          };
+        });
         
         return { 
           count: response.count ?? transformedReadings.length, 
