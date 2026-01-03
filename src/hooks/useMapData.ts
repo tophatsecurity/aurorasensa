@@ -97,7 +97,7 @@ function mergeGpsData(
 ): Record<string, { lat: number; lng: number; altitude?: number; timestamp?: string }> {
   const merged = { ...readingsGps };
   
-  if (geoLocations) {
+  if (geoLocations && Array.isArray(geoLocations)) {
     geoLocations.forEach(geo => {
       // Validate coordinates
       if (geo.lat >= -90 && geo.lat <= 90 && 
@@ -252,7 +252,7 @@ export function useMapData() {
     }
 
     // Add geo locations as GPS markers
-    if (geoLocations) {
+    if (geoLocations && Array.isArray(geoLocations)) {
       geoLocations.forEach(geo => {
         const id = `geo-${geo.device_id}`;
         if (addedIds.has(id)) return;
