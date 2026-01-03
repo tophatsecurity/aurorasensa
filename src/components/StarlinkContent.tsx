@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { 
   XAxis, 
   YAxis, 
@@ -21,18 +21,31 @@ import {
   Satellite, 
   Zap, 
   Signal, 
-  Wifi, 
   Clock, 
   Activity,
   AlertTriangle,
   CheckCircle,
   ArrowUp,
   ArrowDown,
-  Loader2,
   Globe
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
-import { useStarlinkStats, useStarlinkTimeseries, useSensorTypeStats, StarlinkTimeseriesPoint } from "@/hooks/useAuroraApi";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { 
+  useStarlinkStats, 
+  useStarlinkTimeseries, 
+  useSensorTypeStats, 
+  useStarlinkDevices,
+  useStarlinkDeviceStats,
+  useStarlinkDeviceTimeseries,
+  StarlinkTimeseriesPoint 
+} from "@/hooks/useAuroraApi";
 
 // Chart color palette
 const COLORS = {
@@ -84,11 +97,32 @@ const MetricCard = ({ title, value, unit, icon, trend, status, subtitle, isLoadi
 };
 
 const StarlinkContent = () => {
+  const [selectedDevice, setSelectedDevice] = useState<string>("all");
+  
+  // Fetch list of Starlink devices
+  const { data: starlinkDevices, isLoading: devicesLoading } = useStarlinkDevices();
+  
+  // Average stats (for "All" selection)
   const { data: starlinkStats, isLoading: statsLoading } = useStarlinkStats();
   const { data: starlinkTimeseries, isLoading: timeseriesLoading } = useStarlinkTimeseries(24);
   const { data: sensorStats, isLoading: sensorLoading } = useSensorTypeStats("starlink");
+  
+  // Individual device stats (when a specific device is selected)
+  const { data: deviceStats, isLoading: deviceStatsLoading } = useStarlinkDeviceStats(
+    selectedDevice !== "all" ? selectedDevice : null
+  );
+  const { data: deviceTimeseries, isLoading: deviceTimeseriesLoading } = useStarlinkDeviceTimeseries(
+    selectedDevice !== "all" ? selectedDevice : null,
+    24
+  );
 
-  const isLoading = statsLoading || timeseriesLoading || sensorLoading;
+  const isAllSelected = selectedDevice === "all";
+  const isLoading = statsLoading || timeseriesLoading || sensorLoading || devicesLoading || 
+    (!isAllSelected && (deviceStatsLoading || deviceTimeseriesLoading));
+  
+  // Use either aggregate stats or device-specific stats
+  const activeStats = isAllSelected ? starlinkStats : deviceStats;
+  const activeTimeseries = isAllSelected ? starlinkTimeseries : deviceTimeseries;
 
   // Format uptime
   const formatUptime = (seconds?: number) => {
@@ -110,19 +144,19 @@ const StarlinkContent = () => {
     return { value: bps.toFixed(0), unit: 'bps' };
   };
 
-  const downlink = formatThroughput(starlinkStats?.downlink_throughput_bps);
-  const uplink = formatThroughput(starlinkStats?.uplink_throughput_bps);
+  const downlink = formatThroughput(activeStats?.downlink_throughput_bps);
+  const uplink = formatThroughput(activeStats?.uplink_throughput_bps);
 
   // Obstruction status
-  const obstructionPercent = starlinkStats?.obstruction_percent_time ?? 0;
+  const obstructionPercent = activeStats?.obstruction_percent_time ?? 0;
   const obstructionStatus = obstructionPercent < 1 ? 'good' : obstructionPercent < 5 ? 'warning' : 'critical';
 
   // SNR status
-  const snr = starlinkStats?.snr ?? 0;
+  const snr = activeStats?.snr ?? 0;
   const snrStatus = snr > 9 ? 'good' : snr > 5 ? 'warning' : 'critical';
 
   // Latency status
-  const latency = starlinkStats?.pop_ping_latency_ms ?? 0;
+  const latency = activeStats?.pop_ping_latency_ms ?? 0;
   const latencyStatus = latency < 40 ? 'good' : latency < 100 ? 'warning' : 'critical';
 
   // Format timeseries data for charts
@@ -136,10 +170,11 @@ const StarlinkContent = () => {
       }));
   };
 
-  const signalData = useMemo(() => formatTimeseriesData(starlinkTimeseries?.readings, 'signal_dbm'), [starlinkTimeseries]);
-  const powerData = useMemo(() => formatTimeseriesData(starlinkTimeseries?.readings, 'power_w'), [starlinkTimeseries]);
-  const latencyData = useMemo(() => formatTimeseriesData(starlinkTimeseries?.readings, 'pop_ping_latency_ms'), [starlinkTimeseries]);
-  const throughputData = useMemo(() => formatTimeseriesData(starlinkTimeseries?.readings, 'downlink_throughput_bps'), [starlinkTimeseries]);
+  const signalData = useMemo(() => formatTimeseriesData(activeTimeseries?.readings, 'signal_dbm'), [activeTimeseries]);
+  const powerData = useMemo(() => formatTimeseriesData(activeTimeseries?.readings, 'power_w'), [activeTimeseries]);
+  const latencyData = useMemo(() => formatTimeseriesData(activeTimeseries?.readings, 'pop_ping_latency_ms'), [activeTimeseries]);
+  const throughputData = useMemo(() => formatTimeseriesData(activeTimeseries?.readings, 'downlink_throughput_bps'), [activeTimeseries]);
+
 
   // Obstruction pie chart data
   const obstructionPieData = [
@@ -155,28 +190,49 @@ const StarlinkContent = () => {
   return (
     <div className="flex-1 overflow-y-auto p-8">
       {/* Header */}
-      <div className="flex items-center gap-4 mb-8">
+      <div className="flex items-center gap-4 mb-8 flex-wrap">
         <div className="w-12 h-12 rounded-xl bg-violet-500/20 flex items-center justify-center">
           <Satellite className="w-6 h-6 text-violet-400" />
         </div>
         <div>
           <h1 className="text-3xl font-bold text-foreground">Starlink Dashboard</h1>
-          <p className="text-muted-foreground">Comprehensive satellite connectivity metrics</p>
+          <p className="text-muted-foreground">
+            {isAllSelected ? 'Average across all devices' : `Device: ${selectedDevice}`}
+          </p>
         </div>
-        <Badge className="ml-auto bg-violet-500/20 text-violet-400 border-violet-500/30">
-          {isLoading ? 'Loading...' : 'Live'}
-        </Badge>
+        
+        {/* Device Selector */}
+        <div className="ml-auto flex items-center gap-3">
+          <Select value={selectedDevice} onValueChange={setSelectedDevice}>
+            <SelectTrigger className="w-[200px] bg-background border-border">
+              <SelectValue placeholder="Select device" />
+            </SelectTrigger>
+            <SelectContent className="bg-background border-border z-50">
+              <SelectItem value="all">All Devices (Average)</SelectItem>
+              {starlinkDevices && starlinkDevices.length > 0 && (
+                starlinkDevices.map((device) => (
+                  <SelectItem key={device.device_id} value={device.device_id}>
+                    {device.device_id}
+                  </SelectItem>
+                ))
+              )}
+            </SelectContent>
+          </Select>
+          <Badge className="bg-violet-500/20 text-violet-400 border-violet-500/30">
+            {isLoading ? 'Loading...' : 'Live'}
+          </Badge>
+        </div>
       </div>
 
       {/* Status Overview */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
         <MetricCard
           title="Uptime"
-          value={formatUptime(starlinkStats?.uptime_seconds)}
+          value={formatUptime(activeStats?.uptime_seconds)}
           icon={<Clock className="w-5 h-5 text-violet-400" />}
           status="good"
           subtitle="Since last restart"
-          isLoading={statsLoading}
+          isLoading={isLoading}
         />
         <MetricCard
           title="Latency"
@@ -185,7 +241,7 @@ const StarlinkContent = () => {
           icon={<Activity className="w-5 h-5 text-violet-400" />}
           status={latencyStatus}
           subtitle={latencyStatus === 'good' ? 'Excellent' : latencyStatus === 'warning' ? 'Acceptable' : 'High latency'}
-          isLoading={statsLoading}
+          isLoading={isLoading}
         />
         <MetricCard
           title="SNR"
@@ -194,7 +250,7 @@ const StarlinkContent = () => {
           icon={<Signal className="w-5 h-5 text-violet-400" />}
           status={snrStatus}
           subtitle={snrStatus === 'good' ? 'Strong signal' : snrStatus === 'warning' ? 'Moderate' : 'Weak signal'}
-          isLoading={statsLoading}
+          isLoading={isLoading}
         />
         <MetricCard
           title="Obstruction"
@@ -203,7 +259,7 @@ const StarlinkContent = () => {
           icon={obstructionStatus === 'good' ? <CheckCircle className="w-5 h-5 text-success" /> : <AlertTriangle className="w-5 h-5 text-warning" />}
           status={obstructionStatus}
           subtitle={obstructionStatus === 'good' ? 'Clear view' : obstructionStatus === 'warning' ? 'Minor blockage' : 'Check positioning'}
-          isLoading={statsLoading}
+          isLoading={isLoading}
         />
       </div>
 
