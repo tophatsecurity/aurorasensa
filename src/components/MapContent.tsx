@@ -58,6 +58,7 @@ const MapContent = () => {
   const [isLiveTracking, setIsLiveTracking] = useState(true);
   const [hasInitialFit, setHasInitialFit] = useState(false);
   const [showTrails, setShowTrails] = useState(true);
+  const [showAdsbTrails, setShowAdsbTrails] = useState(true);
   const [timeframe, setTimeframe] = useState<TimeframeOption>("1h");
   const [sensorRetentionMinutes, setSensorRetentionMinutes] = useState(60);
   const [clientRetentionMinutes, setClientRetentionMinutes] = useState(60);
@@ -415,7 +416,7 @@ const MapContent = () => {
     }
   }, [sensorMarkers, clientMarkers, adsbMarkers, filter, allPositions, hasInitialFit]);
 
-  // Update trail polylines
+  // Update trail polylines (sensor/client only)
   useEffect(() => {
     if (!mapRef.current) return;
 
@@ -424,12 +425,10 @@ const MapContent = () => {
       client: '#3b82f6',   // blue
     };
 
-    // Remove all trails if trails are disabled
+    // Remove sensor/client trails if disabled
     if (!showTrails) {
       trailsRef.current.forEach(polyline => polyline.remove());
       trailsRef.current.clear();
-      adsbTrailsRef.current.forEach(polyline => polyline.remove());
-      adsbTrailsRef.current.clear();
       return;
     }
 
@@ -487,9 +486,10 @@ const MapContent = () => {
 
   // Render ADS-B aircraft trails automatically from historical data
   useEffect(() => {
-    if (!mapRef.current || !showTrails) return;
-    if (filter !== 'all' && filter !== 'adsb') {
-      // Clear all adsb trails when filter excludes adsb
+    if (!mapRef.current) return;
+    
+    // Clear all ADS-B trails if disabled or filtered out
+    if (!showAdsbTrails || (filter !== 'all' && filter !== 'adsb')) {
       adsbTrailsRef.current.forEach(polyline => polyline.remove());
       adsbTrailsRef.current.clear();
       return;
@@ -582,7 +582,7 @@ const MapContent = () => {
         adsbTrailsRef.current.set(`${icao}-shadow`, shadowLine);
       }
     });
-  }, [adsbTrails, adsbActiveTrails, showTrails, filter]);
+  }, [adsbTrails, adsbActiveTrails, showAdsbTrails, filter]);
 
   // Auto-refresh for live tracking
   useEffect(() => {
@@ -653,8 +653,12 @@ const MapContent = () => {
               onClientRetentionChange={setClientRetentionMinutes}
               showTrails={showTrails}
               onShowTrailsChange={setShowTrails}
+              showAdsbTrails={showAdsbTrails}
+              onShowAdsbTrailsChange={setShowAdsbTrails}
               trailCount={trails.length}
+              adsbTrailCount={adsbTrails.length + adsbActiveTrails.size}
               onClearHistory={clearHistory}
+              onClearAdsbTrails={clearAllAdsbTrails}
             />
           </div>
         </div>
