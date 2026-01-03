@@ -93,7 +93,7 @@ const ThermalProbeCharts = () => {
   const formatDualTemp = (celsius: number | null) => {
     if (celsius === null) return '—';
     const f = toFahrenheit(celsius);
-    return `${celsius.toFixed(1)}°C / ${f?.toFixed(1)}°F`;
+    return `${f?.toFixed(1)}°F / ${celsius.toFixed(1)}°C`;
   };
 
   return (
@@ -166,7 +166,7 @@ const ThermalProbeCharts = () => {
                   formatter={(value: number, name: string) => {
                     const label = name === 'probe_c' ? 'Probe' : name === 'ambient_c' ? 'Ambient' : 'Temperature';
                     const fahrenheit = ((value * 9/5) + 32).toFixed(1);
-                    return [`${value.toFixed(1)}°C / ${fahrenheit}°F`, label];
+                    return [`${fahrenheit}°F / ${value.toFixed(1)}°C`, label];
                   }}
                 />
                 <Legend 
@@ -237,7 +237,7 @@ const ThermalProbeCharts = () => {
                   labelStyle={{ color: 'hsl(var(--foreground))' }}
                   formatter={(value: number) => {
                     const fahrenheit = ((value * 9/5) + 32).toFixed(1);
-                    return [`${value.toFixed(1)}°C / ${fahrenheit}°F`, 'Temperature'];
+                    return [`${fahrenheit}°F / ${value.toFixed(1)}°C`, 'Temperature'];
                   }}
                 />
                 <Area
