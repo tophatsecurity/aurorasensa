@@ -70,11 +70,12 @@ export function useGpsHistory(
         if (existing && existing.points.length > 0) {
           const lastPoint = existing.points[existing.points.length - 1];
           if (lastPoint.lat === newPoint.lat && lastPoint.lng === newPoint.lng) {
-            return;
+            // Position unchanged, skip adding duplicate point
+          } else {
+            const points = [...existing.points, newPoint].slice(-mergedConfig.maxPointsPerEntity);
+            newHistory.set(id, { ...existing, points });
           }
-        }
-        
-        if (existing) {
+        } else if (existing) {
           const points = [...existing.points, newPoint].slice(-mergedConfig.maxPointsPerEntity);
           newHistory.set(id, { ...existing, points });
         } else {
@@ -96,11 +97,12 @@ export function useGpsHistory(
         if (existing && existing.points.length > 0) {
           const lastPoint = existing.points[existing.points.length - 1];
           if (lastPoint.lat === newPoint.lat && lastPoint.lng === newPoint.lng) {
-            return;
+            // Position unchanged, skip adding duplicate point
+          } else {
+            const points = [...existing.points, newPoint].slice(-mergedConfig.maxPointsPerEntity);
+            newHistory.set(id, { ...existing, points });
           }
-        }
-        
-        if (existing) {
+        } else if (existing) {
           const points = [...existing.points, newPoint].slice(-mergedConfig.maxPointsPerEntity);
           newHistory.set(id, { ...existing, points });
         } else {
@@ -122,11 +124,12 @@ export function useGpsHistory(
         if (existing && existing.points.length > 0) {
           const lastPoint = existing.points[existing.points.length - 1];
           if (lastPoint.lat === newPoint.lat && lastPoint.lng === newPoint.lng) {
-            return;
+            // Position unchanged, skip adding duplicate point
+          } else {
+            const points = [...existing.points, newPoint].slice(-mergedConfig.maxPointsPerEntity);
+            newHistory.set(id, { ...existing, points });
           }
-        }
-        
-        if (existing) {
+        } else if (existing) {
           const points = [...existing.points, newPoint].slice(-mergedConfig.maxPointsPerEntity);
           newHistory.set(id, { ...existing, points });
         } else {
