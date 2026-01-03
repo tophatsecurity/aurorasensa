@@ -188,7 +188,7 @@ const DashboardContent = () => {
                 <p className="text-xs text-muted-foreground">Temperature</p>
                 <p className="text-xl font-bold text-red-400">
                   {dashboardStatsLoading ? "..." : avgTemp !== null && avgTemp !== undefined 
-                    ? `${avgTemp.toFixed(1)}°C / ${((avgTemp * 9/5) + 32).toFixed(1)}°F` 
+                    ? `${((avgTemp * 9/5) + 32).toFixed(1)}°F / ${avgTemp.toFixed(1)}°C` 
                     : "—"}
                 </p>
               </div>
@@ -275,9 +275,9 @@ const DashboardContent = () => {
                 <p className="text-xs text-muted-foreground">Thermal Probe Temp</p>
                 <p className="text-lg font-bold text-red-400">
                   {thermalLoading ? "..." : thermalAvgTemp !== null && thermalAvgTemp !== undefined 
-                    ? `${thermalAvgTemp.toFixed(1)}°C / ${((thermalAvgTemp * 9/5) + 32).toFixed(1)}°F` 
+                    ? `${((thermalAvgTemp * 9/5) + 32).toFixed(1)}°F / ${thermalAvgTemp.toFixed(1)}°C` 
                     : avgTemp !== null && avgTemp !== undefined 
-                      ? `${avgTemp.toFixed(1)}°C / ${((avgTemp * 9/5) + 32).toFixed(1)}°F` 
+                      ? `${((avgTemp * 9/5) + 32).toFixed(1)}°F / ${avgTemp.toFixed(1)}°C` 
                       : "—"}
                 </p>
               </div>
@@ -290,13 +290,13 @@ const DashboardContent = () => {
               {thermalMinTemp !== undefined && thermalMaxTemp !== undefined && (
                 <div className="flex justify-between text-muted-foreground">
                   <span>Min:</span>
-                  <span>{thermalMinTemp.toFixed(1)}°C / {((thermalMinTemp * 9/5) + 32).toFixed(1)}°F</span>
+                  <span>{((thermalMinTemp * 9/5) + 32).toFixed(1)}°F / {thermalMinTemp.toFixed(1)}°C</span>
                 </div>
               )}
               {thermalMinTemp !== undefined && thermalMaxTemp !== undefined && (
                 <div className="flex justify-between text-muted-foreground">
                   <span>Max:</span>
-                  <span>{thermalMaxTemp.toFixed(1)}°C / {((thermalMaxTemp * 9/5) + 32).toFixed(1)}°F</span>
+                  <span>{((thermalMaxTemp * 9/5) + 32).toFixed(1)}°F / {thermalMaxTemp.toFixed(1)}°C</span>
                 </div>
               )}
               {thermalProbeStats?.total_readings !== undefined && (
