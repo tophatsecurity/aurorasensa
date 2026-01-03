@@ -71,6 +71,26 @@ const calcStats = (data: { value: number }[] | undefined): SensorStats => {
   return { min, max, avg, current, trend };
 };
 
+// Helper to convert Celsius to Fahrenheit
+const cToF = (celsius: number | null | undefined): number | null => {
+  if (celsius === null || celsius === undefined) return null;
+  return (celsius * 9/5) + 32;
+};
+
+// Format temperature with both C and F
+const formatTemp = (celsius: number | null | undefined): string => {
+  if (celsius === null || celsius === undefined) return "—";
+  const f = cToF(celsius);
+  return `${celsius.toFixed(1)}°C / ${f?.toFixed(1)}°F`;
+};
+
+// Format temperature for compact display
+const formatTempCompact = (celsius: number | null | undefined): string => {
+  if (celsius === null || celsius === undefined) return "—";
+  const f = cToF(celsius);
+  return `${celsius.toFixed(1)}°C (${f?.toFixed(0)}°F)`;
+};
+
 const DashboardContent = () => {
   const { data: stats, isLoading: statsLoading } = useComprehensiveStats();
   const { data: dashboardStats, isLoading: dashboardStatsLoading } = useDashboardStats();
@@ -196,10 +216,9 @@ const DashboardContent = () => {
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 mb-8">
         <StatCardWithChart
           title="THERMAL PROBE"
-          value={thermalAvgTemp !== undefined ? thermalAvgTemp.toFixed(1) : "—"}
-          unit="°C"
+          value={formatTempCompact(thermalAvgTemp)}
           subtitle={thermalMinTemp !== undefined && thermalMaxTemp !== undefined 
-            ? `Min: ${thermalMinTemp.toFixed(1)}°C • Max: ${thermalMaxTemp.toFixed(1)}°C`
+            ? `Min: ${formatTempCompact(thermalMinTemp)} • Max: ${formatTempCompact(thermalMaxTemp)}`
             : `${thermalProbeStats?.count ?? 0} readings`}
           icon={Thermometer}
           iconBgColor="bg-red-500/20"
@@ -354,17 +373,17 @@ const DashboardContent = () => {
                 <span className="text-xs text-muted-foreground flex items-center gap-1">
                   <ArrowDown className="w-3 h-3 text-blue-400" /> Min
                 </span>
-                <span className="font-mono text-sm">{tempStats.min !== null ? `${tempStats.min.toFixed(1)}°C` : '—'}</span>
+                <span className="font-mono text-xs">{formatTempCompact(tempStats.min)}</span>
               </div>
               <div className="flex justify-between items-center">
                 <span className="text-xs text-muted-foreground flex items-center gap-1">
                   <ArrowUp className="w-3 h-3 text-red-400" /> Max
                 </span>
-                <span className="font-mono text-sm">{tempStats.max !== null ? `${tempStats.max.toFixed(1)}°C` : '—'}</span>
+                <span className="font-mono text-xs">{formatTempCompact(tempStats.max)}</span>
               </div>
               <div className="flex justify-between items-center border-t border-border/50 pt-2">
                 <span className="text-xs text-muted-foreground">Avg</span>
-                <span className="font-mono text-sm font-bold text-red-400">{tempStats.avg !== null ? `${tempStats.avg.toFixed(1)}°C` : '—'}</span>
+                <span className="font-mono text-xs font-bold text-red-400">{formatTempCompact(tempStats.avg)}</span>
               </div>
             </div>
           </div>
