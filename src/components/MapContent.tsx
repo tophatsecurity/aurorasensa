@@ -69,7 +69,9 @@ const MapContent = () => {
     isLoading,
     timeAgo,
     handleRefresh,
-  } = useMapData();
+    adsbIsHistorical,
+    adsbSource,
+  } = useMapData({ adsbHistoryMinutes: timeframeToMinutes(timeframe) });
 
   // GPS history tracking
   const { trails, clearHistory } = useGpsHistory(
@@ -216,11 +218,18 @@ const MapContent = () => {
           return directions[index];
         };
         
+        const isHistorical = aircraft.status === 'historical';
+        const statusColor = aircraft.status === 'active' ? 'text-green-500' : 
+                           aircraft.status === 'historical' ? 'text-blue-500' : 'text-yellow-500';
+        const statusLabel = aircraft.status === 'active' ? 'Live' :
+                           aircraft.status === 'historical' ? 'Historical' : 'Stale';
+        
         const popupContent = `
           <div class="p-3 min-w-[220px]">
             <div class="font-bold mb-2 flex items-center gap-2 text-base border-b pb-2">
               ✈️ ${aircraft.name}
               <span class="text-xs font-normal text-gray-500">(${aircraft.hex})</span>
+              ${isHistorical ? '<span class="text-xs bg-blue-500/20 text-blue-400 px-1.5 py-0.5 rounded">Historical</span>' : ''}
             </div>
             <div class="text-sm space-y-1.5">
               <div class="flex justify-between">
@@ -257,7 +266,7 @@ const MapContent = () => {
               </div>
               <div class="flex justify-between">
                 <span class="text-gray-500">Status:</span>
-                <span class="font-medium ${aircraft.status === 'active' ? 'text-green-500' : 'text-yellow-500'}">${aircraft.status}</span>
+                <span class="font-medium ${statusColor}">${statusLabel}</span>
               </div>
             </div>
           </div>
@@ -509,7 +518,7 @@ const MapContent = () => {
         )}
 
         <MapLegend />
-        <MapStatistics stats={stats} />
+        <MapStatistics stats={stats} adsbIsHistorical={adsbIsHistorical} />
         <MapLoadingOverlay isLoading={isLoading} />
       </div>
     </div>
