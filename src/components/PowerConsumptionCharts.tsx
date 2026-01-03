@@ -12,7 +12,7 @@ import {
   ReferenceArea
 } from "recharts";
 import { Zap, Loader2, TrendingUp, TrendingDown, Settings2, AlertTriangle, Bell, BellOff } from "lucide-react";
-import { useDashboardTimeseries } from "@/hooks/useAuroraApi";
+import { useDashboardTimeseries, useStarlinkTimeseries } from "@/hooks/useAuroraApi";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
@@ -38,7 +38,10 @@ interface ThresholdConfig {
 }
 
 const PowerConsumptionCharts = () => {
-  const { data: timeseries, isLoading } = useDashboardTimeseries(24);
+  const { data: timeseries, isLoading: dashboardLoading } = useDashboardTimeseries(24);
+  const { data: starlinkTimeseries, isLoading: starlinkLoading } = useStarlinkTimeseries(24);
+  
+  const isLoading = dashboardLoading || starlinkLoading;
   
   const [thresholdConfig, setThresholdConfig] = useState<ThresholdConfig>({
     warningThreshold: 100,
@@ -46,32 +49,68 @@ const PowerConsumptionCharts = () => {
     alertsEnabled: true,
   });
 
-  const formatData = (points: { timestamp: string; value: number }[] | undefined): ChartData[] => {
-    if (!points || points.length === 0) return [];
-    const data = points.map(p => ({
-      time: new Date(p.timestamp).toLocaleTimeString('en-US', { 
-        hour12: false, 
-        hour: '2-digit', 
-        minute: '2-digit'
-      }),
-      value: Number(p.value.toFixed(2)),
-      isPeak: false,
-      isAboveWarning: p.value >= thresholdConfig.warningThreshold && p.value < thresholdConfig.criticalThreshold,
-      isAboveCritical: p.value >= thresholdConfig.criticalThreshold,
-    }));
-    
-    // Mark peak values
-    if (data.length > 0) {
-      const maxValue = Math.max(...data.map(d => d.value));
-      data.forEach(d => {
-        if (d.value === maxValue) d.isPeak = true;
-      });
+  const formatData = (
+    dashboardPower: { timestamp: string; value: number }[] | undefined,
+    starlinkReadings: Array<{ timestamp: string; power_w?: number }> | undefined
+  ): ChartData[] => {
+    // Try dashboard power data first
+    if (dashboardPower && dashboardPower.length > 0) {
+      const data = dashboardPower.map(p => ({
+        time: new Date(p.timestamp).toLocaleTimeString('en-US', { 
+          hour12: false, 
+          hour: '2-digit', 
+          minute: '2-digit'
+        }),
+        value: Number(p.value.toFixed(2)),
+        isPeak: false,
+        isAboveWarning: p.value >= thresholdConfig.warningThreshold && p.value < thresholdConfig.criticalThreshold,
+        isAboveCritical: p.value >= thresholdConfig.criticalThreshold,
+      }));
+      
+      if (data.length > 0) {
+        const maxValue = Math.max(...data.map(d => d.value));
+        data.forEach(d => {
+          if (d.value === maxValue) d.isPeak = true;
+        });
+      }
+      
+      return data;
     }
     
-    return data;
+    // Fallback to Starlink power data
+    if (starlinkReadings && starlinkReadings.length > 0) {
+      const powerReadings = starlinkReadings.filter(r => r.power_w !== undefined);
+      const data = powerReadings.map(r => ({
+        time: new Date(r.timestamp).toLocaleTimeString('en-US', { 
+          hour12: false, 
+          hour: '2-digit', 
+          minute: '2-digit'
+        }),
+        value: Number((r.power_w ?? 0).toFixed(2)),
+        isPeak: false,
+        isAboveWarning: (r.power_w ?? 0) >= thresholdConfig.warningThreshold && (r.power_w ?? 0) < thresholdConfig.criticalThreshold,
+        isAboveCritical: (r.power_w ?? 0) >= thresholdConfig.criticalThreshold,
+      }));
+      
+      if (data.length > 0) {
+        const maxValue = Math.max(...data.map(d => d.value));
+        data.forEach(d => {
+          if (d.value === maxValue) d.isPeak = true;
+        });
+      }
+      
+      return data;
+    }
+    
+    return [];
   };
 
-  const chartData = useMemo(() => formatData(timeseries?.power), [timeseries?.power, thresholdConfig.warningThreshold, thresholdConfig.criticalThreshold]);
+  const chartData = useMemo(
+    () => formatData(timeseries?.power, starlinkTimeseries?.readings), 
+    [timeseries?.power, starlinkTimeseries?.readings, thresholdConfig.warningThreshold, thresholdConfig.criticalThreshold]
+  );
+
+  
 
   // Calculate statistics
   const stats = useMemo(() => {
