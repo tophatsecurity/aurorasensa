@@ -64,6 +64,7 @@ import {
   useSuspendClient,
   useSoftDeleteClient,
   useRestoreClient,
+  useDeleteClient,
   useClientStateHistory,
   useRenameClient,
   useLatestReadings,
@@ -154,6 +155,7 @@ const ClientsContent = () => {
   const suspendClient = useSuspendClient();
   const softDeleteClient = useSoftDeleteClient();
   const restoreClient = useRestoreClient();
+  const deleteClient = useDeleteClient();
   const renameClient = useRenameClient();
   
   const [searchQuery, setSearchQuery] = useState("");
@@ -165,6 +167,7 @@ const ClientsContent = () => {
   const [expandedClients, setExpandedClients] = useState<Set<string>>(new Set());
   const [detailClient, setDetailClient] = useState<Client | null>(null);
   const [detailsOpen, setDetailsOpen] = useState(false);
+  const [deleteConfirmClient, setDeleteConfirmClient] = useState<Client | null>(null);
 
   const formatLastSeen = (dateString: string | undefined | null) => {
     if (!dateString) return "Never";
@@ -243,6 +246,24 @@ const ClientsContent = () => {
         },
       }
     );
+  };
+
+  const handlePermanentDelete = (client: Client) => {
+    setDeleteConfirmClient(client);
+  };
+
+  const confirmPermanentDelete = () => {
+    if (!deleteConfirmClient) return;
+    
+    deleteClient.mutate(deleteConfirmClient.client_id, {
+      onSuccess: () => {
+        toast.success(`Permanently removed ${deleteConfirmClient.hostname || deleteConfirmClient.client_id}`);
+        setDeleteConfirmClient(null);
+      },
+      onError: (error) => {
+        toast.error(`Failed to remove client: ${error.message}`);
+      },
+    });
   };
 
   const handleEditClient = (client: Client) => {
@@ -593,6 +614,7 @@ const ClientsContent = () => {
                             client={client} 
                             clientState={clientState}
                             onAction={handleStateTransition}
+                            onPermanentDelete={() => handlePermanentDelete(client)}
                             onViewHistory={() => setHistoryDialogClient(client.client_id)}
                             onEdit={() => handleEditClient(client)}
                             isLoading={
@@ -603,6 +625,7 @@ const ClientsContent = () => {
                               suspendClient.isPending ||
                               softDeleteClient.isPending ||
                               restoreClient.isPending ||
+                              deleteClient.isPending ||
                               renameClient.isPending
                             }
                           />
@@ -731,6 +754,27 @@ const ClientsContent = () => {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Permanent Delete Confirmation Dialog */}
+      <AlertDialog open={!!deleteConfirmClient} onOpenChange={(open) => !open && setDeleteConfirmClient(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Permanently Remove Client?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This will permanently remove <span className="font-semibold">{deleteConfirmClient?.hostname || deleteConfirmClient?.client_id}</span> and all associated data. This action cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={confirmPermanentDelete}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              {deleteClient.isPending ? "Removing..." : "Remove Permanently"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 };
@@ -739,12 +783,13 @@ interface ClientActionsProps {
   client: Client;
   clientState: ClientState;
   onAction: (clientId: string, action: "adopt" | "register" | "disable" | "enable" | "suspend" | "delete" | "restore", hostname?: string) => void;
+  onPermanentDelete: () => void;
   onViewHistory: () => void;
   onEdit: () => void;
   isLoading: boolean;
 }
 
-const ClientActions = ({ client, clientState, onAction, onViewHistory, onEdit, isLoading }: ClientActionsProps) => {
+const ClientActions = ({ client, clientState, onAction, onPermanentDelete, onViewHistory, onEdit, isLoading }: ClientActionsProps) => {
   const primaryActions: Record<ClientState, { action: "adopt" | "register" | "enable" | "restore"; label: string; icon: React.ElementType; variant: "default" | "outline" }[]> = {
     pending: [
       { action: "adopt", label: "Adopt", icon: CheckCircle, variant: "default" },
@@ -854,6 +899,19 @@ const ClientActions = ({ client, clientState, onAction, onViewHistory, onEdit, i
               <Trash2 className="w-4 h-4 mr-2" />
               Delete (Soft)
             </DropdownMenuItem>
+          )}
+
+          {clientState === "deleted" && (
+            <>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem 
+                onClick={onPermanentDelete}
+                className="text-destructive font-medium"
+              >
+                <UserX className="w-4 h-4 mr-2" />
+                Remove Permanently
+              </DropdownMenuItem>
+            </>
           )}
         </DropdownMenuContent>
       </DropdownMenu>
