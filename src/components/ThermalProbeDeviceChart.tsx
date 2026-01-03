@@ -109,25 +109,49 @@ const ThermalDeviceChart = () => {
     return { chartData, sources: Array.from(sourceSet) };
   }, [thermalData?.readings, arduinoData?.readings]);
 
-  // Calculate current stats
-  const currentStats = useMemo(() => {
+  // Calculate stats for each source and overall mean
+  const sourceStats = useMemo(() => {
     if (chartData.length === 0 || sources.length === 0) return null;
     
-    const latest = chartData[chartData.length - 1];
-    const temps: number[] = [];
+    const stats: Record<string, { avgF: number; avgC: number; count: number }> = {};
     
-    sources.forEach(s => {
-      const temp = latest[`${s}_f`];
-      if (typeof temp === 'number') temps.push(temp);
+    // Calculate average for each source
+    sources.forEach(source => {
+      const temps: number[] = [];
+      chartData.forEach(entry => {
+        const temp = entry[`${source}_f`];
+        if (typeof temp === 'number') temps.push(temp);
+      });
+      
+      if (temps.length > 0) {
+        const avgF = temps.reduce((a, b) => a + b, 0) / temps.length;
+        stats[source] = {
+          avgF: Number(avgF.toFixed(1)),
+          avgC: Number(((avgF - 32) * 5/9).toFixed(1)),
+          count: temps.length,
+        };
+      }
     });
     
-    if (temps.length === 0) return null;
+    // Calculate overall mean of all readings
+    const allTemps: number[] = [];
+    chartData.forEach(entry => {
+      sources.forEach(source => {
+        const temp = entry[`${source}_f`];
+        if (typeof temp === 'number') allTemps.push(temp);
+      });
+    });
     
-    const avg = temps.reduce((a, b) => a + b, 0) / temps.length;
+    const overallMeanF = allTemps.length > 0 
+      ? allTemps.reduce((a, b) => a + b, 0) / allTemps.length 
+      : 0;
+    
     return {
-      avgF: Number(avg.toFixed(1)),
-      avgC: Number(((avg - 32) * 5/9).toFixed(1)),
-      sourceCount: sources.length,
+      bySource: stats,
+      meanF: Number(overallMeanF.toFixed(1)),
+      meanC: Number(((overallMeanF - 32) * 5/9).toFixed(1)),
+      totalReadings: allTemps.length,
+      sourceCount: Object.keys(stats).length,
     };
   }, [chartData, sources]);
 
@@ -170,17 +194,48 @@ const ThermalDeviceChart = () => {
             </p>
           </div>
         </div>
-        {!isLoading && currentStats && (
+        {!isLoading && sourceStats && (
           <div className="text-right">
             <div className="text-lg font-bold text-red-400">
-              {currentStats.avgF}°F / {currentStats.avgC}°C
+              Mean: {sourceStats.meanF}°F / {sourceStats.meanC}°C
             </div>
             <div className="text-xs text-muted-foreground">
-              {currentStats.sourceCount} source{currentStats.sourceCount !== 1 ? 's' : ''}
+              {sourceStats.sourceCount} source{sourceStats.sourceCount !== 1 ? 's' : ''} • {sourceStats.totalReadings} readings
             </div>
           </div>
         )}
       </div>
+
+      {/* Averages by source */}
+      {!isLoading && sourceStats && Object.keys(sourceStats.bySource).length > 0 && (
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2 mb-4 p-3 rounded-lg bg-muted/30 border border-border/30">
+          {Object.entries(sourceStats.bySource).map(([source, stats], index) => (
+            <div key={source} className="flex items-center gap-2">
+              <div 
+                className="w-2.5 h-2.5 rounded-full flex-shrink-0" 
+                style={{ backgroundColor: getSourceColor(source, index) }}
+              />
+              <div className="min-w-0">
+                <div className="text-xs font-medium text-foreground truncate">
+                  {formatSourceName(source)}
+                </div>
+                <div className="text-xs text-muted-foreground">
+                  Avg: {stats.avgF}°F / {stats.avgC}°C
+                </div>
+              </div>
+            </div>
+          ))}
+          <div className="flex items-center gap-2 col-span-full sm:col-span-1 border-t sm:border-t-0 sm:border-l border-border/50 pt-2 sm:pt-0 sm:pl-3 mt-1 sm:mt-0">
+            <div className="w-2.5 h-2.5 rounded-full bg-gradient-to-r from-red-400 to-blue-400 flex-shrink-0" />
+            <div className="min-w-0">
+              <div className="text-xs font-medium text-foreground">Overall Mean</div>
+              <div className="text-xs text-muted-foreground font-semibold">
+                {sourceStats.meanF}°F / {sourceStats.meanC}°C
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Legend showing all sources */}
       {!isLoading && sources.length > 0 && (
