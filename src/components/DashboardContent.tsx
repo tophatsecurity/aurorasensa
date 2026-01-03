@@ -30,6 +30,7 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import SensorCard from "./SensorCard";
+import StatCardWithChart from "./StatCardWithChart";
 import SensorCharts from "./SensorCharts";
 import StarlinkCharts from "./StarlinkCharts";
 import ThermalProbeCharts from "./ThermalProbeCharts";
@@ -136,282 +137,68 @@ const DashboardContent = () => {
         </Badge>
       </div>
 
-      {/* Top Stats */}
+      {/* Top Stats with Charts */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
-        <SensorCard
+        <StatCardWithChart
           title="CONNECTED CLIENTS"
           value={clientsLoading ? "..." : totalClients.toString()}
           subtitle={`${activeDevices1h} devices active in last hour`}
           icon={Server}
           iconBgColor="bg-green-500/20"
+          isLoading={clientsLoading}
+          devices={(clients || []).map((c, idx) => ({
+            device_id: c.hostname || c.client_id,
+            device_type: 'client',
+            color: ['#22c55e', '#3b82f6', '#f59e0b', '#ec4899'][idx % 4],
+            reading_count: c.batches_received * 50,
+            status: c.status || 'active'
+          }))}
         />
-        <SensorCard
+        <StatCardWithChart
           title="TOTAL READINGS"
           value={statsLoading ? "..." : totalReadings.toLocaleString()}
           subtitle={`${readings1h.toLocaleString()} last hour`}
           icon={Database}
           iconBgColor="bg-blue-500/20"
+          isLoading={statsLoading}
+          devices={(sensorsSummary?.sensor_types || []).slice(0, 6).map((s, idx) => ({
+            device_id: s.device_type,
+            device_type: s.device_type,
+            color: ['#3b82f6', '#22c55e', '#f59e0b', '#8b5cf6', '#ec4899', '#06b6d4'][idx % 6],
+            reading_count: s.total_readings,
+            status: s.active_last_hour ? 'active' : 'inactive'
+          }))}
         />
-        <SensorCard
+        <StatCardWithChart
           title="SENSOR TYPES"
           value={statsLoading ? "..." : totalSensorTypes.toString()}
           subtitle={`${totalDevices} unique devices`}
           icon={Radio}
           iconBgColor="bg-purple-500/20"
+          isLoading={statsLoading}
+          devices={(devicesSummary?.devices || []).slice(0, 6).map((d, idx) => ({
+            device_id: d.device_id,
+            device_type: d.device_type,
+            color: ['#8b5cf6', '#06b6d4', '#ef4444', '#84cc16', '#f59e0b', '#ec4899'][idx % 6],
+            reading_count: d.total_readings,
+            status: d.status
+          }))}
         />
-        <SensorCard
+        <StatCardWithChart
           title="DATA BATCHES"
           value={statsLoading ? "..." : (global?.database?.total_batches ?? 0).toLocaleString()}
           subtitle={`${global?.activity?.last_24_hours?.batches_24h ?? 0} last 24h`}
           icon={BarChart3}
           iconBgColor="bg-cyan-500/20"
+          isLoading={statsLoading}
+          devices={(global?.sensors?.by_type || []).slice(0, 6).map((s, idx) => ({
+            device_id: s.device_type,
+            device_type: s.device_type,
+            color: ['#06b6d4', '#22c55e', '#3b82f6', '#f59e0b', '#8b5cf6', '#ef4444'][idx % 6],
+            reading_count: s.reading_count,
+            status: 'active'
+          }))}
         />
-      </div>
-
-      {/* Live Sensor Values */}
-      <div className="mb-8">
-        <h2 className="text-lg font-semibold mb-4 flex items-center gap-2">
-          <Activity className="w-5 h-5 text-primary" />
-          Live Sensor Values
-          {!dashboardStatsLoading && (
-            <Badge variant="outline" className="ml-2 text-xs bg-success/10 text-success border-success/30">
-              Real-time
-            </Badge>
-          )}
-        </h2>
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-          <div className="glass-card rounded-xl p-4 border border-border/50 hover:border-red-500/30 transition-colors">
-            <div className="flex items-center gap-3 mb-2">
-              <div className="w-10 h-10 rounded-lg bg-red-500/20 flex items-center justify-center">
-                <Thermometer className="w-5 h-5 text-red-400" />
-              </div>
-              <div className="flex-1">
-                <p className="text-xs text-muted-foreground">Temperature</p>
-                <p className="text-xl font-bold text-red-400">
-                  {dashboardStatsLoading ? "..." : avgTemp !== null && avgTemp !== undefined 
-                    ? `${((avgTemp * 9/5) + 32).toFixed(1)}°F / ${avgTemp.toFixed(1)}°C` 
-                    : "—"}
-                </p>
-              </div>
-            </div>
-          </div>
-          <div className="glass-card rounded-xl p-4 border border-border/50 hover:border-blue-500/30 transition-colors">
-            <div className="flex items-center gap-3 mb-2">
-              <div className="w-10 h-10 rounded-lg bg-blue-500/20 flex items-center justify-center">
-                <Droplets className="w-5 h-5 text-blue-400" />
-              </div>
-              <div className="flex-1">
-                <p className="text-xs text-muted-foreground">Humidity</p>
-                <p className="text-2xl font-bold text-blue-400">
-                  {dashboardStatsLoading ? "..." : avgHumidity !== null && avgHumidity !== undefined ? `${avgHumidity.toFixed(1)}%` : "—"}
-                </p>
-              </div>
-            </div>
-            <div className="text-xs text-muted-foreground mt-1">
-              {avgHumidity !== null && avgHumidity !== undefined && (
-                <span className={avgHumidity > 60 ? "text-warning" : avgHumidity < 30 ? "text-warning" : "text-success"}>
-                  {avgHumidity > 60 ? "High" : avgHumidity < 30 ? "Low" : "Normal"}
-                </span>
-              )}
-            </div>
-          </div>
-          <div className="glass-card rounded-xl p-4 border border-border/50 hover:border-purple-500/30 transition-colors">
-            <div className="flex items-center gap-3 mb-2">
-              <div className="w-10 h-10 rounded-lg bg-purple-500/20 flex items-center justify-center">
-                <Signal className="w-5 h-5 text-purple-400" />
-              </div>
-              <div className="flex-1">
-                <p className="text-xs text-muted-foreground">Signal Strength</p>
-                <p className="text-2xl font-bold text-purple-400">
-                  {dashboardStatsLoading ? "..." : avgSignal !== null && avgSignal !== undefined ? `${avgSignal.toFixed(0)} dBm` : "—"}
-                </p>
-              </div>
-            </div>
-            <div className="text-xs text-muted-foreground mt-1">
-              {avgSignal !== null && avgSignal !== undefined && (
-                <span className={avgSignal > -50 ? "text-success" : avgSignal > -70 ? "text-warning" : "text-destructive"}>
-                  {avgSignal > -50 ? "Excellent" : avgSignal > -70 ? "Good" : "Weak"}
-                </span>
-              )}
-            </div>
-          </div>
-          <div className="glass-card rounded-xl p-4 border border-border/50 hover:border-orange-500/30 transition-colors">
-            <div className="flex items-center gap-3 mb-2">
-              <div className="w-10 h-10 rounded-lg bg-orange-500/20 flex items-center justify-center">
-                <Zap className="w-5 h-5 text-orange-400" />
-              </div>
-              <div className="flex-1">
-                <p className="text-xs text-muted-foreground">Power Draw</p>
-                <p className="text-2xl font-bold text-orange-400">
-                  {dashboardStatsLoading ? "..." : avgPower !== null && avgPower !== undefined ? `${avgPower.toFixed(1)}W` : "—"}
-                </p>
-              </div>
-            </div>
-            <div className="text-xs text-muted-foreground mt-1">
-              {avgPower !== null && avgPower !== undefined && (
-                <span className="text-orange-400/70">{(avgPower / 1000).toFixed(3)} kW</span>
-              )}
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* Sensor-Specific Stats Section */}
-      <div className="mb-8">
-        <h2 className="text-lg font-semibold mb-4 flex items-center gap-2">
-          <Satellite className="w-5 h-5 text-primary" />
-          Sensor-Specific Averages
-          {(thermalLoading || starlinkLoading) && (
-            <Loader2 className="w-4 h-4 animate-spin text-muted-foreground" />
-          )}
-        </h2>
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-          {/* Thermal Probe Temperature */}
-          <div className="glass-card rounded-xl p-4 border border-border/50 hover:border-red-500/30 transition-colors">
-            <div className="flex items-center gap-3 mb-3">
-              <div className="w-10 h-10 rounded-lg bg-red-500/20 flex items-center justify-center">
-                <Thermometer className="w-5 h-5 text-red-400" />
-              </div>
-              <div className="flex-1">
-                <p className="text-xs text-muted-foreground">Thermal Probe Temp</p>
-                <p className="text-lg font-bold text-red-400">
-                  {thermalLoading ? "..." : thermalAvgTemp !== null && thermalAvgTemp !== undefined 
-                    ? `${((thermalAvgTemp * 9/5) + 32).toFixed(1)}°F / ${thermalAvgTemp.toFixed(1)}°C` 
-                    : avgTemp !== null && avgTemp !== undefined 
-                      ? `${((avgTemp * 9/5) + 32).toFixed(1)}°F / ${avgTemp.toFixed(1)}°C` 
-                      : "—"}
-                </p>
-              </div>
-            </div>
-            <div className="space-y-1 text-xs">
-              <div className="flex justify-between text-muted-foreground">
-                <span>Source:</span>
-                <span className="text-red-400/70">Thermal Probe / BH / AMT</span>
-              </div>
-              {thermalMinTemp !== undefined && thermalMaxTemp !== undefined && (
-                <div className="flex justify-between text-muted-foreground">
-                  <span>Min:</span>
-                  <span>{((thermalMinTemp * 9/5) + 32).toFixed(1)}°F / {thermalMinTemp.toFixed(1)}°C</span>
-                </div>
-              )}
-              {thermalMinTemp !== undefined && thermalMaxTemp !== undefined && (
-                <div className="flex justify-between text-muted-foreground">
-                  <span>Max:</span>
-                  <span>{((thermalMaxTemp * 9/5) + 32).toFixed(1)}°F / {thermalMaxTemp.toFixed(1)}°C</span>
-                </div>
-              )}
-              {thermalProbeStats?.total_readings !== undefined && (
-                <div className="flex justify-between text-muted-foreground">
-                  <span>Readings:</span>
-                  <span>{thermalProbeStats.total_readings.toLocaleString()}</span>
-                </div>
-              )}
-            </div>
-          </div>
-
-          {/* Average Humidity */}
-          <div className="glass-card rounded-xl p-4 border border-border/50 hover:border-blue-500/30 transition-colors">
-            <div className="flex items-center gap-3 mb-3">
-              <div className="w-10 h-10 rounded-lg bg-blue-500/20 flex items-center justify-center">
-                <Droplets className="w-5 h-5 text-blue-400" />
-              </div>
-              <div className="flex-1">
-                <p className="text-xs text-muted-foreground">Average Humidity</p>
-                <p className="text-2xl font-bold text-blue-400">
-                  {dashboardStatsLoading ? "..." : avgHumidity !== null && avgHumidity !== undefined ? `${avgHumidity.toFixed(1)}%` : "—"}
-                </p>
-              </div>
-            </div>
-            <div className="space-y-1 text-xs">
-              <div className="flex justify-between text-muted-foreground">
-                <span>Status:</span>
-                <span className={avgHumidity !== null && avgHumidity !== undefined ? (avgHumidity > 60 ? "text-warning" : avgHumidity < 30 ? "text-warning" : "text-success") : ""}>
-                  {avgHumidity !== null && avgHumidity !== undefined ? (avgHumidity > 60 ? "High Humidity" : avgHumidity < 30 ? "Low Humidity" : "Normal Range") : "—"}
-                </span>
-              </div>
-              {humidityStats.min !== null && (
-                <div className="flex justify-between text-muted-foreground">
-                  <span>24h Min/Max:</span>
-                  <span>{humidityStats.min.toFixed(1)}% / {humidityStats.max?.toFixed(1)}%</span>
-                </div>
-              )}
-              {humidityStats.avg !== null && (
-                <div className="flex justify-between text-muted-foreground">
-                  <span>24h Average:</span>
-                  <span className="text-blue-400">{humidityStats.avg.toFixed(1)}%</span>
-                </div>
-              )}
-            </div>
-          </div>
-
-          {/* Starlink Latency / Metrics */}
-          <div className="glass-card rounded-xl p-4 border border-border/50 hover:border-violet-500/30 transition-colors">
-            <div className="flex items-center gap-3 mb-3">
-              <div className="w-10 h-10 rounded-lg bg-violet-500/20 flex items-center justify-center">
-                <Satellite className="w-5 h-5 text-violet-400" />
-              </div>
-              <div className="flex-1">
-                <p className="text-xs text-muted-foreground">Starlink Latency</p>
-                <p className="text-2xl font-bold text-violet-400">
-                  {starlinkLoading ? "..." : starlinkLatency !== undefined ? `${starlinkLatency.toFixed(1)} ms` : "—"}
-                </p>
-              </div>
-            </div>
-            <div className="space-y-1 text-xs">
-              <div className="flex justify-between text-muted-foreground">
-                <span>Obstruction:</span>
-                <span className={starlinkObstruction !== undefined ? (starlinkObstruction < 5 ? "text-success" : starlinkObstruction < 15 ? "text-warning" : "text-destructive") : ""}>
-                  {starlinkObstruction !== undefined ? `${starlinkObstruction.toFixed(1)}%` : "—"}
-                </span>
-              </div>
-              {starlinkStats?.total_readings !== undefined && (
-                <div className="flex justify-between text-muted-foreground">
-                  <span>Total Readings:</span>
-                  <span>{starlinkStats.total_readings.toLocaleString()}</span>
-                </div>
-              )}
-              {starlinkStats?.device_count !== undefined && (
-                <div className="flex justify-between text-muted-foreground">
-                  <span>Devices:</span>
-                  <span>{starlinkStats.device_count}</span>
-                </div>
-              )}
-            </div>
-          </div>
-
-          {/* Starlink Power */}
-          <div className="glass-card rounded-xl p-4 border border-border/50 hover:border-cyan-500/30 transition-colors">
-            <div className="flex items-center gap-3 mb-3">
-              <div className="w-10 h-10 rounded-lg bg-cyan-500/20 flex items-center justify-center">
-                <Zap className="w-5 h-5 text-cyan-400" />
-              </div>
-              <div className="flex-1">
-                <p className="text-xs text-muted-foreground">Starlink Power</p>
-                <p className="text-2xl font-bold text-cyan-400">
-                  {starlinkLoading ? "..." : starlinkPower !== null && starlinkPower !== undefined ? `${Number(starlinkPower).toFixed(1)}W` : avgPower !== null && avgPower !== undefined ? `${avgPower.toFixed(1)}W` : "—"}
-                </p>
-              </div>
-            </div>
-            <div className="space-y-1 text-xs">
-              <div className="flex justify-between text-muted-foreground">
-                <span>Source:</span>
-                <span className="text-cyan-400/70">Starlink Terminal</span>
-              </div>
-              {starlinkPower !== undefined && starlinkPower !== null && (
-                <div className="flex justify-between text-muted-foreground">
-                  <span>kW:</span>
-                  <span>{(Number(starlinkPower) / 1000).toFixed(3)} kW</span>
-                </div>
-              )}
-              {avgPower !== undefined && avgPower !== null && (
-                <div className="flex justify-between text-muted-foreground">
-                  <span>System Average:</span>
-                  <span>{avgPower.toFixed(1)}W</span>
-                </div>
-              )}
-            </div>
-          </div>
-        </div>
       </div>
 
       {/* Starlink Trend Charts */}
