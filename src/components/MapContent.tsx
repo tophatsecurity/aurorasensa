@@ -61,6 +61,7 @@ const MapContent = () => {
   const {
     sensorMarkers,
     clientMarkers,
+    adsbMarkers,
     allPositions,
     stats,
     isLoading,
@@ -199,6 +200,51 @@ const MapContent = () => {
       });
     }
 
+    // Update/add ADS-B aircraft markers
+    if (filter === 'all' || filter === 'adsb') {
+      adsbMarkers.forEach((aircraft) => {
+        const markerId = `adsb-${aircraft.id}`;
+        existingMarkerIds.add(markerId);
+        
+        const popupContent = `
+          <div class="p-2 min-w-[200px]">
+            <div class="font-bold mb-2 flex items-center gap-2">
+              ✈️ ${aircraft.name}
+            </div>
+            <div class="text-sm space-y-1">
+              <div><span class="text-gray-500">Altitude:</span> ${aircraft.value.toLocaleString()} ${aircraft.unit}</div>
+              <div><span class="text-gray-500">Status:</span> ${aircraft.status}</div>
+              <div><span class="text-gray-500">Position:</span> ${aircraft.location.lat.toFixed(4)}, ${aircraft.location.lng.toFixed(4)}</div>
+            </div>
+          </div>
+        `;
+
+        const existingMarker = markersRef.current.get(markerId);
+        
+        if (existingMarker) {
+          animateMarker(existingMarker, aircraft.location.lat, aircraft.location.lng);
+          existingMarker.setPopupContent(popupContent);
+        } else {
+          const marker = L.marker([aircraft.location.lat, aircraft.location.lng], { 
+            icon: mapIcons.adsb,
+            opacity: 0 
+          })
+            .bindPopup(popupContent)
+            .addTo(mapRef.current!);
+          
+          let opacity = 0;
+          const fadeIn = () => {
+            opacity += 0.1;
+            marker.setOpacity(Math.min(opacity, 1));
+            if (opacity < 1) requestAnimationFrame(fadeIn);
+          };
+          requestAnimationFrame(fadeIn);
+          
+          markersRef.current.set(markerId, marker);
+        }
+      });
+    }
+
     // Remove markers that no longer exist with fade-out animation
     markersRef.current.forEach((marker, id) => {
       if (!existingMarkerIds.has(id)) {
@@ -223,7 +269,7 @@ const MapContent = () => {
       mapRef.current.fitBounds(bounds, { padding: [50, 50], maxZoom: 12 });
       setHasInitialFit(true);
     }
-  }, [sensorMarkers, clientMarkers, filter, allPositions, hasInitialFit]);
+  }, [sensorMarkers, clientMarkers, adsbMarkers, filter, allPositions, hasInitialFit]);
 
   // Update trail polylines
   useEffect(() => {

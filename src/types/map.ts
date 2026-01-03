@@ -1,7 +1,7 @@
 import { LatLngExpression } from "leaflet";
 import type { LucideIcon } from "lucide-react";
 
-export type FilterType = 'all' | 'gps' | 'starlink' | 'clients' | 'lora';
+export type FilterType = 'all' | 'gps' | 'starlink' | 'clients' | 'lora' | 'adsb';
 
 export interface MapStats {
   total: number;
@@ -9,6 +9,7 @@ export interface MapStats {
   starlink: number;
   clients: number;
   lora: number;
+  adsb: number;
 }
 
 export interface FilterButton {

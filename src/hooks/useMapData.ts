@@ -7,7 +7,9 @@ import {
   useGeoLocations,
   useDeviceLatest,
   useSensorTypeStats,
-  GeoLocation
+  useAdsbAircraft,
+  GeoLocation,
+  AdsbAircraft
 } from "@/hooks/useAuroraApi";
 import { useQueryClient } from "@tanstack/react-query";
 import type { MapStats, SensorMarker, ClientMarker } from "@/types/map";
@@ -146,6 +148,9 @@ export function useMapData() {
 
   // Get the Starlink device latest reading for real-time GPS
   const { data: starlinkLatest } = useDeviceLatest('starlink_dish_1');
+
+  // Get ADS-B aircraft data
+  const { data: adsbAircraft, isLoading: adsbLoading } = useAdsbAircraft();
 
   // Update last refresh time
   useEffect(() => {
@@ -515,24 +520,52 @@ export function useMapData() {
       .filter((c): c is ClientMarker => c !== null);
   }, [clients, gpsCoordinates]);
 
+  // Build ADS-B aircraft markers
+  const adsbMarkers = useMemo<SensorMarker[]>(() => {
+    if (!adsbAircraft || !Array.isArray(adsbAircraft)) return [];
+    
+    return adsbAircraft
+      .filter((aircraft: AdsbAircraft) => 
+        aircraft.lat !== undefined && 
+        aircraft.lon !== undefined &&
+        aircraft.lat >= -90 && aircraft.lat <= 90 &&
+        aircraft.lon >= -180 && aircraft.lon <= 180
+      )
+      .map((aircraft: AdsbAircraft) => ({
+        id: `adsb-${aircraft.hex}`,
+        name: aircraft.flight?.trim() || aircraft.hex,
+        type: 'adsb',
+        value: aircraft.alt_baro || aircraft.alt_geom || 0,
+        unit: 'ft',
+        status: (aircraft.seen !== undefined && aircraft.seen < 60) ? 'active' : 'stale',
+        lastUpdate: new Date().toISOString(),
+        location: {
+          lat: aircraft.lat!,
+          lng: aircraft.lon!
+        }
+      }));
+  }, [adsbAircraft]);
+
   // All marker positions for bounds fitting
   const allPositions = useMemo<LatLngExpression[]>(() => {
     const positions: LatLngExpression[] = [];
     sensorMarkers.forEach(s => positions.push([s.location.lat, s.location.lng]));
     clientMarkers.forEach(c => positions.push([c.location.lat, c.location.lng]));
+    adsbMarkers.forEach(a => positions.push([a.location.lat, a.location.lng]));
     return positions;
-  }, [sensorMarkers, clientMarkers]);
+  }, [sensorMarkers, clientMarkers, adsbMarkers]);
 
   // Calculate statistics
   const stats = useMemo<MapStats>(() => ({
-    total: sensorMarkers.length + clientMarkers.length,
+    total: sensorMarkers.length + clientMarkers.length + adsbMarkers.length,
     gps: sensorMarkers.filter(s => s.type === 'gps').length,
     starlink: sensorMarkers.filter(s => s.type === 'starlink').length,
     clients: clientMarkers.length,
     lora: sensorMarkers.filter(s => s.type === 'lora').length,
-  }), [sensorMarkers, clientMarkers]);
+    adsb: adsbMarkers.length,
+  }), [sensorMarkers, clientMarkers, adsbMarkers]);
 
-  const isLoading = sensorsLoading || clientsLoading || readingsLoading || geoLoading;
+  const isLoading = sensorsLoading || clientsLoading || readingsLoading || geoLoading || adsbLoading;
 
   // Format time ago
   const timeAgo = useMemo(() => {
@@ -544,6 +577,7 @@ export function useMapData() {
   return {
     sensorMarkers,
     clientMarkers,
+    adsbMarkers,
     allPositions,
     stats,
     isLoading,

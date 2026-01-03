@@ -3,6 +3,7 @@ import { memo } from "react";
 const LEGEND_ITEMS: { color: string; shadow: string; label: string }[] = [
   { color: 'bg-green-500', shadow: 'shadow-green-500/30', label: 'GPS Sensors' },
   { color: 'bg-violet-500', shadow: 'shadow-violet-500/30', label: 'Starlink Dishes' },
+  { color: 'bg-cyan-500', shadow: 'shadow-cyan-500/30', label: 'ADS-B Aircraft' },
   { color: 'bg-orange-500', shadow: 'shadow-orange-500/30', label: 'Client Devices' },
   { color: 'bg-red-500', shadow: 'shadow-red-500/30', label: 'LoRa Devices' },
 ];

@@ -9,6 +9,7 @@ interface MapStatisticsProps {
 const STAT_ITEMS: { key: keyof MapStats; color: string; label: string }[] = [
   { key: 'gps', color: 'bg-green-500', label: 'GPS' },
   { key: 'starlink', color: 'bg-violet-500', label: 'Starlink' },
+  { key: 'adsb', color: 'bg-cyan-500', label: 'ADS-B' },
   { key: 'clients', color: 'bg-orange-500', label: 'Clients' },
   { key: 'lora', color: 'bg-red-500', label: 'LoRa' },
 ];
