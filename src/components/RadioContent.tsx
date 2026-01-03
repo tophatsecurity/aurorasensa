@@ -16,7 +16,9 @@ import {
   MonitorSmartphone,
   List,
   LayoutGrid,
-  Table2
+  Table2,
+  Search,
+  X
 } from "lucide-react";
 import {
   Table,
@@ -26,6 +28,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -156,6 +159,8 @@ const RadioContent = () => {
   const [expandedSections, setExpandedSections] = useState<string[]>(["wifi", "bluetooth"]);
   const [wifiViewMode, setWifiViewMode] = useState<"cards" | "table">("cards");
   const [bluetoothViewMode, setBluetoothViewMode] = useState<"cards" | "table">("cards");
+  const [wifiSearch, setWifiSearch] = useState("");
+  const [bluetoothSearch, setBluetoothSearch] = useState("");
   
   // Convert timeRange to hours for API calls
   const hoursForTimeRange = useMemo(() => {
@@ -338,6 +343,30 @@ const RadioContent = () => {
 
     return Array.from(deviceMap.values()).sort((a, b) => b.rssi - a.rssi);
   }, [bluetoothReadings]);
+
+  // Filtered WiFi networks based on search
+  const filteredWifiNetworks = useMemo(() => {
+    if (!wifiSearch.trim()) return wifiNetworks;
+    const searchLower = wifiSearch.toLowerCase().trim();
+    return wifiNetworks.filter(network =>
+      (network.ssid?.toLowerCase().includes(searchLower)) ||
+      (network.bssid?.toLowerCase().includes(searchLower)) ||
+      (network.deviceId?.toLowerCase().includes(searchLower)) ||
+      (network.security?.toLowerCase().includes(searchLower))
+    );
+  }, [wifiNetworks, wifiSearch]);
+
+  // Filtered BLE devices based on search
+  const filteredBleDevices = useMemo(() => {
+    if (!bluetoothSearch.trim()) return bleDevices;
+    const searchLower = bluetoothSearch.toLowerCase().trim();
+    return bleDevices.filter(device =>
+      (device.name?.toLowerCase().includes(searchLower)) ||
+      (device.mac?.toLowerCase().includes(searchLower)) ||
+      (device.deviceId?.toLowerCase().includes(searchLower)) ||
+      (device.manufacturer?.toLowerCase().includes(searchLower))
+    );
+  }, [bleDevices, bluetoothSearch]);
 
   // Calculate overall stats
   const overallStats = useMemo(() => {
@@ -816,11 +845,11 @@ const RadioContent = () => {
             {/* WiFi Tab */}
             <TabsContent value="wifi" className="space-y-6">
               <Card>
-                <CardHeader>
+                <CardHeader className="space-y-4">
                   <CardTitle className="flex items-center justify-between">
                     <span className="flex items-center gap-2">
                       <Wifi className="w-5 h-5 text-aurora-cyan" />
-                      All WiFi Networks ({wifiNetworks.length})
+                      All WiFi Networks ({filteredWifiNetworks.length}{wifiSearch && ` of ${wifiNetworks.length}`})
                     </span>
                     <div className="flex items-center gap-1 border rounded-lg p-1">
                       <Button
@@ -841,6 +870,25 @@ const RadioContent = () => {
                       </Button>
                     </div>
                   </CardTitle>
+                  <div className="relative">
+                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                    <Input
+                      placeholder="Search by SSID, BSSID, or device..."
+                      value={wifiSearch}
+                      onChange={(e) => setWifiSearch(e.target.value)}
+                      className="pl-10 pr-10 bg-background"
+                    />
+                    {wifiSearch && (
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="absolute right-1 top-1/2 -translate-y-1/2 h-7 w-7 p-0"
+                        onClick={() => setWifiSearch("")}
+                      >
+                        <X className="h-4 w-4" />
+                      </Button>
+                    )}
+                  </div>
                 </CardHeader>
                 <CardContent>
                   {wifiNetworks.length === 0 ? (
@@ -848,6 +896,14 @@ const RadioContent = () => {
                       <Wifi className="w-16 h-16 mx-auto mb-4 opacity-50" />
                       <h3 className="text-lg font-medium mb-2">No WiFi Networks Detected</h3>
                       <p>WiFi scanning devices may be offline or not configured.</p>
+                    </div>
+                  ) : filteredWifiNetworks.length === 0 ? (
+                    <div className="text-center py-12 text-muted-foreground">
+                      <Search className="w-12 h-12 mx-auto mb-3 opacity-50" />
+                      <p>No networks match "{wifiSearch}"</p>
+                      <Button variant="ghost" size="sm" onClick={() => setWifiSearch("")} className="mt-2">
+                        Clear search
+                      </Button>
                     </div>
                   ) : wifiViewMode === "table" ? (
                     <div className="rounded-md border">
@@ -865,7 +921,7 @@ const RadioContent = () => {
                           </TableRow>
                         </TableHeader>
                         <TableBody>
-                          {wifiNetworks.map((network, index) => (
+                          {filteredWifiNetworks.map((network, index) => (
                             <TableRow key={`${network.bssid}-${index}`}>
                               <TableCell className="font-medium">
                                 {network.ssid || 'Hidden Network'}
@@ -911,7 +967,7 @@ const RadioContent = () => {
                     </div>
                   ) : (
                     <div className="space-y-3">
-                      {wifiNetworks.map((network, index) => (
+                      {filteredWifiNetworks.map((network, index) => (
                         <div 
                           key={`${network.bssid}-${index}`}
                           className="flex items-center justify-between p-4 rounded-lg border border-border hover:bg-muted/50 transition-colors"
@@ -1000,11 +1056,11 @@ const RadioContent = () => {
             {/* Bluetooth/BLE Tab */}
             <TabsContent value="bluetooth" className="space-y-6">
               <Card>
-                <CardHeader>
+                <CardHeader className="space-y-4">
                   <CardTitle className="flex items-center justify-between">
                     <span className="flex items-center gap-2">
                       <Bluetooth className="w-5 h-5 text-aurora-purple" />
-                      All BLE Devices ({bleDevices.length})
+                      All BLE Devices ({filteredBleDevices.length}{bluetoothSearch && ` of ${bleDevices.length}`})
                     </span>
                     <div className="flex items-center gap-1 border rounded-lg p-1">
                       <Button
@@ -1025,6 +1081,25 @@ const RadioContent = () => {
                       </Button>
                     </div>
                   </CardTitle>
+                  <div className="relative">
+                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                    <Input
+                      placeholder="Search by name, MAC address, or device..."
+                      value={bluetoothSearch}
+                      onChange={(e) => setBluetoothSearch(e.target.value)}
+                      className="pl-10 pr-10 bg-background"
+                    />
+                    {bluetoothSearch && (
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="absolute right-1 top-1/2 -translate-y-1/2 h-7 w-7 p-0"
+                        onClick={() => setBluetoothSearch("")}
+                      >
+                        <X className="h-4 w-4" />
+                      </Button>
+                    )}
+                  </div>
                 </CardHeader>
                 <CardContent>
                   {bleDevices.length === 0 ? (
@@ -1032,6 +1107,14 @@ const RadioContent = () => {
                       <Bluetooth className="w-16 h-16 mx-auto mb-4 opacity-50" />
                       <h3 className="text-lg font-medium mb-2">No BLE Devices Detected</h3>
                       <p>Bluetooth scanning devices may be offline or not configured.</p>
+                    </div>
+                  ) : filteredBleDevices.length === 0 ? (
+                    <div className="text-center py-12 text-muted-foreground">
+                      <Search className="w-12 h-12 mx-auto mb-3 opacity-50" />
+                      <p>No devices match "{bluetoothSearch}"</p>
+                      <Button variant="ghost" size="sm" onClick={() => setBluetoothSearch("")} className="mt-2">
+                        Clear search
+                      </Button>
                     </div>
                   ) : bluetoothViewMode === "table" ? (
                     <div className="rounded-md border">
@@ -1048,7 +1131,7 @@ const RadioContent = () => {
                           </TableRow>
                         </TableHeader>
                         <TableBody>
-                          {bleDevices.map((device, index) => (
+                          {filteredBleDevices.map((device, index) => (
                             <TableRow key={`${device.mac}-${index}`}>
                               <TableCell className="font-medium">
                                 {device.name}
@@ -1091,7 +1174,7 @@ const RadioContent = () => {
                     </div>
                   ) : (
                     <div className="space-y-3">
-                      {bleDevices.map((device, index) => {
+                      {filteredBleDevices.map((device, index) => {
                         const DeviceIcon = getDeviceIcon(device.type || '');
                         return (
                           <div 
