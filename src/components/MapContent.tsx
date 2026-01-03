@@ -9,7 +9,7 @@ import { mapIcons, IconType, createAircraftIcon, getAircraftType, getAircraftCol
 import { formatDateTime } from "@/utils/dateUtils";
 
 // Custom hooks
-import { useMapData } from "@/hooks/useMapData";
+import { useMapData, AircraftTrailData } from "@/hooks/useMapData";
 import { useGpsHistory } from "@/hooks/useGpsHistory";
 import { useAdsbHistory, AircraftTrail } from "@/hooks/useAdsbHistory";
 
@@ -66,6 +66,7 @@ const MapContent = () => {
     sensorMarkers,
     clientMarkers,
     adsbMarkers,
+    adsbTrails,
     allPositions,
     stats,
     isLoading,
@@ -475,28 +476,79 @@ const MapContent = () => {
     });
   }, [trails, showTrails, filter]);
 
-  // Add trail when ADS-B history data is loaded
+  // Add trail when ADS-B history data is loaded (manual toggle)
   useEffect(() => {
     if (historyData) {
       addTrailFromData();
     }
   }, [historyData, addTrailFromData]);
 
-  // Render ADS-B aircraft trails
+  // Render ADS-B aircraft trails automatically from historical data
   useEffect(() => {
-    if (!mapRef.current) return;
+    if (!mapRef.current || !showTrails) return;
+    if (filter !== 'all' && filter !== 'adsb') {
+      // Clear all adsb trails when filter excludes adsb
+      adsbTrailsRef.current.forEach(polyline => polyline.remove());
+      adsbTrailsRef.current.clear();
+      return;
+    }
 
-    const activeTrailIds = new Set(adsbActiveTrails.keys());
+    // Combine auto trails from adsbTrails with manually selected adsbActiveTrails
+    const allTrailIds = new Set<string>();
+    
+    // Add automatic trails from historical data
+    adsbTrails.forEach(trail => allTrailIds.add(trail.icao));
+    
+    // Add manually selected trails
+    adsbActiveTrails.forEach((_, icao) => allTrailIds.add(icao));
 
-    // Remove trails that are no longer active
+    // Remove trails that are no longer needed
     adsbTrailsRef.current.forEach((polyline, id) => {
-      if (!activeTrailIds.has(id)) {
+      // Skip shadow trails in cleanup check
+      const baseId = id.endsWith('-shadow') ? id.replace('-shadow', '') : id;
+      if (!allTrailIds.has(baseId)) {
         polyline.remove();
         adsbTrailsRef.current.delete(id);
       }
     });
 
-    // Add or update active trails
+    // Render automatic trails from adsbTrails
+    adsbTrails.forEach(trail => {
+      if (trail.coordinates.length < 2) return;
+
+      const icao = trail.icao;
+      const existing = adsbTrailsRef.current.get(icao);
+
+      if (existing) {
+        existing.setLatLngs(trail.coordinates);
+      } else {
+        // Create shadow line first
+        const shadowLine = L.polyline(trail.coordinates, {
+          color: '#006064',
+          weight: 5,
+          opacity: 0.3,
+        }).addTo(mapRef.current!);
+
+        // Create main trail line
+        const polyline = L.polyline(trail.coordinates, {
+          color: '#00bcd4',
+          weight: 3,
+          opacity: 0.8,
+          lineCap: 'round',
+          lineJoin: 'round',
+        }).addTo(mapRef.current!);
+
+        polyline.bringToFront();
+
+        const tooltipContent = `✈️ ${trail.flight || trail.icao} - ${trail.coordinates.length} positions`;
+        polyline.bindTooltip(tooltipContent, { permanent: false, direction: 'top' });
+
+        adsbTrailsRef.current.set(icao, polyline);
+        adsbTrailsRef.current.set(`${icao}-shadow`, shadowLine);
+      }
+    });
+
+    // Render manually selected trails from adsbActiveTrails (overrides)
     adsbActiveTrails.forEach((trail, icao) => {
       if (trail.coordinates.length < 2) return;
 
@@ -505,42 +557,30 @@ const MapContent = () => {
       if (existing) {
         existing.setLatLngs(trail.coordinates);
       } else {
-        // Create gradient-like effect with multiple polylines or a single styled one
-        const polyline = L.polyline(trail.coordinates, {
-          color: '#00bcd4', // Cyan color for ADS-B trails
-          weight: 3,
-          opacity: 0.8,
-          lineCap: 'round',
-          lineJoin: 'round',
-        }).addTo(mapRef.current!);
-
-        // Add decorators for direction indication (arrow heads simulation with dashes)
         const shadowLine = L.polyline(trail.coordinates, {
           color: '#006064',
           weight: 5,
           opacity: 0.3,
         }).addTo(mapRef.current!);
 
-        // Combine into a feature group for easier management
+        const polyline = L.polyline(trail.coordinates, {
+          color: '#00bcd4',
+          weight: 3,
+          opacity: 0.8,
+          lineCap: 'round',
+          lineJoin: 'round',
+        }).addTo(mapRef.current!);
+
         polyline.bringToFront();
 
         const tooltipContent = `✈️ ${trail.flight || trail.icao} - ${trail.coordinates.length} positions`;
         polyline.bindTooltip(tooltipContent, { permanent: false, direction: 'top' });
 
-        // Store just the main polyline, we'll manage the shadow separately
         adsbTrailsRef.current.set(icao, polyline);
         adsbTrailsRef.current.set(`${icao}-shadow`, shadowLine);
       }
     });
-
-    // Clean up shadows for removed trails
-    adsbTrailsRef.current.forEach((polyline, id) => {
-      if (id.endsWith('-shadow') && !activeTrailIds.has(id.replace('-shadow', ''))) {
-        polyline.remove();
-        adsbTrailsRef.current.delete(id);
-      }
-    });
-  }, [adsbActiveTrails]);
+  }, [adsbTrails, adsbActiveTrails, showTrails, filter]);
 
   // Auto-refresh for live tracking
   useEffect(() => {
