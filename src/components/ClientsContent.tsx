@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Users, UserPlus, UserX, Trash2, RefreshCw, Search, Filter } from "lucide-react";
+import { Users, UserPlus, UserX, Trash2, RefreshCw, Search, CheckCircle } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -23,12 +23,14 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { useClients, useDeleteClient, Client } from "@/hooks/useAuroraApi";
+import { useClients, useDeleteClient, useAdoptClient, Client } from "@/hooks/useAuroraApi";
 import { formatDistanceToNow } from "date-fns";
+import { toast } from "sonner";
 
 const ClientsContent = () => {
   const { data: clients, isLoading, isError, refetch } = useClients();
   const deleteClient = useDeleteClient();
+  const adoptClient = useAdoptClient();
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("all");
   const [adoptionFilter, setAdoptionFilter] = useState<string>("all");
@@ -69,6 +71,17 @@ const ClientsContent = () => {
 
   const handleDelete = (clientId: string) => {
     deleteClient.mutate(clientId);
+  };
+
+  const handleAdopt = (clientId: string, hostname: string) => {
+    adoptClient.mutate(clientId, {
+      onSuccess: () => {
+        toast.success(`Successfully adopted ${hostname || clientId}`);
+      },
+      onError: (error) => {
+        toast.error(`Failed to adopt client: ${error.message}`);
+      },
+    });
   };
 
   // Filter clients
@@ -286,38 +299,55 @@ const ClientsContent = () => {
                       </div>
                     </div>
 
-                    {canDelete && (
-                      <AlertDialog>
-                        <AlertDialogTrigger asChild>
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            className="text-muted-foreground hover:text-destructive hover:bg-destructive/10"
-                            disabled={deleteClient.isPending}
-                          >
-                            <Trash2 className="w-4 h-4" />
-                          </Button>
-                        </AlertDialogTrigger>
-                        <AlertDialogContent>
-                          <AlertDialogHeader>
-                            <AlertDialogTitle>Delete Client</AlertDialogTitle>
-                            <AlertDialogDescription>
-                              Are you sure you want to delete "{client.hostname || client.mac_address}"? 
-                              This action cannot be undone.
-                            </AlertDialogDescription>
-                          </AlertDialogHeader>
-                          <AlertDialogFooter>
-                            <AlertDialogCancel>Cancel</AlertDialogCancel>
-                            <AlertDialogAction
-                              onClick={() => handleDelete(clientId)}
-                              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                    <div className="flex items-center gap-2">
+                      {/* Adopt Button - only for unadopted clients */}
+                      {!isAdopted && (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => handleAdopt(clientId, client.hostname)}
+                          disabled={adoptClient.isPending}
+                          className="text-success border-success/50 hover:bg-success/10 hover:text-success"
+                        >
+                          <CheckCircle className="w-4 h-4 mr-1" />
+                          Adopt
+                        </Button>
+                      )}
+
+                      {/* Delete Button - only for unadopted or offline */}
+                      {canDelete && (
+                        <AlertDialog>
+                          <AlertDialogTrigger asChild>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="text-muted-foreground hover:text-destructive hover:bg-destructive/10"
+                              disabled={deleteClient.isPending}
                             >
-                              Delete
-                            </AlertDialogAction>
-                          </AlertDialogFooter>
-                        </AlertDialogContent>
-                      </AlertDialog>
-                    )}
+                              <Trash2 className="w-4 h-4" />
+                            </Button>
+                          </AlertDialogTrigger>
+                          <AlertDialogContent>
+                            <AlertDialogHeader>
+                              <AlertDialogTitle>Delete Client</AlertDialogTitle>
+                              <AlertDialogDescription>
+                                Are you sure you want to delete "{client.hostname || client.mac_address}"? 
+                                This action cannot be undone.
+                              </AlertDialogDescription>
+                            </AlertDialogHeader>
+                            <AlertDialogFooter>
+                              <AlertDialogCancel>Cancel</AlertDialogCancel>
+                              <AlertDialogAction
+                                onClick={() => handleDelete(clientId)}
+                                className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                              >
+                                Delete
+                              </AlertDialogAction>
+                            </AlertDialogFooter>
+                          </AlertDialogContent>
+                        </AlertDialog>
+                      )}
+                    </div>
                   </div>
                 );
               })}
