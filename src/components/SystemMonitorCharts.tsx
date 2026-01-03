@@ -11,7 +11,7 @@ import {
   Line
 } from "recharts";
 import { Cpu, MemoryStick, HardDrive, Thermometer, Loader2 } from "lucide-react";
-import { useSystemMonitorTimeseries, SystemMonitorReading } from "@/hooks/useAuroraApi";
+import { useSystemMonitorTimeseries } from "@/hooks/useAuroraApi";
 
 interface ChartData {
   time: string;
@@ -26,6 +26,42 @@ interface SystemChartProps {
   data: ChartData[];
   isLoading?: boolean;
   chartType?: 'area' | 'line';
+}
+
+// Type for nested system_monitor reading data
+interface SystemMonitorData {
+  timestamp: string;
+  device_id?: string;
+  device_type?: string;
+  data?: {
+    performance?: {
+      cpu_usage_percent?: number;
+      cpu_temp_celsius?: number;
+      cpu_temp_fahrenheit?: number;
+      voltage?: number;
+      memory?: {
+        total_mb?: number;
+        used_mb?: number;
+        available_mb?: number;
+        usage_percent?: number;
+      };
+      load_average?: {
+        "1min"?: number;
+        "5min"?: number;
+        "15min"?: number;
+      };
+    };
+    storage?: {
+      filesystems?: Array<{
+        use_percent?: string;
+        mounted_on?: string;
+      }>;
+    };
+    system?: {
+      hostname?: string;
+      uptime_seconds?: number;
+    };
+  };
 }
 
 const SystemChart = ({ title, icon, color, unit, data, isLoading, chartType = 'area' }: SystemChartProps) => {
@@ -168,30 +204,57 @@ const SystemChart = ({ title, icon, color, unit, data, isLoading, chartType = 'a
 const SystemMonitorCharts = () => {
   const { data: systemData, isLoading } = useSystemMonitorTimeseries(24);
 
-  const formatData = (
-    readings: SystemMonitorReading[] | undefined,
-    field: keyof SystemMonitorReading
+  // Extract nested data from system_monitor readings
+  const extractData = (
+    readings: SystemMonitorData[] | undefined,
+    extractor: (r: SystemMonitorData) => number | undefined | null
   ): ChartData[] => {
     if (!readings || readings.length === 0) return [];
     return readings
-      .filter(r => r[field] !== undefined && r[field] !== null)
-      .map(r => ({
-        time: new Date(r.timestamp).toLocaleTimeString('en-US', { 
-          hour12: false, 
-          hour: '2-digit', 
-          minute: '2-digit'
-        }),
-        value: Number(r[field]),
-      }));
+      .map(r => {
+        const value = extractor(r);
+        if (value === undefined || value === null) return null;
+        return {
+          time: new Date(r.timestamp).toLocaleTimeString('en-US', { 
+            hour12: false, 
+            hour: '2-digit', 
+            minute: '2-digit'
+          }),
+          value: Number(value),
+        };
+      })
+      .filter((d): d is ChartData => d !== null);
   };
 
-  const cpuData = useMemo(() => formatData(systemData?.readings, 'cpu_percent'), [systemData?.readings]);
-  const memoryData = useMemo(() => formatData(systemData?.readings, 'memory_percent'), [systemData?.readings]);
-  const diskData = useMemo(() => formatData(systemData?.readings, 'disk_percent'), [systemData?.readings]);
-  const tempData = useMemo(() => formatData(systemData?.readings, 'cpu_temp_c'), [systemData?.readings]);
+  const cpuData = useMemo(() => 
+    extractData(systemData?.readings as SystemMonitorData[], r => r.data?.performance?.cpu_usage_percent), 
+    [systemData?.readings]
+  );
+  
+  const memoryData = useMemo(() => 
+    extractData(systemData?.readings as SystemMonitorData[], r => r.data?.performance?.memory?.usage_percent), 
+    [systemData?.readings]
+  );
+  
+  const diskData = useMemo(() => 
+    extractData(systemData?.readings as SystemMonitorData[], r => {
+      // Get root filesystem usage
+      const rootFs = r.data?.storage?.filesystems?.find(fs => fs.mounted_on === '/');
+      if (rootFs?.use_percent) {
+        return parseFloat(rootFs.use_percent.replace('%', ''));
+      }
+      return undefined;
+    }), 
+    [systemData?.readings]
+  );
+  
+  const tempData = useMemo(() => 
+    extractData(systemData?.readings as SystemMonitorData[], r => r.data?.performance?.cpu_temp_celsius), 
+    [systemData?.readings]
+  );
 
   return (
-    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
       <SystemChart
         title="CPU Usage"
         icon={<Cpu className="w-5 h-5" style={{ color: '#06b6d4' }} />}
