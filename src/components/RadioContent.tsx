@@ -143,13 +143,12 @@ const RadioContent = () => {
   const [timeRange, setTimeRange] = useState("24h");
   const [expandedSections, setExpandedSections] = useState<string[]>(["wifi", "bluetooth"]);
   
-  // Fetch data
+  // Fetch data - using correct sensor type names from API
   const { data: clients, isLoading: clientsLoading } = useClients();
   const { data: latestReadings, isLoading: readingsLoading, refetch: refetchReadings } = useLatestReadings();
   const { data: allSensorStats, isLoading: statsLoading } = useAllSensorStats();
-  const { data: wifiStats } = useSensorTypeStats("wifi");
-  const { data: bluetoothStats } = useSensorTypeStats("bluetooth");
-  const { data: bleStats } = useSensorTypeStats("ble");
+  const { data: wifiStats } = useSensorTypeStats("wifi_scanner");
+  const { data: bluetoothStats } = useSensorTypeStats("bluetooth_scanner");
 
   // Toggle section expansion
   const toggleSection = (section: string) => {
@@ -292,7 +291,7 @@ const RadioContent = () => {
   // Calculate overall stats
   const overallStats = useMemo(() => {
     const wifiCount = wifiStats?.device_count || wifiReadings.length;
-    const bleCount = (bluetoothStats?.device_count || 0) + (bleStats?.device_count || 0) || bluetoothReadings.length;
+    const bleCount = bluetoothStats?.device_count || bluetoothReadings.length;
     const totalNetworks = wifiNetworks.length;
     const totalBleDevices = bleDevices.length;
 
@@ -308,7 +307,7 @@ const RadioContent = () => {
         ? Math.round(bleDevices.reduce((sum, d) => sum + d.rssi, 0) / bleDevices.length)
         : null,
     };
-  }, [wifiStats, bluetoothStats, bleStats, wifiReadings, bluetoothReadings, wifiNetworks, bleDevices]);
+  }, [wifiStats, bluetoothStats, wifiReadings, bluetoothReadings, wifiNetworks, bleDevices]);
 
   // Mock timeseries data for charts (would be replaced with real API data)
   const chartData = useMemo(() => {
