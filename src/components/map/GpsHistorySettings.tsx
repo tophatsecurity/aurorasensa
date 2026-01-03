@@ -1,4 +1,4 @@
-import { Settings2, Clock, Trash2 } from "lucide-react";
+import { Settings2, Clock, Trash2, Navigation, Radio } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -10,8 +10,10 @@ import {
 } from "@/components/ui/popover";
 
 interface GpsHistorySettingsProps {
-  retentionMinutes: number;
-  onRetentionChange: (minutes: number) => void;
+  sensorRetentionMinutes: number;
+  clientRetentionMinutes: number;
+  onSensorRetentionChange: (minutes: number) => void;
+  onClientRetentionChange: (minutes: number) => void;
   showTrails: boolean;
   onShowTrailsChange: (show: boolean) => void;
   trailCount: number;
@@ -19,8 +21,10 @@ interface GpsHistorySettingsProps {
 }
 
 export function GpsHistorySettings({
-  retentionMinutes,
-  onRetentionChange,
+  sensorRetentionMinutes,
+  clientRetentionMinutes,
+  onSensorRetentionChange,
+  onClientRetentionChange,
   showTrails,
   onShowTrailsChange,
   trailCount,
@@ -43,10 +47,10 @@ export function GpsHistorySettings({
           className="bg-card/90 backdrop-blur border-border/50 hover:bg-card gap-2"
         >
           <Clock className="w-4 h-4" />
-          <span className="text-xs">Trails: {showTrails ? `${retentionMinutes}m` : "Off"}</span>
+          <span className="text-xs">Trails: {showTrails ? "On" : "Off"}</span>
         </Button>
       </PopoverTrigger>
-      <PopoverContent className="w-72" align="end">
+      <PopoverContent className="w-80" align="end">
         <div className="space-y-4">
           <div className="flex items-center justify-between">
             <h4 className="font-medium text-sm">GPS History Trails</h4>
@@ -62,37 +66,67 @@ export function GpsHistorySettings({
             </div>
           </div>
 
+          {/* Sensor Retention */}
           <div className="space-y-2">
-            <Label className="text-xs text-muted-foreground">
-              Retention Period
-            </Label>
+            <div className="flex items-center gap-2">
+              <Navigation className="w-4 h-4 text-green-500" />
+              <Label className="text-xs text-muted-foreground">
+                Sensor Trail Retention
+              </Label>
+            </div>
             <div className="flex gap-1">
               {presetOptions.map(opt => (
                 <Button
-                  key={opt.value}
-                  variant={retentionMinutes === opt.value ? "default" : "outline"}
+                  key={`sensor-${opt.value}`}
+                  variant={sensorRetentionMinutes === opt.value ? "default" : "outline"}
                   size="sm"
                   className="flex-1 text-xs px-2"
-                  onClick={() => onRetentionChange(opt.value)}
+                  onClick={() => onSensorRetentionChange(opt.value)}
                 >
                   {opt.label}
                 </Button>
               ))}
             </div>
-          </div>
-
-          <div className="space-y-2">
-            <Label htmlFor="custom-retention" className="text-xs text-muted-foreground">
-              Custom (minutes)
-            </Label>
             <Input
-              id="custom-retention"
               type="number"
               min={1}
               max={1440}
-              value={retentionMinutes}
-              onChange={(e) => onRetentionChange(Math.max(1, Math.min(1440, parseInt(e.target.value) || 60)))}
+              value={sensorRetentionMinutes}
+              onChange={(e) => onSensorRetentionChange(Math.max(1, Math.min(1440, parseInt(e.target.value) || 60)))}
               className="h-8"
+              placeholder="Custom minutes"
+            />
+          </div>
+
+          {/* Client Retention */}
+          <div className="space-y-2">
+            <div className="flex items-center gap-2">
+              <Radio className="w-4 h-4 text-orange-500" />
+              <Label className="text-xs text-muted-foreground">
+                Client Trail Retention
+              </Label>
+            </div>
+            <div className="flex gap-1">
+              {presetOptions.map(opt => (
+                <Button
+                  key={`client-${opt.value}`}
+                  variant={clientRetentionMinutes === opt.value ? "default" : "outline"}
+                  size="sm"
+                  className="flex-1 text-xs px-2"
+                  onClick={() => onClientRetentionChange(opt.value)}
+                >
+                  {opt.label}
+                </Button>
+              ))}
+            </div>
+            <Input
+              type="number"
+              min={1}
+              max={1440}
+              value={clientRetentionMinutes}
+              onChange={(e) => onClientRetentionChange(Math.max(1, Math.min(1440, parseInt(e.target.value) || 60)))}
+              className="h-8"
+              placeholder="Custom minutes"
             />
           </div>
 

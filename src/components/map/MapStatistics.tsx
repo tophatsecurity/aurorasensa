@@ -1,32 +1,19 @@
 import { memo } from "react";
-import { Activity, Clock, History } from "lucide-react";
+import { Activity, Clock } from "lucide-react";
 import type { MapStats } from "@/types/map";
 
 interface MapStatisticsProps {
   stats: MapStats;
-  isHistoricalAdsb?: boolean;
-  adsbSource?: 'live' | 'historical' | 'none';
-  adsbHistoryMinutes?: number;
 }
 
-const STAT_ITEMS: { key: keyof MapStats; color: string; label: string; pulse?: boolean }[] = [
+const STAT_ITEMS: { key: keyof MapStats; color: string; label: string }[] = [
   { key: 'gps', color: 'bg-green-500', label: 'GPS' },
-  { key: 'adsb', color: 'bg-cyan-500', label: 'ADS-B', pulse: true },
   { key: 'starlink', color: 'bg-violet-500', label: 'Starlink' },
   { key: 'clients', color: 'bg-orange-500', label: 'Clients' },
   { key: 'lora', color: 'bg-red-500', label: 'LoRa' },
 ];
 
-export const MapStatistics = memo(function MapStatistics({ 
-  stats, 
-  isHistoricalAdsb, 
-  adsbSource,
-  adsbHistoryMinutes = 60
-}: MapStatisticsProps) {
-  const formatTimeRange = (minutes: number) => {
-    if (minutes < 60) return `${minutes}min`;
-    return `${minutes / 60}hr`;
-  };
+export const MapStatistics = memo(function MapStatistics({ stats }: MapStatisticsProps) {
   return (
     <div className="absolute top-4 right-4 glass-card rounded-xl p-4 z-[1000] min-w-[200px] backdrop-blur-md border border-border/50">
       <div className="flex items-center gap-2 mb-3">
@@ -44,14 +31,8 @@ export const MapStatistics = memo(function MapStatistics({
         {STAT_ITEMS.map((item) => (
           <div key={item.key} className="flex justify-between">
             <span className="text-muted-foreground flex items-center gap-2">
-              <div className={`w-2 h-2 rounded-full ${item.color} ${item.pulse && !isHistoricalAdsb ? 'animate-pulse' : ''}`} />
+              <div className={`w-2 h-2 rounded-full ${item.color}`} />
               {item.label}
-              {item.key === 'adsb' && isHistoricalAdsb && (
-                <span className="text-[10px] text-warning flex items-center gap-1">
-                  <History className="w-3 h-3" />
-                  {formatTimeRange(adsbHistoryMinutes)}
-                </span>
-              )}
             </span>
             <span className="font-medium">{stats[item.key]}</span>
           </div>
@@ -59,11 +40,7 @@ export const MapStatistics = memo(function MapStatistics({
       </div>
       <div className="mt-3 pt-3 border-t border-border/50 flex items-center gap-2 text-xs text-muted-foreground">
         <Clock className="w-3 h-3" />
-        {isHistoricalAdsb ? (
-          <span className="text-warning">ADS-B: Historical ({formatTimeRange(adsbHistoryMinutes)})</span>
-        ) : (
-          <span>Auto-refresh: 5s</span>
-        )}
+        <span>Auto-refresh: 5s</span>
       </div>
     </div>
   );
