@@ -508,6 +508,46 @@ export function useStarlinkReadings(hours: number = 24) {
   });
 }
 
+// Starlink timeseries data for charts
+export interface StarlinkTimeseriesPoint {
+  timestamp: string;
+  signal_dbm?: number;
+  power_w?: number;
+  snr?: number;
+  downlink_throughput_bps?: number;
+  uplink_throughput_bps?: number;
+  pop_ping_latency_ms?: number;
+}
+
+export interface StarlinkTimeseriesResponse {
+  count: number;
+  readings: StarlinkTimeseriesPoint[];
+}
+
+export function useStarlinkTimeseries(hours: number = 24) {
+  return useQuery({
+    queryKey: ["aurora", "starlink", "timeseries", hours],
+    queryFn: async () => {
+      try {
+        // Try to get starlink-specific readings from the readings endpoint
+        const response = await callAuroraApi<{ count: number; readings: StarlinkTimeseriesPoint[] }>(`/api/readings/sensor/starlink?hours=${hours}`);
+        return response;
+      } catch {
+        // Fallback: try to get from general sensor readings
+        try {
+          const fallback = await callAuroraApi<{ count: number; readings: StarlinkTimeseriesPoint[] }>(`/api/stats/sensors/starlink`);
+          return fallback;
+        } catch (error) {
+          console.warn("Failed to fetch starlink timeseries:", error);
+          return { count: 0, readings: [] };
+        }
+      }
+    },
+    refetchInterval: 30000,
+    retry: 1,
+  });
+}
+
 // Thermal probe readings
 export interface ThermalProbeReading {
   timestamp: string;
