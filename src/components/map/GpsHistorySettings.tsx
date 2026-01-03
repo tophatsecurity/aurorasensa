@@ -1,4 +1,4 @@
-import { Settings2, Clock, Trash2, Navigation, Radio } from "lucide-react";
+import { Settings2, Clock, Trash2, Navigation, Radio, Plane } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -16,8 +16,12 @@ interface GpsHistorySettingsProps {
   onClientRetentionChange: (minutes: number) => void;
   showTrails: boolean;
   onShowTrailsChange: (show: boolean) => void;
+  showAdsbTrails: boolean;
+  onShowAdsbTrailsChange: (show: boolean) => void;
   trailCount: number;
+  adsbTrailCount: number;
   onClearHistory: () => void;
+  onClearAdsbTrails: () => void;
 }
 
 export function GpsHistorySettings({
@@ -27,8 +31,12 @@ export function GpsHistorySettings({
   onClientRetentionChange,
   showTrails,
   onShowTrailsChange,
+  showAdsbTrails,
+  onShowAdsbTrailsChange,
   trailCount,
+  adsbTrailCount,
   onClearHistory,
+  onClearAdsbTrails,
 }: GpsHistorySettingsProps) {
   const presetOptions = [
     { label: "15m", value: 15 },
@@ -37,6 +45,8 @@ export function GpsHistorySettings({
     { label: "2h", value: 120 },
     { label: "4h", value: 240 },
   ];
+
+  const anyTrailsOn = showTrails || showAdsbTrails;
 
   return (
     <Popover>
@@ -47,102 +57,117 @@ export function GpsHistorySettings({
           className="bg-card/90 backdrop-blur border-border/50 hover:bg-card gap-2"
         >
           <Clock className="w-4 h-4" />
-          <span className="text-xs">Trails: {showTrails ? "On" : "Off"}</span>
+          <span className="text-xs">Trails: {anyTrailsOn ? "On" : "Off"}</span>
         </Button>
       </PopoverTrigger>
       <PopoverContent className="w-80" align="end">
         <div className="space-y-4">
-          <div className="flex items-center justify-between">
-            <h4 className="font-medium text-sm">GPS History Trails</h4>
-            <div className="flex items-center gap-2">
-              <Label htmlFor="show-trails" className="text-xs text-muted-foreground">
-                Show
-              </Label>
+          <h4 className="font-medium text-sm">Trail Settings</h4>
+
+          {/* Sensor/Client Trails Toggle */}
+          <div className="space-y-2 p-3 rounded-lg bg-muted/50">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Navigation className="w-4 h-4 text-green-500" />
+                <span className="text-sm font-medium">Sensor/Client Trails</span>
+              </div>
               <Switch
                 id="show-trails"
                 checked={showTrails}
                 onCheckedChange={onShowTrailsChange}
               />
             </div>
+
+            {showTrails && (
+              <>
+                {/* Sensor Retention */}
+                <div className="space-y-2 mt-3">
+                  <Label className="text-xs text-muted-foreground">
+                    Sensor Trail Retention
+                  </Label>
+                  <div className="flex gap-1">
+                    {presetOptions.map(opt => (
+                      <Button
+                        key={`sensor-${opt.value}`}
+                        variant={sensorRetentionMinutes === opt.value ? "default" : "outline"}
+                        size="sm"
+                        className="flex-1 text-xs px-2"
+                        onClick={() => onSensorRetentionChange(opt.value)}
+                      >
+                        {opt.label}
+                      </Button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Client Retention */}
+                <div className="space-y-2">
+                  <Label className="text-xs text-muted-foreground">
+                    Client Trail Retention
+                  </Label>
+                  <div className="flex gap-1">
+                    {presetOptions.map(opt => (
+                      <Button
+                        key={`client-${opt.value}`}
+                        variant={clientRetentionMinutes === opt.value ? "default" : "outline"}
+                        size="sm"
+                        className="flex-1 text-xs px-2"
+                        onClick={() => onClientRetentionChange(opt.value)}
+                      >
+                        {opt.label}
+                      </Button>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="flex items-center justify-between pt-2 border-t border-border/50">
+                  <span className="text-xs text-muted-foreground">
+                    {trailCount} active
+                  </span>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="gap-1 h-7 text-xs"
+                    onClick={onClearHistory}
+                  >
+                    <Trash2 className="w-3 h-3" />
+                    Clear
+                  </Button>
+                </div>
+              </>
+            )}
           </div>
 
-          {/* Sensor Retention */}
-          <div className="space-y-2">
-            <div className="flex items-center gap-2">
-              <Navigation className="w-4 h-4 text-green-500" />
-              <Label className="text-xs text-muted-foreground">
-                Sensor Trail Retention
-              </Label>
+          {/* ADS-B Trails Toggle */}
+          <div className="space-y-2 p-3 rounded-lg bg-muted/50">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Plane className="w-4 h-4 text-cyan-500" />
+                <span className="text-sm font-medium">Aircraft Trails</span>
+              </div>
+              <Switch
+                id="show-adsb-trails"
+                checked={showAdsbTrails}
+                onCheckedChange={onShowAdsbTrailsChange}
+              />
             </div>
-            <div className="flex gap-1">
-              {presetOptions.map(opt => (
+
+            {showAdsbTrails && adsbTrailCount > 0 && (
+              <div className="flex items-center justify-between pt-2 border-t border-border/50">
+                <span className="text-xs text-muted-foreground">
+                  {adsbTrailCount} flight trails
+                </span>
                 <Button
-                  key={`sensor-${opt.value}`}
-                  variant={sensorRetentionMinutes === opt.value ? "default" : "outline"}
+                  variant="ghost"
                   size="sm"
-                  className="flex-1 text-xs px-2"
-                  onClick={() => onSensorRetentionChange(opt.value)}
+                  className="gap-1 h-7 text-xs"
+                  onClick={onClearAdsbTrails}
                 >
-                  {opt.label}
+                  <Trash2 className="w-3 h-3" />
+                  Clear
                 </Button>
-              ))}
-            </div>
-            <Input
-              type="number"
-              min={1}
-              max={1440}
-              value={sensorRetentionMinutes}
-              onChange={(e) => onSensorRetentionChange(Math.max(1, Math.min(1440, parseInt(e.target.value) || 60)))}
-              className="h-8"
-              placeholder="Custom minutes"
-            />
-          </div>
-
-          {/* Client Retention */}
-          <div className="space-y-2">
-            <div className="flex items-center gap-2">
-              <Radio className="w-4 h-4 text-orange-500" />
-              <Label className="text-xs text-muted-foreground">
-                Client Trail Retention
-              </Label>
-            </div>
-            <div className="flex gap-1">
-              {presetOptions.map(opt => (
-                <Button
-                  key={`client-${opt.value}`}
-                  variant={clientRetentionMinutes === opt.value ? "default" : "outline"}
-                  size="sm"
-                  className="flex-1 text-xs px-2"
-                  onClick={() => onClientRetentionChange(opt.value)}
-                >
-                  {opt.label}
-                </Button>
-              ))}
-            </div>
-            <Input
-              type="number"
-              min={1}
-              max={1440}
-              value={clientRetentionMinutes}
-              onChange={(e) => onClientRetentionChange(Math.max(1, Math.min(1440, parseInt(e.target.value) || 60)))}
-              className="h-8"
-              placeholder="Custom minutes"
-            />
-          </div>
-
-          <div className="flex items-center justify-between pt-2 border-t border-border/50">
-            <span className="text-xs text-muted-foreground">
-              {trailCount} active trails
-            </span>
-            <Button
-              variant="destructive"
-              size="sm"
-              className="gap-1"
-              onClick={onClearHistory}
-            >
-              <Trash2 className="w-3 h-3" />
-              Clear
-            </Button>
+              </div>
+            )}
           </div>
         </div>
       </PopoverContent>
