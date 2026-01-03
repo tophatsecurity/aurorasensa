@@ -314,6 +314,12 @@ const ClientsContent = () => {
       client.sensors?.some(s => s.toLowerCase().includes(searchQuery.toLowerCase()));
     
     const clientState = client.state || "pending";
+    
+    // Don't show deleted clients in pending tab
+    if (activeTab === "pending" && clientState === "deleted") {
+      return false;
+    }
+    
     const matchesState = stateFilter === "all" || clientState === stateFilter;
     const matchesTab = activeTab === "all" || clientState === activeTab;
 
