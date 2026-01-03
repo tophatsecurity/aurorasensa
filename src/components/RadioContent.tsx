@@ -654,6 +654,9 @@ const RadioContent = () => {
                                     <p className="text-xs text-muted-foreground">
                                       {network.bssid} • Ch {network.channel || 'N/A'}
                                     </p>
+                                    <p className="text-xs text-aurora-cyan">
+                                      Sensor: {network.deviceId}
+                                    </p>
                                   </div>
                                 </div>
                                 <div className="text-right">
@@ -727,6 +730,9 @@ const RadioContent = () => {
                                       <p className="text-xs text-muted-foreground">
                                         {device.mac}
                                       </p>
+                                      <p className="text-xs text-aurora-purple">
+                                        Sensor: {device.deviceId}
+                                      </p>
                                     </div>
                                   </div>
                                   <div className="text-right">
@@ -790,13 +796,19 @@ const RadioContent = () => {
                             </div>
                             <div>
                               <p className="font-semibold text-lg">{network.ssid || 'Hidden Network'}</p>
-                              <div className="flex items-center gap-3 text-sm text-muted-foreground">
-                                <span>{network.bssid}</span>
-                                <span>•</span>
-                                <span>Channel {network.channel || 'N/A'}</span>
-                                <span>•</span>
-                                <span>Scanner: {network.deviceId}</span>
-                              </div>
+                                <div className="flex items-center gap-3 text-sm text-muted-foreground">
+                                  <span>{network.bssid}</span>
+                                  <span>•</span>
+                                  <span>Channel {network.channel || 'N/A'}</span>
+                                </div>
+                                <div className="flex items-center gap-2 mt-1">
+                                  <Badge variant="secondary" className="text-xs bg-aurora-cyan/20 text-aurora-cyan border-aurora-cyan/30">
+                                    Device: {network.deviceId}
+                                  </Badge>
+                                  <Badge variant="outline" className="text-xs">
+                                    wifi_scanner
+                                  </Badge>
+                                </div>
                             </div>
                           </div>
                           <div className="text-right">
@@ -895,8 +907,14 @@ const RadioContent = () => {
                                       <span>{device.manufacturer}</span>
                                     </>
                                   )}
-                                  <span>•</span>
-                                  <span>Scanner: {device.deviceId}</span>
+                                </div>
+                                <div className="flex items-center gap-2 mt-1">
+                                  <Badge variant="secondary" className="text-xs bg-aurora-purple/20 text-aurora-purple border-aurora-purple/30">
+                                    Device: {device.deviceId}
+                                  </Badge>
+                                  <Badge variant="outline" className="text-xs">
+                                    bluetooth_scanner
+                                  </Badge>
                                 </div>
                                 {device.services && device.services.length > 0 && (
                                   <div className="flex flex-wrap gap-1 mt-1">
