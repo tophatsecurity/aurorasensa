@@ -1464,8 +1464,55 @@ export function useStarlinkTimeseries(hours: number = 24) {
     queryKey: ["aurora", "starlink", "timeseries", hours],
     queryFn: async () => {
       try {
-        const response = await callAuroraApi<StarlinkTimeseriesResponse>(`/api/readings/sensor/starlink?hours=${hours}`);
-        return response;
+        // The API may return data in a nested structure: readings[].data.power_w
+        // We need to transform it to our flat structure
+        interface RawReading {
+          timestamp: string;
+          device_id?: string;
+          device_type?: string;
+          data?: {
+            power_w?: number;
+            power_watts?: number;
+            signal_dbm?: number;
+            snr?: number;
+            downlink_throughput_bps?: number;
+            uplink_throughput_bps?: number;
+            pop_ping_latency_ms?: number;
+            obstruction_percent_time?: number;
+            obstruction_percent?: number;
+          };
+          power_w?: number;
+          signal_dbm?: number;
+          snr?: number;
+          downlink_throughput_bps?: number;
+          uplink_throughput_bps?: number;
+          pop_ping_latency_ms?: number;
+        }
+        
+        interface RawResponse {
+          count?: number;
+          readings?: RawReading[];
+          sensor_type?: string;
+        }
+        
+        const response = await callAuroraApi<RawResponse>(`/api/readings/sensor/starlink?hours=${hours}`);
+        
+        // Transform nested data structure to flat structure
+        const transformedReadings: StarlinkTimeseriesPoint[] = (response.readings || []).map(r => ({
+          timestamp: r.timestamp,
+          // Try nested data first, then fall back to direct properties
+          power_w: r.data?.power_w ?? r.data?.power_watts ?? r.power_w,
+          signal_dbm: r.data?.signal_dbm ?? r.signal_dbm,
+          snr: r.data?.snr ?? r.snr,
+          downlink_throughput_bps: r.data?.downlink_throughput_bps ?? r.downlink_throughput_bps,
+          uplink_throughput_bps: r.data?.uplink_throughput_bps ?? r.uplink_throughput_bps,
+          pop_ping_latency_ms: r.data?.pop_ping_latency_ms ?? r.pop_ping_latency_ms,
+        }));
+        
+        return { 
+          count: response.count ?? transformedReadings.length, 
+          readings: transformedReadings 
+        };
       } catch {
         try {
           const fallback = await callAuroraApi<StarlinkTimeseriesResponse>(`/api/stats/sensors/starlink`);
@@ -1507,8 +1554,49 @@ export function useThermalProbeTimeseries(hours: number = 24) {
     queryKey: ["aurora", "thermal_probe", "timeseries", hours],
     queryFn: async () => {
       try {
-        const response = await callAuroraApi<ThermalProbeTimeseriesResponse>(`/api/readings/sensor/thermal_probe?hours=${hours}`);
-        return response;
+        // The API returns data in a nested structure: readings[].data.temperature_c
+        // We need to transform it to our flat structure
+        interface RawReading {
+          timestamp: string;
+          device_id?: string;
+          device_type?: string;
+          data?: {
+            temperature_c?: number;
+            temperature_f?: number;
+            temp_c?: number;
+            temp_f?: number;
+            ambient_c?: number;
+            probe_c?: number;
+          };
+          temp_c?: number;
+          temp_f?: number;
+          ambient_c?: number;
+          probe_c?: number;
+        }
+        
+        interface RawResponse {
+          count?: number;
+          readings?: RawReading[];
+          sensor_type?: string;
+        }
+        
+        const response = await callAuroraApi<RawResponse>(`/api/readings/sensor/thermal_probe?hours=${hours}`);
+        
+        // Transform nested data structure to flat structure
+        const transformedReadings: ThermalProbeTimeseriesPoint[] = (response.readings || []).map(r => ({
+          timestamp: r.timestamp,
+          device_id: r.device_id,
+          // Try nested data first, then fall back to direct properties
+          temp_c: r.data?.temperature_c ?? r.data?.temp_c ?? r.temp_c,
+          temp_f: r.data?.temperature_f ?? r.data?.temp_f ?? r.temp_f,
+          ambient_c: r.data?.ambient_c ?? r.ambient_c,
+          probe_c: r.data?.probe_c ?? r.probe_c,
+        }));
+        
+        return { 
+          count: response.count ?? transformedReadings.length, 
+          readings: transformedReadings 
+        };
       } catch {
         try {
           const fallback = await callAuroraApi<ThermalProbeTimeseriesResponse>(`/api/stats/sensors/thermal_probe`);
