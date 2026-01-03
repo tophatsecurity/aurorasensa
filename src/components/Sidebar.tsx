@@ -14,7 +14,8 @@ import {
   Satellite,
   ScrollText,
   Cog,
-  Users
+  Users,
+  Radio
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -39,6 +40,7 @@ const menuSections = [
     title: "DATA & ANALYTICS",
     items: [
       { id: "sensors", label: "Sensors", icon: Thermometer },
+      { id: "radio", label: "Radio", icon: Radio },
       { id: "starlink", label: "Starlink", icon: Satellite },
       { id: "power", label: "Power", icon: Zap },
       { id: "data-batches", label: "Data Batches", icon: Database },

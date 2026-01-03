@@ -16,6 +16,7 @@ import SettingsContent from "@/components/SettingsContent";
 import StarlinkContent from "@/components/StarlinkContent";
 import AuditLogsContent from "@/components/AuditLogsContent";
 import ConfigurationContent from "@/components/ConfigurationContent";
+import RadioContent from "@/components/RadioContent";
 
 const Index = () => {
   const [activeItem, setActiveItem] = useState("dashboard");
@@ -48,6 +49,8 @@ const Index = () => {
         return <SettingsContent />;
       case "starlink":
         return <StarlinkContent />;
+      case "radio":
+        return <RadioContent />;
       case "audit-logs":
         return <AuditLogsContent />;
       case "configuration":
