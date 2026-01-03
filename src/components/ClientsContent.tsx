@@ -1,13 +1,14 @@
 import { useState } from "react";
 import { 
   Users, UserPlus, UserX, Trash2, RefreshCw, Search, CheckCircle, 
-  Power, PowerOff, Ban, RotateCcw, Clock, History, ChevronDown
+  Power, PowerOff, Ban, RotateCcw, Clock, History, ChevronDown, Pencil
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Label } from "@/components/ui/label";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -37,6 +38,7 @@ import {
   Dialog,
   DialogContent,
   DialogDescription,
+  DialogFooter,
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
@@ -57,6 +59,7 @@ import {
   useSoftDeleteClient,
   useRestoreClient,
   useClientStateHistory,
+  useRenameClient,
   Client,
   ClientState
 } from "@/hooks/useAuroraApi";
@@ -113,11 +116,14 @@ const ClientsContent = () => {
   const suspendClient = useSuspendClient();
   const softDeleteClient = useSoftDeleteClient();
   const restoreClient = useRestoreClient();
+  const renameClient = useRenameClient();
   
   const [searchQuery, setSearchQuery] = useState("");
   const [stateFilter, setStateFilter] = useState<string>("all");
   const [activeTab, setActiveTab] = useState<string>("all");
   const [historyDialogClient, setHistoryDialogClient] = useState<string | null>(null);
+  const [editingClient, setEditingClient] = useState<Client | null>(null);
+  const [editHostname, setEditHostname] = useState("");
 
   const formatLastSeen = (dateString: string | undefined | null) => {
     if (!dateString) return "Never";
@@ -170,6 +176,29 @@ const ClientsContent = () => {
         },
         onError: (error) => {
           toast.error(`Failed to ${action} client: ${error.message}`);
+        },
+      }
+    );
+  };
+
+  const handleEditClient = (client: Client) => {
+    setEditingClient(client);
+    setEditHostname(client.hostname || "");
+  };
+
+  const handleSaveRename = () => {
+    if (!editingClient || !editHostname.trim()) return;
+    
+    renameClient.mutate(
+      { clientId: editingClient.client_id, hostname: editHostname.trim() },
+      {
+        onSuccess: () => {
+          toast.success(`Successfully renamed client to "${editHostname.trim()}"`);
+          setEditingClient(null);
+          setEditHostname("");
+        },
+        onError: (error) => {
+          toast.error(`Failed to rename client: ${error.message}`);
         },
       }
     );
@@ -435,6 +464,7 @@ const ClientsContent = () => {
                         clientState={clientState}
                         onAction={handleStateTransition}
                         onViewHistory={() => setHistoryDialogClient(client.client_id)}
+                        onEdit={() => handleEditClient(client)}
                         isLoading={
                           adoptClient.isPending || 
                           registerClient.isPending || 
@@ -442,7 +472,8 @@ const ClientsContent = () => {
                           enableClient.isPending ||
                           suspendClient.isPending ||
                           softDeleteClient.isPending ||
-                          restoreClient.isPending
+                          restoreClient.isPending ||
+                          renameClient.isPending
                         }
                       />
                     </div>
@@ -459,6 +490,55 @@ const ClientsContent = () => {
         clientId={historyDialogClient} 
         onClose={() => setHistoryDialogClient(null)} 
       />
+
+      {/* Edit Client Dialog */}
+      <Dialog open={!!editingClient} onOpenChange={(open) => !open && setEditingClient(null)}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Edit Client</DialogTitle>
+            <DialogDescription>
+              Update the hostname for {editingClient?.client_id}
+            </DialogDescription>
+          </DialogHeader>
+          
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label htmlFor="hostname">Hostname / Name</Label>
+              <Input
+                id="hostname"
+                value={editHostname}
+                onChange={(e) => setEditHostname(e.target.value)}
+                placeholder="Enter client hostname"
+                maxLength={100}
+              />
+            </div>
+            
+            {editingClient && (
+              <div className="text-sm text-muted-foreground space-y-1">
+                <p><span className="font-medium">Client ID:</span> {editingClient.client_id}</p>
+                {editingClient.mac_address && (
+                  <p><span className="font-medium">MAC:</span> {editingClient.mac_address}</p>
+                )}
+                {editingClient.ip_address && (
+                  <p><span className="font-medium">IP:</span> {editingClient.ip_address}</p>
+                )}
+              </div>
+            )}
+          </div>
+
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setEditingClient(null)}>
+              Cancel
+            </Button>
+            <Button 
+              onClick={handleSaveRename}
+              disabled={renameClient.isPending || !editHostname.trim()}
+            >
+              {renameClient.isPending ? "Saving..." : "Save Changes"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };
@@ -468,10 +548,11 @@ interface ClientActionsProps {
   clientState: ClientState;
   onAction: (clientId: string, action: "adopt" | "register" | "disable" | "enable" | "suspend" | "delete" | "restore", hostname?: string) => void;
   onViewHistory: () => void;
+  onEdit: () => void;
   isLoading: boolean;
 }
 
-const ClientActions = ({ client, clientState, onAction, onViewHistory, isLoading }: ClientActionsProps) => {
+const ClientActions = ({ client, clientState, onAction, onViewHistory, onEdit, isLoading }: ClientActionsProps) => {
   const primaryActions: Record<ClientState, { action: "adopt" | "register" | "enable" | "restore"; label: string; icon: React.ElementType; variant: "default" | "outline" }[]> = {
     pending: [
       { action: "adopt", label: "Adopt", icon: CheckCircle, variant: "default" },
@@ -495,6 +576,17 @@ const ClientActions = ({ client, clientState, onAction, onViewHistory, isLoading
 
   return (
     <div className="flex items-center gap-2">
+      {/* Edit button */}
+      <Button
+        variant="ghost"
+        size="icon"
+        onClick={onEdit}
+        disabled={isLoading}
+        className="text-muted-foreground hover:text-foreground"
+      >
+        <Pencil className="w-4 h-4" />
+      </Button>
+
       {/* Primary action button */}
       {actions.map(({ action, label, icon: Icon, variant }) => (
         <Button
@@ -517,7 +609,11 @@ const ClientActions = ({ client, clientState, onAction, onViewHistory, isLoading
             <ChevronDown className="w-4 h-4" />
           </Button>
         </DropdownMenuTrigger>
-        <DropdownMenuContent align="end">
+        <DropdownMenuContent align="end" className="bg-popover border border-border shadow-lg">
+          <DropdownMenuItem onClick={onEdit}>
+            <Pencil className="w-4 h-4 mr-2" />
+            Edit Name
+          </DropdownMenuItem>
           <DropdownMenuItem onClick={onViewHistory}>
             <History className="w-4 h-4 mr-2" />
             View History
