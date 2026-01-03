@@ -1,11 +1,11 @@
-import { Activity, Cpu, HardDrive, Clock, Thermometer, Server, TrendingUp } from "lucide-react";
+import { Activity, Cpu, HardDrive, Clock, Thermometer, Server, TrendingUp, Wifi, Zap, MemoryStick } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
 import { 
   LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, 
   AreaChart, Area, Legend 
 } from "recharts";
-import { useClients, useComprehensiveStats } from "@/hooks/useAuroraApi";
+import { useClients, useComprehensiveStats, useSensorTypeStats } from "@/hooks/useAuroraApi";
 import { useMetricsHistory } from "@/hooks/useMetricsHistory";
 import { Skeleton } from "@/components/ui/skeleton";
 
@@ -13,6 +13,9 @@ const PerformanceContent = () => {
   const { data: clients, isLoading: clientsLoading } = useClients();
   const { data: stats, isLoading: statsLoading } = useComprehensiveStats();
   const { history: metricsHistory, isLoading: historyLoading } = useMetricsHistory(30000);
+  
+  // System monitor sensor stats from API
+  const { data: systemMonitorStats, isLoading: sysMonitorLoading } = useSensorTypeStats("system_monitor");
 
   // Aggregate system metrics from all clients
   const systemMetrics = clients?.reduce(
@@ -43,12 +46,31 @@ const PerformanceContent = () => {
     ? Math.round(systemMetrics.totalUptime / systemMetrics.clientsWithMetrics) 
     : 0;
 
+  // Extract system_monitor sensor stats from API
+  const sysMonitorFieldStats = systemMonitorStats?.numeric_field_stats_24h;
+  const sysTemp = sysMonitorFieldStats?.temperature_c ?? sysMonitorFieldStats?.cpu_temp;
+  const sysVoltage = sysMonitorFieldStats?.voltage;
+  const sysCpuPercent = sysMonitorFieldStats?.cpu_percent;
+  const sysMemoryPercent = sysMonitorFieldStats?.memory_percent;
+  const sysDiskPercent = sysMonitorFieldStats?.disk_percent;
+  const sysNetworkRx = sysMonitorFieldStats?.network_rx_bytes;
+  const sysNetworkTx = sysMonitorFieldStats?.network_tx_bytes;
+
   // Format uptime
   const formatUptime = (seconds: number) => {
     const days = Math.floor(seconds / 86400);
     const hours = Math.floor((seconds % 86400) / 3600);
     const minutes = Math.floor((seconds % 3600) / 60);
     return `${days}d ${hours}h ${minutes}m`;
+  };
+
+  // Format bytes to human readable
+  const formatBytes = (bytes: number | undefined) => {
+    if (!bytes) return '—';
+    if (bytes > 1e9) return `${(bytes / 1e9).toFixed(1)} GB`;
+    if (bytes > 1e6) return `${(bytes / 1e6).toFixed(1)} MB`;
+    if (bytes > 1e3) return `${(bytes / 1e3).toFixed(1)} KB`;
+    return `${bytes} B`;
   };
 
   // Per-client CPU data for chart
@@ -150,7 +172,111 @@ const PerformanceContent = () => {
         </Card>
       </div>
 
-      {/* NEW: Time-series history charts */}
+      {/* System Monitor Sensor Stats from API */}
+      {systemMonitorStats && (
+        <Card className="bg-card/50 backdrop-blur-sm border-border/50 mb-6">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-lg flex items-center gap-2">
+              <Activity className="w-5 h-5 text-green-500" />
+              System Monitor Sensor (24h Stats)
+              <span className="text-xs text-muted-foreground font-normal ml-2">
+                {systemMonitorStats.total_readings?.toLocaleString() || systemMonitorStats.device_count || 0} readings
+              </span>
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4">
+              {/* CPU Temperature */}
+              {sysTemp && (
+                <div className="glass-card rounded-lg p-3 border border-border/50">
+                  <div className="flex items-center gap-2 mb-2">
+                    <Thermometer className="w-4 h-4 text-red-400" />
+                    <span className="text-xs text-muted-foreground">CPU Temp</span>
+                  </div>
+                  <div className="text-lg font-bold">{sysTemp.avg?.toFixed(1)}°C</div>
+                  <div className="text-xs text-muted-foreground">
+                    {sysTemp.min?.toFixed(0)}° - {sysTemp.max?.toFixed(0)}°C
+                  </div>
+                </div>
+              )}
+              
+              {/* System Voltage */}
+              {sysVoltage && (
+                <div className="glass-card rounded-lg p-3 border border-border/50">
+                  <div className="flex items-center gap-2 mb-2">
+                    <Zap className="w-4 h-4 text-yellow-400" />
+                    <span className="text-xs text-muted-foreground">Voltage</span>
+                  </div>
+                  <div className="text-lg font-bold">{sysVoltage.avg?.toFixed(2)}V</div>
+                  <div className="text-xs text-muted-foreground">
+                    {sysVoltage.min?.toFixed(2)} - {sysVoltage.max?.toFixed(2)}V
+                  </div>
+                </div>
+              )}
+              
+              {/* CPU % from sensor */}
+              {sysCpuPercent && (
+                <div className="glass-card rounded-lg p-3 border border-border/50">
+                  <div className="flex items-center gap-2 mb-2">
+                    <Cpu className="w-4 h-4 text-primary" />
+                    <span className="text-xs text-muted-foreground">CPU Usage</span>
+                  </div>
+                  <div className="text-lg font-bold">{sysCpuPercent.avg?.toFixed(1)}%</div>
+                  <div className="text-xs text-muted-foreground">
+                    {sysCpuPercent.min?.toFixed(0)} - {sysCpuPercent.max?.toFixed(0)}%
+                  </div>
+                </div>
+              )}
+              
+              {/* Memory % from sensor */}
+              {sysMemoryPercent && (
+                <div className="glass-card rounded-lg p-3 border border-border/50">
+                  <div className="flex items-center gap-2 mb-2">
+                    <MemoryStick className="w-4 h-4 text-green-400" />
+                    <span className="text-xs text-muted-foreground">Memory</span>
+                  </div>
+                  <div className="text-lg font-bold">{sysMemoryPercent.avg?.toFixed(1)}%</div>
+                  <div className="text-xs text-muted-foreground">
+                    {sysMemoryPercent.min?.toFixed(0)} - {sysMemoryPercent.max?.toFixed(0)}%
+                  </div>
+                </div>
+              )}
+              
+              {/* Disk % from sensor */}
+              {sysDiskPercent && (
+                <div className="glass-card rounded-lg p-3 border border-border/50">
+                  <div className="flex items-center gap-2 mb-2">
+                    <HardDrive className="w-4 h-4 text-orange-400" />
+                    <span className="text-xs text-muted-foreground">Disk</span>
+                  </div>
+                  <div className="text-lg font-bold">{sysDiskPercent.avg?.toFixed(1)}%</div>
+                  <div className="text-xs text-muted-foreground">
+                    {sysDiskPercent.min?.toFixed(0)} - {sysDiskPercent.max?.toFixed(0)}%
+                  </div>
+                </div>
+              )}
+              
+              {/* Network I/O */}
+              {(sysNetworkRx || sysNetworkTx) && (
+                <div className="glass-card rounded-lg p-3 border border-border/50">
+                  <div className="flex items-center gap-2 mb-2">
+                    <Wifi className="w-4 h-4 text-blue-400" />
+                    <span className="text-xs text-muted-foreground">Network</span>
+                  </div>
+                  <div className="text-sm font-bold">
+                    ↓ {formatBytes(sysNetworkRx?.avg)}
+                  </div>
+                  <div className="text-sm font-bold">
+                    ↑ {formatBytes(sysNetworkTx?.avg)}
+                  </div>
+                </div>
+              )}
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Time-series history charts */}
       <Card className="bg-card/50 backdrop-blur-sm border-border/50 mb-6">
         <CardHeader className="pb-2">
           <CardTitle className="text-lg flex items-center gap-2">
