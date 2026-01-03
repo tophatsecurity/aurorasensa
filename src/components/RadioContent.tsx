@@ -141,6 +141,7 @@ const StatCard = ({
 const RadioContent = () => {
   const [activeTab, setActiveTab] = useState("overview");
   const [timeRange, setTimeRange] = useState("24h");
+  const [selectedDevice, setSelectedDevice] = useState<string>("all");
   const [expandedSections, setExpandedSections] = useState<string[]>(["wifi", "bluetooth"]);
   
   // Convert timeRange to hours for API calls
@@ -165,6 +166,24 @@ const RadioContent = () => {
   const { data: wifiTimeseries, isLoading: wifiTimeseriesLoading } = useWifiScannerTimeseries(hoursForTimeRange);
   const { data: bluetoothTimeseries, isLoading: bluetoothTimeseriesLoading } = useBluetoothScannerTimeseries(hoursForTimeRange);
 
+  // Get unique devices from readings
+  const availableDevices = useMemo(() => {
+    const deviceSet = new Set<string>();
+    
+    latestReadings?.forEach(reading => {
+      if (reading.device_type?.toLowerCase().includes('wifi') ||
+          reading.device_type?.toLowerCase().includes('bluetooth') ||
+          reading.device_type?.toLowerCase().includes('ble') ||
+          reading.device_id?.toLowerCase().includes('wifi') ||
+          reading.device_id?.toLowerCase().includes('bluetooth') ||
+          reading.device_id?.toLowerCase().includes('ble')) {
+        deviceSet.add(reading.device_id);
+      }
+    });
+    
+    return Array.from(deviceSet).sort();
+  }, [latestReadings]);
+
   // Toggle section expansion
   const toggleSection = (section: string) => {
     setExpandedSections(prev =>
@@ -174,25 +193,29 @@ const RadioContent = () => {
     );
   };
 
-  // Process WiFi readings from latest readings
+  // Process WiFi readings from latest readings (filtered by device)
   const wifiReadings = useMemo(() => {
     if (!latestReadings) return [];
-    return latestReadings.filter(r =>
-      r.device_type?.toLowerCase().includes('wifi') ||
-      r.device_id?.toLowerCase().includes('wifi')
-    );
-  }, [latestReadings]);
+    return latestReadings.filter(r => {
+      const isWifi = r.device_type?.toLowerCase().includes('wifi') ||
+                     r.device_id?.toLowerCase().includes('wifi');
+      const matchesDevice = selectedDevice === "all" || r.device_id === selectedDevice;
+      return isWifi && matchesDevice;
+    });
+  }, [latestReadings, selectedDevice]);
 
-  // Process Bluetooth/BLE readings from latest readings
+  // Process Bluetooth/BLE readings from latest readings (filtered by device)
   const bluetoothReadings = useMemo(() => {
     if (!latestReadings) return [];
-    return latestReadings.filter(r =>
-      r.device_type?.toLowerCase().includes('bluetooth') ||
-      r.device_type?.toLowerCase().includes('ble') ||
-      r.device_id?.toLowerCase().includes('bluetooth') ||
-      r.device_id?.toLowerCase().includes('ble')
-    );
-  }, [latestReadings]);
+    return latestReadings.filter(r => {
+      const isBluetooth = r.device_type?.toLowerCase().includes('bluetooth') ||
+                          r.device_type?.toLowerCase().includes('ble') ||
+                          r.device_id?.toLowerCase().includes('bluetooth') ||
+                          r.device_id?.toLowerCase().includes('ble');
+      const matchesDevice = selectedDevice === "all" || r.device_id === selectedDevice;
+      return isBluetooth && matchesDevice;
+    });
+  }, [latestReadings, selectedDevice]);
 
   // Extract WiFi networks from readings
   const wifiNetworks = useMemo(() => {
@@ -419,12 +442,25 @@ const RadioContent = () => {
             <p className="text-sm text-muted-foreground">BLE/Bluetooth and WiFi Monitoring</p>
           </div>
         </div>
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-3 flex-wrap">
+          <Select value={selectedDevice} onValueChange={setSelectedDevice}>
+            <SelectTrigger className="w-44 bg-background">
+              <SelectValue placeholder="All Devices" />
+            </SelectTrigger>
+            <SelectContent className="bg-background border border-border z-50">
+              <SelectItem value="all">All Devices</SelectItem>
+              {availableDevices.map(device => (
+                <SelectItem key={device} value={device}>
+                  {device}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
           <Select value={timeRange} onValueChange={setTimeRange}>
-            <SelectTrigger className="w-32">
+            <SelectTrigger className="w-32 bg-background">
               <SelectValue placeholder="Time range" />
             </SelectTrigger>
-            <SelectContent>
+            <SelectContent className="bg-background border border-border z-50">
               <SelectItem value="1h">Last Hour</SelectItem>
               <SelectItem value="6h">Last 6 Hours</SelectItem>
               <SelectItem value="24h">Last 24 Hours</SelectItem>
