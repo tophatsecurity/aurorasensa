@@ -31,6 +31,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import SensorCard from "./SensorCard";
 import SensorCharts from "./SensorCharts";
+import StarlinkCharts from "./StarlinkCharts";
 import { 
   useComprehensiveStats, 
   useAlerts, 
@@ -392,6 +393,15 @@ const DashboardContent = () => {
             </div>
           </div>
         </div>
+      </div>
+
+      {/* Starlink Trend Charts */}
+      <div className="mb-8">
+        <h2 className="text-lg font-semibold mb-4 flex items-center gap-2">
+          <Satellite className="w-5 h-5 text-violet-500" />
+          Starlink Trends (24h)
+        </h2>
+        <StarlinkCharts />
       </div>
 
       {/* Sensor Types Summary */}
