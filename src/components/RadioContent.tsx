@@ -44,7 +44,7 @@ import {
   Bar,
   Legend
 } from "recharts";
-import { useClients, useLatestReadings, useSensorTypeStats, useAllSensorStats } from "@/hooks/useAuroraApi";
+import { useClients, useLatestReadings, useSensorTypeStats, useAllSensorStats, useWifiScannerTimeseries, useBluetoothScannerTimeseries } from "@/hooks/useAuroraApi";
 import { formatDistanceToNow } from "date-fns";
 
 // Helper function to format signal strength
@@ -143,12 +143,27 @@ const RadioContent = () => {
   const [timeRange, setTimeRange] = useState("24h");
   const [expandedSections, setExpandedSections] = useState<string[]>(["wifi", "bluetooth"]);
   
+  // Convert timeRange to hours for API calls
+  const hoursForTimeRange = useMemo(() => {
+    switch (timeRange) {
+      case "1h": return 1;
+      case "6h": return 6;
+      case "24h": return 24;
+      case "7d": return 168;
+      default: return 24;
+    }
+  }, [timeRange]);
+  
   // Fetch data - using correct sensor type names from API
   const { data: clients, isLoading: clientsLoading } = useClients();
   const { data: latestReadings, isLoading: readingsLoading, refetch: refetchReadings } = useLatestReadings();
   const { data: allSensorStats, isLoading: statsLoading } = useAllSensorStats();
   const { data: wifiStats } = useSensorTypeStats("wifi_scanner");
   const { data: bluetoothStats } = useSensorTypeStats("bluetooth_scanner");
+  
+  // Fetch timeseries data
+  const { data: wifiTimeseries, isLoading: wifiTimeseriesLoading } = useWifiScannerTimeseries(hoursForTimeRange);
+  const { data: bluetoothTimeseries, isLoading: bluetoothTimeseriesLoading } = useBluetoothScannerTimeseries(hoursForTimeRange);
 
   // Toggle section expansion
   const toggleSection = (section: string) => {
@@ -309,23 +324,87 @@ const RadioContent = () => {
     };
   }, [wifiStats, bluetoothStats, wifiReadings, bluetoothReadings, wifiNetworks, bleDevices]);
 
-  // Mock timeseries data for charts (would be replaced with real API data)
+  // Process timeseries data for charts using real API data
   const chartData = useMemo(() => {
-    const now = new Date();
-    const data = [];
-    for (let i = 23; i >= 0; i--) {
-      const time = new Date(now.getTime() - i * 60 * 60 * 1000);
-      data.push({
-        time: time.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-        wifiNetworks: Math.floor(Math.random() * 20) + 10 + wifiNetworks.length,
-        bleDevices: Math.floor(Math.random() * 15) + 5 + bleDevices.length,
-        avgRssi: -60 + Math.floor(Math.random() * 20) - 10,
+    const wifiData = wifiTimeseries?.readings || [];
+    const bleData = bluetoothTimeseries?.readings || [];
+    
+    // Group readings by hour buckets
+    const buckets: Record<string, { wifiCount: number; bleCount: number; wifiRssiSum: number; wifiRssiCount: number; bleRssiSum: number; bleRssiCount: number }> = {};
+    
+    // Get the time interval based on timeRange
+    const intervalMs = timeRange === "1h" ? 5 * 60 * 1000 : // 5 min intervals
+                       timeRange === "6h" ? 30 * 60 * 1000 : // 30 min intervals
+                       timeRange === "24h" ? 60 * 60 * 1000 : // 1 hour intervals
+                       4 * 60 * 60 * 1000; // 4 hour intervals for 7d
+    
+    // Process WiFi readings
+    wifiData.forEach(reading => {
+      const timestamp = new Date(reading.timestamp).getTime();
+      const bucketKey = Math.floor(timestamp / intervalMs) * intervalMs;
+      if (!buckets[bucketKey]) {
+        buckets[bucketKey] = { wifiCount: 0, bleCount: 0, wifiRssiSum: 0, wifiRssiCount: 0, bleRssiSum: 0, bleRssiCount: 0 };
+      }
+      buckets[bucketKey].wifiCount++;
+      if (reading.rssi != null) {
+        buckets[bucketKey].wifiRssiSum += reading.rssi;
+        buckets[bucketKey].wifiRssiCount++;
+      }
+    });
+    
+    // Process Bluetooth readings
+    bleData.forEach(reading => {
+      const timestamp = new Date(reading.timestamp).getTime();
+      const bucketKey = Math.floor(timestamp / intervalMs) * intervalMs;
+      if (!buckets[bucketKey]) {
+        buckets[bucketKey] = { wifiCount: 0, bleCount: 0, wifiRssiSum: 0, wifiRssiCount: 0, bleRssiSum: 0, bleRssiCount: 0 };
+      }
+      buckets[bucketKey].bleCount++;
+      if (reading.rssi != null) {
+        buckets[bucketKey].bleRssiSum += reading.rssi;
+        buckets[bucketKey].bleRssiCount++;
+      }
+    });
+    
+    // Convert buckets to chart data array
+    const sortedKeys = Object.keys(buckets).map(Number).sort((a, b) => a - b);
+    
+    // If no real data, show empty state
+    if (sortedKeys.length === 0) {
+      // Return placeholder data for empty state
+      const now = new Date();
+      const numBuckets = timeRange === "1h" ? 12 : timeRange === "6h" ? 12 : timeRange === "24h" ? 24 : 42;
+      return Array.from({ length: numBuckets }, (_, i) => {
+        const time = new Date(now.getTime() - (numBuckets - 1 - i) * intervalMs);
+        return {
+          time: time.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+          wifiNetworks: 0,
+          bleDevices: 0,
+          avgWifiRssi: null,
+          avgBleRssi: null,
+        };
       });
     }
-    return data;
-  }, [wifiNetworks.length, bleDevices.length]);
+    
+    return sortedKeys.map(key => {
+      const bucket = buckets[key];
+      const time = new Date(key);
+      const formatOptions: Intl.DateTimeFormatOptions = timeRange === "7d" 
+        ? { month: 'short', day: 'numeric', hour: '2-digit' }
+        : { hour: '2-digit', minute: '2-digit' };
+      
+      return {
+        time: time.toLocaleString([], formatOptions),
+        wifiNetworks: bucket.wifiCount,
+        bleDevices: bucket.bleCount,
+        avgWifiRssi: bucket.wifiRssiCount > 0 ? Math.round(bucket.wifiRssiSum / bucket.wifiRssiCount) : null,
+        avgBleRssi: bucket.bleRssiCount > 0 ? Math.round(bucket.bleRssiSum / bucket.bleRssiCount) : null,
+      };
+    });
+  }, [wifiTimeseries, bluetoothTimeseries, timeRange]);
 
   const isLoading = clientsLoading || readingsLoading || statsLoading;
+  const isTimeseriesLoading = wifiTimeseriesLoading || bluetoothTimeseriesLoading;
 
   return (
     <div className="flex flex-col h-full overflow-hidden">
@@ -420,50 +499,113 @@ const RadioContent = () => {
                   <CardTitle className="flex items-center gap-2">
                     <Activity className="w-5 h-5 text-aurora-cyan" />
                     Radio Activity Over Time
+                    {isTimeseriesLoading && <RefreshCw className="w-4 h-4 animate-spin text-muted-foreground" />}
                   </CardTitle>
                 </CardHeader>
                 <CardContent>
-                  <div className="h-80">
-                    <ResponsiveContainer width="100%" height="100%">
-                      <AreaChart data={chartData}>
-                        <defs>
-                          <linearGradient id="wifiGradient" x1="0" y1="0" x2="0" y2="1">
-                            <stop offset="5%" stopColor="hsl(187, 100%, 55%)" stopOpacity={0.3} />
-                            <stop offset="95%" stopColor="hsl(187, 100%, 55%)" stopOpacity={0} />
-                          </linearGradient>
-                          <linearGradient id="bleGradient" x1="0" y1="0" x2="0" y2="1">
-                            <stop offset="5%" stopColor="hsl(280, 100%, 70%)" stopOpacity={0.3} />
-                            <stop offset="95%" stopColor="hsl(280, 100%, 70%)" stopOpacity={0} />
-                          </linearGradient>
-                        </defs>
-                        <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
-                        <XAxis dataKey="time" stroke="hsl(var(--muted-foreground))" fontSize={12} />
-                        <YAxis stroke="hsl(var(--muted-foreground))" fontSize={12} />
-                        <Tooltip 
-                          contentStyle={{ 
-                            backgroundColor: 'hsl(var(--card))', 
-                            border: '1px solid hsl(var(--border))',
-                            borderRadius: '8px'
-                          }}
-                        />
-                        <Legend />
-                        <Area 
-                          type="monotone" 
-                          dataKey="wifiNetworks" 
-                          stroke="hsl(187, 100%, 55%)" 
-                          fill="url(#wifiGradient)"
-                          name="WiFi Networks"
-                        />
-                        <Area 
-                          type="monotone" 
-                          dataKey="bleDevices" 
-                          stroke="hsl(280, 100%, 70%)" 
-                          fill="url(#bleGradient)"
-                          name="BLE Devices"
-                        />
-                      </AreaChart>
-                    </ResponsiveContainer>
-                  </div>
+                  {isTimeseriesLoading ? (
+                    <Skeleton className="h-80 w-full" />
+                  ) : (
+                    <div className="h-80">
+                      <ResponsiveContainer width="100%" height="100%">
+                        <AreaChart data={chartData}>
+                          <defs>
+                            <linearGradient id="wifiGradient" x1="0" y1="0" x2="0" y2="1">
+                              <stop offset="5%" stopColor="hsl(187, 100%, 55%)" stopOpacity={0.3} />
+                              <stop offset="95%" stopColor="hsl(187, 100%, 55%)" stopOpacity={0} />
+                            </linearGradient>
+                            <linearGradient id="bleGradient" x1="0" y1="0" x2="0" y2="1">
+                              <stop offset="5%" stopColor="hsl(280, 100%, 70%)" stopOpacity={0.3} />
+                              <stop offset="95%" stopColor="hsl(280, 100%, 70%)" stopOpacity={0} />
+                            </linearGradient>
+                          </defs>
+                          <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
+                          <XAxis dataKey="time" stroke="hsl(var(--muted-foreground))" fontSize={12} />
+                          <YAxis stroke="hsl(var(--muted-foreground))" fontSize={12} />
+                          <Tooltip 
+                            contentStyle={{ 
+                              backgroundColor: 'hsl(var(--card))', 
+                              border: '1px solid hsl(var(--border))',
+                              borderRadius: '8px'
+                            }}
+                          />
+                          <Legend />
+                          <Area 
+                            type="monotone" 
+                            dataKey="wifiNetworks" 
+                            stroke="hsl(187, 100%, 55%)" 
+                            fill="url(#wifiGradient)"
+                            name="WiFi Readings"
+                          />
+                          <Area 
+                            type="monotone" 
+                            dataKey="bleDevices" 
+                            stroke="hsl(280, 100%, 70%)" 
+                            fill="url(#bleGradient)"
+                            name="BLE Readings"
+                          />
+                        </AreaChart>
+                      </ResponsiveContainer>
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+
+              {/* Signal Strength Chart */}
+              <Card>
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2">
+                    <Signal className="w-5 h-5 text-aurora-green" />
+                    Signal Strength Over Time (dBm)
+                    {isTimeseriesLoading && <RefreshCw className="w-4 h-4 animate-spin text-muted-foreground" />}
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  {isTimeseriesLoading ? (
+                    <Skeleton className="h-64 w-full" />
+                  ) : (
+                    <div className="h-64">
+                      <ResponsiveContainer width="100%" height="100%">
+                        <LineChart data={chartData}>
+                          <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
+                          <XAxis dataKey="time" stroke="hsl(var(--muted-foreground))" fontSize={12} />
+                          <YAxis 
+                            stroke="hsl(var(--muted-foreground))" 
+                            fontSize={12}
+                            domain={[-100, -30]}
+                            tickFormatter={(value) => `${value}`}
+                          />
+                          <Tooltip 
+                            contentStyle={{ 
+                              backgroundColor: 'hsl(var(--card))', 
+                              border: '1px solid hsl(var(--border))',
+                              borderRadius: '8px'
+                            }}
+                            formatter={(value: number | null) => value != null ? `${value} dBm` : 'N/A'}
+                          />
+                          <Legend />
+                          <Line 
+                            type="monotone" 
+                            dataKey="avgWifiRssi" 
+                            stroke="hsl(187, 100%, 55%)" 
+                            strokeWidth={2}
+                            dot={false}
+                            name="WiFi RSSI"
+                            connectNulls
+                          />
+                          <Line 
+                            type="monotone" 
+                            dataKey="avgBleRssi" 
+                            stroke="hsl(280, 100%, 70%)" 
+                            strokeWidth={2}
+                            dot={false}
+                            name="BLE RSSI"
+                            connectNulls
+                          />
+                        </LineChart>
+                      </ResponsiveContainer>
+                    </div>
+                  )}
                 </CardContent>
               </Card>
 
