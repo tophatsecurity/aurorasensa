@@ -8,6 +8,7 @@ import {
   useDeviceLatest,
   useSensorTypeStats,
   useAdsbAircraftWithHistory,
+  useAdsbHistorical,
   GeoLocation,
   AdsbAircraft
 } from "@/hooks/useAuroraApi";
@@ -16,6 +17,15 @@ import type { MapStats, SensorMarker, ClientMarker, AdsbMarker } from "@/types/m
 
 export interface UseMapDataOptions {
   adsbHistoryMinutes?: number;
+}
+
+// Trail type for aircraft history
+export interface AircraftTrailData {
+  icao: string;
+  flight?: string;
+  coordinates: [number, number][];
+  altitudes: (number | undefined)[];
+  timestamps: string[];
 }
 
 // Helper to extract GPS coordinates from various data sources
@@ -161,6 +171,9 @@ export function useMapData(options: UseMapDataOptions = {}) {
     isHistorical: adsbIsHistorical,
     source: adsbSource
   } = useAdsbAircraftWithHistory(adsbHistoryMinutes);
+
+  // Get raw historical readings for trail extraction
+  const { data: adsbHistoricalData } = useAdsbHistorical(adsbHistoryMinutes);
 
   // Update last refresh time
   useEffect(() => {
@@ -584,6 +597,82 @@ export function useMapData(options: UseMapDataOptions = {}) {
       });
   }, [adsbAircraft, adsbIsHistorical]);
 
+  // Extract aircraft trails from historical data
+  const adsbTrails = useMemo<AircraftTrailData[]>(() => {
+    if (!adsbHistoricalData?.readings || adsbHistoricalData.readings.length === 0) {
+      return [];
+    }
+
+    // Map of icao -> trail data with all positions
+    const trailMap = new Map<string, { 
+      flight?: string; 
+      positions: { lat: number; lng: number; alt?: number; timestamp: string }[] 
+    }>();
+
+    adsbHistoricalData.readings.forEach(reading => {
+      const data = reading.data;
+      const timestamp = reading.timestamp;
+      
+      // Check if aircraft_list exists (new format)
+      const aircraftList = (data as { aircraft_list?: Array<Record<string, unknown>> }).aircraft_list;
+      
+      if (aircraftList && Array.isArray(aircraftList)) {
+        aircraftList.forEach(ac => {
+          const hex = String(ac.icao || ac.hex || '');
+          if (!hex) return;
+          
+          const lat = ac.latitude as number || ac.lat as number;
+          const lon = ac.longitude as number || ac.lon as number;
+          const alt = ac.altitude_ft as number || ac.alt_baro as number;
+          const flight = ac.callsign as string || ac.flight as string;
+          
+          if (lat !== undefined && lon !== undefined && 
+              lat >= -90 && lat <= 90 && lon >= -180 && lon <= 180) {
+            const existing = trailMap.get(hex) || { flight, positions: [] };
+            existing.positions.push({ lat, lng: lon, alt, timestamp });
+            if (flight && !existing.flight) existing.flight = flight;
+            trailMap.set(hex, existing);
+          }
+        });
+      } else {
+        // Old format: aircraft data directly in data object
+        const hex = String(data.hex || data.flight || '');
+        if (!hex) return;
+        
+        const lat = data.lat as number;
+        const lon = data.lon as number;
+        const alt = data.alt_baro as number;
+        const flight = data.flight as string;
+        
+        if (lat !== undefined && lon !== undefined && 
+            lat >= -90 && lat <= 90 && lon >= -180 && lon <= 180) {
+          const existing = trailMap.get(hex) || { flight, positions: [] };
+          existing.positions.push({ lat, lng: lon, alt, timestamp });
+          if (flight && !existing.flight) existing.flight = flight;
+          trailMap.set(hex, existing);
+        }
+      }
+    });
+
+    // Convert to trail format, sorted by timestamp
+    return Array.from(trailMap.entries())
+      .filter(([, trail]) => trail.positions.length >= 2) // Only include if we have at least 2 points
+      .map(([icao, trail]) => {
+        // Sort positions by timestamp
+        const sortedPositions = [...trail.positions].sort(
+          (a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime()
+        );
+        
+        return {
+          icao,
+          flight: trail.flight,
+          coordinates: sortedPositions.map(p => [p.lat, p.lng] as [number, number]),
+          altitudes: sortedPositions.map(p => p.alt),
+          timestamps: sortedPositions.map(p => p.timestamp),
+        };
+      });
+  }, [adsbHistoricalData]);
+
   // All marker positions for bounds fitting
   const allPositions = useMemo<LatLngExpression[]>(() => {
     const positions: LatLngExpression[] = [];
@@ -616,13 +705,14 @@ export function useMapData(options: UseMapDataOptions = {}) {
     sensorMarkers,
     clientMarkers,
     adsbMarkers,
+    adsbTrails,
     allPositions,
     stats,
     isLoading,
     timeAgo,
     handleRefresh,
     lastUpdate,
-    geoLocations, // Expose raw geo locations for debugging
+    geoLocations,
     adsbIsHistorical,
     adsbSource,
   };
