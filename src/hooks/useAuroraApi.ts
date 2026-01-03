@@ -304,10 +304,20 @@ export interface ComprehensiveStats {
 // CLIENT TYPES
 // =============================================
 
+export type ClientState = "pending" | "registered" | "adopted" | "disabled" | "suspended" | "deleted";
+
 export interface ClientSensorConfig {
   device_id: string;
   enabled: boolean;
   [key: string]: unknown;
+}
+
+export interface ClientStateHistoryEntry {
+  from_state: ClientState | null;
+  to_state: ClientState;
+  timestamp: string;
+  reason?: string;
+  metadata?: Record<string, unknown>;
 }
 
 export interface Client {
@@ -316,11 +326,23 @@ export interface Client {
   ip_address: string;
   mac_address: string;
   last_seen: string;
+  first_seen?: string;
   adopted_at: string | null;
   registered_at?: string;
   batches_received: number;
+  batch_count?: number;
   auto_registered: boolean;
   status?: string;
+  state?: ClientState;
+  state_history?: ClientStateHistoryEntry[];
+  last_state_change?: string;
+  disabled_at?: string;
+  disabled_reason?: string;
+  suspended_at?: string;
+  suspended_reason?: string;
+  deleted_at?: string;
+  deleted_reason?: string;
+  batch_directory?: string;
   sensors?: string[];
   metadata?: {
     config?: {
@@ -352,6 +374,63 @@ export interface Client {
 interface ClientsListResponse {
   count: number;
   clients: Client[];
+}
+
+interface ClientsByStateResponse {
+  clients_by_state: {
+    pending: Client[];
+    registered: Client[];
+    adopted: Client[];
+    disabled: Client[];
+    suspended: Client[];
+    deleted: Client[];
+  };
+  statistics: {
+    total: number;
+    by_state: Record<ClientState, number>;
+    summary: {
+      active: number;
+      needs_attention: number;
+      inactive: number;
+    };
+  };
+}
+
+interface ClientStatisticsResponse {
+  total: number;
+  by_state: Record<ClientState, number>;
+  summary: {
+    active: number;
+    needs_attention: number;
+    inactive: number;
+  };
+}
+
+interface ClientStateResponse {
+  state: ClientState;
+  clients: Client[];
+  count: number;
+  description: string;
+}
+
+interface StateTransitionRequest {
+  reason?: string;
+  metadata?: Record<string, unknown>;
+}
+
+interface StateTransitionResponse {
+  success: boolean;
+  message: string;
+  client_id: string;
+  new_state: ClientState;
+  previous_state: ClientState;
+}
+
+interface ClientStateHistoryResponse {
+  client_id: string;
+  current_state: ClientState;
+  state_history: ClientStateHistoryEntry[];
+  last_state_change: string;
 }
 
 // =============================================
@@ -807,6 +886,111 @@ export function useClients() {
       return response.clients || [];
     },
     refetchInterval: 15000,
+    retry: 2,
+  });
+}
+
+export function useClientsByState() {
+  return useQuery({
+    queryKey: ["aurora", "clients", "all-states"],
+    queryFn: async () => {
+      return callAuroraApi<ClientsByStateResponse>("/api/clients/all-states");
+    },
+    refetchInterval: 15000,
+    retry: 2,
+  });
+}
+
+export function useClientStatistics() {
+  return useQuery({
+    queryKey: ["aurora", "clients", "statistics"],
+    queryFn: async () => {
+      return callAuroraApi<ClientStatisticsResponse>("/api/clients/statistics");
+    },
+    refetchInterval: 15000,
+    retry: 2,
+  });
+}
+
+export function usePendingClients() {
+  return useQuery({
+    queryKey: ["aurora", "clients", "pending"],
+    queryFn: async () => {
+      const response = await callAuroraApi<ClientStateResponse>("/api/clients/pending");
+      return response.clients || [];
+    },
+    refetchInterval: 15000,
+    retry: 2,
+  });
+}
+
+export function useAdoptedClients() {
+  return useQuery({
+    queryKey: ["aurora", "clients", "adopted"],
+    queryFn: async () => {
+      const response = await callAuroraApi<ClientStateResponse>("/api/clients/adopted");
+      return response.clients || [];
+    },
+    refetchInterval: 15000,
+    retry: 2,
+  });
+}
+
+export function useRegisteredClients() {
+  return useQuery({
+    queryKey: ["aurora", "clients", "registered"],
+    queryFn: async () => {
+      const response = await callAuroraApi<ClientStateResponse>("/api/clients/registered");
+      return response.clients || [];
+    },
+    refetchInterval: 15000,
+    retry: 2,
+  });
+}
+
+export function useDisabledClients() {
+  return useQuery({
+    queryKey: ["aurora", "clients", "disabled"],
+    queryFn: async () => {
+      const response = await callAuroraApi<ClientStateResponse>("/api/clients/disabled");
+      return response.clients || [];
+    },
+    refetchInterval: 15000,
+    retry: 2,
+  });
+}
+
+export function useSuspendedClients() {
+  return useQuery({
+    queryKey: ["aurora", "clients", "suspended"],
+    queryFn: async () => {
+      const response = await callAuroraApi<ClientStateResponse>("/api/clients/suspended");
+      return response.clients || [];
+    },
+    refetchInterval: 15000,
+    retry: 2,
+  });
+}
+
+export function useDeletedClients() {
+  return useQuery({
+    queryKey: ["aurora", "clients", "deleted"],
+    queryFn: async () => {
+      const response = await callAuroraApi<ClientStateResponse>("/api/clients/deleted");
+      return response.clients || [];
+    },
+    refetchInterval: 15000,
+    retry: 2,
+  });
+}
+
+export function useClientStateHistory(clientId: string) {
+  return useQuery({
+    queryKey: ["aurora", "clients", clientId, "state-history"],
+    queryFn: async () => {
+      return callAuroraApi<ClientStateHistoryResponse>(`/api/clients/${clientId}/state-history`);
+    },
+    enabled: !!clientId,
     retry: 2,
   });
 }
@@ -2302,6 +2486,101 @@ export function useUpdateClientConfig() {
     onSuccess: (_, variables) => {
       queryClient.invalidateQueries({ queryKey: ["aurora", "clients", variables.clientId, "config"] });
       queryClient.invalidateQueries({ queryKey: ["aurora", "clients", "configs", "all"] });
+    },
+  });
+}
+
+// =============================================
+// MUTATIONS - CLIENT STATE MANAGEMENT
+// =============================================
+
+export function useAdoptClientDirect() {
+  const queryClient = useQueryClient();
+  
+  return useMutation({
+    mutationFn: async ({ clientId, reason, metadata }: { clientId: string; reason?: string; metadata?: Record<string, unknown> }) => {
+      return callAuroraApi<StateTransitionResponse>(`/api/clients/${clientId}/adopt-direct`, "POST", { reason, metadata });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["aurora", "clients"] });
+    },
+  });
+}
+
+export function useRegisterClient() {
+  const queryClient = useQueryClient();
+  
+  return useMutation({
+    mutationFn: async ({ clientId, reason, metadata }: { clientId: string; reason?: string; metadata?: Record<string, unknown> }) => {
+      return callAuroraApi<StateTransitionResponse>(`/api/clients/${clientId}/register`, "POST", { reason, metadata });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["aurora", "clients"] });
+    },
+  });
+}
+
+export function useDisableClient() {
+  const queryClient = useQueryClient();
+  
+  return useMutation({
+    mutationFn: async ({ clientId, reason, metadata }: { clientId: string; reason?: string; metadata?: Record<string, unknown> }) => {
+      return callAuroraApi<StateTransitionResponse>(`/api/clients/${clientId}/disable`, "POST", { reason, metadata });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["aurora", "clients"] });
+    },
+  });
+}
+
+export function useEnableClient() {
+  const queryClient = useQueryClient();
+  
+  return useMutation({
+    mutationFn: async ({ clientId, reason, metadata }: { clientId: string; reason?: string; metadata?: Record<string, unknown> }) => {
+      return callAuroraApi<StateTransitionResponse>(`/api/clients/${clientId}/enable`, "POST", { reason, metadata });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["aurora", "clients"] });
+    },
+  });
+}
+
+export function useSuspendClient() {
+  const queryClient = useQueryClient();
+  
+  return useMutation({
+    mutationFn: async ({ clientId, reason, metadata }: { clientId: string; reason?: string; metadata?: Record<string, unknown> }) => {
+      return callAuroraApi<StateTransitionResponse>(`/api/clients/${clientId}/suspend`, "POST", { reason, metadata });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["aurora", "clients"] });
+    },
+  });
+}
+
+export function useSoftDeleteClient() {
+  const queryClient = useQueryClient();
+  
+  return useMutation({
+    mutationFn: async ({ clientId, reason, metadata }: { clientId: string; reason?: string; metadata?: Record<string, unknown> }) => {
+      return callAuroraApi<StateTransitionResponse>(`/api/clients/${clientId}/delete-soft`, "POST", { reason, metadata });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["aurora", "clients"] });
+    },
+  });
+}
+
+export function useRestoreClient() {
+  const queryClient = useQueryClient();
+  
+  return useMutation({
+    mutationFn: async ({ clientId, reason, metadata }: { clientId: string; reason?: string; metadata?: Record<string, unknown> }) => {
+      return callAuroraApi<StateTransitionResponse>(`/api/clients/${clientId}/restore`, "POST", { reason, metadata });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["aurora", "clients"] });
     },
   });
 }
