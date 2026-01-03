@@ -491,7 +491,7 @@ const ConfigurationContent = () => {
               </TabsTrigger>
               <TabsTrigger value="devices" className="flex items-center gap-2">
                 <Monitor className="h-4 w-4" />
-                Devices
+                Clients
                 {clients.length > 0 && (
                   <Badge variant="secondary" className="ml-1">
                     {onlineClients}/{clients.length}
@@ -675,11 +675,11 @@ const ConfigurationContent = () => {
               )}
             </TabsContent>
 
-            {/* Device Configurations */}
+            {/* Client Configurations */}
             <TabsContent value="devices" className="space-y-6">
-              {/* Device Summary */}
+              {/* Client Summary */}
               <div className="flex items-center justify-between mb-4">
-                <h3 className="text-lg font-semibold">Devices</h3>
+                <h3 className="text-lg font-semibold">Clients</h3>
                 <Button 
                   variant="outline" 
                   size="sm" 
@@ -687,7 +687,7 @@ const ConfigurationContent = () => {
                   disabled={clients.length < 2}
                 >
                   <ArrowLeftRight className="w-4 h-4 mr-2" />
-                  Compare Devices
+                  Compare Clients
                 </Button>
               </div>
               <div className="grid gap-4 md:grid-cols-3">

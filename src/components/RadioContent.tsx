@@ -609,10 +609,10 @@ const RadioContent = () => {
         <div className="flex items-center gap-3 flex-wrap">
           <Select value={selectedDevice} onValueChange={setSelectedDevice}>
             <SelectTrigger className="w-44 bg-background">
-              <SelectValue placeholder="All Devices" />
+              <SelectValue placeholder="All Clients" />
             </SelectTrigger>
             <SelectContent className="bg-background border border-border z-50">
-              <SelectItem value="all">All Devices</SelectItem>
+              <SelectItem value="all">All Clients</SelectItem>
               {availableDevices.map(device => (
                 <SelectItem key={device} value={device}>
                   {device}
