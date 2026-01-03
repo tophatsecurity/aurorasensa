@@ -19,6 +19,7 @@ import { MapLoadingOverlay } from "@/components/map/MapLoadingOverlay";
 import { MapHeader } from "@/components/map/MapHeader";
 import { MapFilters } from "@/components/map/MapFilters";
 import { GpsHistorySettings } from "@/components/map/GpsHistorySettings";
+import { TimeframeSelector, TimeframeOption, timeframeToMinutes } from "@/components/map/TimeframeSelector";
 import { Button } from "@/components/ui/button";
 
 // Animate marker to new position
@@ -55,6 +56,7 @@ const MapContent = () => {
   const [isLiveTracking, setIsLiveTracking] = useState(true);
   const [hasInitialFit, setHasInitialFit] = useState(false);
   const [showTrails, setShowTrails] = useState(true);
+  const [timeframe, setTimeframe] = useState<TimeframeOption>("1h");
   const [sensorRetentionMinutes, setSensorRetentionMinutes] = useState(60);
   const [clientRetentionMinutes, setClientRetentionMinutes] = useState(60);
   
@@ -426,16 +428,27 @@ const MapContent = () => {
             stats={stats}
             onFilterChange={handleFilterChange}
           />
-          <GpsHistorySettings
-            sensorRetentionMinutes={sensorRetentionMinutes}
-            clientRetentionMinutes={clientRetentionMinutes}
-            onSensorRetentionChange={setSensorRetentionMinutes}
-            onClientRetentionChange={setClientRetentionMinutes}
-            showTrails={showTrails}
-            onShowTrailsChange={setShowTrails}
-            trailCount={trails.length}
-            onClearHistory={clearHistory}
-          />
+          <div className="flex items-center gap-3">
+            <TimeframeSelector 
+              value={timeframe}
+              onChange={(value) => {
+                setTimeframe(value);
+                const minutes = timeframeToMinutes(value);
+                setSensorRetentionMinutes(minutes);
+                setClientRetentionMinutes(minutes);
+              }}
+            />
+            <GpsHistorySettings
+              sensorRetentionMinutes={sensorRetentionMinutes}
+              clientRetentionMinutes={clientRetentionMinutes}
+              onSensorRetentionChange={setSensorRetentionMinutes}
+              onClientRetentionChange={setClientRetentionMinutes}
+              showTrails={showTrails}
+              onShowTrailsChange={setShowTrails}
+              trailCount={trails.length}
+              onClearHistory={clearHistory}
+            />
+          </div>
         </div>
       </div>
 
