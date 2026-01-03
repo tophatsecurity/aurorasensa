@@ -235,7 +235,7 @@ const RadioContent = () => {
   // Process Bluetooth/BLE readings from latest readings (filtered by device) - fixed matching
   const bluetoothReadings = useMemo(() => {
     if (!latestReadings) return [];
-    return latestReadings.filter(r => {
+    const filtered = latestReadings.filter(r => {
       const deviceType = r.device_type?.toLowerCase() || '';
       const isBluetooth = deviceType === 'bluetooth_scanner' || 
                           deviceType.includes('bluetooth') ||
@@ -243,6 +243,9 @@ const RadioContent = () => {
       const matchesDevice = selectedDevice === "all" || r.device_id === selectedDevice;
       return isBluetooth && matchesDevice;
     });
+    console.log('[RadioContent] Bluetooth readings found:', filtered.length, 'from', latestReadings?.length, 'total readings');
+    console.log('[RadioContent] Device types in readings:', [...new Set(latestReadings?.map(r => r.device_type))]);
+    return filtered;
   }, [latestReadings, selectedDevice]);
 
   // Extract WiFi networks from readings
