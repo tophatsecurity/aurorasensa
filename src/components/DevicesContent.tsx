@@ -337,7 +337,7 @@ const DevicesContent = () => {
       sensors: sensorList,
       details: {
         'IP': client.ip_address,
-        'Batches': client.batches_received.toLocaleString(),
+        'Batches': (client.batches_received ?? 0).toLocaleString(),
         ...(system?.cpu_percent !== undefined && { 'CPU': `${system.cpu_percent.toFixed(1)}%` }),
         ...(system?.memory_percent !== undefined && { 'Memory': `${system.memory_percent.toFixed(1)}%` }),
         ...(client.adopted_at && { 'Adopted': 'Yes' }),

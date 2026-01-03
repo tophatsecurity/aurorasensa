@@ -771,7 +771,7 @@ const DashboardContent = () => {
                   <div className="space-y-1 text-xs">
                     <div className="flex justify-between">
                       <span className="text-muted-foreground">Batches:</span>
-                      <span>{client.batches_received.toLocaleString()}</span>
+                      <span>{(client.batches_received ?? 0).toLocaleString()}</span>
                     </div>
                     {system?.cpu_percent !== undefined && (
                       <div className="flex justify-between">
