@@ -13,8 +13,19 @@ import {
   ChevronDown,
   ChevronUp,
   Laptop,
-  MonitorSmartphone
+  MonitorSmartphone,
+  List,
+  LayoutGrid,
+  Table2
 } from "lucide-react";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -143,6 +154,8 @@ const RadioContent = () => {
   const [timeRange, setTimeRange] = useState("24h");
   const [selectedDevice, setSelectedDevice] = useState<string>("all");
   const [expandedSections, setExpandedSections] = useState<string[]>(["wifi", "bluetooth"]);
+  const [wifiViewMode, setWifiViewMode] = useState<"cards" | "table">("cards");
+  const [bluetoothViewMode, setBluetoothViewMode] = useState<"cards" | "table">("cards");
   
   // Convert timeRange to hours for API calls
   const hoursForTimeRange = useMemo(() => {
@@ -166,17 +179,17 @@ const RadioContent = () => {
   const { data: wifiTimeseries, isLoading: wifiTimeseriesLoading } = useWifiScannerTimeseries(hoursForTimeRange);
   const { data: bluetoothTimeseries, isLoading: bluetoothTimeseriesLoading } = useBluetoothScannerTimeseries(hoursForTimeRange);
 
-  // Get unique devices from readings
+  // Get unique devices from readings - fixed to match actual device_type values
   const availableDevices = useMemo(() => {
     const deviceSet = new Set<string>();
     
     latestReadings?.forEach(reading => {
-      if (reading.device_type?.toLowerCase().includes('wifi') ||
-          reading.device_type?.toLowerCase().includes('bluetooth') ||
-          reading.device_type?.toLowerCase().includes('ble') ||
-          reading.device_id?.toLowerCase().includes('wifi') ||
-          reading.device_id?.toLowerCase().includes('bluetooth') ||
-          reading.device_id?.toLowerCase().includes('ble')) {
+      const deviceType = reading.device_type?.toLowerCase() || '';
+      if (deviceType === 'wifi_scanner' || 
+          deviceType === 'bluetooth_scanner' ||
+          deviceType.includes('wifi') ||
+          deviceType.includes('bluetooth') ||
+          deviceType.includes('ble')) {
         deviceSet.add(reading.device_id);
       }
     });
@@ -193,25 +206,25 @@ const RadioContent = () => {
     );
   };
 
-  // Process WiFi readings from latest readings (filtered by device)
+  // Process WiFi readings from latest readings (filtered by device) - fixed matching
   const wifiReadings = useMemo(() => {
     if (!latestReadings) return [];
     return latestReadings.filter(r => {
-      const isWifi = r.device_type?.toLowerCase().includes('wifi') ||
-                     r.device_id?.toLowerCase().includes('wifi');
+      const deviceType = r.device_type?.toLowerCase() || '';
+      const isWifi = deviceType === 'wifi_scanner' || deviceType.includes('wifi');
       const matchesDevice = selectedDevice === "all" || r.device_id === selectedDevice;
       return isWifi && matchesDevice;
     });
   }, [latestReadings, selectedDevice]);
 
-  // Process Bluetooth/BLE readings from latest readings (filtered by device)
+  // Process Bluetooth/BLE readings from latest readings (filtered by device) - fixed matching
   const bluetoothReadings = useMemo(() => {
     if (!latestReadings) return [];
     return latestReadings.filter(r => {
-      const isBluetooth = r.device_type?.toLowerCase().includes('bluetooth') ||
-                          r.device_type?.toLowerCase().includes('ble') ||
-                          r.device_id?.toLowerCase().includes('bluetooth') ||
-                          r.device_id?.toLowerCase().includes('ble');
+      const deviceType = r.device_type?.toLowerCase() || '';
+      const isBluetooth = deviceType === 'bluetooth_scanner' || 
+                          deviceType.includes('bluetooth') ||
+                          deviceType.includes('ble');
       const matchesDevice = selectedDevice === "all" || r.device_id === selectedDevice;
       return isBluetooth && matchesDevice;
     });
@@ -804,9 +817,29 @@ const RadioContent = () => {
             <TabsContent value="wifi" className="space-y-6">
               <Card>
                 <CardHeader>
-                  <CardTitle className="flex items-center gap-2">
-                    <Wifi className="w-5 h-5 text-aurora-cyan" />
-                    All WiFi Networks ({wifiNetworks.length})
+                  <CardTitle className="flex items-center justify-between">
+                    <span className="flex items-center gap-2">
+                      <Wifi className="w-5 h-5 text-aurora-cyan" />
+                      All WiFi Networks ({wifiNetworks.length})
+                    </span>
+                    <div className="flex items-center gap-1 border rounded-lg p-1">
+                      <Button
+                        variant={wifiViewMode === "cards" ? "secondary" : "ghost"}
+                        size="sm"
+                        className="h-8 w-8 p-0"
+                        onClick={() => setWifiViewMode("cards")}
+                      >
+                        <LayoutGrid className="w-4 h-4" />
+                      </Button>
+                      <Button
+                        variant={wifiViewMode === "table" ? "secondary" : "ghost"}
+                        size="sm"
+                        className="h-8 w-8 p-0"
+                        onClick={() => setWifiViewMode("table")}
+                      >
+                        <Table2 className="w-4 h-4" />
+                      </Button>
+                    </div>
                   </CardTitle>
                 </CardHeader>
                 <CardContent>
@@ -815,6 +848,66 @@ const RadioContent = () => {
                       <Wifi className="w-16 h-16 mx-auto mb-4 opacity-50" />
                       <h3 className="text-lg font-medium mb-2">No WiFi Networks Detected</h3>
                       <p>WiFi scanning devices may be offline or not configured.</p>
+                    </div>
+                  ) : wifiViewMode === "table" ? (
+                    <div className="rounded-md border">
+                      <Table>
+                        <TableHeader>
+                          <TableRow>
+                            <TableHead>SSID</TableHead>
+                            <TableHead>BSSID</TableHead>
+                            <TableHead>Channel</TableHead>
+                            <TableHead>Security</TableHead>
+                            <TableHead>Signal</TableHead>
+                            <TableHead>Quality</TableHead>
+                            <TableHead>Device</TableHead>
+                            <TableHead>Last Seen</TableHead>
+                          </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                          {wifiNetworks.map((network, index) => (
+                            <TableRow key={`${network.bssid}-${index}`}>
+                              <TableCell className="font-medium">
+                                {network.ssid || 'Hidden Network'}
+                              </TableCell>
+                              <TableCell className="font-mono text-xs">
+                                {network.bssid}
+                              </TableCell>
+                              <TableCell>{network.channel || 'N/A'}</TableCell>
+                              <TableCell>
+                                <Badge variant="outline" className="text-xs">
+                                  {network.security}
+                                </Badge>
+                              </TableCell>
+                              <TableCell>
+                                <span className={`font-medium ${getSignalColor(network.rssi)}`}>
+                                  {network.rssi} dBm
+                                </span>
+                              </TableCell>
+                              <TableCell>
+                                <Badge 
+                                  variant="secondary" 
+                                  className={`text-xs ${
+                                    network.rssi >= -50 ? 'bg-success/20 text-success' :
+                                    network.rssi >= -70 ? 'bg-yellow-500/20 text-yellow-600' :
+                                    'bg-destructive/20 text-destructive'
+                                  }`}
+                                >
+                                  {formatSignalStrength(network.rssi)}
+                                </Badge>
+                              </TableCell>
+                              <TableCell>
+                                <Badge variant="secondary" className="text-xs bg-aurora-cyan/20 text-aurora-cyan">
+                                  {network.deviceId}
+                                </Badge>
+                              </TableCell>
+                              <TableCell className="text-xs text-muted-foreground">
+                                {formatDistanceToNow(new Date(network.lastSeen), { addSuffix: true })}
+                              </TableCell>
+                            </TableRow>
+                          ))}
+                        </TableBody>
+                      </Table>
                     </div>
                   ) : (
                     <div className="space-y-3">
@@ -908,9 +1001,29 @@ const RadioContent = () => {
             <TabsContent value="bluetooth" className="space-y-6">
               <Card>
                 <CardHeader>
-                  <CardTitle className="flex items-center gap-2">
-                    <Bluetooth className="w-5 h-5 text-aurora-purple" />
-                    All BLE Devices ({bleDevices.length})
+                  <CardTitle className="flex items-center justify-between">
+                    <span className="flex items-center gap-2">
+                      <Bluetooth className="w-5 h-5 text-aurora-purple" />
+                      All BLE Devices ({bleDevices.length})
+                    </span>
+                    <div className="flex items-center gap-1 border rounded-lg p-1">
+                      <Button
+                        variant={bluetoothViewMode === "cards" ? "secondary" : "ghost"}
+                        size="sm"
+                        className="h-8 w-8 p-0"
+                        onClick={() => setBluetoothViewMode("cards")}
+                      >
+                        <LayoutGrid className="w-4 h-4" />
+                      </Button>
+                      <Button
+                        variant={bluetoothViewMode === "table" ? "secondary" : "ghost"}
+                        size="sm"
+                        className="h-8 w-8 p-0"
+                        onClick={() => setBluetoothViewMode("table")}
+                      >
+                        <Table2 className="w-4 h-4" />
+                      </Button>
+                    </div>
                   </CardTitle>
                 </CardHeader>
                 <CardContent>
@@ -919,6 +1032,62 @@ const RadioContent = () => {
                       <Bluetooth className="w-16 h-16 mx-auto mb-4 opacity-50" />
                       <h3 className="text-lg font-medium mb-2">No BLE Devices Detected</h3>
                       <p>Bluetooth scanning devices may be offline or not configured.</p>
+                    </div>
+                  ) : bluetoothViewMode === "table" ? (
+                    <div className="rounded-md border">
+                      <Table>
+                        <TableHeader>
+                          <TableRow>
+                            <TableHead>Name</TableHead>
+                            <TableHead>MAC Address</TableHead>
+                            <TableHead>Manufacturer</TableHead>
+                            <TableHead>Signal</TableHead>
+                            <TableHead>Quality</TableHead>
+                            <TableHead>Device</TableHead>
+                            <TableHead>Last Seen</TableHead>
+                          </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                          {bleDevices.map((device, index) => (
+                            <TableRow key={`${device.mac}-${index}`}>
+                              <TableCell className="font-medium">
+                                {device.name}
+                              </TableCell>
+                              <TableCell className="font-mono text-xs">
+                                {device.mac}
+                              </TableCell>
+                              <TableCell>
+                                {device.manufacturer || 'Unknown'}
+                              </TableCell>
+                              <TableCell>
+                                <span className={`font-medium ${getSignalColor(device.rssi)}`}>
+                                  {device.rssi} dBm
+                                </span>
+                              </TableCell>
+                              <TableCell>
+                                <Badge 
+                                  variant="secondary" 
+                                  className={`text-xs ${
+                                    device.rssi >= -50 ? 'bg-success/20 text-success' :
+                                    device.rssi >= -70 ? 'bg-yellow-500/20 text-yellow-600' :
+                                    'bg-destructive/20 text-destructive'
+                                  }`}
+                                >
+                                  {formatSignalStrength(device.rssi)}
+                                </Badge>
+                              </TableCell>
+                              <TableCell>
+                                <Badge variant="secondary" className="text-xs bg-aurora-purple/20 text-aurora-purple">
+                                  {device.deviceId}
+                                </Badge>
+                              </TableCell>
+                              <TableCell className="text-xs text-muted-foreground">
+                                {formatDistanceToNow(new Date(device.lastSeen), { addSuffix: true })}
+                              </TableCell>
+                            </TableRow>
+                          ))}
+                        </TableBody>
+                      </Table>
                     </div>
                   ) : (
                     <div className="space-y-3">
