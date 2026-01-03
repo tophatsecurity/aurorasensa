@@ -46,8 +46,10 @@ import {
   useSensorTypeStats,
   useStarlinkTimeseries,
   useThermalProbeTimeseries,
+  useSystemInfo,
   Client 
 } from "@/hooks/useAuroraApi";
+import { MemoryStick, HardDrive } from "lucide-react";
 import { formatLastSeen, formatDate, formatDateTime, getDeviceStatusFromLastSeen } from "@/utils/dateUtils";
 
 interface SensorStats {
@@ -104,6 +106,10 @@ const DashboardContent = () => {
   const { data: starlinkStats, isLoading: starlinkLoading } = useSensorTypeStats("starlink");
   const { data: ahtStats } = useSensorTypeStats("aht_sensor");
   const { data: bmtStats } = useSensorTypeStats("bmt_sensor");
+  const { data: systemMonitorStats, isLoading: systemMonitorLoading } = useSensorTypeStats("system_monitor");
+  
+  // System info from API
+  const { data: systemInfo, isLoading: systemInfoLoading } = useSystemInfo();
   
   // Real timeseries data for sparklines
   const { data: starlinkTimeseries, isLoading: starlinkTimeseriesLoading } = useStarlinkTimeseries(24);
@@ -333,7 +339,132 @@ const DashboardContent = () => {
         <StarlinkCharts />
       </div>
 
-      {/* Humidity Trends with Comfort Zones */}
+      {/* System Monitor - Local System Stats */}
+      <div className="mb-8">
+        <h2 className="text-lg font-semibold mb-4 flex items-center gap-2">
+          <Cpu className="w-5 h-5 text-cyan-500" />
+          System Monitor
+        </h2>
+        {(systemMonitorLoading || systemInfoLoading) ? (
+          <div className="flex items-center justify-center py-8">
+            <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
+          </div>
+        ) : (
+          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
+            {/* CPU Usage */}
+            <div className="glass-card rounded-lg p-4 border border-border/50">
+              <div className="flex items-center gap-2 mb-2">
+                <div className="w-8 h-8 rounded-lg bg-cyan-500/20 flex items-center justify-center">
+                  <Cpu className="w-4 h-4 text-cyan-400" />
+                </div>
+                <span className="text-xs text-muted-foreground">CPU</span>
+              </div>
+              <div className="text-2xl font-bold text-foreground">
+                {systemMonitorStats?.numeric_field_stats_24h?.cpu_percent?.avg?.toFixed(1) ?? 
+                 systemInfo?.cpu_load?.[0]?.toFixed(1) ?? "—"}%
+              </div>
+              <div className="text-xs text-muted-foreground mt-1">
+                {systemMonitorStats?.numeric_field_stats_24h?.cpu_percent?.max !== undefined 
+                  ? `Max: ${systemMonitorStats.numeric_field_stats_24h.cpu_percent.max.toFixed(1)}%`
+                  : "24h avg"}
+              </div>
+            </div>
+
+            {/* Memory Usage */}
+            <div className="glass-card rounded-lg p-4 border border-border/50">
+              <div className="flex items-center gap-2 mb-2">
+                <div className="w-8 h-8 rounded-lg bg-purple-500/20 flex items-center justify-center">
+                  <MemoryStick className="w-4 h-4 text-purple-400" />
+                </div>
+                <span className="text-xs text-muted-foreground">Memory</span>
+              </div>
+              <div className="text-2xl font-bold text-foreground">
+                {systemMonitorStats?.numeric_field_stats_24h?.memory_percent?.avg?.toFixed(1) ?? 
+                 systemInfo?.memory?.percent?.toFixed(1) ?? "—"}%
+              </div>
+              <div className="text-xs text-muted-foreground mt-1">
+                {systemInfo?.memory?.total 
+                  ? `${(systemInfo.memory.used / 1024 / 1024 / 1024).toFixed(1)}/${(systemInfo.memory.total / 1024 / 1024 / 1024).toFixed(1)} GB`
+                  : "24h avg"}
+              </div>
+            </div>
+
+            {/* Disk Usage */}
+            <div className="glass-card rounded-lg p-4 border border-border/50">
+              <div className="flex items-center gap-2 mb-2">
+                <div className="w-8 h-8 rounded-lg bg-orange-500/20 flex items-center justify-center">
+                  <HardDrive className="w-4 h-4 text-orange-400" />
+                </div>
+                <span className="text-xs text-muted-foreground">Disk</span>
+              </div>
+              <div className="text-2xl font-bold text-foreground">
+                {systemMonitorStats?.numeric_field_stats_24h?.disk_percent?.avg?.toFixed(1) ?? 
+                 systemInfo?.disk?.percent?.toFixed(1) ?? "—"}%
+              </div>
+              <div className="text-xs text-muted-foreground mt-1">
+                {systemInfo?.disk?.total 
+                  ? `${(systemInfo.disk.used / 1024 / 1024 / 1024).toFixed(1)}/${(systemInfo.disk.total / 1024 / 1024 / 1024).toFixed(1)} GB`
+                  : "24h avg"}
+              </div>
+            </div>
+
+            {/* CPU Temp */}
+            <div className="glass-card rounded-lg p-4 border border-border/50">
+              <div className="flex items-center gap-2 mb-2">
+                <div className="w-8 h-8 rounded-lg bg-red-500/20 flex items-center justify-center">
+                  <Thermometer className="w-4 h-4 text-red-400" />
+                </div>
+                <span className="text-xs text-muted-foreground">CPU Temp</span>
+              </div>
+              <div className="text-2xl font-bold text-foreground">
+                {systemMonitorStats?.numeric_field_stats_24h?.cpu_temp_c?.avg?.toFixed(1) ?? "—"}°C
+              </div>
+              <div className="text-xs text-muted-foreground mt-1">
+                {systemMonitorStats?.numeric_field_stats_24h?.cpu_temp_c?.max !== undefined 
+                  ? `Max: ${systemMonitorStats.numeric_field_stats_24h.cpu_temp_c.max.toFixed(1)}°C`
+                  : "24h avg"}
+              </div>
+            </div>
+
+            {/* Voltage */}
+            <div className="glass-card rounded-lg p-4 border border-border/50">
+              <div className="flex items-center gap-2 mb-2">
+                <div className="w-8 h-8 rounded-lg bg-yellow-500/20 flex items-center justify-center">
+                  <Zap className="w-4 h-4 text-yellow-400" />
+                </div>
+                <span className="text-xs text-muted-foreground">Voltage</span>
+              </div>
+              <div className="text-2xl font-bold text-foreground">
+                {systemMonitorStats?.numeric_field_stats_24h?.voltage?.avg?.toFixed(2) ?? "—"}V
+              </div>
+              <div className="text-xs text-muted-foreground mt-1">
+                {systemMonitorStats?.numeric_field_stats_24h?.voltage?.min !== undefined 
+                  ? `Min: ${systemMonitorStats.numeric_field_stats_24h.voltage.min.toFixed(2)}V`
+                  : "24h avg"}
+              </div>
+            </div>
+
+            {/* Uptime */}
+            <div className="glass-card rounded-lg p-4 border border-border/50">
+              <div className="flex items-center gap-2 mb-2">
+                <div className="w-8 h-8 rounded-lg bg-green-500/20 flex items-center justify-center">
+                  <Clock className="w-4 h-4 text-green-400" />
+                </div>
+                <span className="text-xs text-muted-foreground">Uptime</span>
+              </div>
+              <div className="text-2xl font-bold text-foreground">
+                {systemInfo?.uptime_seconds 
+                  ? `${Math.floor(systemInfo.uptime_seconds / 86400)}d`
+                  : systemInfo?.uptime ?? "—"}
+              </div>
+              <div className="text-xs text-muted-foreground mt-1">
+                {systemInfo?.hostname ?? "Server"}
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+
       <div className="mb-8">
         <h2 className="text-lg font-semibold mb-4 flex items-center gap-2">
           <Droplets className="w-5 h-5 text-blue-500" />
