@@ -280,6 +280,7 @@ const ThermalDeviceChart = () => {
                 axisLine={false}
               />
               <YAxis 
+                domain={['auto', 'auto']}
                 tick={{ fontSize: 10, fill: 'hsl(var(--muted-foreground))' }}
                 tickLine={false}
                 axisLine={false}
