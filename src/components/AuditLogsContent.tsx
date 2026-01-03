@@ -19,6 +19,8 @@ import {
   X
 } from "lucide-react";
 import { formatDateTime, formatRelativeTime } from "@/utils/dateUtils";
+import { usePagination } from "@/hooks/usePagination";
+import { TablePagination } from "@/components/TablePagination";
 
 const AuditLogsContent = () => {
   const [limit, setLimit] = useState(100);
@@ -49,6 +51,22 @@ const AuditLogsContent = () => {
     
     return matchesSearch && matchesAction && matchesUser;
   });
+
+  const {
+    currentPage,
+    totalPages,
+    itemsPerPage,
+    startIndex,
+    endIndex,
+    setCurrentPage,
+    setItemsPerPage,
+    paginateData,
+  } = usePagination<AuditLog>({
+    totalItems: filteredLogs.length,
+    itemsPerPage: 20,
+  });
+
+  const paginatedLogs = paginateData(filteredLogs);
 
   const clearFilters = () => {
     setSearchTerm("");
@@ -269,7 +287,7 @@ const AuditLogsContent = () => {
                       </TableRow>
                     </TableHeader>
                     <TableBody>
-                      {filteredLogs.map((log) => (
+                      {paginatedLogs.map((log) => (
                         <TableRow key={log.id}>
                           <TableCell className="font-mono text-xs">
                             <div className="flex flex-col">
@@ -297,6 +315,19 @@ const AuditLogsContent = () => {
                       ))}
                     </TableBody>
                   </Table>
+                  {filteredLogs.length > 0 && (
+                    <TablePagination
+                      currentPage={currentPage}
+                      totalPages={totalPages}
+                      totalItems={filteredLogs.length}
+                      itemsPerPage={itemsPerPage}
+                      startIndex={startIndex}
+                      endIndex={endIndex}
+                      onPageChange={setCurrentPage}
+                      onItemsPerPageChange={setItemsPerPage}
+                      itemsPerPageOptions={[10, 20, 50, 100]}
+                    />
+                  )}
                 </div>
               )}
             </CardContent>

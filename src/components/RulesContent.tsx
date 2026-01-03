@@ -11,6 +11,8 @@ import { Label } from "@/components/ui/label";
 import { useAlertRules, useUpdateAlertRule, useDeleteAlertRule, AlertRule } from "@/hooks/useAuroraApi";
 import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "@/hooks/use-toast";
+import { usePagination } from "@/hooks/usePagination";
+import { TablePagination } from "@/components/TablePagination";
 
 const RulesContent = () => {
   const { data: rulesData, isLoading, error } = useAlertRules();
@@ -160,6 +162,22 @@ const RulesContent = () => {
   const criticalRules = rules.filter(r => r.severity === 'critical');
   const warningRules = rules.filter(r => r.severity === 'warning');
 
+  const {
+    currentPage,
+    totalPages,
+    itemsPerPage,
+    startIndex,
+    endIndex,
+    setCurrentPage,
+    setItemsPerPage,
+    paginateData,
+  } = usePagination<AlertRule>({
+    totalItems: rules.length,
+    itemsPerPage: 10,
+  });
+
+  const paginatedRules = paginateData(rules);
+
   if (isLoading) {
     return (
       <div className="flex-1 p-6 overflow-y-auto">
@@ -239,7 +257,7 @@ const RulesContent = () => {
 
       {/* Rules List */}
       <div className="grid gap-4">
-        {rules.slice(0, 20).map((rule) => (
+        {paginatedRules.map((rule) => (
           <Card key={rule.id} className="bg-card/50 backdrop-blur-sm border-border/50">
             <CardContent className="p-4">
               <div className="flex items-center justify-between">
@@ -298,10 +316,17 @@ const RulesContent = () => {
         ))}
       </div>
 
-      {rules.length > 20 && (
-        <p className="text-center text-muted-foreground mt-4">
-          Showing 20 of {rules.length} rules
-        </p>
+      {rules.length > 0 && (
+        <TablePagination
+          currentPage={currentPage}
+          totalPages={totalPages}
+          totalItems={rules.length}
+          itemsPerPage={itemsPerPage}
+          startIndex={startIndex}
+          endIndex={endIndex}
+          onPageChange={setCurrentPage}
+          onItemsPerPageChange={setItemsPerPage}
+        />
       )}
 
       {/* Edit Rule Dialog */}

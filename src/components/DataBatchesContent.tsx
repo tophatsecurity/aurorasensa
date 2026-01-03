@@ -5,6 +5,8 @@ import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { useComprehensiveStats } from "@/hooks/useAuroraApi";
 import { useQueryClient } from "@tanstack/react-query";
+import { usePagination } from "@/hooks/usePagination";
+import { TablePagination } from "@/components/TablePagination";
 
 const DataBatchesContent = () => {
   const { data: stats, isLoading, error } = useComprehensiveStats();
@@ -23,6 +25,22 @@ const DataBatchesContent = () => {
 
   // Derive device batch activity from devices_summary
   const devices = stats?.devices_summary?.devices || [];
+
+  const {
+    currentPage,
+    totalPages,
+    itemsPerPage,
+    startIndex,
+    endIndex,
+    setCurrentPage,
+    setItemsPerPage,
+    paginateData,
+  } = usePagination<typeof devices[number]>({
+    totalItems: devices.length,
+    itemsPerPage: 10,
+  });
+
+  const paginatedDevices = paginateData(devices);
 
   if (isLoading) {
     return (
@@ -115,7 +133,7 @@ const DataBatchesContent = () => {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {devices.map((device) => (
+              {paginatedDevices.map((device) => (
                 <TableRow key={device.device_id}>
                   <TableCell className="font-mono text-sm">{device.device_id}</TableCell>
                   <TableCell>
@@ -144,6 +162,18 @@ const DataBatchesContent = () => {
               ))}
             </TableBody>
           </Table>
+          {devices.length > 0 && (
+            <TablePagination
+              currentPage={currentPage}
+              totalPages={totalPages}
+              totalItems={devices.length}
+              itemsPerPage={itemsPerPage}
+              startIndex={startIndex}
+              endIndex={endIndex}
+              onPageChange={setCurrentPage}
+              onItemsPerPageChange={setItemsPerPage}
+            />
+          )}
         </CardContent>
       </Card>
 
