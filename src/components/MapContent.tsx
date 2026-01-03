@@ -1,5 +1,5 @@
 import { useState, useCallback, useEffect, useRef } from "react";
-import { ZoomIn, ZoomOut, Maximize2, Play, Pause } from "lucide-react";
+import { ZoomIn, ZoomOut, Maximize2, Play, Pause, Route, X } from "lucide-react";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
 
@@ -11,6 +11,7 @@ import { formatDateTime } from "@/utils/dateUtils";
 // Custom hooks
 import { useMapData } from "@/hooks/useMapData";
 import { useGpsHistory } from "@/hooks/useGpsHistory";
+import { useAdsbHistory, AircraftTrail } from "@/hooks/useAdsbHistory";
 
 // Map components (non-leaflet)
 import { MapLegend } from "@/components/map/MapLegend";
@@ -52,6 +53,7 @@ const MapContent = () => {
   const mapRef = useRef<L.Map | null>(null);
   const markersRef = useRef<Map<string, L.Marker>>(new Map());
   const trailsRef = useRef<Map<string, L.Polyline>>(new Map());
+  const adsbTrailsRef = useRef<Map<string, L.Polyline>>(new Map());
   const [filter, setFilter] = useState<FilterType>('all');
   const [isLiveTracking, setIsLiveTracking] = useState(true);
   const [hasInitialFit, setHasInitialFit] = useState(false);
@@ -80,6 +82,17 @@ const MapContent = () => {
     { sensorRetentionMinutes, clientRetentionMinutes }
   );
 
+  // ADS-B aircraft history trails
+  const {
+    activeTrails: adsbActiveTrails,
+    isLoading: adsbHistoryLoading,
+    toggleAircraftTrail,
+    addTrailFromData,
+    clearTrail: clearAdsbTrail,
+    clearAllTrails: clearAllAdsbTrails,
+    historyData,
+  } = useAdsbHistory();
+
   // Initialize map
   useEffect(() => {
     if (!mapContainerRef.current || mapRef.current) return;
@@ -106,6 +119,7 @@ const MapContent = () => {
       mapRef.current = null;
       markersRef.current.clear();
       trailsRef.current.clear();
+      adsbTrailsRef.current.clear();
     };
   }, []);
 
@@ -224,6 +238,12 @@ const MapContent = () => {
         const statusLabel = aircraft.status === 'active' ? 'Live' :
                            aircraft.status === 'historical' ? 'Historical' : 'Stale';
         
+        const hasActiveTrail = adsbActiveTrails.has(aircraft.hex);
+        const trailButtonClass = hasActiveTrail 
+          ? 'bg-cyan-500 hover:bg-cyan-600 text-white' 
+          : 'bg-gray-600 hover:bg-gray-500 text-white';
+        const trailButtonText = hasActiveTrail ? 'Hide Trail' : 'Show Trail';
+        
         const popupContent = `
           <div class="p-3 min-w-[260px] max-w-[320px]">
             <div class="font-bold mb-2 flex items-center gap-2 text-base border-b pb-2">
@@ -304,6 +324,15 @@ const MapContent = () => {
                 <span class="text-gray-500">Status:</span>
                 <span class="font-medium ${statusColor}">${statusLabel}</span>
               </div>
+              <div class="pt-2 border-t mt-2">
+                <button 
+                  class="w-full px-3 py-1.5 rounded text-xs font-medium transition-colors ${trailButtonClass}"
+                  data-icao="${aircraft.hex}"
+                  data-action="toggle-trail"
+                >
+                  📍 ${trailButtonText}
+                </button>
+              </div>
             </div>
           </div>
         `;
@@ -320,6 +349,23 @@ const MapContent = () => {
           })
             .bindPopup(popupContent)
             .addTo(mapRef.current!);
+          
+          // Add click handler for trail toggle button in popup
+          marker.on('popupopen', () => {
+            const popup = marker.getPopup();
+            if (popup) {
+              const container = popup.getElement();
+              const trailButton = container?.querySelector('[data-action="toggle-trail"]');
+              if (trailButton) {
+                trailButton.addEventListener('click', () => {
+                  const icao = trailButton.getAttribute('data-icao');
+                  if (icao) {
+                    toggleAircraftTrail(icao);
+                  }
+                });
+              }
+            }
+          });
           
           let opacity = 0;
           const fadeIn = () => {
@@ -420,6 +466,73 @@ const MapContent = () => {
       }
     });
   }, [trails, showTrails, filter]);
+
+  // Add trail when ADS-B history data is loaded
+  useEffect(() => {
+    if (historyData) {
+      addTrailFromData();
+    }
+  }, [historyData, addTrailFromData]);
+
+  // Render ADS-B aircraft trails
+  useEffect(() => {
+    if (!mapRef.current) return;
+
+    const activeTrailIds = new Set(adsbActiveTrails.keys());
+
+    // Remove trails that are no longer active
+    adsbTrailsRef.current.forEach((polyline, id) => {
+      if (!activeTrailIds.has(id)) {
+        polyline.remove();
+        adsbTrailsRef.current.delete(id);
+      }
+    });
+
+    // Add or update active trails
+    adsbActiveTrails.forEach((trail, icao) => {
+      if (trail.coordinates.length < 2) return;
+
+      const existing = adsbTrailsRef.current.get(icao);
+
+      if (existing) {
+        existing.setLatLngs(trail.coordinates);
+      } else {
+        // Create gradient-like effect with multiple polylines or a single styled one
+        const polyline = L.polyline(trail.coordinates, {
+          color: '#00bcd4', // Cyan color for ADS-B trails
+          weight: 3,
+          opacity: 0.8,
+          lineCap: 'round',
+          lineJoin: 'round',
+        }).addTo(mapRef.current!);
+
+        // Add decorators for direction indication (arrow heads simulation with dashes)
+        const shadowLine = L.polyline(trail.coordinates, {
+          color: '#006064',
+          weight: 5,
+          opacity: 0.3,
+        }).addTo(mapRef.current!);
+
+        // Combine into a feature group for easier management
+        polyline.bringToFront();
+
+        const tooltipContent = `✈️ ${trail.flight || trail.icao} - ${trail.coordinates.length} positions`;
+        polyline.bindTooltip(tooltipContent, { permanent: false, direction: 'top' });
+
+        // Store just the main polyline, we'll manage the shadow separately
+        adsbTrailsRef.current.set(icao, polyline);
+        adsbTrailsRef.current.set(`${icao}-shadow`, shadowLine);
+      }
+    });
+
+    // Clean up shadows for removed trails
+    adsbTrailsRef.current.forEach((polyline, id) => {
+      if (id.endsWith('-shadow') && !activeTrailIds.has(id.replace('-shadow', ''))) {
+        polyline.remove();
+        adsbTrailsRef.current.delete(id);
+      }
+    });
+  }, [adsbActiveTrails]);
 
   // Auto-refresh for live tracking
   useEffect(() => {
@@ -550,6 +663,31 @@ const MapContent = () => {
           <div className="absolute top-4 left-1/2 -translate-x-1/2 z-[1000] flex items-center gap-2 px-3 py-1.5 rounded-full bg-card/90 backdrop-blur border border-border/50">
             <div className="w-2 h-2 rounded-full bg-green-500 animate-pulse" />
             <span className="text-xs font-medium">LIVE</span>
+          </div>
+        )}
+
+        {/* ADS-B Trail indicator */}
+        {adsbActiveTrails.size > 0 && (
+          <div className="absolute top-4 right-4 z-[1000] flex items-center gap-2 px-3 py-1.5 rounded-lg bg-card/90 backdrop-blur border border-border/50">
+            <Route className="w-4 h-4 text-cyan-400" />
+            <span className="text-xs font-medium">{adsbActiveTrails.size} Flight Trail{adsbActiveTrails.size > 1 ? 's' : ''}</span>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-5 w-5 p-0 hover:bg-destructive/20"
+              onClick={clearAllAdsbTrails}
+              title="Clear all flight trails"
+            >
+              <X className="w-3 h-3" />
+            </Button>
+          </div>
+        )}
+
+        {/* Loading indicator for trail fetch */}
+        {adsbHistoryLoading && (
+          <div className="absolute top-14 right-4 z-[1000] flex items-center gap-2 px-3 py-1.5 rounded-lg bg-card/90 backdrop-blur border border-border/50">
+            <div className="w-3 h-3 rounded-full border-2 border-cyan-400 border-t-transparent animate-spin" />
+            <span className="text-xs">Loading trail...</span>
           </div>
         )}
 
