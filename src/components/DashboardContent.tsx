@@ -456,7 +456,11 @@ const DashboardContent = () => {
               <div className="text-2xl font-bold text-foreground">
                 {systemInfo?.uptime_seconds 
                   ? `${Math.floor(systemInfo.uptime_seconds / 86400)}d`
-                  : systemInfo?.uptime ?? "—"}
+                  : typeof systemInfo?.uptime === 'object' && systemInfo?.uptime !== null
+                    ? (systemInfo.uptime as { formatted?: string })?.formatted ?? "—"
+                    : typeof systemInfo?.uptime === 'string' 
+                      ? systemInfo.uptime 
+                      : "—"}
               </div>
               <div className="text-xs text-muted-foreground mt-1">
                 {systemInfo?.hostname ?? "Server"}
