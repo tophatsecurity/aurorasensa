@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { 
   useConfig, 
   useClients, 
@@ -6,21 +6,24 @@ import {
   useAllClientConfigs, 
   useUpdateConfig, 
   useUpdateClientConfig,
+  useSystemInfo,
+  useHealth,
+  useComprehensiveStats,
+  useSystemInterfaces,
+  useSystemUsb,
   ServerConfig,
   Client
 } from "@/hooks/useAuroraApi";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Switch } from "@/components/ui/switch";
+import { Progress } from "@/components/ui/progress";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Separator } from "@/components/ui/separator";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import { Textarea } from "@/components/ui/textarea";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { 
   Settings, 
   Server, 
@@ -36,7 +39,14 @@ import {
   AlertCircle,
   CheckCircle2,
   Edit3,
-  X
+  X,
+  HardDrive,
+  Clock,
+  Network,
+  Usb,
+  Activity,
+  Globe,
+  XCircle
 } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
 import { formatRelativeTime } from "@/utils/dateUtils";
@@ -52,6 +62,12 @@ const ConfigEditor = ({ config, onSave, isSaving, title }: ConfigEditorProps) =>
   const [isEditing, setIsEditing] = useState(false);
   const [editedConfig, setEditedConfig] = useState<string>(JSON.stringify(config, null, 2));
   const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!isEditing) {
+      setEditedConfig(JSON.stringify(config, null, 2));
+    }
+  }, [config, isEditing]);
 
   const handleSave = () => {
     try {
@@ -139,6 +155,8 @@ const SensorConfigDisplay = ({ sensors }: SensorConfigDisplayProps) => {
       case "starlink": return <Satellite className="h-4 w-4" />;
       case "thermal_probe": return <Thermometer className="h-4 w-4" />;
       case "system_monitor": return <Monitor className="h-4 w-4" />;
+      case "gps": return <Globe className="h-4 w-4" />;
+      case "bluetooth": return <Radio className="h-4 w-4" />;
       default: return <Cpu className="h-4 w-4" />;
     }
   };
@@ -164,12 +182,17 @@ const SensorConfigDisplay = ({ sensors }: SensorConfigDisplayProps) => {
             <div className="space-y-2">
               {items.map((item, idx) => (
                 <div key={idx} className="bg-muted/50 rounded p-2 text-sm">
-                  <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-2 flex-wrap">
                     <span className="font-mono text-xs">{item.device_id as string || `Device ${idx + 1}`}</span>
                     {item.enabled !== undefined && (
                       <Badge variant={item.enabled ? "default" : "secondary"} className="text-xs">
                         {item.enabled ? "Enabled" : "Disabled"}
                       </Badge>
+                    )}
+                    {item.poll_interval && (
+                      <span className="text-xs text-muted-foreground">
+                        Poll: {item.poll_interval as number}s
+                      </span>
                     )}
                   </div>
                 </div>
@@ -185,7 +208,6 @@ const SensorConfigDisplay = ({ sensors }: SensorConfigDisplayProps) => {
 const ClientConfigCard = ({ client }: { client: Client }) => {
   const { data: clientConfig, isLoading } = useClientConfig(client.client_id);
   const updateClientConfig = useUpdateClientConfig();
-  const [expanded, setExpanded] = useState(false);
 
   const metadata = client.metadata as { 
     config?: { 
@@ -196,6 +218,7 @@ const ClientConfigCard = ({ client }: { client: Client }) => {
       cpu_percent?: number;
       memory_percent?: number;
       disk_percent?: number;
+      uptime_seconds?: number;
     };
   } | undefined;
 
@@ -220,23 +243,38 @@ const ClientConfigCard = ({ client }: { client: Client }) => {
     );
   };
 
+  const formatUptime = (seconds: number) => {
+    const days = Math.floor(seconds / 86400);
+    const hours = Math.floor((seconds % 86400) / 3600);
+    const mins = Math.floor((seconds % 3600) / 60);
+    if (days > 0) return `${days}d ${hours}h`;
+    if (hours > 0) return `${hours}h ${mins}m`;
+    return `${mins}m`;
+  };
+
+  const getStatusColor = (percent: number) => {
+    if (percent > 90) return "text-red-500";
+    if (percent > 75) return "text-yellow-500";
+    return "text-green-500";
+  };
+
   return (
     <Card className="overflow-hidden">
       <CardHeader className="pb-3">
         <div className="flex items-start justify-between">
           <div className="flex items-center gap-3">
-            <div className={`w-3 h-3 rounded-full ${client.status === "online" ? "bg-green-500" : "bg-muted"}`} />
+            <div className={`w-3 h-3 rounded-full animate-pulse ${client.status === "online" ? "bg-green-500" : client.status === "stale" ? "bg-yellow-500" : "bg-muted"}`} />
             <div>
               <CardTitle className="text-base">{client.hostname}</CardTitle>
               <CardDescription className="text-xs">
-                {client.ip_address} • Last seen: {formatRelativeTime(client.last_seen)}
+                {client.ip_address} • {client.mac_address}
               </CardDescription>
             </div>
           </div>
           <div className="flex items-center gap-2">
             {metadata?.config?.project && (
               <Badge variant="outline">
-                v{metadata.config.project.version}
+                {metadata.config.project.name} v{metadata.config.project.version}
               </Badge>
             )}
           </div>
@@ -244,20 +282,64 @@ const ClientConfigCard = ({ client }: { client: Client }) => {
       </CardHeader>
 
       <CardContent className="space-y-4">
-        {/* System Stats */}
+        {/* Connection Info */}
+        <div className="flex flex-wrap gap-2 text-xs text-muted-foreground">
+          <span className="flex items-center gap-1">
+            <Clock className="h-3 w-3" />
+            Last seen: {formatRelativeTime(client.last_seen)}
+          </span>
+          <span className="flex items-center gap-1">
+            <Database className="h-3 w-3" />
+            {client.batches_received} batches
+          </span>
+          {metadata?.system?.uptime_seconds && (
+            <span className="flex items-center gap-1">
+              <Activity className="h-3 w-3" />
+              Uptime: {formatUptime(metadata.system.uptime_seconds)}
+            </span>
+          )}
+        </div>
+
+        {/* System Stats with Progress Bars */}
         {metadata?.system && (
-          <div className="grid grid-cols-3 gap-2">
-            <div className="bg-muted/50 rounded p-2 text-center">
-              <div className="text-xs text-muted-foreground">CPU</div>
-              <div className="font-mono text-sm">{metadata.system.cpu_percent?.toFixed(1) || "—"}%</div>
+          <div className="space-y-3">
+            <div className="space-y-1">
+              <div className="flex justify-between text-xs">
+                <span className="flex items-center gap-1">
+                  <Cpu className="h-3 w-3" />
+                  CPU
+                </span>
+                <span className={`font-mono ${getStatusColor(metadata.system.cpu_percent || 0)}`}>
+                  {metadata.system.cpu_percent?.toFixed(1) || "—"}%
+                </span>
+              </div>
+              <Progress value={metadata.system.cpu_percent || 0} className="h-2" />
             </div>
-            <div className="bg-muted/50 rounded p-2 text-center">
-              <div className="text-xs text-muted-foreground">Memory</div>
-              <div className="font-mono text-sm">{metadata.system.memory_percent?.toFixed(1) || "—"}%</div>
+            
+            <div className="space-y-1">
+              <div className="flex justify-between text-xs">
+                <span className="flex items-center gap-1">
+                  <Monitor className="h-3 w-3" />
+                  Memory
+                </span>
+                <span className={`font-mono ${getStatusColor(metadata.system.memory_percent || 0)}`}>
+                  {metadata.system.memory_percent?.toFixed(1) || "—"}%
+                </span>
+              </div>
+              <Progress value={metadata.system.memory_percent || 0} className="h-2" />
             </div>
-            <div className="bg-muted/50 rounded p-2 text-center">
-              <div className="text-xs text-muted-foreground">Disk</div>
-              <div className="font-mono text-sm">{metadata.system.disk_percent?.toFixed(1) || "—"}%</div>
+            
+            <div className="space-y-1">
+              <div className="flex justify-between text-xs">
+                <span className="flex items-center gap-1">
+                  <HardDrive className="h-3 w-3" />
+                  Disk
+                </span>
+                <span className={`font-mono ${getStatusColor(metadata.system.disk_percent || 0)}`}>
+                  {metadata.system.disk_percent?.toFixed(1) || "—"}%
+                </span>
+              </div>
+              <Progress value={metadata.system.disk_percent || 0} className="h-2" />
             </div>
           </div>
         )}
@@ -269,7 +351,7 @@ const ClientConfigCard = ({ client }: { client: Client }) => {
               <AccordionTrigger className="py-2 text-sm">
                 <div className="flex items-center gap-2">
                   <Database className="h-4 w-4" />
-                  Sensor Configuration
+                  Sensor Configuration ({Object.keys(metadata.config.sensors).length} types)
                 </div>
               </AccordionTrigger>
               <AccordionContent>
@@ -309,9 +391,31 @@ const ClientConfigCard = ({ client }: { client: Client }) => {
   );
 };
 
+const formatBytes = (bytes: number) => {
+  if (bytes === 0) return "0 B";
+  const k = 1024;
+  const sizes = ["B", "KB", "MB", "GB", "TB"];
+  const i = Math.floor(Math.log(bytes) / Math.log(k));
+  return `${(bytes / Math.pow(k, i)).toFixed(1)} ${sizes[i]}`;
+};
+
+const formatUptime = (seconds: number) => {
+  const days = Math.floor(seconds / 86400);
+  const hours = Math.floor((seconds % 86400) / 3600);
+  const mins = Math.floor((seconds % 3600) / 60);
+  if (days > 0) return `${days}d ${hours}h ${mins}m`;
+  if (hours > 0) return `${hours}h ${mins}m`;
+  return `${mins}m`;
+};
+
 const ConfigurationContent = () => {
   const { data: serverConfig, isLoading: configLoading, refetch: refetchConfig } = useConfig();
   const { data: clients = [], isLoading: clientsLoading, refetch: refetchClients } = useClients();
+  const { data: systemInfo, isLoading: systemLoading } = useSystemInfo();
+  const { data: health, isLoading: healthLoading } = useHealth();
+  const { data: stats, isLoading: statsLoading } = useComprehensiveStats();
+  const { data: interfaces } = useSystemInterfaces();
+  const { data: usbDevices } = useSystemUsb();
   const updateConfig = useUpdateConfig();
 
   const handleSaveServerConfig = (config: ServerConfig) => {
@@ -341,6 +445,9 @@ const ConfigurationContent = () => {
     });
   };
 
+  const isApiHealthy = health?.status === "ok" || health?.status === "healthy";
+  const onlineClients = clients.filter(c => c.status === "online").length;
+
   return (
     <div className="flex flex-col h-full">
       {/* Header */}
@@ -360,28 +467,117 @@ const ConfigurationContent = () => {
       <ScrollArea className="flex-1">
         <div className="p-6">
           <Tabs defaultValue="server" className="space-y-6">
-            <TabsList className="grid w-full max-w-md grid-cols-2">
+            <TabsList className="grid w-full max-w-lg grid-cols-3">
               <TabsTrigger value="server" className="flex items-center gap-2">
                 <Server className="h-4 w-4" />
-                Server Config
+                Server
               </TabsTrigger>
               <TabsTrigger value="clients" className="flex items-center gap-2">
                 <Monitor className="h-4 w-4" />
-                Client Configs
+                Clients
                 {clients.length > 0 && (
                   <Badge variant="secondary" className="ml-1">
-                    {clients.length}
+                    {onlineClients}/{clients.length}
                   </Badge>
                 )}
+              </TabsTrigger>
+              <TabsTrigger value="system" className="flex items-center gap-2">
+                <Activity className="h-4 w-4" />
+                System
               </TabsTrigger>
             </TabsList>
 
             {/* Server Configuration */}
             <TabsContent value="server" className="space-y-6">
+              {/* Status Overview Cards */}
+              <div className="grid gap-4 md:grid-cols-4">
+                <Card>
+                  <CardHeader className="pb-2">
+                    <CardTitle className="text-sm flex items-center gap-2">
+                      <Server className="h-4 w-4" />
+                      API Status
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    {healthLoading ? (
+                      <Skeleton className="h-6 w-20" />
+                    ) : (
+                      <div className="flex items-center gap-2">
+                        {isApiHealthy ? (
+                          <>
+                            <CheckCircle2 className="h-4 w-4 text-green-500" />
+                            <span className="text-sm font-medium text-green-600">Healthy</span>
+                          </>
+                        ) : (
+                          <>
+                            <XCircle className="h-4 w-4 text-red-500" />
+                            <span className="text-sm font-medium text-red-600">Unhealthy</span>
+                          </>
+                        )}
+                      </div>
+                    )}
+                  </CardContent>
+                </Card>
+
+                <Card>
+                  <CardHeader className="pb-2">
+                    <CardTitle className="text-sm flex items-center gap-2">
+                      <Database className="h-4 w-4" />
+                      Total Readings
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    {statsLoading ? (
+                      <Skeleton className="h-6 w-24" />
+                    ) : (
+                      <div className="text-2xl font-bold">
+                        {stats?.global?.database?.total_readings?.toLocaleString() || 0}
+                      </div>
+                    )}
+                  </CardContent>
+                </Card>
+
+                <Card>
+                  <CardHeader className="pb-2">
+                    <CardTitle className="text-sm flex items-center gap-2">
+                      <Monitor className="h-4 w-4" />
+                      Active Clients
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    {clientsLoading ? (
+                      <Skeleton className="h-6 w-16" />
+                    ) : (
+                      <div className="flex items-baseline gap-1">
+                        <span className="text-2xl font-bold text-green-600">{onlineClients}</span>
+                        <span className="text-muted-foreground">/ {clients.length}</span>
+                      </div>
+                    )}
+                  </CardContent>
+                </Card>
+
+                <Card>
+                  <CardHeader className="pb-2">
+                    <CardTitle className="text-sm flex items-center gap-2">
+                      <Activity className="h-4 w-4" />
+                      Active Alerts
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    {statsLoading ? (
+                      <Skeleton className="h-6 w-16" />
+                    ) : (
+                      <div className="text-2xl font-bold">
+                        {stats?.global?.database?.active_alerts || 0}
+                      </div>
+                    )}
+                  </CardContent>
+                </Card>
+              </div>
+
+              {/* Server Config JSON Editor */}
               {configLoading ? (
-                <div className="space-y-4">
-                  <Skeleton className="h-[400px] w-full" />
-                </div>
+                <Skeleton className="h-[400px] w-full" />
               ) : serverConfig ? (
                 <ConfigEditor
                   config={serverConfig}
@@ -402,48 +598,60 @@ const ConfigurationContent = () => {
                 </Card>
               )}
 
-              {/* Server Config Info Cards */}
-              {serverConfig && (
-                <div className="grid gap-4 md:grid-cols-3">
+              {/* Database & Activity Stats */}
+              {stats && (
+                <div className="grid gap-4 md:grid-cols-2">
                   <Card>
-                    <CardHeader className="pb-2">
-                      <CardTitle className="text-sm flex items-center gap-2">
+                    <CardHeader>
+                      <CardTitle className="text-base flex items-center gap-2">
                         <Database className="h-4 w-4" />
-                        Database
+                        Database Statistics
                       </CardTitle>
                     </CardHeader>
-                    <CardContent>
-                      <div className="flex items-center gap-2">
-                        <CheckCircle2 className="h-4 w-4 text-green-500" />
-                        <span className="text-sm">Connected</span>
+                    <CardContent className="space-y-3">
+                      <div className="flex justify-between text-sm">
+                        <span className="text-muted-foreground">Total Batches</span>
+                        <span className="font-mono">{stats.global?.database?.total_batches?.toLocaleString() || 0}</span>
+                      </div>
+                      <div className="flex justify-between text-sm">
+                        <span className="text-muted-foreground">Total Clients</span>
+                        <span className="font-mono">{stats.global?.database?.total_clients || 0}</span>
+                      </div>
+                      <div className="flex justify-between text-sm">
+                        <span className="text-muted-foreground">Alert Rules</span>
+                        <span className="font-mono">{stats.global?.database?.total_alert_rules || 0}</span>
+                      </div>
+                      <div className="flex justify-between text-sm">
+                        <span className="text-muted-foreground">Data Span</span>
+                        <span className="font-mono">{stats.global?.time_ranges?.data_span_days?.toFixed(1) || 0} days</span>
                       </div>
                     </CardContent>
                   </Card>
 
                   <Card>
-                    <CardHeader className="pb-2">
-                      <CardTitle className="text-sm flex items-center gap-2">
-                        <Server className="h-4 w-4" />
-                        API Server
+                    <CardHeader>
+                      <CardTitle className="text-base flex items-center gap-2">
+                        <Activity className="h-4 w-4" />
+                        Activity (Last 24h)
                       </CardTitle>
                     </CardHeader>
-                    <CardContent>
-                      <div className="flex items-center gap-2">
-                        <CheckCircle2 className="h-4 w-4 text-green-500" />
-                        <span className="text-sm">Running</span>
+                    <CardContent className="space-y-3">
+                      <div className="flex justify-between text-sm">
+                        <span className="text-muted-foreground">Readings</span>
+                        <span className="font-mono">{stats.global?.activity?.last_24_hours?.readings_24h?.toLocaleString() || 0}</span>
                       </div>
-                    </CardContent>
-                  </Card>
-
-                  <Card>
-                    <CardHeader className="pb-2">
-                      <CardTitle className="text-sm flex items-center gap-2">
-                        <Monitor className="h-4 w-4" />
-                        Active Clients
-                      </CardTitle>
-                    </CardHeader>
-                    <CardContent>
-                      <div className="text-2xl font-bold">{clients.length}</div>
+                      <div className="flex justify-between text-sm">
+                        <span className="text-muted-foreground">Batches</span>
+                        <span className="font-mono">{stats.global?.activity?.last_24_hours?.batches_24h?.toLocaleString() || 0}</span>
+                      </div>
+                      <div className="flex justify-between text-sm">
+                        <span className="text-muted-foreground">Active Devices</span>
+                        <span className="font-mono">{stats.global?.activity?.last_24_hours?.active_devices_24h || 0}</span>
+                      </div>
+                      <div className="flex justify-between text-sm">
+                        <span className="text-muted-foreground">Avg Readings/Hour</span>
+                        <span className="font-mono">{stats.global?.activity?.avg_readings_per_hour?.toFixed(1) || 0}</span>
+                      </div>
                     </CardContent>
                   </Card>
                 </div>
@@ -452,10 +660,53 @@ const ConfigurationContent = () => {
 
             {/* Client Configurations */}
             <TabsContent value="clients" className="space-y-6">
+              {/* Client Summary */}
+              <div className="grid gap-4 md:grid-cols-3">
+                <Card>
+                  <CardContent className="pt-6">
+                    <div className="flex items-center gap-3">
+                      <div className="p-2 bg-green-500/10 rounded-lg">
+                        <CheckCircle2 className="h-5 w-5 text-green-500" />
+                      </div>
+                      <div>
+                        <p className="text-2xl font-bold">{onlineClients}</p>
+                        <p className="text-xs text-muted-foreground">Online Clients</p>
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+                <Card>
+                  <CardContent className="pt-6">
+                    <div className="flex items-center gap-3">
+                      <div className="p-2 bg-yellow-500/10 rounded-lg">
+                        <AlertCircle className="h-5 w-5 text-yellow-500" />
+                      </div>
+                      <div>
+                        <p className="text-2xl font-bold">{clients.filter(c => c.status === "stale").length}</p>
+                        <p className="text-xs text-muted-foreground">Stale Clients</p>
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+                <Card>
+                  <CardContent className="pt-6">
+                    <div className="flex items-center gap-3">
+                      <div className="p-2 bg-muted rounded-lg">
+                        <XCircle className="h-5 w-5 text-muted-foreground" />
+                      </div>
+                      <div>
+                        <p className="text-2xl font-bold">{clients.filter(c => c.status === "offline").length}</p>
+                        <p className="text-xs text-muted-foreground">Offline Clients</p>
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+              </div>
+
               {clientsLoading ? (
                 <div className="grid gap-4 md:grid-cols-2">
                   {[1, 2, 3, 4].map((i) => (
-                    <Skeleton key={i} className="h-[300px] w-full" />
+                    <Skeleton key={i} className="h-[350px] w-full" />
                   ))}
                 </div>
               ) : clients.length === 0 ? (
@@ -474,6 +725,201 @@ const ConfigurationContent = () => {
                     <ClientConfigCard key={client.client_id} client={client} />
                   ))}
                 </div>
+              )}
+            </TabsContent>
+
+            {/* System Info Tab */}
+            <TabsContent value="system" className="space-y-6">
+              {/* System Overview */}
+              <div className="grid gap-4 md:grid-cols-4">
+                <Card>
+                  <CardHeader className="pb-2">
+                    <CardTitle className="text-sm flex items-center gap-2">
+                      <Server className="h-4 w-4" />
+                      Hostname
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    {systemLoading ? (
+                      <Skeleton className="h-6 w-32" />
+                    ) : (
+                      <p className="font-mono text-sm">{systemInfo?.hostname || "—"}</p>
+                    )}
+                  </CardContent>
+                </Card>
+
+                <Card>
+                  <CardHeader className="pb-2">
+                    <CardTitle className="text-sm flex items-center gap-2">
+                      <Globe className="h-4 w-4" />
+                      IP Address
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    {systemLoading ? (
+                      <Skeleton className="h-6 w-28" />
+                    ) : (
+                      <p className="font-mono text-sm">{systemInfo?.ip_address || "—"}</p>
+                    )}
+                  </CardContent>
+                </Card>
+
+                <Card>
+                  <CardHeader className="pb-2">
+                    <CardTitle className="text-sm flex items-center gap-2">
+                      <Clock className="h-4 w-4" />
+                      Uptime
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    {systemLoading ? (
+                      <Skeleton className="h-6 w-24" />
+                    ) : (
+                      <p className="font-mono text-sm">
+                        {systemInfo?.uptime_seconds ? formatUptime(systemInfo.uptime_seconds) : systemInfo?.uptime || "—"}
+                      </p>
+                    )}
+                  </CardContent>
+                </Card>
+
+                <Card>
+                  <CardHeader className="pb-2">
+                    <CardTitle className="text-sm flex items-center gap-2">
+                      <Cpu className="h-4 w-4" />
+                      Load Average
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    {systemLoading ? (
+                      <Skeleton className="h-6 w-28" />
+                    ) : (
+                      <p className="font-mono text-sm">
+                        {systemInfo?.cpu_load?.map(l => l.toFixed(2)).join(" / ") || "—"}
+                      </p>
+                    )}
+                  </CardContent>
+                </Card>
+              </div>
+
+              {/* Resource Usage */}
+              {systemInfo && (
+                <div className="grid gap-4 md:grid-cols-2">
+                  <Card>
+                    <CardHeader>
+                      <CardTitle className="text-base flex items-center gap-2">
+                        <Monitor className="h-4 w-4" />
+                        Memory Usage
+                      </CardTitle>
+                    </CardHeader>
+                    <CardContent className="space-y-4">
+                      <div className="space-y-2">
+                        <div className="flex justify-between text-sm">
+                          <span>Used</span>
+                          <span className="font-mono">
+                            {systemInfo.memory ? `${formatBytes(systemInfo.memory.used)} / ${formatBytes(systemInfo.memory.total)}` : "—"}
+                          </span>
+                        </div>
+                        <Progress value={systemInfo.memory?.percent || 0} className="h-3" />
+                        <p className="text-xs text-muted-foreground text-right">
+                          {systemInfo.memory?.percent?.toFixed(1) || 0}% used
+                        </p>
+                      </div>
+                    </CardContent>
+                  </Card>
+
+                  <Card>
+                    <CardHeader>
+                      <CardTitle className="text-base flex items-center gap-2">
+                        <HardDrive className="h-4 w-4" />
+                        Disk Usage
+                      </CardTitle>
+                    </CardHeader>
+                    <CardContent className="space-y-4">
+                      <div className="space-y-2">
+                        <div className="flex justify-between text-sm">
+                          <span>Used</span>
+                          <span className="font-mono">
+                            {systemInfo.disk ? `${formatBytes(systemInfo.disk.used)} / ${formatBytes(systemInfo.disk.total)}` : "—"}
+                          </span>
+                        </div>
+                        <Progress value={systemInfo.disk?.percent || 0} className="h-3" />
+                        <p className="text-xs text-muted-foreground text-right">
+                          {systemInfo.disk?.percent?.toFixed(1) || 0}% used
+                        </p>
+                      </div>
+                    </CardContent>
+                  </Card>
+                </div>
+              )}
+
+              {/* Network Interfaces */}
+              {interfaces && interfaces.length > 0 && (
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="text-base flex items-center gap-2">
+                      <Network className="h-4 w-4" />
+                      Network Interfaces
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead>Interface</TableHead>
+                          <TableHead>IP Address</TableHead>
+                          <TableHead>MAC Address</TableHead>
+                          <TableHead>Status</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {interfaces.map((iface, idx) => (
+                          <TableRow key={idx}>
+                            <TableCell className="font-mono text-sm">{iface.name}</TableCell>
+                            <TableCell className="font-mono text-sm">{iface.ip || "—"}</TableCell>
+                            <TableCell className="font-mono text-sm text-muted-foreground">{iface.mac || "—"}</TableCell>
+                            <TableCell>
+                              <Badge variant={iface.status === "up" ? "default" : "secondary"}>
+                                {iface.status || "unknown"}
+                              </Badge>
+                            </TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </CardContent>
+                </Card>
+              )}
+
+              {/* USB Devices */}
+              {usbDevices && usbDevices.length > 0 && (
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="text-base flex items-center gap-2">
+                      <Usb className="h-4 w-4" />
+                      USB Devices
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead>Device</TableHead>
+                          <TableHead>Vendor</TableHead>
+                          <TableHead>Product</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {usbDevices.map((device, idx) => (
+                          <TableRow key={idx}>
+                            <TableCell className="font-mono text-sm">{device.device}</TableCell>
+                            <TableCell className="text-sm">{device.vendor || "—"}</TableCell>
+                            <TableCell className="text-sm">{device.product || "—"}</TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </CardContent>
+                </Card>
               )}
             </TabsContent>
           </Tabs>
