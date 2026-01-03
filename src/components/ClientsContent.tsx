@@ -71,7 +71,7 @@ import {
   Client,
   ClientState
 } from "@/hooks/useAuroraApi";
-import { formatDistanceToNow } from "date-fns";
+import { formatLastSeen, formatDateTime, getDeviceStatusFromLastSeen } from "@/utils/dateUtils";
 import { toast } from "sonner";
 import DeviceDetailDialog from "./DeviceDetailDialog";
 
@@ -169,31 +169,10 @@ const ClientsContent = () => {
   const [detailsOpen, setDetailsOpen] = useState(false);
   const [deleteConfirmClient, setDeleteConfirmClient] = useState<Client | null>(null);
 
-  const formatLastSeen = (dateString: string | undefined | null) => {
-    if (!dateString) return "Never";
-    try {
-      const date = new Date(dateString);
-      if (isNaN(date.getTime())) return "Unknown";
-      return formatDistanceToNow(date, { addSuffix: true });
-    } catch {
-      return "Unknown";
-    }
-  };
-
   const getActivityStatus = (client: Client): "online" | "offline" | "warning" => {
-    const lastSeen = client.last_seen;
-    if (!lastSeen) return "offline";
-    try {
-      const lastSeenDate = new Date(lastSeen);
-      if (isNaN(lastSeenDate.getTime())) return "offline";
-      const now = new Date();
-      const diffMinutes = (now.getTime() - lastSeenDate.getTime()) / (1000 * 60);
-      if (diffMinutes < 5) return "online";
-      if (diffMinutes < 30) return "warning";
-      return "offline";
-    } catch {
-      return "offline";
-    }
+    const status = getDeviceStatusFromLastSeen(client.last_seen);
+    if (status === 'stale') return 'warning';
+    return status;
   };
 
   // Get sensors for a client
@@ -980,7 +959,7 @@ const ClientStateHistoryDialog = ({ clientId, onClose }: ClientStateHistoryDialo
                   <Badge variant="secondary">{entry.to_state}</Badge>
                 </div>
                 <div className="text-sm text-muted-foreground">
-                  {formatDistanceToNow(new Date(entry.timestamp), { addSuffix: true })}
+                  {formatLastSeen(entry.timestamp)}
                 </div>
                 {entry.reason && (
                   <div className="text-sm mt-1">{entry.reason}</div>
