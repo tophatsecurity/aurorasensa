@@ -34,6 +34,7 @@ import SensorCharts from "./SensorCharts";
 import StarlinkCharts from "./StarlinkCharts";
 import ThermalProbeCharts from "./ThermalProbeCharts";
 import HumidityCharts from "./HumidityCharts";
+import PowerConsumptionCharts from "./PowerConsumptionCharts";
 import { 
   useComprehensiveStats, 
   useAlerts, 
@@ -422,6 +423,15 @@ const DashboardContent = () => {
           Humidity Trends (24h)
         </h2>
         <HumidityCharts />
+      </div>
+
+      {/* Power Consumption Trends */}
+      <div className="mb-8">
+        <h2 className="text-lg font-semibold mb-4 flex items-center gap-2">
+          <Zap className="w-5 h-5 text-orange-500" />
+          Power Consumption (24h)
+        </h2>
+        <PowerConsumptionCharts />
       </div>
 
       {/* Sensor Types Summary */}
