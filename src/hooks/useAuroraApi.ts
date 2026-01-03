@@ -439,6 +439,110 @@ export function useStarlinkStats() {
   });
 }
 
+// Sensor type specific stats hook
+export interface SensorTypeStats {
+  device_type: string;
+  count: number;
+  device_count: number;
+  avg_value?: number;
+  min_value?: number;
+  max_value?: number;
+  latest_reading?: Record<string, unknown>;
+  first_seen?: string;
+  last_seen?: string;
+  readings_last_hour?: number;
+  readings_last_24h?: number;
+}
+
+export function useSensorTypeStats(sensorType: string) {
+  return useQuery({
+    queryKey: ["aurora", "stats", "sensors", sensorType],
+    queryFn: async () => {
+      try {
+        const response = await callAuroraApi<SensorTypeStats>(`/api/stats/sensors/${sensorType}`);
+        return response;
+      } catch (error) {
+        console.warn(`Failed to fetch sensor type stats for ${sensorType}:`, error);
+        return null;
+      }
+    },
+    refetchInterval: 15000,
+    retry: 1,
+    enabled: !!sensorType,
+  });
+}
+
+// Starlink readings for signal/power data
+export interface StarlinkReading {
+  timestamp: string;
+  signal_dbm?: number;
+  power_w?: number;
+  snr?: number;
+  downlink_throughput_bps?: number;
+  uplink_throughput_bps?: number;
+  pop_ping_latency_ms?: number;
+}
+
+export interface StarlinkReadingsResponse {
+  count: number;
+  readings: StarlinkReading[];
+  avg_signal_dbm?: number;
+  avg_power_w?: number;
+  avg_snr?: number;
+}
+
+export function useStarlinkReadings(hours: number = 24) {
+  return useQuery({
+    queryKey: ["aurora", "starlink", "readings", hours],
+    queryFn: async () => {
+      try {
+        const response = await callAuroraApi<StarlinkReadingsResponse>(`/api/stats/sensors/starlink`);
+        return response;
+      } catch (error) {
+        console.warn("Failed to fetch starlink readings:", error);
+        return null;
+      }
+    },
+    refetchInterval: 15000,
+    retry: 1,
+  });
+}
+
+// Thermal probe readings
+export interface ThermalProbeReading {
+  timestamp: string;
+  temp_c?: number;
+  temp_f?: number;
+  ambient_c?: number;
+  probe_c?: number;
+}
+
+export interface ThermalProbeStats {
+  count: number;
+  readings?: ThermalProbeReading[];
+  avg_temp_c?: number;
+  min_temp_c?: number;
+  max_temp_c?: number;
+  latest_reading?: Record<string, unknown>;
+}
+
+export function useThermalProbeStats() {
+  return useQuery({
+    queryKey: ["aurora", "stats", "sensors", "thermal_probe"],
+    queryFn: async () => {
+      try {
+        const response = await callAuroraApi<ThermalProbeStats>(`/api/stats/sensors/thermal_probe`);
+        return response;
+      } catch (error) {
+        console.warn("Failed to fetch thermal probe stats:", error);
+        return null;
+      }
+    },
+    refetchInterval: 15000,
+    retry: 1,
+  });
+}
+
 // Adopt client mutation
 export function useAdoptClient() {
   const queryClient = useQueryClient();
