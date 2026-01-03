@@ -1,21 +1,20 @@
 import { memo, useMemo } from "react";
-import { Layers, Navigation, Radio, Wifi, Plane } from "lucide-react";
+import { Navigation, Radio, Wifi, Plane } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
-import type { FilterType, MapStats, FilterButton } from "@/types/map";
+import type { FilterType, MapStats, FilterButton, ActiveFilters } from "@/types/map";
 
 interface MapFiltersProps {
-  filter: FilterType;
+  activeFilters: ActiveFilters;
   stats: MapStats;
-  onFilterChange: (filter: FilterType) => void;
+  onToggleFilter: (filter: Exclude<FilterType, 'all'>) => void;
 }
 
 export const MapFilters = memo(function MapFilters({ 
-  filter, 
+  activeFilters, 
   stats, 
-  onFilterChange 
+  onToggleFilter 
 }: MapFiltersProps) {
   const filterButtons = useMemo<FilterButton[]>(() => [
-    { id: 'all', label: 'All', icon: <Layers className="w-3 h-3" />, color: 'bg-primary', count: stats.total },
     { id: 'gps', label: 'GPS', icon: <Navigation className="w-3 h-3" />, color: 'bg-green-500', count: stats.gps },
     { id: 'starlink', label: 'Starlink', icon: <Wifi className="w-3 h-3" />, color: 'bg-violet-500', count: stats.starlink },
     { id: 'adsb', label: 'ADS-B', icon: <Plane className="w-3 h-3" />, color: 'bg-cyan-500', count: stats.adsb },
@@ -25,22 +24,25 @@ export const MapFilters = memo(function MapFilters({
 
   return (
     <div className="flex items-center gap-2 flex-wrap">
-      {filterButtons.map((btn) => (
-        <Badge
-          key={btn.id}
-          variant={filter === btn.id ? 'default' : 'outline'}
-          className={`cursor-pointer gap-1.5 px-3 py-1.5 transition-all ${
-            filter === btn.id ? btn.color + ' text-white shadow-lg' : 'hover:bg-muted'
-          }`}
-          onClick={() => onFilterChange(btn.id)}
-        >
-          {btn.icon}
-          {btn.label}
-          <span className={`ml-1 text-xs ${filter === btn.id ? 'opacity-80' : 'text-muted-foreground'}`}>
-            ({btn.count})
-          </span>
-        </Badge>
-      ))}
+      {filterButtons.map((btn) => {
+        const isActive = activeFilters.has(btn.id);
+        return (
+          <Badge
+            key={btn.id}
+            variant={isActive ? 'default' : 'outline'}
+            className={`cursor-pointer gap-1.5 px-3 py-1.5 transition-all ${
+              isActive ? btn.color + ' text-white shadow-lg' : 'hover:bg-muted opacity-60'
+            }`}
+            onClick={() => onToggleFilter(btn.id)}
+          >
+            {btn.icon}
+            {btn.label}
+            <span className={`ml-1 text-xs ${isActive ? 'opacity-80' : 'text-muted-foreground'}`}>
+              ({btn.count})
+            </span>
+          </Badge>
+        );
+      })}
     </div>
   );
 });

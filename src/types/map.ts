@@ -3,6 +3,8 @@ import type { LucideIcon } from "lucide-react";
 
 export type FilterType = 'all' | 'gps' | 'starlink' | 'clients' | 'lora' | 'adsb';
 
+export type ActiveFilters = Set<Exclude<FilterType, 'all'>>;
+
 export interface MapStats {
   total: number;
   gps: number;
@@ -13,7 +15,7 @@ export interface MapStats {
 }
 
 export interface FilterButton {
-  id: FilterType;
+  id: Exclude<FilterType, 'all'>;
   label: string;
   icon: React.ReactNode;
   color: string;

@@ -4,7 +4,7 @@ import L from "leaflet";
 import "leaflet/dist/leaflet.css";
 
 // Types and utilities
-import { FilterType, MAP_CONFIG, AdsbMarker } from "@/types/map";
+import { FilterType, MAP_CONFIG, AdsbMarker, ActiveFilters } from "@/types/map";
 import { mapIcons, IconType, createAircraftIcon, getAircraftType, getAircraftColor } from "@/utils/mapIcons";
 import { formatDateTime } from "@/utils/dateUtils";
 
@@ -54,7 +54,7 @@ const MapContent = () => {
   const markersRef = useRef<Map<string, L.Marker>>(new Map());
   const trailsRef = useRef<Map<string, L.Polyline>>(new Map());
   const adsbTrailsRef = useRef<Map<string, L.Polyline>>(new Map());
-  const [filter, setFilter] = useState<FilterType>('all');
+  const [activeFilters, setActiveFilters] = useState<ActiveFilters>(new Set(['gps', 'starlink', 'clients', 'lora', 'adsb']));
   const [isLiveTracking, setIsLiveTracking] = useState(true);
   const [hasInitialFit, setHasInitialFit] = useState(false);
   const [showTrails, setShowTrails] = useState(true);
@@ -133,8 +133,8 @@ const MapContent = () => {
 
     // Update/add sensor markers
     sensorMarkers.forEach((sensor) => {
-      const sensorType = sensor.type.toLowerCase();
-      if (filter !== 'all' && sensorType !== filter) return;
+      const sensorType = sensor.type.toLowerCase() as Exclude<FilterType, 'all'>;
+      if (!activeFilters.has(sensorType)) return;
 
       const markerId = `sensor-${sensor.id}`;
       existingMarkerIds.add(markerId);
@@ -179,7 +179,7 @@ const MapContent = () => {
     });
 
     // Update/add client markers
-    if (filter === 'all' || filter === 'clients') {
+    if (activeFilters.has('clients')) {
       clientMarkers.forEach((client) => {
         const markerId = `client-${client.client_id}`;
         existingMarkerIds.add(markerId);
@@ -221,7 +221,7 @@ const MapContent = () => {
     }
 
     // Update/add ADS-B aircraft markers
-    if (filter === 'all' || filter === 'adsb') {
+    if (activeFilters.has('adsb')) {
       adsbMarkers.forEach((aircraft: AdsbMarker) => {
         const markerId = `adsb-${aircraft.id}`;
         existingMarkerIds.add(markerId);
@@ -414,7 +414,7 @@ const MapContent = () => {
       mapRef.current.fitBounds(bounds, { padding: [50, 50], maxZoom: 12 });
       setHasInitialFit(true);
     }
-  }, [sensorMarkers, clientMarkers, adsbMarkers, filter, allPositions, hasInitialFit]);
+  }, [sensorMarkers, clientMarkers, adsbMarkers, activeFilters, allPositions, hasInitialFit]);
 
   // Update trail polylines (sensor/client only)
   useEffect(() => {
@@ -444,9 +444,8 @@ const MapContent = () => {
 
     // Update or add trails
     trails.forEach(trail => {
-      // Filter based on current filter
-      const shouldShow = filter === 'all' || 
-        (filter === 'clients' && trail.type === 'client') ||
+      // Filter based on active filters
+      const shouldShow = (trail.type === 'client' && activeFilters.has('clients')) ||
         (trail.type === 'sensor');
 
       if (!shouldShow) {
@@ -475,7 +474,7 @@ const MapContent = () => {
         trailsRef.current.set(trail.id, polyline);
       }
     });
-  }, [trails, showTrails, filter]);
+  }, [trails, showTrails, activeFilters]);
 
   // Add trail when ADS-B history data is loaded (manual toggle)
   useEffect(() => {
@@ -489,7 +488,7 @@ const MapContent = () => {
     if (!mapRef.current) return;
     
     // Clear all ADS-B trails if disabled or filtered out
-    if (!showAdsbTrails || (filter !== 'all' && filter !== 'adsb')) {
+    if (!showAdsbTrails || !activeFilters.has('adsb')) {
       adsbTrailsRef.current.forEach(polyline => polyline.remove());
       adsbTrailsRef.current.clear();
       return;
@@ -582,7 +581,7 @@ const MapContent = () => {
         adsbTrailsRef.current.set(`${icao}-shadow`, shadowLine);
       }
     });
-  }, [adsbTrails, adsbActiveTrails, showAdsbTrails, filter]);
+  }, [adsbTrails, adsbActiveTrails, showAdsbTrails, activeFilters]);
 
   // Auto-refresh for live tracking
   useEffect(() => {
@@ -595,8 +594,16 @@ const MapContent = () => {
     return () => clearInterval(interval);
   }, [isLiveTracking, handleRefresh]);
 
-  const handleFilterChange = useCallback((newFilter: FilterType) => {
-    setFilter(newFilter);
+  const handleToggleFilter = useCallback((filterType: Exclude<FilterType, 'all'>) => {
+    setActiveFilters(prev => {
+      const newFilters = new Set(prev);
+      if (newFilters.has(filterType)) {
+        newFilters.delete(filterType);
+      } else {
+        newFilters.add(filterType);
+      }
+      return newFilters;
+    });
   }, []);
 
   const handleZoomIn = useCallback(() => {
@@ -632,9 +639,9 @@ const MapContent = () => {
         />
         <div className="flex items-center justify-between gap-4">
           <MapFilters 
-            filter={filter}
+            activeFilters={activeFilters}
             stats={stats}
-            onFilterChange={handleFilterChange}
+            onToggleFilter={handleToggleFilter}
           />
           <div className="flex items-center gap-3">
             <TimeframeSelector 
