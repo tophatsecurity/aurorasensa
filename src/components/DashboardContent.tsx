@@ -33,6 +33,7 @@ import SensorCard from "./SensorCard";
 import SensorCharts from "./SensorCharts";
 import StarlinkCharts from "./StarlinkCharts";
 import ThermalProbeCharts from "./ThermalProbeCharts";
+import HumidityCharts from "./HumidityCharts";
 import { 
   useComprehensiveStats, 
   useAlerts, 
@@ -412,6 +413,15 @@ const DashboardContent = () => {
           Thermal Probe Trends (24h)
         </h2>
         <ThermalProbeCharts />
+      </div>
+
+      {/* Humidity Trends with Comfort Zones */}
+      <div className="mb-8">
+        <h2 className="text-lg font-semibold mb-4 flex items-center gap-2">
+          <Droplets className="w-5 h-5 text-blue-500" />
+          Humidity Trends (24h)
+        </h2>
+        <HumidityCharts />
       </div>
 
       {/* Sensor Types Summary */}
