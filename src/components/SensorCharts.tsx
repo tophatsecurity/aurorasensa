@@ -23,10 +23,22 @@ interface SensorChartProps {
   unit: string;
   data: ChartData[];
   isLoading?: boolean;
+  isTemperature?: boolean;
 }
 
-const SensorChart = ({ title, icon, color, unit, data, isLoading }: SensorChartProps) => {
-  const currentValue = data.length > 0 ? data[data.length - 1]?.value.toFixed(1) : '—';
+// Helper to convert Celsius to Fahrenheit
+const cToF = (celsius: number): number => (celsius * 9/5) + 32;
+
+const SensorChart = ({ title, icon, color, unit, data, isLoading, isTemperature = false }: SensorChartProps) => {
+  const currentValue = data.length > 0 ? data[data.length - 1]?.value : null;
+  
+  const formatDisplayValue = (val: number | null) => {
+    if (val === null) return '—';
+    if (isTemperature) {
+      return `${val.toFixed(1)}°C (${cToF(val).toFixed(0)}°F)`;
+    }
+    return `${val.toFixed(1)}${unit}`;
+  };
 
   return (
     <div className="glass-card rounded-xl p-5 border border-border/50">
@@ -40,7 +52,7 @@ const SensorChart = ({ title, icon, color, unit, data, isLoading }: SensorChartP
               {title}
             </h4>
             <p className="text-2xl font-bold" style={{ color }}>
-              {isLoading ? '...' : `${currentValue}${unit}`}
+              {isLoading ? '...' : formatDisplayValue(currentValue)}
             </p>
           </div>
         </div>
@@ -86,6 +98,12 @@ const SensorChart = ({ title, icon, color, unit, data, isLoading }: SensorChartP
                   fontSize: '12px',
                 }}
                 labelStyle={{ color: 'hsl(var(--foreground))' }}
+                formatter={(value: number) => {
+                  if (isTemperature) {
+                    return [`${cToF(value).toFixed(1)}°F / ${value.toFixed(1)}°C`, title];
+                  }
+                  return [`${value.toFixed(1)}${unit}`, title];
+                }}
               />
               <Area
                 type="monotone"
@@ -133,6 +151,7 @@ const SensorCharts = () => {
         unit="°C"
         data={temperatureData}
         isLoading={isLoading}
+        isTemperature={true}
       />
       <SensorChart
         title="Humidity"
