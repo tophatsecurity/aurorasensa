@@ -4,7 +4,7 @@ import L from "leaflet";
 import "leaflet/dist/leaflet.css";
 
 // Types and utilities
-import { FilterType, MAP_CONFIG } from "@/types/map";
+import { FilterType, MAP_CONFIG, AdsbMarker } from "@/types/map";
 import { mapIcons, IconType } from "@/utils/mapIcons";
 import { formatDateTime } from "@/utils/dateUtils";
 
@@ -202,19 +202,61 @@ const MapContent = () => {
 
     // Update/add ADS-B aircraft markers
     if (filter === 'all' || filter === 'adsb') {
-      adsbMarkers.forEach((aircraft) => {
+      adsbMarkers.forEach((aircraft: AdsbMarker) => {
         const markerId = `adsb-${aircraft.id}`;
         existingMarkerIds.add(markerId);
         
+        // Format heading with compass direction
+        const getHeadingDirection = (track?: number) => {
+          if (track === undefined) return '';
+          const directions = ['N', 'NE', 'E', 'SE', 'S', 'SW', 'W', 'NW'];
+          const index = Math.round(track / 45) % 8;
+          return directions[index];
+        };
+        
         const popupContent = `
-          <div class="p-2 min-w-[200px]">
-            <div class="font-bold mb-2 flex items-center gap-2">
+          <div class="p-3 min-w-[220px]">
+            <div class="font-bold mb-2 flex items-center gap-2 text-base border-b pb-2">
               ✈️ ${aircraft.name}
+              <span class="text-xs font-normal text-gray-500">(${aircraft.hex})</span>
             </div>
-            <div class="text-sm space-y-1">
-              <div><span class="text-gray-500">Altitude:</span> ${aircraft.value.toLocaleString()} ${aircraft.unit}</div>
-              <div><span class="text-gray-500">Status:</span> ${aircraft.status}</div>
-              <div><span class="text-gray-500">Position:</span> ${aircraft.location.lat.toFixed(4)}, ${aircraft.location.lng.toFixed(4)}</div>
+            <div class="text-sm space-y-1.5">
+              <div class="flex justify-between">
+                <span class="text-gray-500">Altitude:</span>
+                <span class="font-medium">${aircraft.value.toLocaleString()} ${aircraft.unit}</span>
+              </div>
+              ${aircraft.speed !== undefined ? `
+              <div class="flex justify-between">
+                <span class="text-gray-500">Speed:</span>
+                <span class="font-medium">${Math.round(aircraft.speed)} kts</span>
+              </div>
+              ` : ''}
+              ${aircraft.track !== undefined ? `
+              <div class="flex justify-between">
+                <span class="text-gray-500">Heading:</span>
+                <span class="font-medium">${Math.round(aircraft.track)}° ${getHeadingDirection(aircraft.track)}</span>
+              </div>
+              ` : ''}
+              ${aircraft.squawk ? `
+              <div class="flex justify-between">
+                <span class="text-gray-500">Squawk:</span>
+                <span class="font-medium ${aircraft.squawk === '7500' || aircraft.squawk === '7600' || aircraft.squawk === '7700' ? 'text-red-500 font-bold' : ''}">${aircraft.squawk}</span>
+              </div>
+              ` : ''}
+              ${aircraft.rssi !== undefined ? `
+              <div class="flex justify-between">
+                <span class="text-gray-500">Signal:</span>
+                <span class="font-medium">${aircraft.rssi.toFixed(1)} dBFS</span>
+              </div>
+              ` : ''}
+              <div class="flex justify-between pt-1 border-t mt-1">
+                <span class="text-gray-500">Position:</span>
+                <span class="font-medium text-xs">${aircraft.location.lat.toFixed(4)}, ${aircraft.location.lng.toFixed(4)}</span>
+              </div>
+              <div class="flex justify-between">
+                <span class="text-gray-500">Status:</span>
+                <span class="font-medium ${aircraft.status === 'active' ? 'text-green-500' : 'text-yellow-500'}">${aircraft.status}</span>
+              </div>
             </div>
           </div>
         `;

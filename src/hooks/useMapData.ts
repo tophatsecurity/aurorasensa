@@ -12,7 +12,7 @@ import {
   AdsbAircraft
 } from "@/hooks/useAuroraApi";
 import { useQueryClient } from "@tanstack/react-query";
-import type { MapStats, SensorMarker, ClientMarker } from "@/types/map";
+import type { MapStats, SensorMarker, ClientMarker, AdsbMarker } from "@/types/map";
 
 // Helper to extract GPS coordinates from various data sources
 function extractGpsFromReadings(readings: Array<{ device_id: string; device_type: string; data: Record<string, unknown> }>) {
@@ -521,7 +521,7 @@ export function useMapData() {
   }, [clients, gpsCoordinates]);
 
   // Build ADS-B aircraft markers
-  const adsbMarkers = useMemo<SensorMarker[]>(() => {
+  const adsbMarkers = useMemo<AdsbMarker[]>(() => {
     if (!adsbAircraft || !Array.isArray(adsbAircraft)) return [];
     
     return adsbAircraft
@@ -533,6 +533,7 @@ export function useMapData() {
       )
       .map((aircraft: AdsbAircraft) => ({
         id: `adsb-${aircraft.hex}`,
+        hex: aircraft.hex,
         name: aircraft.flight?.trim() || aircraft.hex,
         type: 'adsb',
         value: aircraft.alt_baro || aircraft.alt_geom || 0,
@@ -542,7 +543,12 @@ export function useMapData() {
         location: {
           lat: aircraft.lat!,
           lng: aircraft.lon!
-        }
+        },
+        speed: aircraft.gs,
+        track: aircraft.track,
+        squawk: aircraft.squawk,
+        rssi: aircraft.rssi,
+        category: aircraft.category,
       }));
   }, [adsbAircraft]);
 

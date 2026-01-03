@@ -34,6 +34,15 @@ export interface SensorMarker {
   };
 }
 
+export interface AdsbMarker extends SensorMarker {
+  hex: string;
+  speed?: number;
+  track?: number;
+  squawk?: string;
+  rssi?: number;
+  category?: string;
+}
+
 export interface ClientMarker {
   client_id: string;
   hostname: string;
