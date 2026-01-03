@@ -455,7 +455,7 @@ const ConfigurationContent = () => {
         <div className="flex items-center justify-between">
           <div>
             <h1 className="text-2xl font-bold text-foreground">Configuration</h1>
-            <p className="text-muted-foreground">Manage server and client configurations</p>
+            <p className="text-muted-foreground">Manage server and device configurations</p>
           </div>
           <Button onClick={handleRefresh} variant="outline" size="sm">
             <RefreshCw className="w-4 h-4 mr-2" />
@@ -472,9 +472,9 @@ const ConfigurationContent = () => {
                 <Server className="h-4 w-4" />
                 Server
               </TabsTrigger>
-              <TabsTrigger value="clients" className="flex items-center gap-2">
+              <TabsTrigger value="devices" className="flex items-center gap-2">
                 <Monitor className="h-4 w-4" />
-                Clients
+                Devices
                 {clients.length > 0 && (
                   <Badge variant="secondary" className="ml-1">
                     {onlineClients}/{clients.length}
@@ -658,9 +658,9 @@ const ConfigurationContent = () => {
               )}
             </TabsContent>
 
-            {/* Client Configurations */}
-            <TabsContent value="clients" className="space-y-6">
-              {/* Client Summary */}
+            {/* Device Configurations */}
+            <TabsContent value="devices" className="space-y-6">
+              {/* Device Summary */}
               <div className="grid gap-4 md:grid-cols-3">
                 <Card>
                   <CardContent className="pt-6">
@@ -670,7 +670,7 @@ const ConfigurationContent = () => {
                       </div>
                       <div>
                         <p className="text-2xl font-bold">{onlineClients}</p>
-                        <p className="text-xs text-muted-foreground">Online Clients</p>
+                        <p className="text-xs text-muted-foreground">Online Devices</p>
                       </div>
                     </div>
                   </CardContent>
@@ -683,7 +683,7 @@ const ConfigurationContent = () => {
                       </div>
                       <div>
                         <p className="text-2xl font-bold">{clients.filter(c => c.status === "stale").length}</p>
-                        <p className="text-xs text-muted-foreground">Stale Clients</p>
+                        <p className="text-xs text-muted-foreground">Stale Devices</p>
                       </div>
                     </div>
                   </CardContent>
@@ -696,7 +696,7 @@ const ConfigurationContent = () => {
                       </div>
                       <div>
                         <p className="text-2xl font-bold">{clients.filter(c => c.status === "offline").length}</p>
-                        <p className="text-xs text-muted-foreground">Offline Clients</p>
+                        <p className="text-xs text-muted-foreground">Offline Devices</p>
                       </div>
                     </div>
                   </CardContent>
@@ -713,9 +713,9 @@ const ConfigurationContent = () => {
                 <Card>
                   <CardContent className="py-8 text-center">
                     <Monitor className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
-                    <p className="text-muted-foreground">No clients registered</p>
+                    <p className="text-muted-foreground">No devices registered</p>
                     <p className="text-sm text-muted-foreground mt-1">
-                      Clients will appear here once they connect to the server
+                      Devices will appear here once they connect to the server
                     </p>
                   </CardContent>
                 </Card>
