@@ -5,82 +5,99 @@ import {
   CartesianGrid, 
   Tooltip, 
   ResponsiveContainer,
-  BarChart,
-  Bar,
-  Cell,
+  LineChart,
+  Line,
   Legend
 } from "recharts";
 import { Thermometer, Loader2 } from "lucide-react";
-import { useThermalProbeTimeseries, useSensorTypeStats } from "@/hooks/useAuroraApi";
-
-interface DeviceData {
-  device_name: string;
-  temp_c: number;
-  temp_f: number;
-  total_readings: number;
-}
+import { useThermalProbeTimeseries } from "@/hooks/useAuroraApi";
+import { format } from "date-fns";
 
 // Helper to convert Celsius to Fahrenheit
 const cToF = (celsius: number): number => {
   return (celsius * 9/5) + 32;
 };
 
+// Color palette for devices
+const DEVICE_COLORS = [
+  '#ef4444', // red
+  '#f59e0b', // amber
+  '#22c55e', // green
+  '#3b82f6', // blue
+  '#8b5cf6', // purple
+  '#ec4899', // pink
+  '#14b8a6', // teal
+  '#f97316', // orange
+];
+
 const ThermalProbeDeviceChart = () => {
-  const { data: thermalData, isLoading: thermalLoading } = useThermalProbeTimeseries(24);
-  const { data: thermalStats, isLoading: statsLoading } = useSensorTypeStats("thermal_probe");
+  const { data: thermalData, isLoading } = useThermalProbeTimeseries(24);
 
-  const isLoading = thermalLoading || statsLoading;
+  // Get unique devices and format time series data
+  const { chartData, devices } = useMemo(() => {
+    if (!thermalData?.readings || thermalData.readings.length === 0) {
+      return { chartData: [], devices: [] };
+    }
 
-  // Group readings by device and calculate stats
-  const deviceData = useMemo<DeviceData[]>(() => {
-    if (!thermalData?.readings || thermalData.readings.length === 0) return [];
-    
-    const deviceMap = new Map<string, { temps: number[]; count: number }>();
+    // Get unique device IDs
+    const deviceSet = new Set<string>();
+    thermalData.readings.forEach(r => {
+      if (r.device_id) deviceSet.add(r.device_id);
+    });
+    const devices = Array.from(deviceSet);
+
+    // Group by timestamp and create data points
+    const timeMap = new Map<string, Record<string, number | string>>();
     
     thermalData.readings.forEach(r => {
-      const deviceId = r.device_id || 'unknown';
+      const timestamp = r.timestamp ? new Date(r.timestamp).getTime() : null;
+      if (!timestamp || !r.device_id) return;
+      
       const temp = r.temp_c ?? r.probe_c ?? r.ambient_c;
-      
       if (temp === undefined) return;
-      
-      if (!deviceMap.has(deviceId)) {
-        deviceMap.set(deviceId, { temps: [], count: 0 });
+
+      const timeKey = String(timestamp);
+      if (!timeMap.has(timeKey)) {
+        timeMap.set(timeKey, { time: timestamp });
       }
       
-      const device = deviceMap.get(deviceId)!;
-      device.temps.push(temp);
-      device.count++;
+      const entry = timeMap.get(timeKey)!;
+      // Store both F and C for each device
+      entry[`${r.device_id}_f`] = Number(cToF(temp).toFixed(1));
+      entry[`${r.device_id}_c`] = Number(temp.toFixed(1));
     });
-    
-    return Array.from(deviceMap.entries()).map(([name, data]) => {
-      const avgTemp = data.temps.reduce((a, b) => a + b, 0) / data.temps.length;
-      return {
-        device_name: name.replace(/_/g, ' ').replace(/thermal probe/i, '').trim() || name,
-        temp_c: Number(avgTemp.toFixed(1)),
-        temp_f: Number(cToF(avgTemp).toFixed(1)),
-        total_readings: data.count,
-      };
-    }).sort((a, b) => b.total_readings - a.total_readings);
+
+    // Convert to array and sort by time
+    const chartData = Array.from(timeMap.values())
+      .sort((a, b) => (a.time as number) - (b.time as number));
+
+    return { chartData, devices };
   }, [thermalData?.readings]);
 
-  // Calculate overall stats
-  const overallStats = useMemo(() => {
-    if (deviceData.length === 0) return { avgC: null, avgF: null, totalReadings: 0 };
-    const totalReadings = deviceData.reduce((sum, d) => sum + d.total_readings, 0);
-    const avgC = deviceData.reduce((sum, d) => sum + d.temp_c * d.total_readings, 0) / totalReadings;
+  // Calculate current stats
+  const currentStats = useMemo(() => {
+    if (chartData.length === 0 || devices.length === 0) return null;
+    
+    const latest = chartData[chartData.length - 1];
+    const temps: number[] = [];
+    
+    devices.forEach(d => {
+      const temp = latest[`${d}_f`];
+      if (typeof temp === 'number') temps.push(temp);
+    });
+    
+    if (temps.length === 0) return null;
+    
+    const avg = temps.reduce((a, b) => a + b, 0) / temps.length;
     return {
-      avgC: Number(avgC.toFixed(1)),
-      avgF: Number(cToF(avgC).toFixed(1)),
-      totalReadings,
+      avgF: Number(avg.toFixed(1)),
+      avgC: Number(((avg - 32) * 5/9).toFixed(1)),
+      deviceCount: devices.length,
     };
-  }, [deviceData]);
+  }, [chartData, devices]);
 
-  // Color based on temperature
-  const getBarColor = (temp_c: number) => {
-    if (temp_c < 10) return '#3b82f6'; // blue - cold
-    if (temp_c < 25) return '#22c55e'; // green - normal
-    if (temp_c < 35) return '#f59e0b'; // amber - warm
-    return '#ef4444'; // red - hot
+  const formatDeviceName = (deviceId: string) => {
+    return deviceId.replace(/_/g, ' ').replace(/thermal probe/i, '').trim() || deviceId;
   };
 
   return (
@@ -92,20 +109,20 @@ const ThermalProbeDeviceChart = () => {
           </div>
           <div>
             <h4 className="text-sm font-semibold text-foreground">
-              Thermal Probe by Device
+              Thermal Probe Over Time
             </h4>
             <p className="text-xs text-muted-foreground">
-              Temperature readings per device (°F / °C)
+              Temperature by device (°F / °C)
             </p>
           </div>
         </div>
-        {!isLoading && overallStats.avgC !== null && (
+        {!isLoading && currentStats && (
           <div className="text-right">
             <div className="text-lg font-bold text-red-400">
-              {overallStats.avgF}°F / {overallStats.avgC}°C
+              {currentStats.avgF}°F / {currentStats.avgC}°C
             </div>
             <div className="text-xs text-muted-foreground">
-              {overallStats.totalReadings.toLocaleString()} total readings
+              {currentStats.deviceCount} device{currentStats.deviceCount !== 1 ? 's' : ''}
             </div>
           </div>
         )}
@@ -116,27 +133,25 @@ const ThermalProbeDeviceChart = () => {
           <div className="h-full flex items-center justify-center">
             <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
           </div>
-        ) : deviceData.length === 0 ? (
+        ) : chartData.length === 0 ? (
           <div className="h-full flex items-center justify-center text-muted-foreground text-sm">
-            No thermal probe devices found
+            No thermal probe data found
           </div>
         ) : (
           <ResponsiveContainer width="100%" height="100%">
-            <BarChart 
-              data={deviceData} 
-              margin={{ top: 10, right: 10, left: -10, bottom: 60 }}
-              layout="horizontal"
+            <LineChart 
+              data={chartData} 
+              margin={{ top: 10, right: 10, left: -10, bottom: 10 }}
             >
-              <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" opacity={0.3} vertical={false} />
+              <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" opacity={0.3} />
               <XAxis 
-                dataKey="device_name" 
+                dataKey="time"
+                type="number"
+                domain={['dataMin', 'dataMax']}
+                tickFormatter={(v) => format(new Date(v), 'HH:mm')}
                 tick={{ fontSize: 10, fill: 'hsl(var(--muted-foreground))' }}
                 tickLine={false}
                 axisLine={false}
-                angle={-45}
-                textAnchor="end"
-                height={60}
-                interval={0}
               />
               <YAxis 
                 tick={{ fontSize: 10, fill: 'hsl(var(--muted-foreground))' }}
@@ -144,7 +159,7 @@ const ThermalProbeDeviceChart = () => {
                 axisLine={false}
                 tickFormatter={(v) => `${v}°F`}
                 label={{ 
-                  value: 'Temperature (°F)', 
+                  value: 'Temp (°F)', 
                   angle: -90, 
                   position: 'insideLeft',
                   style: { fontSize: 10, fill: 'hsl(var(--muted-foreground))' }
@@ -157,57 +172,32 @@ const ThermalProbeDeviceChart = () => {
                   borderRadius: '8px',
                   fontSize: '12px',
                 }}
-                labelStyle={{ color: 'hsl(var(--foreground))', fontWeight: 'bold' }}
-                formatter={(value: number, name: string, props: { payload: DeviceData }) => {
-                  if (name === 'temp_f') {
-                    return [
-                      <span key="temp">
-                        <div className="text-red-400">{props.payload.temp_f}°F / {props.payload.temp_c}°C</div>
-                        <div className="text-muted-foreground mt-1">{props.payload.total_readings.toLocaleString()} readings</div>
-                      </span>,
-                      'Temperature'
-                    ];
-                  }
-                  return [value, name];
+                labelFormatter={(v) => format(new Date(v as number), 'MMM d, HH:mm:ss')}
+                formatter={(value: number, name: string, props) => {
+                  const deviceId = name.replace('_f', '');
+                  const tempC = props.payload[`${deviceId}_c`];
+                  return [`${value}°F / ${tempC}°C`, formatDeviceName(deviceId)];
                 }}
               />
-              <Bar 
-                dataKey="temp_f" 
-                radius={[4, 4, 0, 0]}
-                animationDuration={300}
-              >
-                {deviceData.map((entry, index) => (
-                  <Cell key={`cell-${index}`} fill={getBarColor(entry.temp_c)} />
-                ))}
-              </Bar>
-            </BarChart>
+              <Legend 
+                formatter={(value) => formatDeviceName(value.replace('_f', ''))}
+                wrapperStyle={{ fontSize: '11px' }}
+              />
+              {devices.map((device, index) => (
+                <Line
+                  key={device}
+                  type="monotone"
+                  dataKey={`${device}_f`}
+                  stroke={DEVICE_COLORS[index % DEVICE_COLORS.length]}
+                  strokeWidth={2}
+                  dot={false}
+                  connectNulls
+                />
+              ))}
+            </LineChart>
           </ResponsiveContainer>
         )}
       </div>
-
-      {/* Temperature Legend */}
-      {!isLoading && deviceData.length > 0 && (
-        <div className="mt-4 pt-3 border-t border-border/50">
-          <div className="flex items-center justify-center gap-4 text-xs">
-            <div className="flex items-center gap-1.5">
-              <div className="w-3 h-3 rounded bg-blue-500" />
-              <span className="text-muted-foreground">&lt;50°F / 10°C (Cold)</span>
-            </div>
-            <div className="flex items-center gap-1.5">
-              <div className="w-3 h-3 rounded bg-green-500" />
-              <span className="text-muted-foreground">50-77°F / 10-25°C (Normal)</span>
-            </div>
-            <div className="flex items-center gap-1.5">
-              <div className="w-3 h-3 rounded bg-amber-500" />
-              <span className="text-muted-foreground">77-95°F / 25-35°C (Warm)</span>
-            </div>
-            <div className="flex items-center gap-1.5">
-              <div className="w-3 h-3 rounded bg-red-500" />
-              <span className="text-muted-foreground">&gt;95°F / 35°C (Hot)</span>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 };
