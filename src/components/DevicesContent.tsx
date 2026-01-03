@@ -17,14 +17,25 @@ import {
   Bluetooth,
   Monitor,
   Satellite,
-  Eye
+  Eye,
+  Trash2
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { useClients, useAdsbAircraft, useAdoptClient, Client } from "@/hooks/useAuroraApi";
+import { useClients, useAdsbAircraft, useAdoptClient, useDeleteClient, Client } from "@/hooks/useAuroraApi";
 import { useQueryClient } from "@tanstack/react-query";
 import DeviceDetailDialog from "./DeviceDetailDialog";
 import { toast } from "sonner";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 
 type DeviceType = 'all' | 'client' | 'adsb';
 
@@ -44,8 +55,11 @@ interface DeviceCardProps {
   sensors?: SensorBadge[];
   onViewDetails?: () => void;
   onAdopt?: () => void;
+  onDelete?: () => void;
   isAdopting?: boolean;
+  isDeleting?: boolean;
   needsAdoption?: boolean;
+  canDelete?: boolean;
 }
 
 const getSensorIcon = (sensorId: string) => {
@@ -74,7 +88,7 @@ const getSensorColor = (sensorId: string) => {
   return 'bg-primary/20 text-primary border-primary/30';
 };
 
-const DeviceCard = ({ name, type, status, lastSeen, icon, details, sensors, onViewDetails, onAdopt, isAdopting, needsAdoption }: DeviceCardProps) => {
+const DeviceCard = ({ name, type, status, lastSeen, icon, details, sensors, onViewDetails, onAdopt, onDelete, isAdopting, isDeleting, needsAdoption, canDelete }: DeviceCardProps) => {
   const getStatusIcon = () => {
     switch (status.toLowerCase()) {
       case 'online':
@@ -128,6 +142,17 @@ const DeviceCard = ({ name, type, status, lastSeen, icon, details, sensors, onVi
               disabled={isAdopting}
             >
               {isAdopting ? <Loader2 className="w-3 h-3 animate-spin" /> : "Adopt"}
+            </Button>
+          )}
+          {canDelete && onDelete && (
+            <Button 
+              variant="ghost" 
+              size="icon" 
+              className="h-8 w-8 text-destructive hover:text-destructive hover:bg-destructive/10 opacity-0 group-hover:opacity-100 transition-opacity"
+              onClick={(e) => { e.stopPropagation(); onDelete(); }}
+              disabled={isDeleting}
+            >
+              {isDeleting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Trash2 className="w-4 h-4" />}
             </Button>
           )}
           {onViewDetails && (
@@ -222,9 +247,12 @@ const DevicesContent = () => {
   const [filter, setFilter] = useState<DeviceType>('all');
   const [selectedClient, setSelectedClient] = useState<Client | null>(null);
   const [detailsOpen, setDetailsOpen] = useState(false);
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [clientToDelete, setClientToDelete] = useState<Client | null>(null);
   const { data: clients, isLoading: clientsLoading } = useClients();
   const { data: aircraft, isLoading: aircraftLoading } = useAdsbAircraft();
   const adoptMutation = useAdoptClient();
+  const deleteMutation = useDeleteClient();
   const queryClient = useQueryClient();
 
   const handleRefresh = () => {
@@ -247,15 +275,41 @@ const DevicesContent = () => {
     });
   };
 
+  const handleDeleteClick = (client: Client) => {
+    setClientToDelete(client);
+    setDeleteDialogOpen(true);
+  };
+
+  const handleConfirmDelete = () => {
+    if (!clientToDelete) return;
+    
+    deleteMutation.mutate(clientToDelete.client_id, {
+      onSuccess: () => {
+        toast.success(`${clientToDelete.hostname || clientToDelete.client_id} deleted successfully`);
+        setDeleteDialogOpen(false);
+        setClientToDelete(null);
+      },
+      onError: (error) => {
+        toast.error(`Failed to delete device: ${error.message}`);
+      },
+    });
+  };
+
   const isNeedsAdoption = (client: Client) => {
     // Client needs adoption if it was auto-registered and hasn't been adopted yet
     return client.auto_registered === true && (!client.adopted_at || client.adopted_at === null);
   };
 
+  const canDeleteClient = (client: Client) => {
+    // Can delete if unadopted OR offline
+    const status = getClientStatus(client);
+    return isNeedsAdoption(client) || status === 'offline';
+  };
+
   const isLoading = clientsLoading || aircraftLoading;
 
   // Transform data into devices
-  const devices: (DeviceCardProps & { client?: Client })[] = [];
+  const devices: (DeviceCardProps & { client?: Client; canDelete?: boolean })[] = [];
 
   // Add clients as devices with their sensors
   clients?.forEach((client: Client) => {
@@ -269,6 +323,7 @@ const DevicesContent = () => {
     }));
 
     const needsAdoption = isNeedsAdoption(client);
+    const canDelete = canDeleteClient(client);
 
     // Get the most recent last_seen value
     const lastSeenStr = client.metadata?.last_seen || client.last_seen;
@@ -289,6 +344,7 @@ const DevicesContent = () => {
       },
       client,
       needsAdoption,
+      canDelete,
     });
   });
 
@@ -394,7 +450,9 @@ const DevicesContent = () => {
               {...device}
               onViewDetails={device.client ? () => handleViewDetails(device.client!) : undefined}
               onAdopt={device.client && device.needsAdoption ? () => handleAdopt(device.client!) : undefined}
+              onDelete={device.client && device.canDelete ? () => handleDeleteClick(device.client!) : undefined}
               isAdopting={adoptMutation.isPending && adoptMutation.variables === device.client?.client_id}
+              isDeleting={deleteMutation.isPending && deleteMutation.variables === device.client?.client_id}
             />
           ))}
         </div>
@@ -416,6 +474,34 @@ const DevicesContent = () => {
         open={detailsOpen}
         onOpenChange={setDetailsOpen}
       />
+
+      {/* Delete Confirmation Dialog */}
+      <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete Device</AlertDialogTitle>
+            <AlertDialogDescription>
+              Are you sure you want to delete "{clientToDelete?.hostname || clientToDelete?.client_id}"? 
+              This action cannot be undone and will remove the device from the system.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel onClick={() => setClientToDelete(null)}>Cancel</AlertDialogCancel>
+            <AlertDialogAction 
+              onClick={handleConfirmDelete}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              disabled={deleteMutation.isPending}
+            >
+              {deleteMutation.isPending ? (
+                <Loader2 className="w-4 h-4 animate-spin mr-2" />
+              ) : (
+                <Trash2 className="w-4 h-4 mr-2" />
+              )}
+              Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 };
