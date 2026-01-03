@@ -85,6 +85,17 @@ const ThermalProbeCharts = () => {
     return val.toFixed(1);
   };
 
+  const toFahrenheit = (celsius: number | null) => {
+    if (celsius === null) return null;
+    return (celsius * 9/5) + 32;
+  };
+
+  const formatDualTemp = (celsius: number | null) => {
+    if (celsius === null) return '—';
+    const f = toFahrenheit(celsius);
+    return `${celsius.toFixed(1)}°C / ${f?.toFixed(1)}°F`;
+  };
+
   return (
     <div className="glass-card rounded-xl p-5 border border-border/50">
       <div className="flex items-center justify-between mb-4">
@@ -97,20 +108,20 @@ const ThermalProbeCharts = () => {
               Thermal Probe Temperature
             </h4>
             <p className="text-2xl font-bold text-red-400">
-              {isLoading ? '...' : `${formatValue(stats.current)}°C`}
+              {isLoading ? '...' : formatDualTemp(stats.current)}
             </p>
           </div>
         </div>
         {!isLoading && chartData.length > 0 && (
           <div className="text-right text-xs space-y-0.5">
             <div className="text-muted-foreground">
-              Avg: <span className="font-medium text-red-400">{formatValue(stats.avg)}°C</span>
+              Avg: <span className="font-medium text-red-400">{formatDualTemp(stats.avg)}</span>
             </div>
             <div className="text-muted-foreground">
-              Min/Max: {formatValue(stats.min)}°C / {formatValue(stats.max)}°C
+              Min: {formatDualTemp(stats.min)}
             </div>
             <div className="text-muted-foreground">
-              Range: <span className="text-orange-400">{stats.min !== null && stats.max !== null ? (stats.max - stats.min).toFixed(1) : '—'}°C</span>
+              Max: {formatDualTemp(stats.max)}
             </div>
           </div>
         )}
@@ -154,7 +165,8 @@ const ThermalProbeCharts = () => {
                   labelStyle={{ color: 'hsl(var(--foreground))' }}
                   formatter={(value: number, name: string) => {
                     const label = name === 'probe_c' ? 'Probe' : name === 'ambient_c' ? 'Ambient' : 'Temperature';
-                    return [`${value.toFixed(1)}°C`, label];
+                    const fahrenheit = ((value * 9/5) + 32).toFixed(1);
+                    return [`${value.toFixed(1)}°C / ${fahrenheit}°F`, label];
                   }}
                 />
                 <Legend 
@@ -223,7 +235,10 @@ const ThermalProbeCharts = () => {
                     fontSize: '12px',
                   }}
                   labelStyle={{ color: 'hsl(var(--foreground))' }}
-                  formatter={(value: number) => [`${value.toFixed(1)}°C`, 'Temperature']}
+                  formatter={(value: number) => {
+                    const fahrenheit = ((value * 9/5) + 32).toFixed(1);
+                    return [`${value.toFixed(1)}°C / ${fahrenheit}°F`, 'Temperature'];
+                  }}
                 />
                 <Area
                   type="monotone"
@@ -254,7 +269,7 @@ const ThermalProbeCharts = () => {
               {stats.current < 10 ? "Cold" :
                stats.current < 25 ? "Normal" :
                stats.current < 35 ? "Warm" :
-               "Hot"} ({formatValue(stats.current)}°C / {((stats.current * 9/5) + 32).toFixed(1)}°F)
+               "Hot"} ({formatDualTemp(stats.current)})
             </span>
           </div>
         </div>
