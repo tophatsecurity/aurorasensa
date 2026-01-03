@@ -212,42 +212,6 @@ const DashboardContent = () => {
         />
       </div>
 
-      {/* Thermal Probe - Full Width Section */}
-      <div className="mb-8">
-        <h2 className="text-lg font-semibold mb-4 flex items-center gap-2">
-          <Thermometer className="w-5 h-5 text-red-500" />
-          Thermal Probe Monitoring
-        </h2>
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-          <div className="lg:col-span-1">
-            <StatCardWithChart
-              title="CURRENT TEMPERATURE"
-              value={formatTempCompact(thermalAvgTemp)}
-              subtitle={thermalMinTemp !== undefined && thermalMaxTemp !== undefined 
-                ? `Min: ${formatTempCompact(thermalMinTemp)} • Max: ${formatTempCompact(thermalMaxTemp)}`
-                : `${thermalProbeStats?.count ?? 0} readings`}
-              icon={Thermometer}
-              iconBgColor="bg-red-500/20"
-              isLoading={thermalLoading || thermalTimeseriesLoading}
-              timeseries={(thermalTimeseries?.readings || []).map(r => ({
-                timestamp: r.timestamp,
-                value: r.temp_c ?? r.probe_c ?? 0,
-                device_id: r.device_id || "thermal_probe"
-              }))}
-              devices={[{
-                device_id: "thermal_probe",
-                device_type: "thermal_probe",
-                color: "#ef4444",
-                reading_count: thermalProbeStats?.count ?? 0,
-                status: "active"
-              }]}
-            />
-          </div>
-          <div className="lg:col-span-2">
-            <ThermalProbeCharts />
-          </div>
-        </div>
-      </div>
 
       {/* Power Consumption Trends */}
       <div className="mb-8">
