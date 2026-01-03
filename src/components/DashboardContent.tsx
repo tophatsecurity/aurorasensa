@@ -34,6 +34,7 @@ import StatCardWithChart from "./StatCardWithChart";
 import SensorCharts from "./SensorCharts";
 import StarlinkCharts from "./StarlinkCharts";
 import ThermalProbeCharts from "./ThermalProbeCharts";
+import ThermalProbeDeviceChart from "./ThermalProbeDeviceChart";
 import HumidityCharts from "./HumidityCharts";
 import PowerConsumptionCharts from "./PowerConsumptionCharts";
 import { 
@@ -212,8 +213,15 @@ const DashboardContent = () => {
         />
       </div>
 
+      {/* Thermal Probe by Device */}
+      <div className="mb-8">
+        <h2 className="text-lg font-semibold mb-4 flex items-center gap-2">
+          <Thermometer className="w-5 h-5 text-red-500" />
+          Thermal Probe (°F / °C)
+        </h2>
+        <ThermalProbeDeviceChart />
+      </div>
 
-      {/* Power Consumption Trends */}
       <div className="mb-8">
         <h2 className="text-lg font-semibold mb-4 flex items-center gap-2">
           <Zap className="w-5 h-5 text-orange-500" />
