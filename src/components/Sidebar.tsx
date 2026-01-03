@@ -13,7 +13,8 @@ import {
   Server,
   Satellite,
   ScrollText,
-  Cog
+  Cog,
+  Users
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -29,6 +30,7 @@ const menuSections = [
       { id: "dashboard", label: "Dashboard", icon: LayoutDashboard },
       { id: "map", label: "Map", icon: Map },
       { id: "devices", label: "Devices", icon: Cpu },
+      { id: "clients", label: "Clients", icon: Users },
       { id: "alerts", label: "Alerts", icon: Bell },
       { id: "rules", label: "Rules", icon: FileText },
     ],
