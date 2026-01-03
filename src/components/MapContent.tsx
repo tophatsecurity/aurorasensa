@@ -66,6 +66,8 @@ const MapContent = () => {
     isLoading,
     timeAgo,
     handleRefresh,
+    isHistoricalAdsb,
+    adsbSource,
   } = useMapData();
 
   // GPS history tracking
@@ -457,7 +459,7 @@ const MapContent = () => {
         )}
 
         <MapLegend />
-        <MapStatistics stats={stats} />
+        <MapStatistics stats={stats} isHistoricalAdsb={isHistoricalAdsb} adsbSource={adsbSource} />
         <MapLoadingOverlay isLoading={isLoading} />
       </div>
     </div>

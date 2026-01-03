@@ -1,7 +1,7 @@
 import { useMemo, useState, useEffect, useCallback } from "react";
 import { LatLngExpression } from "leaflet";
 import { 
-  useAdsbAircraft, 
+  useAdsbAircraftWithHistory, 
   useSensors, 
   useClients, 
   useLatestReadings,
@@ -121,10 +121,12 @@ export function useMapData() {
   const queryClient = useQueryClient();
 
   const { 
-    data: aircraft, 
+    aircraft, 
     isLoading: aircraftLoading, 
-    dataUpdatedAt: aircraftUpdated 
-  } = useAdsbAircraft();
+    dataUpdatedAt: aircraftUpdated,
+    isHistorical: isHistoricalAdsb,
+    source: adsbSource
+  } = useAdsbAircraftWithHistory(60); // 60 minutes of historical data
   
   const { 
     data: sensors, 
@@ -596,5 +598,7 @@ export function useMapData() {
     handleRefresh,
     lastUpdate,
     geoLocations, // Expose raw geo locations for debugging
+    isHistoricalAdsb, // Whether ADSB data is from historical readings
+    adsbSource, // Source of ADSB data: 'live', 'historical', or 'none'
   };
 }

@@ -1,3 +1,4 @@
+import { useMemo } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 
@@ -844,6 +845,122 @@ export function useAdsbAircraft() {
     refetchInterval: 5000,
     retry: 2,
   });
+}
+
+// Historical ADSB readings from sensor data (fallback when live is empty)
+export interface AdsbHistoricalReading {
+  device_id: string;
+  device_type: string;
+  timestamp: string;
+  data: {
+    hex?: string;
+    flight?: string;
+    alt_baro?: number;
+    alt_geom?: number;
+    gs?: number;
+    track?: number;
+    lat?: number;
+    lon?: number;
+    squawk?: string;
+    category?: string;
+    rssi?: number;
+    seen?: number;
+    [key: string]: unknown;
+  };
+}
+
+interface AdsbHistoricalResponse {
+  count: number;
+  readings: AdsbHistoricalReading[];
+}
+
+export function useAdsbHistorical(minutes: number = 60) {
+  return useQuery({
+    queryKey: ["aurora", "adsb", "historical", minutes],
+    queryFn: async () => {
+      const response = await callAuroraApi<AdsbHistoricalResponse>(
+        `/api/readings/sensor/adsb?hours=${Math.ceil(minutes / 60)}`
+      );
+      return response;
+    },
+    refetchInterval: 30000,
+    retry: 2,
+  });
+}
+
+// Combined hook that uses live data or falls back to historical
+export function useAdsbAircraftWithHistory(historyMinutes: number = 60) {
+  const liveQuery = useAdsbAircraft();
+  const historicalQuery = useAdsbHistorical(historyMinutes);
+  
+  const combinedData = useMemo(() => {
+    // If we have live aircraft data, use it
+    if (liveQuery.data && liveQuery.data.length > 0) {
+      return {
+        aircraft: liveQuery.data,
+        isHistorical: false,
+        source: 'live' as const,
+      };
+    }
+    
+    // Otherwise, try to use historical data
+    if (historicalQuery.data?.readings && historicalQuery.data.readings.length > 0) {
+      // Convert historical readings to AdsbAircraft format
+      // Group by hex/flight to get unique aircraft, keeping the most recent reading
+      const aircraftMap = new Map<string, AdsbAircraft>();
+      
+      historicalQuery.data.readings.forEach(reading => {
+        const data = reading.data;
+        const key = data.hex || data.flight || reading.device_id;
+        
+        if (key && data.lat !== undefined && data.lon !== undefined) {
+          const existing = aircraftMap.get(key);
+          const readingTime = new Date(reading.timestamp).getTime();
+          const existingTime = existing ? new Date(existing.seen ? Date.now() - existing.seen * 1000 : 0).getTime() : 0;
+          
+          if (!existing || readingTime > existingTime) {
+            aircraftMap.set(key, {
+              hex: data.hex || key,
+              flight: data.flight,
+              alt_baro: data.alt_baro,
+              alt_geom: data.alt_geom,
+              gs: data.gs,
+              track: data.track,
+              lat: data.lat,
+              lon: data.lon,
+              squawk: data.squawk,
+              category: data.category,
+              rssi: data.rssi,
+              seen: Math.floor((Date.now() - new Date(reading.timestamp).getTime()) / 1000),
+            });
+          }
+        }
+      });
+      
+      return {
+        aircraft: Array.from(aircraftMap.values()),
+        isHistorical: true,
+        source: 'historical' as const,
+      };
+    }
+    
+    return {
+      aircraft: [],
+      isHistorical: false,
+      source: 'none' as const,
+    };
+  }, [liveQuery.data, historicalQuery.data]);
+  
+  return {
+    ...combinedData,
+    isLoading: liveQuery.isLoading || historicalQuery.isLoading,
+    isError: liveQuery.isError && historicalQuery.isError,
+    dataUpdatedAt: liveQuery.dataUpdatedAt || historicalQuery.dataUpdatedAt,
+    refetch: () => {
+      liveQuery.refetch();
+      historicalQuery.refetch();
+    },
+  };
 }
 
 export function useAdsbStats() {
