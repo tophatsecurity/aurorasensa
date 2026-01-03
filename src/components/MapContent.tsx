@@ -19,7 +19,6 @@ import { MapLoadingOverlay } from "@/components/map/MapLoadingOverlay";
 import { MapHeader } from "@/components/map/MapHeader";
 import { MapFilters } from "@/components/map/MapFilters";
 import { GpsHistorySettings } from "@/components/map/GpsHistorySettings";
-import { AdsbHistorySelector } from "@/components/map/AdsbHistorySelector";
 import { Button } from "@/components/ui/button";
 
 // Animate marker to new position
@@ -57,7 +56,6 @@ const MapContent = () => {
   const [hasInitialFit, setHasInitialFit] = useState(false);
   const [showTrails, setShowTrails] = useState(true);
   const [retentionMinutes, setRetentionMinutes] = useState(60);
-  const [adsbHistoryMinutes, setAdsbHistoryMinutes] = useState(60);
   
   const {
     aircraftMarkers,
@@ -70,7 +68,7 @@ const MapContent = () => {
     handleRefresh,
     isHistoricalAdsb,
     adsbSource,
-  } = useMapData(adsbHistoryMinutes);
+  } = useMapData(retentionMinutes);
 
   // GPS history tracking
   const { trails, clearHistory } = useGpsHistory(
@@ -393,20 +391,14 @@ const MapContent = () => {
             stats={stats}
             onFilterChange={handleFilterChange}
           />
-          <div className="flex items-center gap-4">
-            <AdsbHistorySelector
-              value={adsbHistoryMinutes}
-              onChange={setAdsbHistoryMinutes}
-            />
-            <GpsHistorySettings
-              retentionMinutes={retentionMinutes}
-              onRetentionChange={setRetentionMinutes}
-              showTrails={showTrails}
-              onShowTrailsChange={setShowTrails}
-              trailCount={trails.length}
-              onClearHistory={clearHistory}
-            />
-          </div>
+          <GpsHistorySettings
+            retentionMinutes={retentionMinutes}
+            onRetentionChange={setRetentionMinutes}
+            showTrails={showTrails}
+            onShowTrailsChange={setShowTrails}
+            trailCount={trails.length}
+            onClearHistory={clearHistory}
+          />
         </div>
       </div>
 
@@ -467,7 +459,7 @@ const MapContent = () => {
         )}
 
         <MapLegend />
-        <MapStatistics stats={stats} isHistoricalAdsb={isHistoricalAdsb} adsbSource={adsbSource} adsbHistoryMinutes={adsbHistoryMinutes} />
+        <MapStatistics stats={stats} isHistoricalAdsb={isHistoricalAdsb} adsbSource={adsbSource} adsbHistoryMinutes={retentionMinutes} />
         <MapLoadingOverlay isLoading={isLoading} />
       </div>
     </div>
