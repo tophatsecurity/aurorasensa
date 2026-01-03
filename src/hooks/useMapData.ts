@@ -568,6 +568,18 @@ export function useMapData(options: UseMapDataOptions = {}) {
           squawk: aircraft.squawk,
           rssi: aircraft.rssi,
           category: aircraft.category,
+          // Extended fields
+          registration: aircraft.registration,
+          operator: aircraft.operator || aircraft.operator_callsign,
+          aircraftType: aircraft.type,
+          country: aircraft.country,
+          military: aircraft.military,
+          altGeom: aircraft.alt_geom,
+          baroRate: aircraft.baro_rate,
+          ias: aircraft.ias,
+          tas: aircraft.tas,
+          emergency: aircraft.emergency,
+          messages: aircraft.messages,
         };
       });
   }, [adsbAircraft, adsbIsHistorical]);
