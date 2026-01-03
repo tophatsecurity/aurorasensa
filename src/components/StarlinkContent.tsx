@@ -263,6 +263,30 @@ const StarlinkContent = () => {
         />
       </div>
 
+      {/* Individual Device Stats - Signal Strength & Power */}
+      {!isAllSelected && deviceStats && (
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-8">
+          <MetricCard
+            title="Signal Strength"
+            value={deviceStats.signal_dbm?.toFixed(1) ?? '—'}
+            unit="dBm"
+            icon={<Signal className="w-5 h-5 text-cyan-400" />}
+            status={(deviceStats.signal_dbm ?? -100) > -70 ? 'good' : (deviceStats.signal_dbm ?? -100) > -85 ? 'warning' : 'critical'}
+            subtitle={(deviceStats.signal_dbm ?? -100) > -70 ? 'Strong signal' : (deviceStats.signal_dbm ?? -100) > -85 ? 'Moderate' : 'Weak signal'}
+            isLoading={deviceStatsLoading}
+          />
+          <MetricCard
+            title="Power Consumption"
+            value={deviceStats.power_w?.toFixed(1) ?? '—'}
+            unit="W"
+            icon={<Zap className="w-5 h-5 text-amber-400" />}
+            status={(deviceStats.power_w ?? 0) < 100 ? 'good' : (deviceStats.power_w ?? 0) < 150 ? 'warning' : 'critical'}
+            subtitle={(deviceStats.power_w ?? 0) < 100 ? 'Normal' : (deviceStats.power_w ?? 0) < 150 ? 'Elevated' : 'High usage'}
+            isLoading={deviceStatsLoading}
+          />
+        </div>
+      )}
+
       {/* Throughput Section */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-8">
         <div className="glass-card rounded-xl p-5 border border-border/50">
