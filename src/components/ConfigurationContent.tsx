@@ -46,10 +46,12 @@ import {
   Usb,
   Activity,
   Globe,
-  XCircle
+  XCircle,
+  Eye
 } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
 import { formatRelativeTime } from "@/utils/dateUtils";
+import DeviceDetailDialog from "@/components/DeviceDetailDialog";
 
 interface ConfigEditorProps {
   config: ServerConfig;
@@ -205,7 +207,7 @@ const SensorConfigDisplay = ({ sensors }: SensorConfigDisplayProps) => {
   );
 };
 
-const ClientConfigCard = ({ client }: { client: Client }) => {
+const ClientConfigCard = ({ client, onViewDetails }: { client: Client; onViewDetails: (client: Client) => void }) => {
   const { data: clientConfig, isLoading } = useClientConfig(client.client_id);
   const updateClientConfig = useUpdateClientConfig();
 
@@ -277,6 +279,10 @@ const ClientConfigCard = ({ client }: { client: Client }) => {
                 {metadata.config.project.name} v{metadata.config.project.version}
               </Badge>
             )}
+            <Button variant="outline" size="sm" onClick={() => onViewDetails(client)}>
+              <Eye className="h-3 w-3 mr-1" />
+              Details
+            </Button>
           </div>
         </div>
       </CardHeader>
@@ -409,6 +415,9 @@ const formatUptime = (seconds: number) => {
 };
 
 const ConfigurationContent = () => {
+  const [selectedDevice, setSelectedDevice] = useState<Client | null>(null);
+  const [detailDialogOpen, setDetailDialogOpen] = useState(false);
+  
   const { data: serverConfig, isLoading: configLoading, refetch: refetchConfig } = useConfig();
   const { data: clients = [], isLoading: clientsLoading, refetch: refetchClients } = useClients();
   const { data: systemInfo, isLoading: systemLoading } = useSystemInfo();
@@ -417,6 +426,11 @@ const ConfigurationContent = () => {
   const { data: interfaces } = useSystemInterfaces();
   const { data: usbDevices } = useSystemUsb();
   const updateConfig = useUpdateConfig();
+
+  const handleViewDetails = (client: Client) => {
+    setSelectedDevice(client);
+    setDetailDialogOpen(true);
+  };
 
   const handleSaveServerConfig = (config: ServerConfig) => {
     updateConfig.mutate(config, {
@@ -722,7 +736,7 @@ const ConfigurationContent = () => {
               ) : (
                 <div className="grid gap-4 md:grid-cols-2">
                   {clients.map((client) => (
-                    <ClientConfigCard key={client.client_id} client={client} />
+                    <ClientConfigCard key={client.client_id} client={client} onViewDetails={handleViewDetails} />
                   ))}
                 </div>
               )}
@@ -925,6 +939,11 @@ const ConfigurationContent = () => {
           </Tabs>
         </div>
       </ScrollArea>
+      <DeviceDetailDialog 
+        client={selectedDevice} 
+        open={detailDialogOpen} 
+        onOpenChange={setDetailDialogOpen} 
+      />
     </div>
   );
 };
