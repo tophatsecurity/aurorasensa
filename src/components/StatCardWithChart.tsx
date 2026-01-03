@@ -1,6 +1,13 @@
 import { LucideIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { AreaChart, Area, ResponsiveContainer, Tooltip } from "recharts";
+import { AreaChart, Area, ResponsiveContainer, Tooltip, XAxis } from "recharts";
+import { format } from "date-fns";
+
+interface TimeseriesPoint {
+  timestamp: string;
+  value: number;
+  device_id?: string;
+}
 
 interface DeviceData {
   device_id: string;
@@ -17,12 +24,14 @@ interface StatCardWithChartProps {
   icon: LucideIcon;
   iconBgColor?: string;
   devices?: DeviceData[];
+  timeseries?: TimeseriesPoint[];
+  unit?: string;
   isLoading?: boolean;
   className?: string;
 }
 
-// Color palette for devices
-const DEVICE_COLORS = [
+// Color palette for devices/lines
+const CHART_COLORS = [
   "#22c55e", // green
   "#3b82f6", // blue
   "#f59e0b", // amber
@@ -40,22 +49,49 @@ const StatCardWithChart = ({
   icon: Icon, 
   iconBgColor = "bg-aurora-purple/20",
   devices = [],
+  timeseries = [],
+  unit = "",
   isLoading = false,
   className
 }: StatCardWithChartProps) => {
-  // Generate mock activity data for the mini chart based on device counts
-  const chartData = devices.length > 0 
-    ? Array.from({ length: 12 }, (_, i) => {
-        const point: Record<string, number> = { time: i };
-        devices.forEach((device, idx) => {
-          // Create varied activity based on reading count
-          const baseValue = device.reading_count / 1000;
-          const variance = Math.sin((i + idx) * 0.5) * baseValue * 0.3;
-          point[device.device_id] = Math.max(0, baseValue + variance + Math.random() * baseValue * 0.2);
+  // Transform timeseries data for chart - group by timestamp and device if needed
+  type ChartPoint = Record<string, string | number>;
+  
+  const chartData: ChartPoint[] = timeseries.length > 0 
+    ? (() => {
+        const grouped: ChartPoint[] = [];
+        timeseries.forEach((point) => {
+          const timeKey = format(new Date(point.timestamp), "HH:mm");
+          const deviceId = point.device_id || "value";
+          
+          // Find or create entry for this timestamp
+          let entry = grouped.find(e => e.time === timeKey);
+          if (!entry) {
+            entry = { time: timeKey, timestamp: point.timestamp };
+            grouped.push(entry);
+          }
+          entry[deviceId] = point.value;
         });
-        return point;
-      })
-    : [];
+        return grouped.slice(-24);
+      })()
+    : devices.length > 0 
+      ? Array.from({ length: 12 }, (_, i) => {
+          const point: ChartPoint = { time: `${i}` };
+          devices.forEach((device, idx) => {
+            const baseValue = device.reading_count / 1000;
+            const variance = Math.sin((i + idx) * 0.5) * baseValue * 0.3;
+            point[device.device_id] = Math.max(0, baseValue + variance + Math.random() * baseValue * 0.2);
+          });
+          return point;
+        })
+      : [];
+
+  // Get unique device IDs from timeseries for multi-line charts
+  const uniqueDevices = timeseries.length > 0 
+    ? [...new Set(timeseries.map(p => p.device_id || "value"))]
+    : devices.map(d => d.device_id);
+
+  const showLegend = devices.length > 0 && uniqueDevices.length > 1;
 
   return (
     <div className={cn(
@@ -71,7 +107,7 @@ const StatCardWithChart = ({
             {title}
           </h4>
           <p className="text-2xl font-bold text-foreground">
-            {isLoading ? "..." : (value === null || value === undefined ? "—" : value)}
+            {isLoading ? "..." : (value === null || value === undefined ? "—" : `${value}${unit}`)}
           </p>
           {subtitle && (
             <p className="text-xs text-muted-foreground mt-1">{subtitle}</p>
@@ -79,8 +115,8 @@ const StatCardWithChart = ({
         </div>
       </div>
 
-      {/* Mini chart */}
-      {devices.length > 0 && (
+      {/* Sparkline chart */}
+      {chartData.length > 0 && (
         <div className="mt-4 h-16">
           <ResponsiveContainer width="100%" height="100%">
             <AreaChart data={chartData} margin={{ top: 0, right: 0, left: 0, bottom: 0 }}>
@@ -91,33 +127,45 @@ const StatCardWithChart = ({
                   borderRadius: '8px',
                   fontSize: '12px'
                 }}
-                labelFormatter={() => ''}
+                formatter={(value: number) => [`${value.toFixed(1)}${unit}`, '']}
+                labelFormatter={(label) => label}
               />
-              {devices.map((device, idx) => (
+              {uniqueDevices.length > 0 ? (
+                uniqueDevices.map((deviceId, idx) => (
+                  <Area
+                    key={deviceId}
+                    type="monotone"
+                    dataKey={deviceId}
+                    stackId={uniqueDevices.length > 1 ? "1" : undefined}
+                    stroke={devices.find(d => d.device_id === deviceId)?.color || CHART_COLORS[idx % CHART_COLORS.length]}
+                    fill={devices.find(d => d.device_id === deviceId)?.color || CHART_COLORS[idx % CHART_COLORS.length]}
+                    fillOpacity={0.4}
+                    strokeWidth={1.5}
+                  />
+                ))
+              ) : (
                 <Area
-                  key={device.device_id}
                   type="monotone"
-                  dataKey={device.device_id}
-                  stackId="1"
-                  stroke={device.color || DEVICE_COLORS[idx % DEVICE_COLORS.length]}
-                  fill={device.color || DEVICE_COLORS[idx % DEVICE_COLORS.length]}
+                  dataKey="value"
+                  stroke={CHART_COLORS[0]}
+                  fill={CHART_COLORS[0]}
                   fillOpacity={0.4}
                   strokeWidth={1.5}
                 />
-              ))}
+              )}
             </AreaChart>
           </ResponsiveContainer>
         </div>
       )}
 
       {/* Device legend */}
-      {devices.length > 0 && (
+      {showLegend && (
         <div className="mt-3 flex flex-wrap gap-2">
           {devices.slice(0, 4).map((device, idx) => (
             <div key={device.device_id} className="flex items-center gap-1.5">
               <div 
                 className="w-2 h-2 rounded-full"
-                style={{ backgroundColor: device.color || DEVICE_COLORS[idx % DEVICE_COLORS.length] }}
+                style={{ backgroundColor: device.color || CHART_COLORS[idx % CHART_COLORS.length] }}
               />
               <span className="text-[10px] text-muted-foreground truncate max-w-[60px]">
                 {device.device_id.replace(/_/g, ' ').replace(/\d+$/, '').trim()}

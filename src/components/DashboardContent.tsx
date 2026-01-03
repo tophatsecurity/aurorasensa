@@ -43,6 +43,8 @@ import {
   useDashboardStats, 
   useDashboardTimeseries, 
   useSensorTypeStats,
+  useStarlinkTimeseries,
+  useThermalProbeTimeseries,
   Client 
 } from "@/hooks/useAuroraApi";
 import { formatLastSeen, formatDate, formatDateTime, getDeviceStatusFromLastSeen } from "@/utils/dateUtils";
@@ -81,6 +83,10 @@ const DashboardContent = () => {
   const { data: starlinkStats, isLoading: starlinkLoading } = useSensorTypeStats("starlink");
   const { data: ahtStats } = useSensorTypeStats("aht_sensor");
   const { data: bmtStats } = useSensorTypeStats("bmt_sensor");
+  
+  // Real timeseries data for sparklines
+  const { data: starlinkTimeseries, isLoading: starlinkTimeseriesLoading } = useStarlinkTimeseries(24);
+  const { data: thermalTimeseries, isLoading: thermalTimeseriesLoading } = useThermalProbeTimeseries(24);
 
   // Extract key metrics from comprehensive stats
   const global = stats?.global;
@@ -138,7 +144,7 @@ const DashboardContent = () => {
       </div>
 
       {/* Top Stats with Charts */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 mb-8">
         <StatCardWithChart
           title="CONNECTED CLIENTS"
           value={clientsLoading ? "..." : totalClients.toString()}
@@ -184,20 +190,76 @@ const DashboardContent = () => {
             status: d.status
           }))}
         />
+      </div>
+
+      {/* Sensor Stats with Real Timeseries */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 mb-8">
         <StatCardWithChart
-          title="DATA BATCHES"
-          value={statsLoading ? "..." : (global?.database?.total_batches ?? 0).toLocaleString()}
-          subtitle={`${global?.activity?.last_24_hours?.batches_24h ?? 0} last 24h`}
-          icon={BarChart3}
-          iconBgColor="bg-cyan-500/20"
-          isLoading={statsLoading}
-          devices={(global?.sensors?.by_type || []).slice(0, 6).map((s, idx) => ({
-            device_id: s.device_type,
-            device_type: s.device_type,
-            color: ['#06b6d4', '#22c55e', '#3b82f6', '#f59e0b', '#8b5cf6', '#ef4444'][idx % 6],
-            reading_count: s.reading_count,
-            status: 'active'
+          title="THERMAL PROBE"
+          value={thermalAvgTemp !== undefined ? thermalAvgTemp.toFixed(1) : "—"}
+          unit="°C"
+          subtitle={thermalMinTemp !== undefined && thermalMaxTemp !== undefined 
+            ? `Min: ${thermalMinTemp.toFixed(1)}°C • Max: ${thermalMaxTemp.toFixed(1)}°C`
+            : `${thermalProbeStats?.count ?? 0} readings`}
+          icon={Thermometer}
+          iconBgColor="bg-red-500/20"
+          isLoading={thermalLoading || thermalTimeseriesLoading}
+          timeseries={(thermalTimeseries?.readings || []).map(r => ({
+            timestamp: r.timestamp,
+            value: r.temp_c ?? r.probe_c ?? 0,
+            device_id: r.device_id || "thermal_probe"
           }))}
+          devices={[{
+            device_id: "thermal_probe",
+            device_type: "thermal_probe",
+            color: "#ef4444",
+            reading_count: thermalProbeStats?.count ?? 0,
+            status: "active"
+          }]}
+        />
+        <StatCardWithChart
+          title="STARLINK LATENCY"
+          value={starlinkLatency !== undefined ? starlinkLatency.toFixed(0) : "—"}
+          unit=" ms"
+          subtitle={starlinkDownlink !== undefined 
+            ? `↓ ${(starlinkDownlink / 1000000).toFixed(1)} Mbps`
+            : `${starlinkStats?.count ?? 0} readings`}
+          icon={Satellite}
+          iconBgColor="bg-violet-500/20"
+          isLoading={starlinkLoading || starlinkTimeseriesLoading}
+          timeseries={(starlinkTimeseries?.readings || []).map(r => ({
+            timestamp: r.timestamp,
+            value: r.pop_ping_latency_ms ?? 0,
+          }))}
+          devices={[{
+            device_id: "starlink",
+            device_type: "starlink",
+            color: "#8b5cf6",
+            reading_count: starlinkStats?.count ?? 0,
+            status: "active"
+          }]}
+        />
+        <StatCardWithChart
+          title="STARLINK POWER"
+          value={starlinkPower !== undefined ? starlinkPower.toFixed(0) : "—"}
+          unit=" W"
+          subtitle={starlinkObstruction !== undefined 
+            ? `Obstruction: ${starlinkObstruction.toFixed(1)}%`
+            : `${starlinkStats?.count ?? 0} readings`}
+          icon={Zap}
+          iconBgColor="bg-orange-500/20"
+          isLoading={starlinkLoading || starlinkTimeseriesLoading}
+          timeseries={(starlinkTimeseries?.readings || []).map(r => ({
+            timestamp: r.timestamp,
+            value: r.power_w ?? 0,
+          }))}
+          devices={[{
+            device_id: "starlink_power",
+            device_type: "starlink",
+            color: "#f59e0b",
+            reading_count: starlinkStats?.count ?? 0,
+            status: "active"
+          }]}
         />
       </div>
 
