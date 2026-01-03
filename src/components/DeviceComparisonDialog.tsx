@@ -276,13 +276,13 @@ const DeviceComparisonDialog = ({ open, onOpenChange, initialDevice }: DeviceCom
           </DialogTitle>
         </DialogHeader>
 
-        {/* Device Selectors */}
+        {/* Client Selectors */}
         <div className="grid grid-cols-2 gap-4 py-4 border-b border-border">
           <div className="space-y-2">
-            <label className="text-sm font-medium">Device 1</label>
+            <label className="text-sm font-medium">Client 1</label>
             <Select value={device1Id} onValueChange={setDevice1Id}>
               <SelectTrigger className="bg-background">
-                <SelectValue placeholder="Select device..." />
+                <SelectValue placeholder="Select client..." />
               </SelectTrigger>
               <SelectContent className="bg-popover z-50">
                 {clients.map((client) => (
@@ -297,10 +297,10 @@ const DeviceComparisonDialog = ({ open, onOpenChange, initialDevice }: DeviceCom
             </Select>
           </div>
           <div className="space-y-2">
-            <label className="text-sm font-medium">Device 2</label>
+            <label className="text-sm font-medium">Client 2</label>
             <Select value={device2Id} onValueChange={setDevice2Id}>
               <SelectTrigger className="bg-background">
-                <SelectValue placeholder="Select device..." />
+                <SelectValue placeholder="Select client..." />
               </SelectTrigger>
               <SelectContent className="bg-popover z-50">
                 {clients.map((client) => (
@@ -564,7 +564,7 @@ const DeviceComparisonDialog = ({ open, onOpenChange, initialDevice }: DeviceCom
           ) : (
             <div className="flex flex-col items-center justify-center py-16 text-muted-foreground">
               <ArrowLeftRight className="w-12 h-12 mb-4 opacity-50" />
-              <p>Select two devices to compare</p>
+              <p>Select two clients to compare</p>
             </div>
           )}
         </ScrollArea>

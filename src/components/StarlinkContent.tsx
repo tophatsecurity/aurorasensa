@@ -205,10 +205,10 @@ const StarlinkContent = () => {
         <div className="ml-auto flex items-center gap-3">
           <Select value={selectedDevice} onValueChange={setSelectedDevice}>
             <SelectTrigger className="w-[200px] bg-background border-border">
-              <SelectValue placeholder="Select device" />
+              <SelectValue placeholder="Select client" />
             </SelectTrigger>
             <SelectContent className="bg-background border-border z-50">
-              <SelectItem value="all">All Devices (Average)</SelectItem>
+              <SelectItem value="all">All Clients (Average)</SelectItem>
               {starlinkDevices && starlinkDevices.length > 0 && (
                 starlinkDevices.map((device) => (
                   <SelectItem key={device.device_id} value={device.device_id}>
