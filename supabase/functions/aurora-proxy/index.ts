@@ -6,63 +6,6 @@ const corsHeaders = {
 };
 
 const AURORA_ENDPOINT = "http://aurora.tophatsecurity.com:9151";
-const REQUEST_TIMEOUT = 15000; // 15 seconds per attempt
-const MAX_RETRIES = 2;
-
-async function fetchWithTimeout(url: string, options: RequestInit, timeout: number): Promise<Response> {
-  const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), timeout);
-  
-  try {
-    const response = await fetch(url, { ...options, signal: controller.signal });
-    clearTimeout(timeoutId);
-    return response;
-  } catch (error) {
-    clearTimeout(timeoutId);
-    throw error;
-  }
-}
-
-async function proxyRequest(url: string, method: string, body: unknown): Promise<Response> {
-  const options: RequestInit = {
-    method,
-    headers: { 'Content-Type': 'application/json' },
-  };
-
-  if (body && method !== 'GET') {
-    options.body = JSON.stringify(body);
-  }
-
-  let lastError: Error | null = null;
-  
-  for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
-    try {
-      if (attempt > 0) {
-        console.log(`Retry attempt ${attempt}/${MAX_RETRIES}`);
-        await new Promise(r => setTimeout(r, 500 * attempt)); // Brief delay between retries
-      }
-      
-      const response = await fetchWithTimeout(url, options, REQUEST_TIMEOUT);
-      console.log(`Response: ${response.status}`);
-      return response;
-    } catch (error) {
-      lastError = error instanceof Error ? error : new Error(String(error));
-      const isTimeout = lastError.name === 'AbortError';
-      console.error(`Attempt ${attempt + 1} failed:`, isTimeout ? "timeout" : lastError.message);
-      
-      if (!isTimeout) break; // Only retry on timeout
-    }
-  }
-
-  const isTimeout = lastError?.name === 'AbortError';
-  return new Response(JSON.stringify({ 
-    error: isTimeout ? 'Aurora API timeout - server may be slow or unreachable' : 'Request failed',
-    details: lastError?.message
-  }), {
-    status: isTimeout ? 504 : 502,
-    headers: { 'Content-Type': 'application/json' },
-  });
-}
 
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
@@ -82,8 +25,18 @@ serve(async (req) => {
     const url = `${AURORA_ENDPOINT}${path}`;
     console.log(`Proxy ${method}: ${url}`);
 
-    const response = await proxyRequest(url, method, body);
+    const options: RequestInit = {
+      method,
+      headers: { 'Content-Type': 'application/json' },
+    };
+
+    if (body && method !== 'GET') {
+      options.body = JSON.stringify(body);
+    }
+
+    const response = await fetch(url, options);
     const data = await response.text();
+    console.log(`Response: ${response.status}`);
 
     return new Response(data, {
       status: response.status,
@@ -94,7 +47,7 @@ serve(async (req) => {
     });
   } catch (error) {
     console.error("Handler error:", error);
-    return new Response(JSON.stringify({ error: 'Request failed' }), {
+    return new Response(JSON.stringify({ error: 'Request failed', details: String(error) }), {
       status: 500,
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });
