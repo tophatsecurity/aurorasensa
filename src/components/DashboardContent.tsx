@@ -431,42 +431,6 @@ const DashboardContent = () => {
               </div>
             </div>
 
-            {/* CPU Temp */}
-            <div className="glass-card rounded-lg p-4 border border-border/50">
-              <div className="flex items-center gap-2 mb-2">
-                <div className="w-8 h-8 rounded-lg bg-red-500/20 flex items-center justify-center">
-                  <Thermometer className="w-4 h-4 text-red-400" />
-                </div>
-                <span className="text-xs text-muted-foreground">CPU Temp</span>
-              </div>
-              <div className="text-2xl font-bold text-foreground">
-                {systemMonitorStats?.numeric_field_stats_24h?.cpu_temp_c?.avg?.toFixed(1) ?? "—"}°C
-              </div>
-              <div className="text-xs text-muted-foreground mt-1">
-                {systemMonitorStats?.numeric_field_stats_24h?.cpu_temp_c?.max !== undefined 
-                  ? `Max: ${systemMonitorStats.numeric_field_stats_24h.cpu_temp_c.max.toFixed(1)}°C`
-                  : "24h avg"}
-              </div>
-            </div>
-
-            {/* Voltage */}
-            <div className="glass-card rounded-lg p-4 border border-border/50">
-              <div className="flex items-center gap-2 mb-2">
-                <div className="w-8 h-8 rounded-lg bg-yellow-500/20 flex items-center justify-center">
-                  <Zap className="w-4 h-4 text-yellow-400" />
-                </div>
-                <span className="text-xs text-muted-foreground">Voltage</span>
-              </div>
-              <div className="text-2xl font-bold text-foreground">
-                {systemMonitorStats?.numeric_field_stats_24h?.voltage?.avg?.toFixed(2) ?? "—"}V
-              </div>
-              <div className="text-xs text-muted-foreground mt-1">
-                {systemMonitorStats?.numeric_field_stats_24h?.voltage?.min !== undefined 
-                  ? `Min: ${systemMonitorStats.numeric_field_stats_24h.voltage.min.toFixed(2)}V`
-                  : "24h avg"}
-              </div>
-            </div>
-
             {/* Uptime */}
             <div className="glass-card rounded-lg p-4 border border-border/50">
               <div className="flex items-center gap-2 mb-2">
