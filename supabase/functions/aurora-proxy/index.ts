@@ -6,86 +6,16 @@ const corsHeaders = {
 };
 
 const AURORA_ENDPOINT = "http://aurora.tophatsecurity.com:9151";
-const AURORA_USERNAME = "admin";
-const AURORA_PASSWORD = "admin";
-
-// Configuration
 const REQUEST_TIMEOUT = 30000;
-const AUTH_TIMEOUT = 20000;
-
-// Session state - lazy initialized
-let sessionCookie: string | null = null;
-let sessionExpiry = 0;
-
-async function authenticate(): Promise<string | null> {
-  console.log("Authenticating with Aurora API...");
-  
-  const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), AUTH_TIMEOUT);
-  
-  try {
-    const response = await fetch(`${AURORA_ENDPOINT}/api/auth/login`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        username: AURORA_USERNAME,
-        password: AURORA_PASSWORD,
-      }),
-      signal: controller.signal,
-    });
-    
-    clearTimeout(timeoutId);
-    console.log(`Auth response: ${response.status}`);
-
-    if (response.ok) {
-      const setCookie = response.headers.get('set-cookie');
-      if (setCookie) {
-        sessionCookie = setCookie.split(';')[0];
-        sessionExpiry = Date.now() + 55 * 60 * 1000;
-        console.log("Auth successful");
-        return sessionCookie;
-      }
-      
-      // Try token from body
-      const data = await response.json().catch(() => ({}));
-      if (data?.token || data?.access_token) {
-        sessionCookie = data.token || data.access_token;
-        sessionExpiry = Date.now() + 55 * 60 * 1000;
-        return sessionCookie;
-      }
-      
-      // Session-based auth
-      sessionCookie = "session";
-      sessionExpiry = Date.now() + 55 * 60 * 1000;
-      return sessionCookie;
-    }
-    
-    return null;
-  } catch (error) {
-    clearTimeout(timeoutId);
-    console.error("Auth error:", error);
-    return null;
-  }
-}
 
 async function proxyRequest(url: string, method: string, body: unknown): Promise<Response> {
-  // Lazy auth - only if needed
-  if (!sessionCookie || Date.now() >= sessionExpiry) {
-    await authenticate();
-  }
-
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), REQUEST_TIMEOUT);
 
   try {
-    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
-    if (sessionCookie && sessionCookie !== 'session') {
-      headers['Cookie'] = sessionCookie;
-    }
-
     const options: RequestInit = {
       method,
-      headers,
+      headers: { 'Content-Type': 'application/json' },
       signal: controller.signal,
     };
 
@@ -97,28 +27,6 @@ async function proxyRequest(url: string, method: string, body: unknown): Promise
     clearTimeout(timeoutId);
     
     console.log(`Response: ${response.status}`);
-
-    // Re-auth on 401
-    if (response.status === 401) {
-      sessionCookie = null;
-      sessionExpiry = 0;
-      await authenticate();
-      
-      if (sessionCookie) {
-        const retryHeaders: Record<string, string> = { 'Content-Type': 'application/json' };
-        if (sessionCookie !== 'session') {
-          retryHeaders['Cookie'] = sessionCookie;
-        }
-        
-        const retryOptions: RequestInit = { method, headers: retryHeaders };
-        if (body && method !== 'GET') {
-          retryOptions.body = JSON.stringify(body);
-        }
-        
-        return fetch(url, retryOptions);
-      }
-    }
-
     return response;
   } catch (error) {
     clearTimeout(timeoutId);
