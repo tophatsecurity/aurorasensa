@@ -9,18 +9,20 @@ const AURORA_ENDPOINT = "http://aurora.tophatsecurity.com:9151";
 const AURORA_USERNAME = "admin";
 const AURORA_PASSWORD = "admin";
 
-// Configuration
+// Configuration - increased timeouts for slow API
 const CONFIG = {
-  requestTimeout: 15000, // 15 seconds
-  authTimeout: 10000, // 10 seconds for auth
-  maxRetries: 3,
-  baseRetryDelay: 500, // 500ms base delay
-  maxRetryDelay: 5000, // max 5 second delay
+  requestTimeout: 25000, // 25 seconds
+  authTimeout: 20000, // 20 seconds for auth
+  maxRetries: 2, // Reduce retries
+  baseRetryDelay: 1000,
+  maxRetryDelay: 3000,
 };
 
-// Store session cookie and expiry for reuse
-let sessionCookie: string | null = null;
-let sessionExpiry: number = 0;
+// Session state
+const session = {
+  cookie: null as string | null,
+  expiry: 0
+};
 
 // Helper to add timeout to fetch requests
 async function fetchWithTimeout(url: string, options: RequestInit, timeout: number): Promise<Response> {
@@ -41,7 +43,7 @@ async function fetchWithTimeout(url: string, options: RequestInit, timeout: numb
 // Calculate exponential backoff delay with jitter
 function getRetryDelay(attempt: number): number {
   const exponentialDelay = CONFIG.baseRetryDelay * Math.pow(2, attempt);
-  const jitter = Math.random() * 200; // Add 0-200ms jitter
+  const jitter = Math.random() * 200;
   return Math.min(exponentialDelay + jitter, CONFIG.maxRetryDelay);
 }
 
@@ -52,7 +54,7 @@ function sleep(ms: number): Promise<void> {
 
 // Check if session is still valid (with 5 min buffer)
 function isSessionValid(): boolean {
-  return sessionCookie !== null && Date.now() < sessionExpiry - 5 * 60 * 1000;
+  return session.cookie !== null && Date.now() < session.expiry - 5 * 60 * 1000;
 }
 
 async function authenticate(): Promise<string | null> {
@@ -81,31 +83,29 @@ async function authenticate(): Promise<string | null> {
         // Extract session cookie from response headers
         const setCookie = response.headers.get('set-cookie');
         if (setCookie) {
-          // Parse the cookie value
           const cookieMatch = setCookie.match(/([^;]+)/);
           if (cookieMatch) {
-            sessionCookie = cookieMatch[1];
-            // Set session expiry to 1 hour from now (adjust based on actual session duration)
-            sessionExpiry = Date.now() + 60 * 60 * 1000;
+            session.cookie = cookieMatch[1];
+            session.expiry = Date.now() + 60 * 60 * 1000;
             console.log("Authentication successful, cookie obtained");
-            return sessionCookie;
+            return session.cookie;
           }
         }
         
         // Some APIs return token in body instead
         const data = await response.json().catch(() => null);
         if (data?.token || data?.access_token) {
-          sessionCookie = data.token || data.access_token;
-          sessionExpiry = Date.now() + 60 * 60 * 1000;
+          session.cookie = data.token || data.access_token;
+          session.expiry = Date.now() + 60 * 60 * 1000;
           console.log("Authentication successful, token obtained from body");
-          return sessionCookie;
+          return session.cookie;
         }
         
         // Auth succeeded but no token - might be session-based
         console.log("Auth succeeded, assuming session-based auth");
-        sessionCookie = "authenticated";
-        sessionExpiry = Date.now() + 60 * 60 * 1000;
-        return sessionCookie;
+        session.cookie = "authenticated";
+        session.expiry = Date.now() + 60 * 60 * 1000;
+        return session.cookie;
       }
 
       // Non-retryable auth errors
@@ -154,7 +154,7 @@ async function proxyRequest(
     method,
     headers: {
       'Content-Type': 'application/json',
-      ...(sessionCookie && sessionCookie !== 'authenticated' && { 'Cookie': sessionCookie }),
+      ...(session.cookie && session.cookie !== 'authenticated' && { 'Cookie': session.cookie }),
     },
   };
 
@@ -169,8 +169,8 @@ async function proxyRequest(
     // If unauthorized, invalidate session and retry once
     if (response.status === 401 && attempt === 0) {
       console.log("Got 401, invalidating session and retrying...");
-      sessionCookie = null;
-      sessionExpiry = 0;
+      session.cookie = null;
+      session.expiry = 0;
       return proxyRequest(url, method, body, attempt + 1);
     }
 
