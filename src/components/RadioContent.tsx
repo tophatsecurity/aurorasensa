@@ -60,7 +60,7 @@ import {
   Bar,
   Legend
 } from "recharts";
-import { useClients, useLatestReadings, useSensorTypeStats, useAllSensorStats, useWifiScannerTimeseries, useBluetoothScannerTimeseries, useLoraDetectorTimeseries, useAdsbAircraftWithHistory } from "@/hooks/useAuroraApi";
+import { useClients, useLatestReadings, useSensorTypeStats, useAllSensorStats, useWifiScannerTimeseries, useBluetoothScannerTimeseries, useLoraDetectorTimeseries, useAdsbAircraftWithHistory, useLoraDevices, useLoraGlobalStats, useRecentLoraDetections } from "@/hooks/useAuroraApi";
 import { formatDistanceToNow } from "date-fns";
 
 // Helper function to format signal strength
@@ -191,6 +191,11 @@ const RadioContent = () => {
   const { data: wifiTimeseries, isLoading: wifiTimeseriesLoading } = useWifiScannerTimeseries(hoursForTimeRange);
   const { data: bluetoothTimeseries, isLoading: bluetoothTimeseriesLoading } = useBluetoothScannerTimeseries(hoursForTimeRange);
   const { data: loraTimeseries, isLoading: loraTimeseriesLoading } = useLoraDetectorTimeseries(hoursForTimeRange);
+  
+  // Fetch LoRa devices and stats from dedicated API endpoints
+  const { data: loraDevices, isLoading: loraDevicesLoading } = useLoraDevices();
+  const { data: loraGlobalStats, isLoading: loraGlobalStatsLoading } = useLoraGlobalStats();
+  const { data: recentLoraDetections, isLoading: recentLoraDetectionsLoading } = useRecentLoraDetections();
   
   // Fetch ADSB data
   const { aircraft: adsbAircraft, isLoading: adsbLoading } = useAdsbAircraftWithHistory(hoursForTimeRange * 60);

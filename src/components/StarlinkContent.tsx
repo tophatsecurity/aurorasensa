@@ -44,6 +44,11 @@ import {
   useStarlinkDevices,
   useStarlinkDeviceStats,
   useStarlinkDeviceTimeseries,
+  useStarlinkSignalStrength,
+  useStarlinkPerformance,
+  useStarlinkPower,
+  useStarlinkConnectivity,
+  useStarlinkGlobalStats,
   StarlinkTimeseriesPoint 
 } from "@/hooks/useAuroraApi";
 
@@ -106,6 +111,13 @@ const StarlinkContent = () => {
   const { data: starlinkStats, isLoading: statsLoading } = useStarlinkStats();
   const { data: starlinkTimeseries, isLoading: timeseriesLoading } = useStarlinkTimeseries(24);
   const { data: sensorStats, isLoading: sensorLoading } = useSensorTypeStats("starlink");
+  
+  // New dedicated API endpoints for detailed metrics
+  const { data: signalStrength } = useStarlinkSignalStrength();
+  const { data: performance } = useStarlinkPerformance();
+  const { data: power } = useStarlinkPower();
+  const { data: connectivity } = useStarlinkConnectivity();
+  const { data: globalStats } = useStarlinkGlobalStats();
   
   // Individual device stats (when a specific device is selected)
   const { data: deviceStats, isLoading: deviceStatsLoading } = useStarlinkDeviceStats(
