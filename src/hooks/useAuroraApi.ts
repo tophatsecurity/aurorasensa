@@ -1683,6 +1683,38 @@ export interface StarlinkDeviceStats {
   power_w?: number;
 }
 
+// Starlink additional types from API
+export interface StarlinkSignalStrength {
+  device_id?: string;
+  signal_strength_dbm?: number;
+  snr?: number;
+  timestamp?: string;
+}
+
+export interface StarlinkPerformance {
+  device_id?: string;
+  downlink_throughput_bps?: number;
+  uplink_throughput_bps?: number;
+  pop_ping_latency_ms?: number;
+  timestamp?: string;
+}
+
+export interface StarlinkPower {
+  device_id?: string;
+  power_w?: number;
+  voltage?: number;
+  current?: number;
+  timestamp?: string;
+}
+
+export interface StarlinkConnectivity {
+  device_id?: string;
+  connected?: boolean;
+  obstruction_percent?: number;
+  uptime_seconds?: number;
+  timestamp?: string;
+}
+
 // =============================================
 // HOOKS - STARLINK
 // =============================================
@@ -1692,17 +1724,22 @@ export function useStarlinkDevices() {
     queryKey: ["aurora", "starlink", "devices"],
     queryFn: async () => {
       try {
-        // Get all devices and filter for starlink types
-        const response = await callAuroraApi<{ devices: StarlinkDevice[] }>("/api/v1/devices");
-        const devices = response.devices || [];
-        // Filter for starlink devices (starlink_dish or starlink_dish_comprehensive)
-        return devices.filter(d => 
-          d.device_type?.toLowerCase().includes('starlink') || 
-          d.device_id?.toLowerCase().includes('starlink')
-        );
-      } catch (error) {
-        console.warn("Failed to fetch starlink devices:", error);
-        return [];
+        // Try dedicated starlink devices endpoint first
+        const response = await callAuroraApi<StarlinkDevice[]>("/api/starlink/devices");
+        return response || [];
+      } catch {
+        try {
+          // Fallback to filtering from all devices
+          const response = await callAuroraApi<{ devices: StarlinkDevice[] }>("/api/v1/devices");
+          const devices = response.devices || [];
+          return devices.filter(d => 
+            d.device_type?.toLowerCase().includes('starlink') || 
+            d.device_id?.toLowerCase().includes('starlink')
+          );
+        } catch (error) {
+          console.warn("Failed to fetch starlink devices:", error);
+          return [];
+        }
       }
     },
     refetchInterval: 30000,
@@ -1715,6 +1752,51 @@ export function useStarlinkStats() {
     queryKey: ["aurora", "starlink", "stats"],
     queryFn: () => callAuroraApi<StarlinkStats>("/api/starlink/stats"),
     refetchInterval: 15000,
+    retry: 2,
+  });
+}
+
+export function useStarlinkSignalStrength() {
+  return useQuery({
+    queryKey: ["aurora", "starlink", "signal-strength"],
+    queryFn: () => callAuroraApi<StarlinkSignalStrength>("/api/starlink/signal-strength"),
+    refetchInterval: 15000,
+    retry: 2,
+  });
+}
+
+export function useStarlinkPerformance() {
+  return useQuery({
+    queryKey: ["aurora", "starlink", "performance"],
+    queryFn: () => callAuroraApi<StarlinkPerformance>("/api/starlink/performance"),
+    refetchInterval: 15000,
+    retry: 2,
+  });
+}
+
+export function useStarlinkPower() {
+  return useQuery({
+    queryKey: ["aurora", "starlink", "power"],
+    queryFn: () => callAuroraApi<StarlinkPower>("/api/starlink/power"),
+    refetchInterval: 15000,
+    retry: 2,
+  });
+}
+
+export function useStarlinkConnectivity() {
+  return useQuery({
+    queryKey: ["aurora", "starlink", "connectivity"],
+    queryFn: () => callAuroraApi<StarlinkConnectivity>("/api/starlink/connectivity"),
+    refetchInterval: 15000,
+    retry: 2,
+  });
+}
+
+export function useStarlinkGlobalStats() {
+  return useQuery({
+    queryKey: ["aurora", "starlink", "stats", "global"],
+    queryFn: () => callAuroraApi<StarlinkStats>("/api/starlink/stats/global"),
+    refetchInterval: 30000,
     retry: 2,
   });
 }
@@ -2388,7 +2470,127 @@ export function useLoraDetectorTimeseries(hours: number = 24) {
 }
 
 // =============================================
-// HOOKS - BMT SENSOR TIMESERIES (Legacy - wraps Arduino)
+// HOOKS - LORA DEVICES & STATS (NEW API ENDPOINTS)
+// =============================================
+
+export interface LoraDevice {
+  device_id: string;
+  device_type?: string;
+  status?: string;
+  last_seen?: string;
+  frequency?: number;
+  rssi?: number;
+}
+
+export interface LoraDetection {
+  id?: string;
+  device_id: string;
+  timestamp: string;
+  frequency?: number;
+  rssi?: number;
+  snr?: number;
+  payload?: string;
+  spreading_factor?: number;
+  bandwidth?: number;
+}
+
+export interface LoraGlobalStats {
+  total_devices?: number;
+  total_detections?: number;
+  detections_last_hour?: number;
+  detections_last_24h?: number;
+  avg_rssi?: number;
+  avg_snr?: number;
+}
+
+export interface LoraChannelStats {
+  channel: number;
+  frequency?: number;
+  detection_count?: number;
+  avg_rssi?: number;
+}
+
+export interface LoraSpectrum {
+  frequency_start?: number;
+  frequency_end?: number;
+  power_levels?: number[];
+  timestamp?: string;
+}
+
+export function useLoraDevices() {
+  return useQuery({
+    queryKey: ["aurora", "lora", "devices"],
+    queryFn: () => callAuroraApi<LoraDevice[]>("/api/lora/devices"),
+    refetchInterval: 30000,
+    retry: 2,
+  });
+}
+
+export function useLoraDevice(deviceId: string) {
+  return useQuery({
+    queryKey: ["aurora", "lora", "devices", deviceId],
+    queryFn: () => callAuroraApi<LoraDevice>(`/api/lora/devices/${deviceId}`),
+    refetchInterval: 30000,
+    retry: 2,
+    enabled: !!deviceId,
+  });
+}
+
+export function useLoraDetections() {
+  return useQuery({
+    queryKey: ["aurora", "lora", "detections"],
+    queryFn: () => callAuroraApi<LoraDetection[]>("/api/lora/detections"),
+    refetchInterval: 15000,
+    retry: 2,
+  });
+}
+
+export function useRecentLoraDetections() {
+  return useQuery({
+    queryKey: ["aurora", "lora", "detections", "recent"],
+    queryFn: () => callAuroraApi<LoraDetection[]>("/api/lora/detections/recent"),
+    refetchInterval: 10000,
+    retry: 2,
+  });
+}
+
+export function useLoraGlobalStats() {
+  return useQuery({
+    queryKey: ["aurora", "lora", "stats", "global"],
+    queryFn: () => callAuroraApi<LoraGlobalStats>("/api/lora/stats/global"),
+    refetchInterval: 30000,
+    retry: 2,
+  });
+}
+
+export function useLoraDeviceStats(deviceId: string) {
+  return useQuery({
+    queryKey: ["aurora", "lora", "stats", "device", deviceId],
+    queryFn: () => callAuroraApi<LoraGlobalStats>(`/api/lora/stats/device/${deviceId}`),
+    refetchInterval: 30000,
+    retry: 2,
+    enabled: !!deviceId,
+  });
+}
+
+export function useLoraChannelStats() {
+  return useQuery({
+    queryKey: ["aurora", "lora", "channels"],
+    queryFn: () => callAuroraApi<LoraChannelStats[]>("/api/lora/channels"),
+    refetchInterval: 30000,
+    retry: 2,
+  });
+}
+
+export function useLoraSpectrum() {
+  return useQuery({
+    queryKey: ["aurora", "lora", "spectrum"],
+    queryFn: () => callAuroraApi<LoraSpectrum>("/api/lora/spectrum"),
+    refetchInterval: 15000,
+    retry: 2,
+  });
+}
+
 // =============================================
 
 export interface BmtSensorReading {
