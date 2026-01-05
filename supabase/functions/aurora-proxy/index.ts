@@ -25,10 +25,14 @@ serve(async (req) => {
     
     const url = `${AURORA_ENDPOINT}${path}`;
     console.log(`Proxy ${method}: ${url}`);
+    console.log(`API Key present: ${!!AURORA_API_KEY}`);
 
     const headers: Record<string, string> = { 'Content-Type': 'application/json' };
     if (AURORA_API_KEY) {
       headers['X-API-Key'] = AURORA_API_KEY;
+      console.log('Added X-API-Key header');
+    } else {
+      console.warn('AURORA_API_KEY secret not found!');
     }
 
     const options: RequestInit = {
