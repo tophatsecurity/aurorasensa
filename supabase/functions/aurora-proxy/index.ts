@@ -6,6 +6,7 @@ const corsHeaders = {
 };
 
 const AURORA_ENDPOINT = "http://aurora.tophatsecurity.com:9151";
+const AURORA_API_KEY = Deno.env.get('AURORA_API_KEY');
 
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
@@ -25,9 +26,14 @@ serve(async (req) => {
     const url = `${AURORA_ENDPOINT}${path}`;
     console.log(`Proxy ${method}: ${url}`);
 
+    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+    if (AURORA_API_KEY) {
+      headers['X-API-Key'] = AURORA_API_KEY;
+    }
+
     const options: RequestInit = {
       method,
-      headers: { 'Content-Type': 'application/json' },
+      headers,
     };
 
     if (body && method !== 'GET') {
