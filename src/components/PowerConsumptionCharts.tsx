@@ -12,7 +12,7 @@ import {
   ReferenceArea
 } from "recharts";
 import { Zap, Loader2, TrendingUp, TrendingDown, Settings2, AlertTriangle, Bell, BellOff } from "lucide-react";
-import { useStarlinkTimeseries } from "@/hooks/useAuroraApi";
+import { useStarlinkPower, useStarlinkTimeseries } from "@/hooks/useAuroraApi";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
@@ -42,7 +42,11 @@ interface PowerConsumptionChartsProps {
 }
 
 const PowerConsumptionCharts = ({ hours = 24 }: PowerConsumptionChartsProps) => {
-  const { data: starlinkTimeseries, isLoading } = useStarlinkTimeseries(hours);
+  // Use dedicated power endpoint for current reading, timeseries for history
+  const { data: starlinkPower, isLoading: isPowerLoading } = useStarlinkPower();
+  const { data: starlinkTimeseries, isLoading: isTimeseriesLoading } = useStarlinkTimeseries(hours);
+  
+  const isLoading = isPowerLoading || isTimeseriesLoading;
   
   const [thresholdConfig, setThresholdConfig] = useState<ThresholdConfig>({
     warningThreshold: 100,
@@ -50,10 +54,22 @@ const PowerConsumptionCharts = ({ hours = 24 }: PowerConsumptionChartsProps) => 
     alertsEnabled: true,
   });
 
+  // Get current power from dedicated endpoint (more accurate)
+  const currentPower = useMemo(() => {
+    if (starlinkPower?.power_w !== undefined) {
+      return starlinkPower.power_w;
+    }
+    // Fallback to latest timeseries reading
+    const readings = starlinkTimeseries?.readings?.filter(r => r.power_w !== undefined && r.power_w > 0);
+    if (readings && readings.length > 0) {
+      return readings[readings.length - 1].power_w;
+    }
+    return null;
+  }, [starlinkPower, starlinkTimeseries]);
+
   const formatData = (
     starlinkReadings: Array<{ timestamp: string; power_w?: number }> | undefined
   ): ChartData[] => {
-    // Use Starlink power data as primary source
     const validStarlinkPower = starlinkReadings?.filter(r => 
       r.power_w !== undefined && r.power_w !== null && !isNaN(r.power_w) && r.power_w > 0
     );
@@ -91,24 +107,30 @@ const PowerConsumptionCharts = ({ hours = 24 }: PowerConsumptionChartsProps) => 
 
   
 
-  // Calculate statistics
+  // Calculate statistics - use currentPower from dedicated endpoint for accuracy
   const stats = useMemo(() => {
-    if (chartData.length === 0) return { 
-      current: null, avg: null, min: null, max: null, 
-      hourlyAvg: null, trend: 'stable' as const,
-      peakTime: null, totalKwh: null,
-      warningCount: 0, criticalCount: 0
-    };
-    
     const values = chartData.map(d => d.value);
-    const current = values[values.length - 1];
+    
+    // Use dedicated power endpoint for current, fallback to chart data
+    const current = currentPower ?? (values.length > 0 ? values[values.length - 1] : null);
+    
+    if (values.length === 0 && current === null) {
+      return { 
+        current: null, avg: null, min: null, max: null, 
+        hourlyAvg: null, trend: 'stable' as const,
+        peakTime: null, totalKwh: null,
+        warningCount: 0, criticalCount: 0
+      };
+    }
+    
     const previous = values.length > 1 ? values[values.length - 2] : current;
-    const avg = values.reduce((a, b) => a + b, 0) / values.length;
-    const max = Math.max(...values);
-    const peakIndex = values.indexOf(max);
+    const avg = values.length > 0 ? values.reduce((a, b) => a + b, 0) / values.length : current;
+    const max = values.length > 0 ? Math.max(...values) : current;
+    const min = values.length > 0 ? Math.min(...values) : current;
+    const peakIndex = values.indexOf(max ?? 0);
     
     // Estimate kWh (assuming readings are evenly spaced over 24h)
-    const totalKwh = (avg * 24) / 1000;
+    const totalKwh = avg !== null ? (avg * 24) / 1000 : null;
     
     // Count threshold violations
     const warningCount = chartData.filter(d => d.isAboveWarning).length;
@@ -117,16 +139,18 @@ const PowerConsumptionCharts = ({ hours = 24 }: PowerConsumptionChartsProps) => 
     return {
       current,
       avg,
-      min: Math.min(...values),
+      min,
       max,
       hourlyAvg: avg,
-      trend: current > previous + 0.5 ? 'up' as const : current < previous - 0.5 ? 'down' as const : 'stable' as const,
+      trend: current !== null && previous !== null 
+        ? (current > previous + 0.5 ? 'up' as const : current < previous - 0.5 ? 'down' as const : 'stable' as const)
+        : 'stable' as const,
       peakTime: chartData[peakIndex]?.time || null,
       totalKwh,
       warningCount,
       criticalCount,
     };
-  }, [chartData]);
+  }, [chartData, currentPower]);
 
   // Current status based on thresholds
   const currentStatus = useMemo(() => {
