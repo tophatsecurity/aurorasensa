@@ -57,9 +57,11 @@ const PowerConsumptionCharts = ({ hours = 24 }: PowerConsumptionChartsProps) => 
     dashboardPower: { timestamp: string; value: number }[] | undefined,
     starlinkReadings: Array<{ timestamp: string; power_w?: number }> | undefined
   ): ChartData[] => {
-    // Try dashboard power data first
-    if (dashboardPower && dashboardPower.length > 0) {
-      const data = dashboardPower.map(p => ({
+    // Try dashboard power data first - check for actual valid values
+    const validDashboardPower = dashboardPower?.filter(p => p.value !== null && p.value !== undefined && !isNaN(p.value));
+    
+    if (validDashboardPower && validDashboardPower.length > 0) {
+      const data = validDashboardPower.map(p => ({
         time: new Date(p.timestamp).toLocaleTimeString('en-US', { 
           hour12: false, 
           hour: '2-digit', 
@@ -81,10 +83,13 @@ const PowerConsumptionCharts = ({ hours = 24 }: PowerConsumptionChartsProps) => 
       return data;
     }
     
-    // Fallback to Starlink power data
-    if (starlinkReadings && starlinkReadings.length > 0) {
-      const powerReadings = starlinkReadings.filter(r => r.power_w !== undefined);
-      const data = powerReadings.map(r => ({
+    // Fallback to Starlink power data - filter for valid power readings
+    const validStarlinkPower = starlinkReadings?.filter(r => 
+      r.power_w !== undefined && r.power_w !== null && !isNaN(r.power_w) && r.power_w > 0
+    );
+    
+    if (validStarlinkPower && validStarlinkPower.length > 0) {
+      const data = validStarlinkPower.map(r => ({
         time: new Date(r.timestamp).toLocaleTimeString('en-US', { 
           hour12: false, 
           hour: '2-digit', 
