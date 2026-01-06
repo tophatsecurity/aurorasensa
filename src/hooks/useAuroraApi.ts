@@ -3236,10 +3236,14 @@ export function useAdoptClientDirect() {
   
   return useMutation({
     mutationFn: async ({ clientId, reason, metadata }: { clientId: string; reason?: string; metadata?: Record<string, unknown> }) => {
-      return callAuroraApi<StateTransitionResponse>(`/api/clients/${clientId}/adopt-direct`, "POST", { reason, metadata });
+      // Use the simple adopt endpoint which should work for state transitions
+      return callAuroraApi<StateTransitionResponse>(`/api/clients/${clientId}/adopt`, "POST", { reason, metadata });
     },
     onSuccess: () => {
+      // Invalidate all client-related queries to ensure UI refreshes
       queryClient.invalidateQueries({ queryKey: ["aurora", "clients"] });
+      queryClient.invalidateQueries({ queryKey: ["aurora", "clients", "all-states"] });
+      queryClient.invalidateQueries({ queryKey: ["aurora", "clients", "statistics"] });
     },
   });
 }
@@ -3253,6 +3257,8 @@ export function useRegisterClient() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["aurora", "clients"] });
+      queryClient.invalidateQueries({ queryKey: ["aurora", "clients", "all-states"] });
+      queryClient.invalidateQueries({ queryKey: ["aurora", "clients", "statistics"] });
     },
   });
 }
@@ -3266,6 +3272,8 @@ export function useDisableClient() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["aurora", "clients"] });
+      queryClient.invalidateQueries({ queryKey: ["aurora", "clients", "all-states"] });
+      queryClient.invalidateQueries({ queryKey: ["aurora", "clients", "statistics"] });
     },
   });
 }
@@ -3279,6 +3287,8 @@ export function useEnableClient() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["aurora", "clients"] });
+      queryClient.invalidateQueries({ queryKey: ["aurora", "clients", "all-states"] });
+      queryClient.invalidateQueries({ queryKey: ["aurora", "clients", "statistics"] });
     },
   });
 }
@@ -3292,6 +3302,8 @@ export function useSuspendClient() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["aurora", "clients"] });
+      queryClient.invalidateQueries({ queryKey: ["aurora", "clients", "all-states"] });
+      queryClient.invalidateQueries({ queryKey: ["aurora", "clients", "statistics"] });
     },
   });
 }
@@ -3305,6 +3317,8 @@ export function useSoftDeleteClient() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["aurora", "clients"] });
+      queryClient.invalidateQueries({ queryKey: ["aurora", "clients", "all-states"] });
+      queryClient.invalidateQueries({ queryKey: ["aurora", "clients", "statistics"] });
     },
   });
 }
@@ -3318,6 +3332,8 @@ export function useRestoreClient() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["aurora", "clients"] });
+      queryClient.invalidateQueries({ queryKey: ["aurora", "clients", "all-states"] });
+      queryClient.invalidateQueries({ queryKey: ["aurora", "clients", "statistics"] });
     },
   });
 }
