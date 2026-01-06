@@ -19,18 +19,25 @@ import {
   Activity,
   Calendar,
   Clock,
-  Database
+  Database,
+  Filter,
+  X,
+  Check
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Checkbox } from "@/components/ui/checkbox";
+import { ScrollArea } from "@/components/ui/scroll-area";
 import { 
   useComprehensiveStats, 
   useDashboardTimeseries,
   useSensorTypeStats,
-  type SensorTypeSummary 
+  type SensorTypeSummary,
+  type DeviceSummary
 } from "@/hooks/useAuroraApi";
 import { useQueryClient } from "@tanstack/react-query";
 import {
@@ -414,6 +421,8 @@ const SensorDetailPanel = ({ sensorType, timeseries }: SensorDetailPanelProps) =
 const DataAnalyticsContent = () => {
   const [selectedSensor, setSelectedSensor] = useState<string | null>(null);
   const [timeRange, setTimeRange] = useState<string>("24h");
+  const [selectedDevices, setSelectedDevices] = useState<string[]>([]); // Empty = All Devices
+  const [deviceFilterOpen, setDeviceFilterOpen] = useState(false);
   
   const { data: stats, isLoading: statsLoading } = useComprehensiveStats();
   const { data: timeseries, isLoading: timeseriesLoading } = useDashboardTimeseries(24);
@@ -425,21 +434,62 @@ const DataAnalyticsContent = () => {
 
   const isLoading = statsLoading || timeseriesLoading;
 
+  // Get all devices from stats
+  const allDevices: DeviceSummary[] = stats?.devices_summary?.devices || [];
   const sensorTypes = stats?.sensors_summary?.sensor_types || [];
   const globalStats = stats?.global;
 
-  // Prepare pie chart data
+  // Filter sensor types based on selected devices
+  const filteredSensorTypes = useMemo(() => {
+    if (selectedDevices.length === 0) return sensorTypes; // All devices
+    
+    // Filter sensors that have devices matching the selected device IDs
+    const selectedDeviceTypes = new Set(
+      allDevices
+        .filter(d => selectedDevices.includes(d.device_id))
+        .map(d => d.device_type)
+    );
+    
+    return sensorTypes.filter(s => selectedDeviceTypes.has(s.device_type));
+  }, [sensorTypes, selectedDevices, allDevices]);
+
+  // Filter devices list based on selected devices
+  const filteredDevices = useMemo(() => {
+    if (selectedDevices.length === 0) return allDevices;
+    return allDevices.filter(d => selectedDevices.includes(d.device_id));
+  }, [allDevices, selectedDevices]);
+
+  // Toggle device selection
+  const toggleDevice = (deviceId: string) => {
+    setSelectedDevices(prev => 
+      prev.includes(deviceId) 
+        ? prev.filter(id => id !== deviceId)
+        : [...prev, deviceId]
+    );
+  };
+
+  // Clear all device filters
+  const clearDeviceFilter = () => {
+    setSelectedDevices([]);
+  };
+
+  // Select all devices
+  const selectAllDevices = () => {
+    setSelectedDevices(allDevices.map(d => d.device_id));
+  };
+
+  // Prepare pie chart data - filtered
   const pieData = useMemo(() => {
-    return sensorTypes.map(sensor => ({
+    return filteredSensorTypes.map(sensor => ({
       name: sensor.device_type.replace(/_/g, ' '),
       value: sensor.total_readings,
       fill: getSensorColor(sensor.device_type),
     }));
-  }, [sensorTypes]);
+  }, [filteredSensorTypes]);
 
-  // Prepare bar chart data for readings distribution
+  // Prepare bar chart data for readings distribution - filtered
   const barData = useMemo(() => {
-    return sensorTypes
+    return filteredSensorTypes
       .slice()
       .sort((a, b) => b.total_readings - a.total_readings)
       .slice(0, 8)
@@ -449,7 +499,7 @@ const DataAnalyticsContent = () => {
         devices: sensor.device_count,
         fill: getSensorColor(sensor.device_type),
       }));
-  }, [sensorTypes]);
+  }, [filteredSensorTypes]);
 
   return (
     <div className="flex-1 overflow-y-auto p-8">
@@ -463,6 +513,101 @@ const DataAnalyticsContent = () => {
           </Badge>
         </div>
         <div className="flex items-center gap-3">
+          {/* Device Filter */}
+          <Popover open={deviceFilterOpen} onOpenChange={setDeviceFilterOpen}>
+            <PopoverTrigger asChild>
+              <Button variant="outline" size="sm" className="gap-2">
+                <Filter className="w-4 h-4" />
+                {selectedDevices.length === 0 ? (
+                  "All Devices"
+                ) : (
+                  <span className="flex items-center gap-1">
+                    {selectedDevices.length} Device{selectedDevices.length !== 1 ? 's' : ''}
+                    <Badge variant="secondary" className="ml-1 h-5 px-1.5 text-xs">
+                      {selectedDevices.length}
+                    </Badge>
+                  </span>
+                )}
+              </Button>
+            </PopoverTrigger>
+            <PopoverContent className="w-80 p-0" align="end">
+              <div className="p-3 border-b border-border">
+                <div className="flex items-center justify-between">
+                  <h4 className="font-semibold text-sm">Filter by Device</h4>
+                  <div className="flex gap-1">
+                    <Button 
+                      variant="ghost" 
+                      size="sm" 
+                      className="h-7 text-xs"
+                      onClick={clearDeviceFilter}
+                    >
+                      Clear
+                    </Button>
+                    <Button 
+                      variant="ghost" 
+                      size="sm" 
+                      className="h-7 text-xs"
+                      onClick={selectAllDevices}
+                    >
+                      Select All
+                    </Button>
+                  </div>
+                </div>
+                <p className="text-xs text-muted-foreground mt-1">
+                  {selectedDevices.length === 0 
+                    ? "Showing all devices" 
+                    : `${selectedDevices.length} of ${allDevices.length} devices selected`}
+                </p>
+              </div>
+              <ScrollArea className="h-[300px]">
+                <div className="p-2 space-y-1">
+                  {allDevices.map((device) => {
+                    const isSelected = selectedDevices.includes(device.device_id);
+                    const color = getSensorColor(device.device_type);
+                    
+                    return (
+                      <div
+                        key={device.device_id}
+                        className={`flex items-center gap-3 p-2 rounded-md cursor-pointer transition-colors hover:bg-muted/50 ${
+                          isSelected ? 'bg-primary/10' : ''
+                        }`}
+                        onClick={() => toggleDevice(device.device_id)}
+                      >
+                        <Checkbox 
+                          checked={isSelected}
+                          onCheckedChange={() => toggleDevice(device.device_id)}
+                        />
+                        <div 
+                          className="w-2 h-2 rounded-full flex-shrink-0"
+                          style={{ backgroundColor: color }}
+                        />
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm font-medium truncate">
+                            {device.device_id}
+                          </p>
+                          <p className="text-xs text-muted-foreground capitalize">
+                            {device.device_type.replace(/_/g, ' ')}
+                          </p>
+                        </div>
+                        <Badge 
+                          variant={device.status === 'active' ? 'default' : 'secondary'}
+                          className="text-xs flex-shrink-0"
+                        >
+                          {device.status}
+                        </Badge>
+                      </div>
+                    );
+                  })}
+                  {allDevices.length === 0 && (
+                    <p className="text-sm text-muted-foreground text-center py-4">
+                      No devices found
+                    </p>
+                  )}
+                </div>
+              </ScrollArea>
+            </PopoverContent>
+          </Popover>
+
           <Select value={timeRange} onValueChange={setTimeRange}>
             <SelectTrigger className="w-[120px]">
               <SelectValue placeholder="Time range" />
@@ -500,6 +645,25 @@ const DataAnalyticsContent = () => {
           </TabsList>
 
           <TabsContent value="overview" className="space-y-6">
+            {/* Device Filter Indicator */}
+            {selectedDevices.length > 0 && (
+              <div className="flex items-center gap-2 p-3 rounded-lg bg-primary/10 border border-primary/20">
+                <Filter className="w-4 h-4 text-primary" />
+                <span className="text-sm">
+                  Filtering by <strong>{selectedDevices.length}</strong> device{selectedDevices.length !== 1 ? 's' : ''}
+                </span>
+                <Button 
+                  variant="ghost" 
+                  size="sm" 
+                  className="ml-auto h-7 text-xs gap-1"
+                  onClick={clearDeviceFilter}
+                >
+                  <X className="w-3 h-3" />
+                  Clear Filter
+                </Button>
+              </div>
+            )}
+
             {/* Summary Stats */}
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
               <Card>
@@ -509,10 +673,14 @@ const DataAnalyticsContent = () => {
                     Total Readings
                   </div>
                   <p className="text-3xl font-bold text-primary">
-                    {formatNumber(globalStats?.database?.total_readings)}
+                    {formatNumber(
+                      selectedDevices.length === 0 
+                        ? globalStats?.database?.total_readings
+                        : filteredSensorTypes.reduce((sum, s) => sum + s.total_readings, 0)
+                    )}
                   </p>
                   <p className="text-xs text-muted-foreground mt-1">
-                    Across all sensors
+                    {selectedDevices.length === 0 ? 'Across all sensors' : 'From selected devices'}
                   </p>
                 </CardContent>
               </Card>
@@ -523,24 +691,24 @@ const DataAnalyticsContent = () => {
                     Sensor Types
                   </div>
                   <p className="text-3xl font-bold text-orange-500">
-                    {sensorTypes.length}
+                    {filteredSensorTypes.length}
                   </p>
                   <p className="text-xs text-muted-foreground mt-1">
-                    Unique sensor categories
+                    {selectedDevices.length === 0 ? 'Unique sensor categories' : `of ${sensorTypes.length} total`}
                   </p>
                 </CardContent>
               </Card>
               <Card>
                 <CardContent className="p-4">
                   <div className="flex items-center gap-2 text-muted-foreground text-xs mb-1">
-                    <TrendingUp className="w-3 h-3" />
-                    Avg Readings/Hour
+                    <Cpu className="w-3 h-3" />
+                    Selected Devices
                   </div>
                   <p className="text-3xl font-bold text-green-500">
-                    {formatNumber(globalStats?.activity?.avg_readings_per_hour)}
+                    {selectedDevices.length === 0 ? allDevices.length : selectedDevices.length}
                   </p>
                   <p className="text-xs text-muted-foreground mt-1">
-                    Data ingestion rate
+                    {selectedDevices.length === 0 ? 'All devices' : `of ${allDevices.length} total`}
                   </p>
                 </CardContent>
               </Card>
@@ -667,7 +835,7 @@ const DataAnalyticsContent = () => {
                   Select Sensor Type
                 </h3>
                 <div className="space-y-2 max-h-[600px] overflow-y-auto pr-2">
-                  {sensorTypes.map((sensor) => (
+                  {filteredSensorTypes.map((sensor) => (
                     <SensorAnalyticsCard
                       key={sensor.device_type}
                       sensor={sensor}
@@ -675,7 +843,7 @@ const DataAnalyticsContent = () => {
                       isSelected={selectedSensor === sensor.device_type}
                     />
                   ))}
-                  {sensorTypes.length === 0 && (
+                  {filteredSensorTypes.length === 0 && (
                     <p className="text-sm text-muted-foreground text-center py-8">
                       No sensors found
                     </p>
@@ -791,11 +959,11 @@ const DataAnalyticsContent = () => {
                 </CardHeader>
                 <CardContent>
                   <div className="space-y-3">
-                    {sensorTypes
+                    {filteredSensorTypes
                       .sort((a, b) => b.total_readings - a.total_readings)
                       .slice(0, 6)
                       .map(sensor => {
-                        const maxReadings = Math.max(...sensorTypes.map(s => s.total_readings));
+                        const maxReadings = Math.max(...filteredSensorTypes.map(s => s.total_readings));
                         const percentage = maxReadings > 0 ? (sensor.total_readings / maxReadings) * 100 : 0;
                         const color = getSensorColor(sensor.device_type);
                         
@@ -824,7 +992,7 @@ const DataAnalyticsContent = () => {
                 </CardHeader>
                 <CardContent>
                   <div className="space-y-2">
-                    {sensorTypes.map(sensor => {
+                    {filteredSensorTypes.map(sensor => {
                       const color = getSensorColor(sensor.device_type);
                       return (
                         <div 
