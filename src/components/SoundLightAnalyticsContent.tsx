@@ -49,10 +49,19 @@ const COLORS = {
   sound: "#8b5cf6",
 };
 
+const SENSOR_TYPES = ["light_sensor", "sound_sensor"] as const;
+type SoundLightSensorType = typeof SENSOR_TYPES[number];
+
+const SENSOR_TYPE_LABELS: Record<SoundLightSensorType, string> = {
+  light_sensor: "Light Sensor",
+  sound_sensor: "Sound Sensor",
+};
+
 const SoundLightAnalyticsContent = () => {
   const queryClient = useQueryClient();
   const [timeRange, setTimeRange] = useState("24");
   const [selectedClients, setSelectedClients] = useState<string[]>([]);
+  const [selectedSensorTypes, setSelectedSensorTypes] = useState<SoundLightSensorType[]>([]);
   
   const hours = parseInt(timeRange);
   
@@ -87,31 +96,50 @@ const SoundLightAnalyticsContent = () => {
     );
   };
 
+  const isSensorTypeSelected = (type: SoundLightSensorType) => 
+    selectedSensorTypes.length === 0 || selectedSensorTypes.includes(type);
+
+  const toggleSensorType = (type: SoundLightSensorType) => {
+    setSelectedSensorTypes(prev => 
+      prev.includes(type)
+        ? prev.filter(t => t !== type)
+        : [...prev, type]
+    );
+  };
+
   // Process light and sound data
   const chartData = useMemo(() => {
+    const showLight = isSensorTypeSelected("light_sensor");
+    const showSound = isSensorTypeSelected("sound_sensor");
+    
     return (arduinoData?.readings || [])
       .filter(r => {
         if (r.client_id && !isClientSelected(r.client_id)) return false;
-        return r.light_raw !== undefined || r.sound_raw !== undefined;
+        const hasLight = showLight && r.light_raw !== undefined;
+        const hasSound = showSound && r.sound_raw !== undefined;
+        return hasLight || hasSound;
       })
       .map(r => ({
         time: format(new Date(r.timestamp), "HH:mm"),
-        light: r.light_raw,
-        sound: r.sound_raw,
+        light: showLight ? r.light_raw : undefined,
+        sound: showSound ? r.sound_raw : undefined,
         client: r.client_id,
       }))
       .sort((a, b) => a.time.localeCompare(b.time));
-  }, [arduinoData, selectedClients]);
+  }, [arduinoData, selectedClients, selectedSensorTypes]);
 
   // Calculate stats
   const stats = useMemo(() => {
+    const showLight = isSensorTypeSelected("light_sensor");
+    const showSound = isSensorTypeSelected("sound_sensor");
+    
     const lightValues: number[] = [];
     const soundValues: number[] = [];
 
     arduinoData?.readings?.forEach(r => {
       if (r.client_id && !isClientSelected(r.client_id)) return;
-      if (r.light_raw !== undefined) lightValues.push(r.light_raw);
-      if (r.sound_raw !== undefined) soundValues.push(r.sound_raw);
+      if (showLight && r.light_raw !== undefined) lightValues.push(r.light_raw);
+      if (showSound && r.sound_raw !== undefined) soundValues.push(r.sound_raw);
     });
 
     return {
@@ -125,7 +153,7 @@ const SoundLightAnalyticsContent = () => {
       currentSound: soundValues.length > 0 ? soundValues[soundValues.length - 1] : null,
       totalReadings: lightValues.length + soundValues.length,
     };
-  }, [arduinoData, selectedClients]);
+  }, [arduinoData, selectedClients, selectedSensorTypes]);
 
   // Normalize for progress bars (assuming max raw value ~1023 for analog sensors)
   const lightPercent = stats.currentLight !== null ? Math.min(100, (stats.currentLight / 1023) * 100) : 0;
@@ -208,6 +236,48 @@ const SoundLightAnalyticsContent = () => {
                     </div>
                   ))
                 )}
+              </div>
+            </PopoverContent>
+          </Popover>
+
+          {/* Sensor Type Filter */}
+          <Popover>
+            <PopoverTrigger asChild>
+              <Button variant="outline" size="sm" className="gap-2">
+                <Filter className="w-4 h-4" />
+                Sensor Types
+                {selectedSensorTypes.length > 0 && (
+                  <Badge variant="secondary" className="ml-1">
+                    {selectedSensorTypes.length}
+                  </Badge>
+                )}
+              </Button>
+            </PopoverTrigger>
+            <PopoverContent className="w-64 p-3" align="end">
+              <div className="space-y-2">
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-sm font-medium">Filter by Sensor Type</span>
+                  {selectedSensorTypes.length > 0 && (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="h-6 text-xs"
+                      onClick={() => setSelectedSensorTypes([])}
+                    >
+                      Clear
+                    </Button>
+                  )}
+                </div>
+                {SENSOR_TYPES.map(type => (
+                  <div
+                    key={type}
+                    className="flex items-center gap-2 p-2 hover:bg-muted/50 rounded cursor-pointer"
+                    onClick={() => toggleSensorType(type)}
+                  >
+                    <Checkbox checked={selectedSensorTypes.includes(type)} />
+                    <span className="text-sm truncate">{SENSOR_TYPE_LABELS[type]}</span>
+                  </div>
+                ))}
               </div>
             </PopoverContent>
           </Popover>

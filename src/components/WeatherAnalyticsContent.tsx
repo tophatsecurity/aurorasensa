@@ -58,10 +58,22 @@ const COLORS = {
   humidity: "#06b6d4",
 };
 
+const SENSOR_TYPES = ["aht", "bmt", "thermal_probe", "arduino_th", "arduino_bmp"] as const;
+type SensorType = typeof SENSOR_TYPES[number];
+
+const SENSOR_TYPE_LABELS: Record<SensorType, string> = {
+  aht: "AHT Sensor",
+  bmt: "BMT Sensor",
+  thermal_probe: "Thermal Probe",
+  arduino_th: "Arduino TH",
+  arduino_bmp: "Arduino BMP",
+};
+
 const WeatherAnalyticsContent = () => {
   const queryClient = useQueryClient();
   const [timeRange, setTimeRange] = useState("24");
   const [selectedClients, setSelectedClients] = useState<string[]>([]);
+  const [selectedSensorTypes, setSelectedSensorTypes] = useState<SensorType[]>([]);
   
   const hours = parseInt(timeRange);
   
@@ -107,56 +119,73 @@ const WeatherAnalyticsContent = () => {
     );
   };
 
+  const isSensorTypeSelected = (type: SensorType) => 
+    selectedSensorTypes.length === 0 || selectedSensorTypes.includes(type);
+
+  const toggleSensorType = (type: SensorType) => {
+    setSelectedSensorTypes(prev => 
+      prev.includes(type)
+        ? prev.filter(t => t !== type)
+        : [...prev, type]
+    );
+  };
+
   // Combine temperature data from all sources
   const temperatureChartData = useMemo(() => {
     const timeMap = new Map<string, Record<string, number | null>>();
 
     // Process AHT sensor data
-    ahtData?.readings?.forEach(r => {
-      if (r.client_id && !isClientSelected(r.client_id)) return;
-      const temp = r.aht_temp_c ?? r.temp_c;
-      if (temp !== undefined) {
-        const time = format(new Date(r.timestamp), "HH:mm");
-        const existing = timeMap.get(time) || {};
-        existing.aht = temp;
-        timeMap.set(time, existing);
-      }
-    });
+    if (isSensorTypeSelected("aht")) {
+      ahtData?.readings?.forEach(r => {
+        if (r.client_id && !isClientSelected(r.client_id)) return;
+        const temp = r.aht_temp_c ?? r.temp_c;
+        if (temp !== undefined) {
+          const time = format(new Date(r.timestamp), "HH:mm");
+          const existing = timeMap.get(time) || {};
+          existing.aht = temp;
+          timeMap.set(time, existing);
+        }
+      });
+    }
 
     // Process BMT sensor data
-    bmtData?.readings?.forEach(r => {
-      if (r.client_id && !isClientSelected(r.client_id)) return;
-      const temp = r.bme280_temp_c ?? r.temp_c;
-      if (temp !== undefined) {
-        const time = format(new Date(r.timestamp), "HH:mm");
-        const existing = timeMap.get(time) || {};
-        existing.bmt = temp;
-        timeMap.set(time, existing);
-      }
-    });
+    if (isSensorTypeSelected("bmt")) {
+      bmtData?.readings?.forEach(r => {
+        if (r.client_id && !isClientSelected(r.client_id)) return;
+        const temp = r.bme280_temp_c ?? r.temp_c;
+        if (temp !== undefined) {
+          const time = format(new Date(r.timestamp), "HH:mm");
+          const existing = timeMap.get(time) || {};
+          existing.bmt = temp;
+          timeMap.set(time, existing);
+        }
+      });
+    }
 
     // Process Thermal Probe data
-    thermalData?.readings?.forEach(r => {
-      if (r.client_id && !isClientSelected(r.client_id)) return;
-      const temp = r.temp_c ?? r.probe_c ?? r.ambient_c;
-      if (temp !== undefined) {
-        const time = format(new Date(r.timestamp), "HH:mm");
-        const existing = timeMap.get(time) || {};
-        existing.thermal = temp;
-        timeMap.set(time, existing);
-      }
-    });
+    if (isSensorTypeSelected("thermal_probe")) {
+      thermalData?.readings?.forEach(r => {
+        if (r.client_id && !isClientSelected(r.client_id)) return;
+        const temp = r.temp_c ?? r.probe_c ?? r.ambient_c;
+        if (temp !== undefined) {
+          const time = format(new Date(r.timestamp), "HH:mm");
+          const existing = timeMap.get(time) || {};
+          existing.thermal = temp;
+          timeMap.set(time, existing);
+        }
+      });
+    }
 
     // Process Arduino TH data
     arduinoData?.readings?.forEach(r => {
       if (r.client_id && !isClientSelected(r.client_id)) return;
-      if (r.th_temp_c !== undefined) {
+      if (isSensorTypeSelected("arduino_th") && r.th_temp_c !== undefined) {
         const time = format(new Date(r.timestamp), "HH:mm");
         const existing = timeMap.get(time) || {};
         existing.arduino_th = r.th_temp_c;
         timeMap.set(time, existing);
       }
-      if (r.bmp_temp_c !== undefined) {
+      if (isSensorTypeSelected("arduino_bmp") && r.bmp_temp_c !== undefined) {
         const time = format(new Date(r.timestamp), "HH:mm");
         const existing = timeMap.get(time) || {};
         existing.arduino_bmp = r.bmp_temp_c;
@@ -167,40 +196,46 @@ const WeatherAnalyticsContent = () => {
     return Array.from(timeMap.entries())
       .map(([time, values]) => ({ time, ...values }))
       .sort((a, b) => a.time.localeCompare(b.time));
-  }, [thermalData, ahtData, arduinoData, bmtData, selectedClients]);
+  }, [thermalData, ahtData, arduinoData, bmtData, selectedClients, selectedSensorTypes]);
+  
 
   // Combine humidity data
   const humidityChartData = useMemo(() => {
     const timeMap = new Map<string, Record<string, number | null>>();
 
-    ahtData?.readings?.forEach(r => {
-      if (r.client_id && !isClientSelected(r.client_id)) return;
-      const humidity = r.aht_humidity ?? r.humidity;
-      if (humidity !== undefined) {
-        const time = format(new Date(r.timestamp), "HH:mm");
-        const existing = timeMap.get(time) || {};
-        existing.aht = humidity;
-        timeMap.set(time, existing);
-      }
-    });
+    if (isSensorTypeSelected("aht")) {
+      ahtData?.readings?.forEach(r => {
+        if (r.client_id && !isClientSelected(r.client_id)) return;
+        const humidity = r.aht_humidity ?? r.humidity;
+        if (humidity !== undefined) {
+          const time = format(new Date(r.timestamp), "HH:mm");
+          const existing = timeMap.get(time) || {};
+          existing.aht = humidity;
+          timeMap.set(time, existing);
+        }
+      });
+    }
 
-    arduinoData?.readings?.forEach(r => {
-      if (r.client_id && !isClientSelected(r.client_id)) return;
-      if (r.th_humidity !== undefined) {
-        const time = format(new Date(r.timestamp), "HH:mm");
-        const existing = timeMap.get(time) || {};
-        existing.arduino = r.th_humidity;
-        timeMap.set(time, existing);
-      }
-    });
+    if (isSensorTypeSelected("arduino_th")) {
+      arduinoData?.readings?.forEach(r => {
+        if (r.client_id && !isClientSelected(r.client_id)) return;
+        if (r.th_humidity !== undefined) {
+          const time = format(new Date(r.timestamp), "HH:mm");
+          const existing = timeMap.get(time) || {};
+          existing.arduino = r.th_humidity;
+          timeMap.set(time, existing);
+        }
+      });
+    }
 
     return Array.from(timeMap.entries())
       .map(([time, values]) => ({ time, ...values }))
       .sort((a, b) => a.time.localeCompare(b.time));
-  }, [ahtData, arduinoData, selectedClients]);
+  }, [ahtData, arduinoData, selectedClients, selectedSensorTypes]);
 
   // Pressure data from Arduino BMP sensor
   const pressureChartData = useMemo(() => {
+    if (!isSensorTypeSelected("arduino_bmp")) return [];
     return (arduinoData?.readings || [])
       .filter(r => {
         if (r.client_id && !isClientSelected(r.client_id)) return false;
@@ -211,7 +246,7 @@ const WeatherAnalyticsContent = () => {
         pressure: r.bmp_pressure_hpa,
       }))
       .sort((a, b) => a.time.localeCompare(b.time));
-  }, [arduinoData, selectedClients]);
+  }, [arduinoData, selectedClients, selectedSensorTypes]);
 
   // Calculate stats
   const stats = useMemo(() => {
@@ -219,26 +254,30 @@ const WeatherAnalyticsContent = () => {
     const humidities: number[] = [];
     const pressures: number[] = [];
 
-    ahtData?.readings?.forEach(r => {
-      if (r.client_id && !isClientSelected(r.client_id)) return;
-      const temp = r.aht_temp_c ?? r.temp_c;
-      if (temp !== undefined) temps.push(temp);
-      const hum = r.aht_humidity ?? r.humidity;
-      if (hum !== undefined) humidities.push(hum);
-    });
+    if (isSensorTypeSelected("aht")) {
+      ahtData?.readings?.forEach(r => {
+        if (r.client_id && !isClientSelected(r.client_id)) return;
+        const temp = r.aht_temp_c ?? r.temp_c;
+        if (temp !== undefined) temps.push(temp);
+        const hum = r.aht_humidity ?? r.humidity;
+        if (hum !== undefined) humidities.push(hum);
+      });
+    }
 
-    thermalData?.readings?.forEach(r => {
-      if (r.client_id && !isClientSelected(r.client_id)) return;
-      const temp = r.temp_c ?? r.probe_c ?? r.ambient_c;
-      if (temp !== undefined) temps.push(temp);
-    });
+    if (isSensorTypeSelected("thermal_probe")) {
+      thermalData?.readings?.forEach(r => {
+        if (r.client_id && !isClientSelected(r.client_id)) return;
+        const temp = r.temp_c ?? r.probe_c ?? r.ambient_c;
+        if (temp !== undefined) temps.push(temp);
+      });
+    }
 
     arduinoData?.readings?.forEach(r => {
       if (r.client_id && !isClientSelected(r.client_id)) return;
-      if (r.th_temp_c !== undefined) temps.push(r.th_temp_c);
-      if (r.bmp_temp_c !== undefined) temps.push(r.bmp_temp_c);
-      if (r.th_humidity !== undefined) humidities.push(r.th_humidity);
-      if (r.bmp_pressure_hpa !== undefined) pressures.push(r.bmp_pressure_hpa);
+      if (isSensorTypeSelected("arduino_th") && r.th_temp_c !== undefined) temps.push(r.th_temp_c);
+      if (isSensorTypeSelected("arduino_bmp") && r.bmp_temp_c !== undefined) temps.push(r.bmp_temp_c);
+      if (isSensorTypeSelected("arduino_th") && r.th_humidity !== undefined) humidities.push(r.th_humidity);
+      if (isSensorTypeSelected("arduino_bmp") && r.bmp_pressure_hpa !== undefined) pressures.push(r.bmp_pressure_hpa);
     });
 
     return {
@@ -249,7 +288,7 @@ const WeatherAnalyticsContent = () => {
       avgPressure: pressures.length > 0 ? pressures.reduce((a, b) => a + b, 0) / pressures.length : null,
       totalReadings: temps.length + humidities.length + pressures.length,
     };
-  }, [ahtData, thermalData, arduinoData, selectedClients]);
+  }, [ahtData, thermalData, arduinoData, selectedClients, selectedSensorTypes]);
 
   return (
     <div className="flex-1 overflow-y-auto p-6">
@@ -307,6 +346,48 @@ const WeatherAnalyticsContent = () => {
                     </div>
                   ))
                 )}
+              </div>
+            </PopoverContent>
+          </Popover>
+
+          {/* Sensor Type Filter */}
+          <Popover>
+            <PopoverTrigger asChild>
+              <Button variant="outline" size="sm" className="gap-2">
+                <Filter className="w-4 h-4" />
+                Sensor Types
+                {selectedSensorTypes.length > 0 && (
+                  <Badge variant="secondary" className="ml-1">
+                    {selectedSensorTypes.length}
+                  </Badge>
+                )}
+              </Button>
+            </PopoverTrigger>
+            <PopoverContent className="w-64 p-3" align="end">
+              <div className="space-y-2">
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-sm font-medium">Filter by Sensor Type</span>
+                  {selectedSensorTypes.length > 0 && (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="h-6 text-xs"
+                      onClick={() => setSelectedSensorTypes([])}
+                    >
+                      Clear
+                    </Button>
+                  )}
+                </div>
+                {SENSOR_TYPES.map(type => (
+                  <div
+                    key={type}
+                    className="flex items-center gap-2 p-2 hover:bg-muted/50 rounded cursor-pointer"
+                    onClick={() => toggleSensorType(type)}
+                  >
+                    <Checkbox checked={selectedSensorTypes.includes(type)} />
+                    <span className="text-sm truncate">{SENSOR_TYPE_LABELS[type]}</span>
+                  </div>
+                ))}
               </div>
             </PopoverContent>
           </Popover>

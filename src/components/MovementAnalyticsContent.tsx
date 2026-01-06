@@ -53,10 +53,21 @@ const COLORS = {
   magnitude: "#8b5cf6",
 };
 
+const SENSOR_TYPES = ["accel_x", "accel_y", "accel_z", "magnitude"] as const;
+type MovementSensorType = typeof SENSOR_TYPES[number];
+
+const SENSOR_TYPE_LABELS: Record<MovementSensorType, string> = {
+  accel_x: "X Axis (Lateral)",
+  accel_y: "Y Axis (Vertical)",
+  accel_z: "Z Axis (Forward)",
+  magnitude: "Magnitude",
+};
+
 const MovementAnalyticsContent = () => {
   const queryClient = useQueryClient();
   const [timeRange, setTimeRange] = useState("24");
   const [selectedClients, setSelectedClients] = useState<string[]>([]);
+  const [selectedSensorTypes, setSelectedSensorTypes] = useState<MovementSensorType[]>([]);
   
   const hours = parseInt(timeRange);
   
@@ -95,8 +106,24 @@ const MovementAnalyticsContent = () => {
     );
   };
 
+  const isSensorTypeSelected = (type: MovementSensorType) => 
+    selectedSensorTypes.length === 0 || selectedSensorTypes.includes(type);
+
+  const toggleSensorType = (type: MovementSensorType) => {
+    setSelectedSensorTypes(prev => 
+      prev.includes(type)
+        ? prev.filter(t => t !== type)
+        : [...prev, type]
+    );
+  };
+
   // Process accelerometer data
   const accelData = useMemo(() => {
+    const showX = isSensorTypeSelected("accel_x");
+    const showY = isSensorTypeSelected("accel_y");
+    const showZ = isSensorTypeSelected("accel_z");
+    const showMagnitude = isSensorTypeSelected("magnitude");
+    
     return (arduinoData?.readings || [])
       .filter(r => {
         if (r.client_id && !isClientSelected(r.client_id)) return false;
@@ -110,29 +137,44 @@ const MovementAnalyticsContent = () => {
         
         return {
           time: format(new Date(r.timestamp), "HH:mm:ss"),
-          x,
-          y,
-          z,
-          magnitude,
+          x: showX ? x : undefined,
+          y: showY ? y : undefined,
+          z: showZ ? z : undefined,
+          magnitude: showMagnitude ? magnitude : undefined,
           client: r.client_id,
         };
       })
       .sort((a, b) => a.time.localeCompare(b.time));
-  }, [arduinoData, selectedClients]);
+  }, [arduinoData, selectedClients, selectedSensorTypes]);
 
   // Calculate stats
   const stats = useMemo(() => {
+    const showX = isSensorTypeSelected("accel_x");
+    const showY = isSensorTypeSelected("accel_y");
+    const showZ = isSensorTypeSelected("accel_z");
+    const showMagnitude = isSensorTypeSelected("magnitude");
+    
     const xValues: number[] = [];
     const yValues: number[] = [];
     const zValues: number[] = [];
     const magnitudes: number[] = [];
 
-    accelData.forEach(r => {
-      xValues.push(r.x);
-      yValues.push(r.y);
-      zValues.push(r.z);
-      magnitudes.push(r.magnitude);
-    });
+    (arduinoData?.readings || [])
+      .filter(r => {
+        if (r.client_id && !isClientSelected(r.client_id)) return false;
+        return r.accel_x !== undefined || r.accel_y !== undefined || r.accel_z !== undefined;
+      })
+      .forEach(r => {
+        const x = r.accel_x ?? 0;
+        const y = r.accel_y ?? 0;
+        const z = r.accel_z ?? 0;
+        const magnitude = Math.sqrt(x * x + y * y + z * z);
+        
+        if (showX) xValues.push(x);
+        if (showY) yValues.push(y);
+        if (showZ) zValues.push(z);
+        if (showMagnitude) magnitudes.push(magnitude);
+      });
 
     return {
       currentX: xValues.length > 0 ? xValues[xValues.length - 1] : null,
@@ -145,9 +187,9 @@ const MovementAnalyticsContent = () => {
       avgMagnitude: magnitudes.length > 0 ? magnitudes.reduce((a, b) => a + b, 0) / magnitudes.length : null,
       maxMagnitude: magnitudes.length > 0 ? Math.max(...magnitudes) : null,
       minMagnitude: magnitudes.length > 0 ? Math.min(...magnitudes) : null,
-      totalReadings: accelData.length,
+      totalReadings: Math.max(xValues.length, yValues.length, zValues.length, magnitudes.length),
     };
-  }, [accelData]);
+  }, [arduinoData, selectedClients, selectedSensorTypes]);
 
   // Detect motion state
   const getMotionState = (magnitude: number | null) => {
@@ -163,8 +205,29 @@ const MovementAnalyticsContent = () => {
   const motionState = getMotionState(stats.currentMagnitude);
 
   // 3D scatter data for XY and XZ planes
-  const scatterXY = accelData.map(d => ({ x: d.x, y: d.y, z: d.magnitude }));
-  const scatterXZ = accelData.map(d => ({ x: d.x, y: d.z, z: d.magnitude }));
+  const scatterXY = useMemo(() => 
+    (arduinoData?.readings || [])
+      .filter(r => !r.client_id || isClientSelected(r.client_id))
+      .filter(r => r.accel_x !== undefined && r.accel_y !== undefined)
+      .map(r => ({ 
+        x: r.accel_x ?? 0, 
+        y: r.accel_y ?? 0, 
+        z: Math.sqrt((r.accel_x ?? 0) ** 2 + (r.accel_y ?? 0) ** 2 + (r.accel_z ?? 0) ** 2) 
+      })), 
+    [arduinoData, selectedClients]
+  );
+  
+  const scatterXZ = useMemo(() => 
+    (arduinoData?.readings || [])
+      .filter(r => !r.client_id || isClientSelected(r.client_id))
+      .filter(r => r.accel_x !== undefined && r.accel_z !== undefined)
+      .map(r => ({ 
+        x: r.accel_x ?? 0, 
+        y: r.accel_z ?? 0, 
+        z: Math.sqrt((r.accel_x ?? 0) ** 2 + (r.accel_y ?? 0) ** 2 + (r.accel_z ?? 0) ** 2) 
+      })), 
+    [arduinoData, selectedClients]
+  );
 
   return (
     <div className="flex-1 overflow-y-auto p-6">
@@ -222,6 +285,48 @@ const MovementAnalyticsContent = () => {
                     </div>
                   ))
                 )}
+              </div>
+            </PopoverContent>
+          </Popover>
+
+          {/* Sensor Type Filter */}
+          <Popover>
+            <PopoverTrigger asChild>
+              <Button variant="outline" size="sm" className="gap-2">
+                <Filter className="w-4 h-4" />
+                Axes
+                {selectedSensorTypes.length > 0 && (
+                  <Badge variant="secondary" className="ml-1">
+                    {selectedSensorTypes.length}
+                  </Badge>
+                )}
+              </Button>
+            </PopoverTrigger>
+            <PopoverContent className="w-64 p-3" align="end">
+              <div className="space-y-2">
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-sm font-medium">Filter by Axis</span>
+                  {selectedSensorTypes.length > 0 && (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="h-6 text-xs"
+                      onClick={() => setSelectedSensorTypes([])}
+                    >
+                      Clear
+                    </Button>
+                  )}
+                </div>
+                {SENSOR_TYPES.map(type => (
+                  <div
+                    key={type}
+                    className="flex items-center gap-2 p-2 hover:bg-muted/50 rounded cursor-pointer"
+                    onClick={() => toggleSensorType(type)}
+                  >
+                    <Checkbox checked={selectedSensorTypes.includes(type)} />
+                    <span className="text-sm truncate">{SENSOR_TYPE_LABELS[type]}</span>
+                  </div>
+                ))}
               </div>
             </PopoverContent>
           </Popover>
