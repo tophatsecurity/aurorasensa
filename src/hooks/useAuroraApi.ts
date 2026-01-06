@@ -1914,6 +1914,7 @@ export function useStarlinkTimeseries(hours: number = 24) {
           timestamp: string;
           device_id?: string;
           device_type?: string;
+          client_id?: string;
           data?: {
             power_w?: number;
             power_watts?: number;
@@ -2004,6 +2005,7 @@ export function useThermalProbeTimeseries(hours: number = 24) {
           timestamp: string;
           device_id?: string;
           device_type?: string;
+          client_id?: string;
           data?: {
             temperature_c?: number;
             temperature_f?: number;
@@ -2030,6 +2032,7 @@ export function useThermalProbeTimeseries(hours: number = 24) {
         const transformedReadings: ThermalProbeTimeseriesPoint[] = (response.readings || []).map(r => ({
           timestamp: r.timestamp,
           device_id: r.device_id,
+          client_id: r.client_id,
           // Try nested data first, then fall back to direct properties
           temp_c: r.data?.temperature_c ?? r.data?.temp_c ?? r.temp_c,
           temp_f: r.data?.temperature_f ?? r.data?.temp_f ?? r.temp_f,
@@ -2094,6 +2097,7 @@ export function useArduinoSensorTimeseries(hours: number = 24) {
           timestamp: string;
           device_id?: string;
           device_type?: string;
+          client_id?: string;
           data?: {
             th?: { temp_c?: number; hum_pct?: number };
             bmp?: { temp_c?: number; press_hpa?: number };
@@ -2129,6 +2133,7 @@ export function useArduinoSensorTimeseries(hours: number = 24) {
           return {
             timestamp: r.timestamp,
             device_id: r.device_id,
+            client_id: r.client_id,
             // DHT/AHT temperature from nested or legacy format
             th_temp_c: data?.th?.temp_c ?? data?.aht_temp_c ?? data?.temp_c,
             th_humidity: data?.th?.hum_pct ?? data?.aht_humidity ?? data?.humidity,
@@ -2188,6 +2193,7 @@ export function useAhtSensorTimeseries(hours: number = 24) {
           timestamp: string;
           device_id?: string;
           device_type?: string;
+          client_id?: string;
           data?: {
             th?: { temp_c?: number; hum_pct?: number };
             aht_temp_c?: number;
@@ -2217,6 +2223,7 @@ export function useAhtSensorTimeseries(hours: number = 24) {
           return {
             timestamp: r.timestamp,
             device_id: r.device_id,
+            client_id: r.client_id,
             aht_temp_c: thTemp ?? r.data?.aht_temp_c ?? r.aht_temp_c ?? r.data?.temp_c ?? r.temp_c,
             aht_humidity: thHum ?? r.data?.aht_humidity ?? r.aht_humidity ?? r.data?.humidity ?? r.humidity,
             temp_c: thTemp ?? r.data?.temp_c ?? r.temp_c ?? r.data?.aht_temp_c ?? r.aht_temp_c,
@@ -2271,6 +2278,7 @@ export function useWifiScannerTimeseries(hours: number = 24) {
           timestamp: string;
           device_id?: string;
           device_type?: string;
+          client_id?: string;
           data?: {
             ssid?: string;
             bssid?: string;
@@ -2304,6 +2312,7 @@ export function useWifiScannerTimeseries(hours: number = 24) {
         const transformedReadings: WifiScannerReading[] = (response.readings || []).map(r => ({
           timestamp: r.timestamp,
           device_id: r.device_id,
+          client_id: r.client_id,
           ssid: r.data?.ssid ?? r.ssid,
           bssid: r.data?.bssid ?? r.bssid,
           channel: r.data?.channel ?? r.channel,
@@ -2362,6 +2371,7 @@ export function useBluetoothScannerTimeseries(hours: number = 24) {
           timestamp: string;
           device_id?: string;
           device_type?: string;
+          client_id?: string;
           data?: {
             mac_address?: string;
             name?: string;
@@ -2394,6 +2404,7 @@ export function useBluetoothScannerTimeseries(hours: number = 24) {
         const transformedReadings: BluetoothScannerReading[] = (response.readings || []).map(r => ({
           timestamp: r.timestamp,
           device_id: r.device_id,
+          client_id: r.client_id,
           mac_address: r.data?.mac_address ?? r.mac_address,
           name: r.data?.name ?? r.name,
           rssi: r.data?.rssi ?? r.rssi ?? r.data?.signal_strength ?? r.signal_strength,
@@ -2451,6 +2462,7 @@ export function useLoraDetectorTimeseries(hours: number = 24) {
           timestamp: string;
           device_id?: string;
           device_type?: string;
+          client_id?: string;
           data?: {
             frequency?: number;
             rssi?: number;
@@ -2482,6 +2494,7 @@ export function useLoraDetectorTimeseries(hours: number = 24) {
         const transformedReadings: LoraDetectorReading[] = (response.readings || []).map(r => ({
           timestamp: r.timestamp,
           device_id: r.device_id,
+          client_id: r.client_id,
           frequency: r.data?.frequency ?? r.frequency,
           rssi: r.data?.rssi ?? r.rssi,
           snr: r.data?.snr ?? r.snr,
@@ -2656,6 +2669,7 @@ export function useBmtSensorTimeseries(hours: number = 24) {
           timestamp: string;
           device_id?: string;
           device_type?: string;
+          client_id?: string;
           data?: {
             bmp?: { temp_c?: number; press_hpa?: number };
             bme280_temp_c?: number;
@@ -2689,6 +2703,7 @@ export function useBmtSensorTimeseries(hours: number = 24) {
           return {
             timestamp: r.timestamp,
             device_id: r.device_id,
+            client_id: r.client_id,
             bme280_temp_c: bmpTemp ?? r.data?.bme280_temp_c ?? r.bme280_temp_c ?? r.data?.temp_c ?? r.temp_c,
             bme280_humidity: r.data?.bme280_humidity ?? r.bme280_humidity ?? r.data?.humidity ?? r.humidity,
             bme280_pressure_hpa: bmpPressure ?? r.data?.bme280_pressure_hpa ?? r.bme280_pressure_hpa ?? r.data?.pressure_hpa ?? r.pressure_hpa,
