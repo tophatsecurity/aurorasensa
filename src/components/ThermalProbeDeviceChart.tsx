@@ -10,7 +10,14 @@ import {
   Legend
 } from "recharts";
 import { Thermometer, Loader2 } from "lucide-react";
-import { useThermalProbeTimeseries, useArduinoSensorTimeseries } from "@/hooks/useAuroraApi";
+import { 
+  useThermalProbeTimeseries, 
+  useArduinoSensorTimeseries, 
+  useAhtSensorTimeseries,
+  useBmtSensorTimeseries,
+  useSystemMonitorTimeseries,
+  useStarlinkTimeseries
+} from "@/hooks/useAuroraApi";
 import { format } from "date-fns";
 
 // Helper to convert Celsius to Fahrenheit
@@ -18,21 +25,25 @@ const cToF = (celsius: number): number => {
   return (celsius * 9/5) + 32;
 };
 
-// Color palette for different sources
+// Color palette for different source types
 const SOURCE_COLORS: Record<string, string> = {
   'thermal_probe': '#ef4444', // red
   'arduino_th': '#3b82f6', // blue - DHT/AHT sensor
   'arduino_bmp': '#22c55e', // green - BMP280 sensor
+  'aht_sensor': '#8b5cf6', // purple - AHT sensor
+  'bmt_sensor': '#f59e0b', // amber - BME/BMT sensor
+  'system_cpu': '#06b6d4', // cyan - CPU temp
+  'starlink': '#ec4899', // pink - Starlink (if has temp)
 };
 
 // Device-specific colors within each source type
 const DEVICE_COLORS = [
-  '#f59e0b', // amber
-  '#8b5cf6', // purple
-  '#ec4899', // pink
-  '#14b8a6', // teal
   '#f97316', // orange
-  '#06b6d4', // cyan
+  '#14b8a6', // teal
+  '#a855f7', // violet
+  '#84cc16', // lime
+  '#e11d48', // rose
+  '#0ea5e9', // sky
 ];
 
 interface ThermalDeviceChartProps {
@@ -40,10 +51,15 @@ interface ThermalDeviceChartProps {
 }
 
 const ThermalDeviceChart = ({ hours = 24 }: ThermalDeviceChartProps) => {
+  // Fetch all temperature sources
   const { data: thermalData, isLoading: thermalLoading } = useThermalProbeTimeseries(hours);
   const { data: arduinoData, isLoading: arduinoLoading } = useArduinoSensorTimeseries(hours);
+  const { data: ahtData, isLoading: ahtLoading } = useAhtSensorTimeseries(hours);
+  const { data: bmtData, isLoading: bmtLoading } = useBmtSensorTimeseries(hours);
+  const { data: systemData, isLoading: systemLoading } = useSystemMonitorTimeseries(hours);
+  const { data: starlinkData, isLoading: starlinkLoading } = useStarlinkTimeseries(hours);
 
-  const isLoading = thermalLoading || arduinoLoading;
+  const isLoading = thermalLoading || arduinoLoading || ahtLoading || bmtLoading || systemLoading || starlinkLoading;
 
   // Combine all temperature sources and format for charting
   const { chartData, sources } = useMemo(() => {
@@ -106,12 +122,109 @@ const ThermalDeviceChart = ({ hours = 24 }: ThermalDeviceChartProps) => {
       });
     }
 
+    // Process standalone AHT sensor data
+    if (ahtData?.readings && ahtData.readings.length > 0) {
+      ahtData.readings.forEach((r) => {
+        const timestamp = r.timestamp ? new Date(r.timestamp).getTime() : null;
+        if (!timestamp) return;
+        
+        const temp = r.aht_temp_c ?? r.temp_c;
+        if (temp === undefined || temp === null) return;
+
+        const deviceId = r.device_id || 'aht_1';
+        const sourceKey = `aht_${deviceId}`;
+        sourceSet.add(sourceKey);
+
+        const timeKey = String(timestamp);
+        if (!timeMap.has(timeKey)) {
+          timeMap.set(timeKey, { time: timestamp });
+        }
+        
+        const entry = timeMap.get(timeKey)!;
+        entry[`${sourceKey}_f`] = Number(cToF(temp).toFixed(1));
+        entry[`${sourceKey}_c`] = Number(temp.toFixed(1));
+      });
+    }
+
+    // Process BME/BMT sensor data
+    if (bmtData?.readings && bmtData.readings.length > 0) {
+      bmtData.readings.forEach((r) => {
+        const timestamp = r.timestamp ? new Date(r.timestamp).getTime() : null;
+        if (!timestamp) return;
+        
+        const temp = r.bme280_temp_c ?? r.temp_c;
+        if (temp === undefined || temp === null) return;
+
+        const deviceId = r.device_id || 'bmt_1';
+        const sourceKey = `bmt_${deviceId}`;
+        sourceSet.add(sourceKey);
+
+        const timeKey = String(timestamp);
+        if (!timeMap.has(timeKey)) {
+          timeMap.set(timeKey, { time: timestamp });
+        }
+        
+        const entry = timeMap.get(timeKey)!;
+        entry[`${sourceKey}_f`] = Number(cToF(temp).toFixed(1));
+        entry[`${sourceKey}_c`] = Number(temp.toFixed(1));
+      });
+    }
+
+    // Process System Monitor CPU temperature
+    if (systemData?.readings && systemData.readings.length > 0) {
+      systemData.readings.forEach((r) => {
+        const timestamp = r.timestamp ? new Date(r.timestamp).getTime() : null;
+        if (!timestamp) return;
+        
+        const temp = r.cpu_temp_c;
+        if (temp === undefined || temp === null) return;
+
+        const deviceId = r.device_id || 'system_1';
+        const sourceKey = `cpu_${deviceId}`;
+        sourceSet.add(sourceKey);
+
+        const timeKey = String(timestamp);
+        if (!timeMap.has(timeKey)) {
+          timeMap.set(timeKey, { time: timestamp });
+        }
+        
+        const entry = timeMap.get(timeKey)!;
+        entry[`${sourceKey}_f`] = Number(cToF(temp).toFixed(1));
+        entry[`${sourceKey}_c`] = Number(temp.toFixed(1));
+      });
+    }
+
+    // Process Starlink data (check for any temp fields)
+    if (starlinkData?.readings && starlinkData.readings.length > 0) {
+      starlinkData.readings.forEach((r) => {
+        const timestamp = r.timestamp ? new Date(r.timestamp).getTime() : null;
+        if (!timestamp) return;
+        
+        // Starlink might have temperature data in some fields - cast through unknown first
+        const rawReading = r as unknown as Record<string, unknown>;
+        const temp = rawReading.dish_temp_c ?? rawReading.temp_c ?? rawReading.temperature_c;
+        if (temp === undefined || temp === null || typeof temp !== 'number') return;
+
+        const sourceKey = 'starlink_dish';
+        sourceSet.add(sourceKey);
+
+        const timeKey = String(timestamp);
+        if (!timeMap.has(timeKey)) {
+          timeMap.set(timeKey, { time: timestamp });
+        }
+        
+        const entry = timeMap.get(timeKey)!;
+        entry[`${sourceKey}_f`] = Number(cToF(temp).toFixed(1));
+        entry[`${sourceKey}_c`] = Number(temp.toFixed(1));
+      });
+    }
+
     // Convert to array and sort by time
     const chartData = Array.from(timeMap.values())
       .sort((a, b) => (a.time as number) - (b.time as number));
 
     return { chartData, sources: Array.from(sourceSet) };
-  }, [thermalData?.readings, arduinoData?.readings]);
+  }, [thermalData?.readings, arduinoData?.readings, ahtData?.readings, bmtData?.readings, systemData?.readings, starlinkData?.readings]);
 
   // Calculate stats for each source and overall mean
   const sourceStats = useMemo(() => {
@@ -163,6 +276,10 @@ const ThermalDeviceChart = ({ hours = 24 }: ThermalDeviceChartProps) => {
     if (sourceKey.startsWith('probe_')) return SOURCE_COLORS['thermal_probe'];
     if (sourceKey.startsWith('th_')) return SOURCE_COLORS['arduino_th'];
     if (sourceKey.startsWith('bmp_')) return SOURCE_COLORS['arduino_bmp'];
+    if (sourceKey.startsWith('aht_')) return SOURCE_COLORS['aht_sensor'];
+    if (sourceKey.startsWith('bmt_')) return SOURCE_COLORS['bmt_sensor'];
+    if (sourceKey.startsWith('cpu_')) return SOURCE_COLORS['system_cpu'];
+    if (sourceKey.startsWith('starlink')) return SOURCE_COLORS['starlink'];
     return DEVICE_COLORS[index % DEVICE_COLORS.length];
   };
 
@@ -179,6 +296,21 @@ const ThermalDeviceChart = ({ hours = 24 }: ThermalDeviceChartProps) => {
       const deviceId = sourceKey.replace('bmp_', '');
       return `BMP: ${deviceId.replace(/_/g, ' ')}`;
     }
+    if (sourceKey.startsWith('aht_')) {
+      const deviceId = sourceKey.replace('aht_', '');
+      return `AHT: ${deviceId.replace(/_/g, ' ')}`;
+    }
+    if (sourceKey.startsWith('bmt_')) {
+      const deviceId = sourceKey.replace('bmt_', '');
+      return `BME: ${deviceId.replace(/_/g, ' ')}`;
+    }
+    if (sourceKey.startsWith('cpu_')) {
+      const deviceId = sourceKey.replace('cpu_', '');
+      return `CPU: ${deviceId.replace(/_/g, ' ')}`;
+    }
+    if (sourceKey.startsWith('starlink')) {
+      return 'Starlink Dish';
+    }
     return sourceKey.replace(/_/g, ' ');
   };
 
@@ -194,7 +326,7 @@ const ThermalDeviceChart = ({ hours = 24 }: ThermalDeviceChartProps) => {
               All Temperatures Over Time
             </h4>
             <p className="text-xs text-muted-foreground">
-              Thermal Probe + Arduino Sensors (°F / °C)
+              All Sensor Sources (°F / °C)
             </p>
           </div>
         </div>
@@ -212,7 +344,7 @@ const ThermalDeviceChart = ({ hours = 24 }: ThermalDeviceChartProps) => {
 
       {/* Averages by source */}
       {!isLoading && sourceStats && Object.keys(sourceStats.bySource).length > 0 && (
-        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2 mb-4 p-3 rounded-lg bg-muted/30 border border-border/30">
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6 gap-2 mb-4 p-3 rounded-lg bg-muted/30 border border-border/30">
           {Object.entries(sourceStats.bySource).map(([source, stats], index) => (
             <div key={source} className="flex items-center gap-2">
               <div 
