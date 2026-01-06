@@ -3836,3 +3836,332 @@ export function useLoRaSpectrumAnalysis() {
     staleTime: 15000,
   });
 }
+
+// =============================================
+// GPSD STATUS & GPS HOOKS
+// =============================================
+
+export interface GpsdStatus {
+  timestamp?: string;
+  mode?: number; // 0=no fix, 1=no fix, 2=2D fix, 3=3D fix
+  latitude?: number;
+  longitude?: number;
+  altitude?: number;
+  speed?: number; // m/s
+  track?: number; // heading in degrees
+  climb?: number; // vertical speed m/s
+  time?: string;
+  ept?: number; // estimated time uncertainty
+  epx?: number; // longitude error
+  epy?: number; // latitude error
+  epv?: number; // altitude error
+  eps?: number; // speed error
+  satellites_used?: number;
+  satellites_visible?: number;
+  hdop?: number;
+  vdop?: number;
+  pdop?: number;
+  status?: string;
+  device?: string;
+}
+
+export interface VisibleSatellite {
+  PRN?: number;
+  elevation?: number;
+  azimuth?: number;
+  ss?: number; // signal strength
+  used?: boolean;
+  gnssid?: number;
+  svid?: number;
+}
+
+export interface VisibleSatsResponse {
+  timestamp?: string;
+  satellites?: VisibleSatellite[];
+  satellites_visible?: number;
+  satellites_used?: number;
+}
+
+export function useGpsdStatus() {
+  return useQuery({
+    queryKey: ["aurora", "gpsd", "status"],
+    queryFn: async () => {
+      try {
+        // This endpoint returns JSONL, we need to get the latest entry
+        const response = await callAuroraApi<GpsdStatus | GpsdStatus[]>("/gpsd_status.jsonl");
+        // If it's an array, return the last entry
+        if (Array.isArray(response)) {
+          return response[response.length - 1] || null;
+        }
+        return response;
+      } catch (error) {
+        console.warn("Failed to fetch GPSD status:", error);
+        return null;
+      }
+    },
+    refetchInterval: 5000,
+    retry: 1,
+  });
+}
+
+export function useVisibleSatellites() {
+  return useQuery({
+    queryKey: ["aurora", "gpsd", "satellites"],
+    queryFn: async () => {
+      try {
+        const response = await callAuroraApi<VisibleSatsResponse | VisibleSatellite[]>("/visible_sats.jsonl");
+        // Handle both array of satellites or response with satellites property
+        if (Array.isArray(response)) {
+          return { satellites: response, satellites_visible: response.length };
+        }
+        return response;
+      } catch (error) {
+        console.warn("Failed to fetch visible satellites:", error);
+        return { satellites: [], satellites_visible: 0 };
+      }
+    },
+    refetchInterval: 5000,
+    retry: 1,
+  });
+}
+
+// =============================================
+// GENERIC TIMESERIES HOOK
+// =============================================
+
+export interface GenericTimeseriesPoint {
+  timestamp: string;
+  value?: number;
+  device_id?: string;
+  device_type?: string;
+  [key: string]: unknown;
+}
+
+export interface GenericTimeseriesResponse {
+  count?: number;
+  data?: GenericTimeseriesPoint[];
+  points?: GenericTimeseriesPoint[];
+  readings?: GenericTimeseriesPoint[];
+}
+
+export function useTimeseries(sensorType?: string, deviceId?: string, hours: number = 24) {
+  return useQuery({
+    queryKey: ["aurora", "timeseries", sensorType, deviceId, hours],
+    queryFn: async () => {
+      try {
+        const params = new URLSearchParams();
+        if (sensorType) params.append("sensor_type", sensorType);
+        if (deviceId) params.append("device_id", deviceId);
+        params.append("hours", hours.toString());
+        
+        const response = await callAuroraApi<GenericTimeseriesResponse>(`/api/timeseries?${params.toString()}`);
+        return response.data || response.points || response.readings || [];
+      } catch (error) {
+        console.warn("Failed to fetch timeseries:", error);
+        return [];
+      }
+    },
+    refetchInterval: 30000,
+    retry: 1,
+    enabled: !!sensorType || !!deviceId,
+  });
+}
+
+// =============================================
+// DATA FILE HOOKS (JSONL endpoints)
+// =============================================
+
+export interface BandwidthDataPoint {
+  timestamp?: string;
+  download_mbps?: number;
+  upload_mbps?: number;
+  latency_ms?: number;
+  jitter_ms?: number;
+}
+
+export interface ArduinoDataPoint {
+  timestamp?: string;
+  device_id?: string;
+  temp_c?: number;
+  humidity?: number;
+  light?: number;
+  motion?: boolean;
+  [key: string]: unknown;
+}
+
+export interface PingStatsPoint {
+  timestamp?: string;
+  host?: string;
+  min_ms?: number;
+  avg_ms?: number;
+  max_ms?: number;
+  packet_loss?: number;
+}
+
+export function useBandwidthData() {
+  return useQuery({
+    queryKey: ["aurora", "data", "bandwidth"],
+    queryFn: async () => {
+      try {
+        const response = await callAuroraApi<BandwidthDataPoint | BandwidthDataPoint[]>("/bandwidth.jsonl");
+        return Array.isArray(response) ? response : [response];
+      } catch (error) {
+        console.warn("Failed to fetch bandwidth data:", error);
+        return [];
+      }
+    },
+    refetchInterval: 30000,
+    retry: 1,
+  });
+}
+
+export function useArduinoData() {
+  return useQuery({
+    queryKey: ["aurora", "data", "arduino"],
+    queryFn: async () => {
+      try {
+        const response = await callAuroraApi<ArduinoDataPoint | ArduinoDataPoint[]>("/arduino_data.jsonl");
+        return Array.isArray(response) ? response : [response];
+      } catch (error) {
+        console.warn("Failed to fetch Arduino data:", error);
+        return [];
+      }
+    },
+    refetchInterval: 10000,
+    retry: 1,
+  });
+}
+
+export function usePingStats() {
+  return useQuery({
+    queryKey: ["aurora", "data", "ping"],
+    queryFn: async () => {
+      try {
+        const response = await callAuroraApi<PingStatsPoint | PingStatsPoint[]>("/ping_stats.jsonl");
+        return Array.isArray(response) ? response : [response];
+      } catch (error) {
+        console.warn("Failed to fetch ping stats:", error);
+        return [];
+      }
+    },
+    refetchInterval: 30000,
+    retry: 1,
+  });
+}
+
+export function useStarlinkStatusData() {
+  return useQuery({
+    queryKey: ["aurora", "data", "starlink_status"],
+    queryFn: async () => {
+      try {
+        interface StarlinkStatusPoint {
+          timestamp?: string;
+          device_id?: string;
+          state?: string;
+          uptime_s?: number;
+          pop_ping_latency_ms?: number;
+          downlink_throughput_bps?: number;
+          uplink_throughput_bps?: number;
+          snr?: number;
+          latitude?: number;
+          longitude?: number;
+          altitude?: number;
+          [key: string]: unknown;
+        }
+        const response = await callAuroraApi<StarlinkStatusPoint | StarlinkStatusPoint[]>("/starlink_status.jsonl");
+        return Array.isArray(response) ? response : [response];
+      } catch (error) {
+        console.warn("Failed to fetch Starlink status data:", error);
+        return [];
+      }
+    },
+    refetchInterval: 10000,
+    retry: 1,
+  });
+}
+
+// =============================================
+// GPS READINGS HOOK (from sensor data)
+// =============================================
+
+export interface GpsReading {
+  timestamp: string;
+  device_id?: string;
+  client_id?: string;
+  latitude?: number;
+  longitude?: number;
+  altitude?: number;
+  speed?: number;
+  heading?: number;
+  accuracy?: number;
+  satellites?: number;
+  hdop?: number;
+  fix_type?: string;
+}
+
+export interface GpsReadingsResponse {
+  count: number;
+  readings: GpsReading[];
+}
+
+export function useGpsReadings(hours: number = 24) {
+  return useQuery({
+    queryKey: ["aurora", "gps", "readings", hours],
+    queryFn: async () => {
+      try {
+        interface RawReading {
+          timestamp: string;
+          device_id?: string;
+          device_type?: string;
+          client_id?: string;
+          data?: {
+            latitude?: number;
+            longitude?: number;
+            altitude?: number;
+            speed?: number;
+            heading?: number;
+            track?: number;
+            accuracy?: number;
+            satellites?: number;
+            satellites_used?: number;
+            hdop?: number;
+            fix_type?: string;
+            mode?: number;
+          };
+        }
+        
+        interface RawResponse {
+          count?: number;
+          readings?: RawReading[];
+        }
+        
+        const response = await callAuroraApi<RawResponse>(`/api/readings/sensor/gps?hours=${hours}`);
+        
+        const transformedReadings: GpsReading[] = (response.readings || []).map(r => ({
+          timestamp: r.timestamp,
+          device_id: r.device_id,
+          client_id: r.client_id,
+          latitude: r.data?.latitude,
+          longitude: r.data?.longitude,
+          altitude: r.data?.altitude,
+          speed: r.data?.speed,
+          heading: r.data?.heading ?? r.data?.track,
+          accuracy: r.data?.accuracy,
+          satellites: r.data?.satellites ?? r.data?.satellites_used,
+          hdop: r.data?.hdop,
+          fix_type: r.data?.fix_type ?? (r.data?.mode === 3 ? '3D' : r.data?.mode === 2 ? '2D' : 'None'),
+        }));
+        
+        return { 
+          count: response.count ?? transformedReadings.length, 
+          readings: transformedReadings 
+        };
+      } catch (error) {
+        console.warn("Failed to fetch GPS readings:", error);
+        return { count: 0, readings: [] };
+      }
+    },
+    refetchInterval: 10000,
+    retry: 1,
+  });
+}

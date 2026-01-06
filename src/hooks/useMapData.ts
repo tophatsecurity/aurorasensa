@@ -9,6 +9,9 @@ import {
   useSensorTypeStats,
   useAdsbAircraftWithHistory,
   useAdsbHistorical,
+  useGpsdStatus,
+  useGpsReadings,
+  useStarlinkStatusData,
   GeoLocation,
   AdsbAircraft
 } from "@/hooks/useAuroraApi";
@@ -186,6 +189,15 @@ export function useMapData(options: UseMapDataOptions = {}) {
   // Get the Starlink device latest reading for real-time GPS
   const { data: starlinkLatest } = useDeviceLatest('starlink_dish_1');
 
+  // Get GPSD status for real-time GPS location
+  const { data: gpsdStatus } = useGpsdStatus();
+
+  // Get GPS readings history for trails
+  const { data: gpsReadings } = useGpsReadings(24);
+
+  // Get Starlink status data which often contains GPS
+  const { data: starlinkStatusData } = useStarlinkStatusData();
+
   // Get ADS-B aircraft data with historical fallback based on timeframe
   const { 
     aircraft: adsbAircraft, 
@@ -212,8 +224,12 @@ export function useMapData(options: UseMapDataOptions = {}) {
       adsbAircraft: adsbAircraft?.length || 0,
       starlinkStats: !!starlinkStats,
       starlinkLatest: !!starlinkLatest?.data,
+      gpsdStatus: !!gpsdStatus,
+      gpsReadings: gpsReadings?.count || 0,
+      starlinkStatusData: starlinkStatusData?.length || 0,
     });
-  }, [sensors, clients, latestReadings, geoLocations, adsbAircraft, starlinkStats, starlinkLatest]);
+  }, [sensors, clients, latestReadings, geoLocations, adsbAircraft, starlinkStats, starlinkLatest, gpsdStatus, gpsReadings, starlinkStatusData]);
+
 
   const handleRefresh = useCallback(() => {
     queryClient.invalidateQueries({ queryKey: ["aurora"] });
@@ -369,17 +385,79 @@ export function useMapData(options: UseMapDataOptions = {}) {
     }
   }, [starlinkGps]);
 
-  // Merge geo locations API with readings GPS and Starlink GPS
+  // Extract GPS from GPSD status (real-time GPS daemon)
+  const gpsdGps = useMemo<{ lat: number; lng: number; altitude?: number } | null>(() => {
+    if (gpsdStatus && gpsdStatus.mode && gpsdStatus.mode >= 2) {
+      const lat = gpsdStatus.latitude;
+      const lng = gpsdStatus.longitude;
+      if (lat !== undefined && lng !== undefined &&
+          lat >= -90 && lat <= 90 && 
+          lng >= -180 && lng <= 180 &&
+          !(lat === 0 && lng === 0)) {
+        console.log('[MapData] Found GPSD GPS:', { lat, lng, altitude: gpsdStatus.altitude });
+        return { lat, lng, altitude: gpsdStatus.altitude };
+      }
+    }
+    return null;
+  }, [gpsdStatus]);
+
+  // Extract GPS from Starlink status data
+  const starlinkStatusGps = useMemo<{ lat: number; lng: number; altitude?: number } | null>(() => {
+    if (starlinkStatusData && starlinkStatusData.length > 0) {
+      // Get the latest entry
+      const latest = starlinkStatusData[starlinkStatusData.length - 1];
+      const lat = latest.latitude;
+      const lng = latest.longitude;
+      if (lat !== undefined && lng !== undefined &&
+          lat >= -90 && lat <= 90 && 
+          lng >= -180 && lng <= 180 &&
+          !(lat === 0 && lng === 0)) {
+        console.log('[MapData] Found Starlink status GPS:', { lat, lng, altitude: latest.altitude });
+        return { lat, lng, altitude: latest.altitude };
+      }
+    }
+    return null;
+  }, [starlinkStatusData]);
+
+  // Merge geo locations API with readings GPS, Starlink GPS, GPSD GPS
   const gpsCoordinates = useMemo(() => {
     const merged = mergeGpsData(geoLocations, readingsGps);
     
-    // Add Starlink GPS if available
-    if (starlinkGps) {
+    // Add Starlink GPS if available (priority: starlinkStatusGps > starlinkGps)
+    const effectiveStarlinkGps = starlinkStatusGps || starlinkGps;
+    if (effectiveStarlinkGps) {
       merged['starlink_dish_1'] = {
-        lat: starlinkGps.lat,
-        lng: starlinkGps.lng,
-        altitude: starlinkGps.altitude,
+        lat: effectiveStarlinkGps.lat,
+        lng: effectiveStarlinkGps.lng,
+        altitude: effectiveStarlinkGps.altitude,
       };
+    }
+
+    // Add GPSD GPS if available
+    if (gpsdGps) {
+      merged['gpsd_device'] = {
+        lat: gpsdGps.lat,
+        lng: gpsdGps.lng,
+        altitude: gpsdGps.altitude,
+      };
+    }
+
+    // Add GPS readings from GPS sensor
+    if (gpsReadings?.readings) {
+      gpsReadings.readings.forEach(reading => {
+        if (reading.latitude !== undefined && reading.longitude !== undefined &&
+            reading.latitude >= -90 && reading.latitude <= 90 &&
+            reading.longitude >= -180 && reading.longitude <= 180 &&
+            !(reading.latitude === 0 && reading.longitude === 0)) {
+          const deviceId = reading.device_id || 'gps_device';
+          merged[deviceId] = {
+            lat: reading.latitude,
+            lng: reading.longitude,
+            altitude: reading.altitude,
+            timestamp: reading.timestamp,
+          };
+        }
+      });
     }
     
     if (Object.keys(merged).length > 0) {
@@ -387,7 +465,7 @@ export function useMapData(options: UseMapDataOptions = {}) {
     }
     
     return merged;
-  }, [geoLocations, readingsGps, starlinkGps]);
+  }, [geoLocations, readingsGps, starlinkGps, starlinkStatusGps, gpsdGps, gpsReadings]);
 
   // Build sensor markers from sensors API, geo locations, and clients with GPS
   const sensorMarkers = useMemo<SensorMarker[]>(() => {
@@ -434,18 +512,67 @@ export function useMapData(options: UseMapDataOptions = {}) {
     });
 
     // Add Starlink marker from stats GPS if we have it
-    if (starlinkGps && !addedIds.has('starlink_dish_1')) {
+    const effectiveStarlinkGps = starlinkStatusGps || starlinkGps;
+    if (effectiveStarlinkGps && !addedIds.has('starlink_dish_1')) {
       markers.push({
         id: 'starlink_dish_1',
         name: 'Starlink Dish',
         type: 'starlink',
-        value: starlinkGps.altitude || 0,
+        value: effectiveStarlinkGps.altitude || 0,
         unit: 'm',
         status: 'active',
         lastUpdate: new Date().toISOString(),
-        location: { lat: starlinkGps.lat, lng: starlinkGps.lng }
+        location: { lat: effectiveStarlinkGps.lat, lng: effectiveStarlinkGps.lng }
       });
       addedIds.add('starlink_dish_1');
+    }
+
+    // Add GPSD marker if we have GPS daemon data
+    if (gpsdGps && !addedIds.has('gpsd_device')) {
+      markers.push({
+        id: 'gpsd_device',
+        name: 'GPS Device',
+        type: 'gps',
+        value: gpsdGps.altitude || 0,
+        unit: 'm',
+        status: gpsdStatus?.mode === 3 ? 'active' : 'warning',
+        lastUpdate: gpsdStatus?.timestamp || new Date().toISOString(),
+        location: { lat: gpsdGps.lat, lng: gpsdGps.lng }
+      });
+      addedIds.add('gpsd_device');
+    }
+
+    // Add GPS readings markers
+    if (gpsReadings?.readings) {
+      // Get the latest reading for each device
+      const latestByDevice = new Map<string, typeof gpsReadings.readings[0]>();
+      gpsReadings.readings.forEach(reading => {
+        const deviceId = reading.device_id || 'gps_device';
+        const existing = latestByDevice.get(deviceId);
+        if (!existing || new Date(reading.timestamp) > new Date(existing.timestamp)) {
+          latestByDevice.set(deviceId, reading);
+        }
+      });
+      
+      latestByDevice.forEach((reading, deviceId) => {
+        if (addedIds.has(deviceId)) return;
+        if (reading.latitude !== undefined && reading.longitude !== undefined &&
+            reading.latitude >= -90 && reading.latitude <= 90 &&
+            reading.longitude >= -180 && reading.longitude <= 180 &&
+            !(reading.latitude === 0 && reading.longitude === 0)) {
+          markers.push({
+            id: deviceId,
+            name: deviceId.replace(/_/g, ' '),
+            type: 'gps',
+            value: reading.altitude || 0,
+            unit: 'm',
+            status: 'active',
+            lastUpdate: reading.timestamp,
+            location: { lat: reading.latitude, lng: reading.longitude }
+          });
+          addedIds.add(deviceId);
+        }
+      });
     }
     
     // Add clients as sensors based on their enabled sensor types
@@ -652,7 +779,7 @@ export function useMapData(options: UseMapDataOptions = {}) {
     }
     
     return markers;
-  }, [sensors, clients, gpsCoordinates, geoLocations, starlinkGps]);
+  }, [sensors, clients, gpsCoordinates, geoLocations, starlinkGps, starlinkStatusGps, gpsdGps, gpsdStatus, gpsReadings]);
 
   // Get client markers for the clients filter
   const clientMarkers = useMemo<ClientMarker[]>(() => {
