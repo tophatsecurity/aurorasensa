@@ -56,6 +56,11 @@ const PowerConsumptionCharts = ({ hours = 24 }: PowerConsumptionChartsProps) => 
 
   // Get current power from dedicated endpoint (more accurate)
   const currentPower = useMemo(() => {
+    // Use dedicated power endpoint - check device_summaries first
+    if (starlinkPower?.device_summaries?.[0]?.overall?.avg_watts !== undefined) {
+      return starlinkPower.device_summaries[0].overall.avg_watts;
+    }
+    // Legacy fallback
     if (starlinkPower?.power_w !== undefined) {
       return starlinkPower.power_w;
     }
@@ -67,9 +72,34 @@ const PowerConsumptionCharts = ({ hours = 24 }: PowerConsumptionChartsProps) => 
     return null;
   }, [starlinkPower, starlinkTimeseries]);
 
-  const formatData = (
-    starlinkReadings: Array<{ timestamp: string; power_w?: number }> | undefined
-  ): ChartData[] => {
+  const formatData = (): ChartData[] => {
+    // First, try to use power_data from the dedicated power endpoint (most accurate)
+    const powerData = starlinkPower?.power_data;
+    if (powerData && powerData.length > 0) {
+      const data = powerData.map(r => ({
+        time: new Date(r.timestamp).toLocaleTimeString('en-US', { 
+          hour12: false, 
+          hour: '2-digit', 
+          minute: '2-digit'
+        }),
+        value: Number(r.power_watts.toFixed(2)),
+        isPeak: false,
+        isAboveWarning: r.power_watts >= thresholdConfig.warningThreshold && r.power_watts < thresholdConfig.criticalThreshold,
+        isAboveCritical: r.power_watts >= thresholdConfig.criticalThreshold,
+      }));
+      
+      if (data.length > 0) {
+        const maxValue = Math.max(...data.map(d => d.value));
+        data.forEach(d => {
+          if (d.value === maxValue) d.isPeak = true;
+        });
+      }
+      
+      return data;
+    }
+    
+    // Fallback to starlinkTimeseries readings
+    const starlinkReadings = starlinkTimeseries?.readings;
     const validStarlinkPower = starlinkReadings?.filter(r => 
       r.power_w !== undefined && r.power_w !== null && !isNaN(r.power_w) && r.power_w > 0
     );
@@ -101,8 +131,8 @@ const PowerConsumptionCharts = ({ hours = 24 }: PowerConsumptionChartsProps) => 
   };
 
   const chartData = useMemo(
-    () => formatData(starlinkTimeseries?.readings), 
-    [starlinkTimeseries?.readings, thresholdConfig.warningThreshold, thresholdConfig.criticalThreshold]
+    () => formatData(), 
+    [starlinkPower?.power_data, starlinkTimeseries?.readings, thresholdConfig.warningThreshold, thresholdConfig.criticalThreshold]
   );
 
   
