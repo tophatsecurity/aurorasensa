@@ -15,7 +15,10 @@ import {
   Cog,
   Users,
   Radio,
-  BarChart3
+  BarChart3,
+  Cloud,
+  Sun,
+  Move
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -36,13 +39,21 @@ const menuSections = [
     ],
   },
   {
-    title: "DATA & ANALYTICS",
+    title: "SENSOR ANALYTICS",
     items: [
-      { id: "sensors", label: "Sensors", icon: Thermometer },
-      { id: "data-analytics", label: "Data Analytics", icon: BarChart3 },
+      { id: "weather", label: "Weather", icon: Cloud },
       { id: "radio", label: "Radio", icon: Radio },
       { id: "starlink", label: "Starlink", icon: Satellite },
       { id: "power", label: "Power", icon: Zap },
+      { id: "sound-light", label: "Sound & Light", icon: Sun },
+      { id: "movement", label: "Movement", icon: Move },
+    ],
+  },
+  {
+    title: "DATA",
+    items: [
+      { id: "sensors", label: "Sensors", icon: Thermometer },
+      { id: "data-analytics", label: "Data Analytics", icon: BarChart3 },
       { id: "data-batches", label: "Data Batches", icon: Database },
       { id: "export", label: "Export", icon: Download },
     ],
