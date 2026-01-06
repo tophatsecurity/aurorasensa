@@ -27,9 +27,16 @@ import {
   CheckCircle,
   ArrowUp,
   ArrowDown,
-  Globe
+  Globe,
+  Filter,
+  X,
+  Check
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Checkbox } from "@/components/ui/checkbox";
+import { ScrollArea } from "@/components/ui/scroll-area";
 import {
   Select,
   SelectContent,
@@ -49,6 +56,7 @@ import {
   useStarlinkPower,
   useStarlinkConnectivity,
   useStarlinkGlobalStats,
+  useClients,
   StarlinkTimeseriesPoint 
 } from "@/hooks/useAuroraApi";
 
@@ -103,9 +111,12 @@ const MetricCard = ({ title, value, unit, icon, trend, status, subtitle, isLoadi
 
 const StarlinkContent = () => {
   const [selectedDevice, setSelectedDevice] = useState<string>("all");
+  const [selectedClients, setSelectedClients] = useState<string[]>([]);
+  const [clientFilterOpen, setClientFilterOpen] = useState(false);
   
-  // Fetch list of Starlink devices
+  // Fetch list of Starlink devices and clients
   const { data: starlinkDevices, isLoading: devicesLoading } = useStarlinkDevices();
+  const { data: allClients = [] } = useClients();
   
   // Average stats (for "All" selection)
   const { data: starlinkStats, isLoading: statsLoading } = useStarlinkStats();
@@ -127,6 +138,52 @@ const StarlinkContent = () => {
     selectedDevice !== "all" ? selectedDevice : null,
     24
   );
+
+  // Extract unique clients from starlink devices
+  const availableClients = useMemo(() => {
+    if (!starlinkDevices) return [];
+    const clientIds = new Set<string>();
+    starlinkDevices.forEach(device => {
+      if (device.client_id) {
+        clientIds.add(device.client_id);
+      }
+    });
+    return Array.from(clientIds).sort();
+  }, [starlinkDevices]);
+
+  // Get client name helper
+  const getClientName = (clientId: string) => {
+    const client = allClients.find(c => c.client_id === clientId);
+    return client?.hostname || clientId;
+  };
+
+  // Filter devices based on selected clients
+  const filteredDevices = useMemo(() => {
+    if (!starlinkDevices) return [];
+    if (selectedClients.length === 0) return starlinkDevices;
+    return starlinkDevices.filter(device => 
+      device.client_id && selectedClients.includes(device.client_id)
+    );
+  }, [starlinkDevices, selectedClients]);
+
+  // Toggle client selection
+  const toggleClient = (clientId: string) => {
+    setSelectedClients(prev => 
+      prev.includes(clientId) 
+        ? prev.filter(id => id !== clientId)
+        : [...prev, clientId]
+    );
+  };
+
+  // Clear all client filters
+  const clearClientFilter = () => {
+    setSelectedClients([]);
+  };
+
+  // Select all clients
+  const selectAllClients = () => {
+    setSelectedClients(availableClients);
+  };
 
   const isAllSelected = selectedDevice === "all";
   const isLoading = statsLoading || timeseriesLoading || sensorLoading || devicesLoading || 
@@ -210,19 +267,114 @@ const StarlinkContent = () => {
           <h1 className="text-3xl font-bold text-foreground">Starlink Dashboard</h1>
           <p className="text-muted-foreground">
             {isAllSelected ? 'Average across all devices' : `Device: ${selectedDevice}`}
+            {selectedClients.length > 0 && ` • ${selectedClients.length} client${selectedClients.length !== 1 ? 's' : ''} filtered`}
           </p>
         </div>
         
-        {/* Device Selector */}
+        {/* Filters */}
         <div className="ml-auto flex items-center gap-3">
+          {/* Client Multi-Select Filter */}
+          <Popover open={clientFilterOpen} onOpenChange={setClientFilterOpen}>
+            <PopoverTrigger asChild>
+              <Button variant="outline" size="sm" className="gap-2">
+                <Filter className="w-4 h-4" />
+                {selectedClients.length === 0 ? (
+                  "All Clients"
+                ) : (
+                  <span className="flex items-center gap-1">
+                    {selectedClients.length} Client{selectedClients.length !== 1 ? 's' : ''}
+                    <Badge variant="secondary" className="ml-1 h-5 px-1.5 text-xs">
+                      {selectedClients.length}
+                    </Badge>
+                  </span>
+                )}
+              </Button>
+            </PopoverTrigger>
+            <PopoverContent className="w-80 p-0" align="end">
+              <div className="p-3 border-b border-border">
+                <div className="flex items-center justify-between">
+                  <h4 className="font-semibold text-sm">Filter by Client</h4>
+                  <div className="flex gap-1">
+                    <Button 
+                      variant="ghost" 
+                      size="sm" 
+                      className="h-7 text-xs"
+                      onClick={clearClientFilter}
+                    >
+                      Clear
+                    </Button>
+                    <Button 
+                      variant="ghost" 
+                      size="sm" 
+                      className="h-7 text-xs"
+                      onClick={selectAllClients}
+                    >
+                      Select All
+                    </Button>
+                  </div>
+                </div>
+                <p className="text-xs text-muted-foreground mt-1">
+                  {selectedClients.length === 0 
+                    ? "Showing all clients" 
+                    : `${selectedClients.length} of ${availableClients.length} clients selected`}
+                </p>
+              </div>
+              <ScrollArea className="h-[300px]">
+                <div className="p-2 space-y-1">
+                  {availableClients.length > 0 ? (
+                    availableClients.map((clientId) => {
+                      const isSelected = selectedClients.includes(clientId);
+                      const client = allClients.find(c => c.client_id === clientId);
+                      const isActive = client?.state === 'adopted' || client?.state === 'registered';
+                      
+                      return (
+                        <div
+                          key={clientId}
+                          className={`flex items-center gap-3 p-2 rounded-md cursor-pointer transition-colors hover:bg-muted/50 ${
+                            isSelected ? 'bg-primary/10' : ''
+                          }`}
+                          onClick={() => toggleClient(clientId)}
+                        >
+                          <Checkbox 
+                            checked={isSelected}
+                            className="pointer-events-none"
+                          />
+                          <div className="flex-1 min-w-0">
+                            <p className="text-sm font-medium truncate">
+                              {getClientName(clientId)}
+                            </p>
+                            <p className="text-xs text-muted-foreground truncate">
+                              {clientId}
+                            </p>
+                          </div>
+                          <Badge 
+                            variant={isActive ? "default" : "secondary"}
+                            className="text-xs shrink-0"
+                          >
+                            {isActive ? 'Active' : 'Inactive'}
+                          </Badge>
+                        </div>
+                      );
+                    })
+                  ) : (
+                    <div className="p-4 text-center text-sm text-muted-foreground">
+                      No clients available
+                    </div>
+                  )}
+                </div>
+              </ScrollArea>
+            </PopoverContent>
+          </Popover>
+
+          {/* Device Selector */}
           <Select value={selectedDevice} onValueChange={setSelectedDevice}>
             <SelectTrigger className="w-[200px] bg-background border-border">
-              <SelectValue placeholder="Select client" />
+              <SelectValue placeholder="Select device" />
             </SelectTrigger>
             <SelectContent className="bg-background border-border z-50">
-              <SelectItem value="all">All Clients (Average)</SelectItem>
-              {starlinkDevices && starlinkDevices.length > 0 && (
-                starlinkDevices.map((device) => (
+              <SelectItem value="all">All Devices (Average)</SelectItem>
+              {filteredDevices && filteredDevices.length > 0 && (
+                filteredDevices.map((device) => (
                   <SelectItem key={device.device_id} value={device.device_id}>
                     {device.device_id}
                   </SelectItem>
@@ -235,6 +387,36 @@ const StarlinkContent = () => {
           </Badge>
         </div>
       </div>
+
+      {/* Active Filters Display */}
+      {selectedClients.length > 0 && (
+        <div className="flex items-center gap-2 mb-4 flex-wrap">
+          <span className="text-xs text-muted-foreground">Active filters:</span>
+          {selectedClients.map(clientId => (
+            <Badge 
+              key={clientId}
+              variant="secondary" 
+              className="gap-1 pr-1"
+            >
+              {getClientName(clientId)}
+              <button
+                onClick={() => toggleClient(clientId)}
+                className="ml-1 hover:bg-muted rounded-full p-0.5"
+              >
+                <X className="w-3 h-3" />
+              </button>
+            </Badge>
+          ))}
+          <Button 
+            variant="ghost" 
+            size="sm" 
+            className="h-6 text-xs text-muted-foreground"
+            onClick={clearClientFilter}
+          >
+            Clear all
+          </Button>
+        </div>
+      )}
 
       {/* Status Overview */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">

@@ -1673,6 +1673,7 @@ export function useExportFormats() {
 export interface StarlinkDevice {
   device_id: string;
   device_type: string;
+  client_id?: string;
   status?: string;
   last_seen?: string;
 }
