@@ -234,13 +234,23 @@ const ClientsContent = () => {
   const confirmPermanentDelete = () => {
     if (!deleteConfirmClient) return;
     
+    const clientName = deleteConfirmClient.hostname || deleteConfirmClient.client_id;
+    
     deleteClient.mutate(deleteConfirmClient.client_id, {
       onSuccess: () => {
-        toast.success(`Permanently removed ${deleteConfirmClient.hostname || deleteConfirmClient.client_id}`);
+        toast.success(`Permanently removed ${clientName}`);
         setDeleteConfirmClient(null);
+        refetch(); // Refresh client list
       },
       onError: (error) => {
-        toast.error(`Failed to remove client: ${error.message}`);
+        // Handle "not found" as already deleted
+        if (error.message?.includes('not found')) {
+          toast.info(`Client ${clientName} was already removed`);
+          refetch(); // Refresh to sync state
+        } else {
+          toast.error(`Failed to remove client: ${error.message}`);
+        }
+        setDeleteConfirmClient(null); // Close dialog on error too
       },
     });
   };
