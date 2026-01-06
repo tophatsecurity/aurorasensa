@@ -37,6 +37,7 @@ import {
   useDashboardTimeseries,
   useSensorTypeStats,
   useClients,
+  useDeviceTree,
   type SensorTypeSummary,
   type DeviceSummary
 } from "@/hooks/useAuroraApi";
@@ -430,6 +431,7 @@ const DataAnalyticsContent = () => {
   const { data: stats, isLoading: statsLoading } = useComprehensiveStats();
   const { data: timeseries, isLoading: timeseriesLoading } = useDashboardTimeseries(24);
   const { data: clients } = useClients();
+  const { data: deviceTree } = useDeviceTree();
   const queryClient = useQueryClient();
 
   const handleRefresh = () => {
@@ -445,6 +447,30 @@ const DataAnalyticsContent = () => {
   
   // Get all clients list
   const allClients = clients || [];
+
+  // Build device to client mapping from device tree
+  const deviceToClientMap = useMemo(() => {
+    const map = new Map<string, string>();
+    
+    const processNode = (node: { device_id: string; client_id?: string; children?: typeof deviceTree }) => {
+      if (node.client_id) {
+        map.set(node.device_id, node.client_id);
+      }
+      if (node.children) {
+        node.children.forEach(processNode);
+      }
+    };
+    
+    deviceTree?.forEach(processNode);
+    return map;
+  }, [deviceTree]);
+
+  // Get unique clients from device tree
+  const clientsFromDevices = useMemo(() => {
+    const clientIds = new Set<string>();
+    deviceToClientMap.forEach(clientId => clientIds.add(clientId));
+    return Array.from(clientIds).sort();
+  }, [deviceToClientMap]);
   
   // Get unique sensor types for the filter dropdown
   const availableSensorTypes = useMemo(() => {
@@ -457,17 +483,37 @@ const DataAnalyticsContent = () => {
     return client?.hostname || clientId;
   };
 
-  // Filter sensor types based on selected sensor types filter
+  // Filter sensor types based on both client and sensor type filters
   const filteredSensorTypes = useMemo(() => {
-    if (selectedSensorTypes.length === 0) return sensorTypes;
-    return sensorTypes.filter(s => selectedSensorTypes.includes(s.device_type));
+    let filtered = sensorTypes;
+    
+    // Filter by sensor type selection
+    if (selectedSensorTypes.length > 0) {
+      filtered = filtered.filter(s => selectedSensorTypes.includes(s.device_type));
+    }
+    
+    return filtered;
   }, [sensorTypes, selectedSensorTypes]);
 
-  // Filter devices list based on selected sensor types
+  // Filter devices list based on both client and sensor type filters
   const filteredDevices = useMemo(() => {
-    if (selectedSensorTypes.length === 0) return allDevices;
-    return allDevices.filter(d => selectedSensorTypes.includes(d.device_type));
-  }, [allDevices, selectedSensorTypes]);
+    let filtered = allDevices;
+    
+    // Filter by sensor type
+    if (selectedSensorTypes.length > 0) {
+      filtered = filtered.filter(d => selectedSensorTypes.includes(d.device_type));
+    }
+    
+    // Filter by client using device tree mapping
+    if (selectedClients.length > 0) {
+      filtered = filtered.filter(d => {
+        const clientId = deviceToClientMap.get(d.device_id);
+        return clientId && selectedClients.includes(clientId);
+      });
+    }
+    
+    return filtered;
+  }, [allDevices, selectedSensorTypes, selectedClients, deviceToClientMap]);
 
   // Toggle client selection
   const toggleClient = (clientId: string) => {
@@ -497,9 +543,10 @@ const DataAnalyticsContent = () => {
     setSelectedSensorTypes([]);
   };
 
-  // Select all clients
+  // Select all clients - use clients from device tree or all clients
   const selectAllClients = () => {
-    setSelectedClients(allClients.map(c => c.client_id));
+    const clientIds = clientsFromDevices.length > 0 ? clientsFromDevices : allClients.map(c => c.client_id);
+    setSelectedClients(clientIds);
   };
 
   // Select all sensor types
@@ -585,7 +632,7 @@ const DataAnalyticsContent = () => {
                 <p className="text-xs text-muted-foreground mt-1">
                   {selectedClients.length === 0 
                     ? "Showing all clients" 
-                    : `${selectedClients.length} of ${allClients.length} clients selected`}
+                    : `${selectedClients.length} of ${Math.max(allClients.length, clientsFromDevices.length)} clients selected`}
                 </p>
               </div>
               <ScrollArea className="h-[300px]">
