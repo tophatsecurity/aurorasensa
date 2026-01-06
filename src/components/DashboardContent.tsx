@@ -324,7 +324,174 @@ const DashboardContent = () => {
           <Thermometer className="w-5 h-5 text-red-500" />
           Thermal ({periodLabel}) (°F / °C)
         </h2>
+        
+        {/* Thermal Stats Cards */}
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-4">
+          {/* Current Temperature */}
+          <StatCardWithChart
+            title="TEMPERATURE"
+            value={thermalAvgTemp !== undefined ? thermalAvgTemp.toFixed(1) : avgTemp !== undefined && avgTemp !== null ? avgTemp.toFixed(1) : "—"}
+            unit="°C"
+            subtitle={thermalAvgTemp !== undefined 
+              ? `${cToF(thermalAvgTemp)?.toFixed(1)}°F` 
+              : avgTemp !== undefined && avgTemp !== null 
+                ? `${cToF(avgTemp)?.toFixed(1)}°F`
+                : "No data"}
+            icon={Thermometer}
+            iconBgColor="bg-red-500/20"
+            isLoading={thermalLoading || thermalTimeseriesLoading}
+            timeseries={(thermalTimeseries?.readings || []).map(r => ({
+              timestamp: r.timestamp,
+              value: r.temp_c ?? r.probe_c ?? r.ambient_c ?? 0,
+            }))}
+            devices={[{
+              device_id: "thermal_probe",
+              device_type: "thermal_probe",
+              color: "#ef4444",
+              reading_count: thermalProbeStats?.total_readings ?? thermalProbeStats?.count ?? 0,
+              status: "active"
+            }]}
+          />
+          
+          {/* Min Temperature */}
+          <div className="glass-card rounded-lg p-4 border border-border/50">
+            <div className="flex items-center gap-2 mb-2">
+              <div className="w-8 h-8 rounded-lg bg-blue-500/20 flex items-center justify-center">
+                <ArrowDown className="w-4 h-4 text-blue-400" />
+              </div>
+              <span className="text-xs text-muted-foreground">Min Temp (24h)</span>
+            </div>
+            <div className="text-2xl font-bold text-blue-400">
+              {thermalLoading ? "..." : thermalMinTemp !== undefined 
+                ? `${thermalMinTemp.toFixed(1)}°C` 
+                : tempStats.min !== null 
+                  ? `${tempStats.min.toFixed(1)}°C`
+                  : "—"}
+            </div>
+            <div className="text-xs text-muted-foreground mt-1">
+              {thermalMinTemp !== undefined 
+                ? `${cToF(thermalMinTemp)?.toFixed(1)}°F`
+                : tempStats.min !== null 
+                  ? `${cToF(tempStats.min)?.toFixed(1)}°F`
+                  : ""}
+            </div>
+          </div>
+          
+          {/* Max Temperature */}
+          <div className="glass-card rounded-lg p-4 border border-border/50">
+            <div className="flex items-center gap-2 mb-2">
+              <div className="w-8 h-8 rounded-lg bg-red-500/20 flex items-center justify-center">
+                <ArrowUp className="w-4 h-4 text-red-400" />
+              </div>
+              <span className="text-xs text-muted-foreground">Max Temp (24h)</span>
+            </div>
+            <div className="text-2xl font-bold text-red-400">
+              {thermalLoading ? "..." : thermalMaxTemp !== undefined 
+                ? `${thermalMaxTemp.toFixed(1)}°C` 
+                : tempStats.max !== null 
+                  ? `${tempStats.max.toFixed(1)}°C`
+                  : "—"}
+            </div>
+            <div className="text-xs text-muted-foreground mt-1">
+              {thermalMaxTemp !== undefined 
+                ? `${cToF(thermalMaxTemp)?.toFixed(1)}°F`
+                : tempStats.max !== null 
+                  ? `${cToF(tempStats.max)?.toFixed(1)}°F`
+                  : ""}
+            </div>
+          </div>
+          
+          {/* Readings Count */}
+          <div className="glass-card rounded-lg p-4 border border-border/50">
+            <div className="flex items-center gap-2 mb-2">
+              <div className="w-8 h-8 rounded-lg bg-amber-500/20 flex items-center justify-center">
+                <Database className="w-4 h-4 text-amber-400" />
+              </div>
+              <span className="text-xs text-muted-foreground">Thermal Readings</span>
+            </div>
+            <div className="text-2xl font-bold text-amber-400">
+              {thermalLoading ? "..." : (thermalProbeStats?.total_readings ?? thermalProbeStats?.count ?? 0).toLocaleString()}
+            </div>
+            <div className="text-xs text-muted-foreground mt-1">
+              {thermalProbeStats?.device_count ?? 1} device{(thermalProbeStats?.device_count ?? 1) !== 1 ? 's' : ''}
+            </div>
+          </div>
+        </div>
+        
+        {/* BME/AHT Sensor Stats */}
+        {(bmtTemp || ahtTemp) && (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-4">
+            {bmtTemp && (
+              <div className="glass-card rounded-lg p-4 border border-border/50">
+                <div className="flex items-center gap-2 mb-2">
+                  <div className="w-8 h-8 rounded-lg bg-amber-500/20 flex items-center justify-center">
+                    <Thermometer className="w-4 h-4 text-amber-400" />
+                  </div>
+                  <span className="text-xs text-muted-foreground">BME280 Temp</span>
+                </div>
+                <div className="text-2xl font-bold text-amber-400">
+                  {bmtTemp.avg?.toFixed(1) ?? "—"}°C
+                </div>
+                <div className="text-xs text-muted-foreground mt-1">
+                  Min: {bmtTemp.min?.toFixed(1) ?? "—"}°C / Max: {bmtTemp.max?.toFixed(1) ?? "—"}°C
+                </div>
+              </div>
+            )}
+            {bmtHumidity && (
+              <div className="glass-card rounded-lg p-4 border border-border/50">
+                <div className="flex items-center gap-2 mb-2">
+                  <div className="w-8 h-8 rounded-lg bg-blue-500/20 flex items-center justify-center">
+                    <Droplets className="w-4 h-4 text-blue-400" />
+                  </div>
+                  <span className="text-xs text-muted-foreground">BME280 Humidity</span>
+                </div>
+                <div className="text-2xl font-bold text-blue-400">
+                  {bmtHumidity.avg?.toFixed(1) ?? "—"}%
+                </div>
+                <div className="text-xs text-muted-foreground mt-1">
+                  Min: {bmtHumidity.min?.toFixed(1) ?? "—"}% / Max: {bmtHumidity.max?.toFixed(1) ?? "—"}%
+                </div>
+              </div>
+            )}
+            {ahtTemp && (
+              <div className="glass-card rounded-lg p-4 border border-border/50">
+                <div className="flex items-center gap-2 mb-2">
+                  <div className="w-8 h-8 rounded-lg bg-violet-500/20 flex items-center justify-center">
+                    <Thermometer className="w-4 h-4 text-violet-400" />
+                  </div>
+                  <span className="text-xs text-muted-foreground">AHT Temp</span>
+                </div>
+                <div className="text-2xl font-bold text-violet-400">
+                  {ahtTemp.avg?.toFixed(1) ?? "—"}°C
+                </div>
+                <div className="text-xs text-muted-foreground mt-1">
+                  Min: {ahtTemp.min?.toFixed(1) ?? "—"}°C / Max: {ahtTemp.max?.toFixed(1) ?? "—"}°C
+                </div>
+              </div>
+            )}
+            {ahtHumidity && (
+              <div className="glass-card rounded-lg p-4 border border-border/50">
+                <div className="flex items-center gap-2 mb-2">
+                  <div className="w-8 h-8 rounded-lg bg-indigo-500/20 flex items-center justify-center">
+                    <Droplets className="w-4 h-4 text-indigo-400" />
+                  </div>
+                  <span className="text-xs text-muted-foreground">AHT Humidity</span>
+                </div>
+                <div className="text-2xl font-bold text-indigo-400">
+                  {ahtHumidity.avg?.toFixed(1) ?? "—"}%
+                </div>
+                <div className="text-xs text-muted-foreground mt-1">
+                  Min: {ahtHumidity.min?.toFixed(1) ?? "—"}% / Max: {ahtHumidity.max?.toFixed(1) ?? "—"}%
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+        
         <ThermalProbeDeviceChart hours={periodHours} />
+        <div className="mt-4">
+          <ThermalProbeCharts />
+        </div>
       </div>
 
       {/* Starlink - Full Width Section */}
