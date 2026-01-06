@@ -16,7 +16,8 @@ import {
   useAhtSensorTimeseries,
   useBmtSensorTimeseries,
   useSystemMonitorTimeseries,
-  useStarlinkTimeseries
+  useStarlinkTimeseries,
+  useDashboardTimeseries
 } from "@/hooks/useAuroraApi";
 import { format } from "date-fns";
 
@@ -34,6 +35,7 @@ const SOURCE_COLORS: Record<string, string> = {
   'bmt_sensor': '#f59e0b', // amber - BME/BMT sensor
   'system_cpu': '#06b6d4', // cyan - CPU temp
   'starlink': '#ec4899', // pink - Starlink (if has temp)
+  'dashboard': '#a855f7', // violet - Dashboard aggregate temp
 };
 
 // Device-specific colors within each source type
@@ -58,8 +60,9 @@ const ThermalDeviceChart = ({ hours = 24 }: ThermalDeviceChartProps) => {
   const { data: bmtData, isLoading: bmtLoading } = useBmtSensorTimeseries(hours);
   const { data: systemData, isLoading: systemLoading } = useSystemMonitorTimeseries(hours);
   const { data: starlinkData, isLoading: starlinkLoading } = useStarlinkTimeseries(hours);
+  const { data: dashboardData, isLoading: dashboardLoading } = useDashboardTimeseries(hours);
 
-  const isLoading = thermalLoading || arduinoLoading || ahtLoading || bmtLoading || systemLoading || starlinkLoading;
+  const isLoading = thermalLoading || arduinoLoading || ahtLoading || bmtLoading || systemLoading || starlinkLoading || dashboardLoading;
 
   // Combine all temperature sources and format for charting
   const { chartData, sources } = useMemo(() => {
@@ -219,12 +222,35 @@ const ThermalDeviceChart = ({ hours = 24 }: ThermalDeviceChartProps) => {
       });
     }
 
+    // Process Dashboard aggregate temperature data
+    if (dashboardData?.temperature && dashboardData.temperature.length > 0) {
+      dashboardData.temperature.forEach((r) => {
+        const timestamp = r.timestamp ? new Date(r.timestamp).getTime() : null;
+        if (!timestamp) return;
+        
+        const temp = r.value;
+        if (temp === undefined || temp === null) return;
+
+        const sourceKey = 'dashboard_temp';
+        sourceSet.add(sourceKey);
+
+        const timeKey = String(timestamp);
+        if (!timeMap.has(timeKey)) {
+          timeMap.set(timeKey, { time: timestamp });
+        }
+        
+        const entry = timeMap.get(timeKey)!;
+        entry[`${sourceKey}_f`] = Number(cToF(temp).toFixed(1));
+        entry[`${sourceKey}_c`] = Number(temp.toFixed(1));
+      });
+    }
+
     // Convert to array and sort by time
     const chartData = Array.from(timeMap.values())
       .sort((a, b) => (a.time as number) - (b.time as number));
 
     return { chartData, sources: Array.from(sourceSet) };
-  }, [thermalData?.readings, arduinoData?.readings, ahtData?.readings, bmtData?.readings, systemData?.readings, starlinkData?.readings]);
+  }, [thermalData?.readings, arduinoData?.readings, ahtData?.readings, bmtData?.readings, systemData?.readings, starlinkData?.readings, dashboardData?.temperature]);
 
   // Calculate stats for each source and overall mean
   const sourceStats = useMemo(() => {
@@ -280,6 +306,7 @@ const ThermalDeviceChart = ({ hours = 24 }: ThermalDeviceChartProps) => {
     if (sourceKey.startsWith('bmt_')) return SOURCE_COLORS['bmt_sensor'];
     if (sourceKey.startsWith('cpu_')) return SOURCE_COLORS['system_cpu'];
     if (sourceKey.startsWith('starlink')) return SOURCE_COLORS['starlink'];
+    if (sourceKey.startsWith('dashboard')) return SOURCE_COLORS['dashboard'];
     return DEVICE_COLORS[index % DEVICE_COLORS.length];
   };
 
@@ -310,6 +337,9 @@ const ThermalDeviceChart = ({ hours = 24 }: ThermalDeviceChartProps) => {
     }
     if (sourceKey.startsWith('starlink')) {
       return 'Starlink Dish';
+    }
+    if (sourceKey.startsWith('dashboard')) {
+      return 'Dashboard Avg';
     }
     return sourceKey.replace(/_/g, ' ');
   };
