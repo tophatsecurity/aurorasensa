@@ -16,6 +16,7 @@ import StarlinkContent from "@/components/StarlinkContent";
 import AuditLogsContent from "@/components/AuditLogsContent";
 import ConfigurationContent from "@/components/ConfigurationContent";
 import RadioContent from "@/components/RadioContent";
+import DataAnalyticsContent from "@/components/DataAnalyticsContent";
 
 const Index = () => {
   const [activeItem, setActiveItem] = useState("dashboard");
@@ -26,6 +27,8 @@ const Index = () => {
         return <DashboardContent />;
       case "sensors":
         return <SensorsContent />;
+      case "data-analytics":
+        return <DataAnalyticsContent />;
       case "alerts":
         return <AlertsContent />;
       case "map":
