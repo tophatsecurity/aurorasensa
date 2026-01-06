@@ -12,7 +12,7 @@ import {
   ReferenceArea
 } from "recharts";
 import { Zap, Loader2, TrendingUp, TrendingDown, Settings2, AlertTriangle, Bell, BellOff } from "lucide-react";
-import { useDashboardTimeseries, useStarlinkTimeseries } from "@/hooks/useAuroraApi";
+import { useStarlinkTimeseries } from "@/hooks/useAuroraApi";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
@@ -42,10 +42,7 @@ interface PowerConsumptionChartsProps {
 }
 
 const PowerConsumptionCharts = ({ hours = 24 }: PowerConsumptionChartsProps) => {
-  const { data: timeseries, isLoading: dashboardLoading } = useDashboardTimeseries(hours);
-  const { data: starlinkTimeseries, isLoading: starlinkLoading } = useStarlinkTimeseries(hours);
-  
-  const isLoading = dashboardLoading || starlinkLoading;
+  const { data: starlinkTimeseries, isLoading } = useStarlinkTimeseries(hours);
   
   const [thresholdConfig, setThresholdConfig] = useState<ThresholdConfig>({
     warningThreshold: 100,
@@ -54,36 +51,9 @@ const PowerConsumptionCharts = ({ hours = 24 }: PowerConsumptionChartsProps) => 
   });
 
   const formatData = (
-    dashboardPower: { timestamp: string; value: number }[] | undefined,
     starlinkReadings: Array<{ timestamp: string; power_w?: number }> | undefined
   ): ChartData[] => {
-    // Try dashboard power data first - check for actual valid values
-    const validDashboardPower = dashboardPower?.filter(p => p.value !== null && p.value !== undefined && !isNaN(p.value));
-    
-    if (validDashboardPower && validDashboardPower.length > 0) {
-      const data = validDashboardPower.map(p => ({
-        time: new Date(p.timestamp).toLocaleTimeString('en-US', { 
-          hour12: false, 
-          hour: '2-digit', 
-          minute: '2-digit'
-        }),
-        value: Number(p.value.toFixed(2)),
-        isPeak: false,
-        isAboveWarning: p.value >= thresholdConfig.warningThreshold && p.value < thresholdConfig.criticalThreshold,
-        isAboveCritical: p.value >= thresholdConfig.criticalThreshold,
-      }));
-      
-      if (data.length > 0) {
-        const maxValue = Math.max(...data.map(d => d.value));
-        data.forEach(d => {
-          if (d.value === maxValue) d.isPeak = true;
-        });
-      }
-      
-      return data;
-    }
-    
-    // Fallback to Starlink power data - filter for valid power readings
+    // Use Starlink power data as primary source
     const validStarlinkPower = starlinkReadings?.filter(r => 
       r.power_w !== undefined && r.power_w !== null && !isNaN(r.power_w) && r.power_w > 0
     );
@@ -115,8 +85,8 @@ const PowerConsumptionCharts = ({ hours = 24 }: PowerConsumptionChartsProps) => 
   };
 
   const chartData = useMemo(
-    () => formatData(timeseries?.power, starlinkTimeseries?.readings), 
-    [timeseries?.power, starlinkTimeseries?.readings, thresholdConfig.warningThreshold, thresholdConfig.criticalThreshold]
+    () => formatData(starlinkTimeseries?.readings), 
+    [starlinkTimeseries?.readings, thresholdConfig.warningThreshold, thresholdConfig.criticalThreshold]
   );
 
   
