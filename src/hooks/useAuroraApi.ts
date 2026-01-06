@@ -834,6 +834,7 @@ export interface ThermalProbeTimeseriesPoint {
   ambient_c?: number;
   probe_c?: number;
   device_id?: string;
+  client_id?: string;
 }
 
 export interface ThermalProbeTimeseriesResponse {
@@ -2057,6 +2058,7 @@ export function useThermalProbeTimeseries(hours: number = 24) {
 export interface ArduinoSensorReading {
   timestamp: string;
   device_id?: string;
+  client_id?: string;
   // DHT/AHT temperature and humidity
   th_temp_c?: number;
   th_humidity?: number;
@@ -2160,6 +2162,7 @@ export function useArduinoSensorTimeseries(hours: number = 24) {
 export interface AhtSensorReading {
   timestamp: string;
   device_id?: string;
+  client_id?: string;
   aht_temp_c?: number;
   aht_humidity?: number;
   temp_c?: number;
@@ -2622,6 +2625,7 @@ export function useLoraSpectrum() {
 export interface BmtSensorReading {
   timestamp: string;
   device_id?: string;
+  client_id?: string;
   bme280_temp_c?: number;
   bme280_humidity?: number;
   bme280_pressure_hpa?: number;
