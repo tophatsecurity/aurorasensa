@@ -47,6 +47,7 @@ import {
   useDashboardTimeseries, 
   useSensorTypeStats,
   useStarlinkTimeseries,
+  useStarlinkPower,
   useThermalProbeTimeseries,
   useSystemInfo,
   Client 
@@ -116,6 +117,9 @@ const DashboardContent = () => {
   // Real timeseries data for sparklines
   const { data: starlinkTimeseries, isLoading: starlinkTimeseriesLoading } = useStarlinkTimeseries(24);
   const { data: thermalTimeseries, isLoading: thermalTimeseriesLoading } = useThermalProbeTimeseries(24);
+  
+  // Dedicated Starlink power endpoint for accurate power data
+  const { data: starlinkPowerData, isLoading: starlinkPowerLoading } = useStarlinkPower();
 
   // Extract key metrics from comprehensive stats
   const global = stats?.global;
@@ -145,8 +149,11 @@ const DashboardContent = () => {
   const thermalMinTemp = thermalFieldStats?.temperature_c?.min ?? thermalFieldStats?.temp_c?.min;
   const thermalMaxTemp = thermalFieldStats?.temperature_c?.max ?? thermalFieldStats?.temp_c?.max;
   
-  // Starlink metrics from real API data
-  const starlinkPower = starlinkFieldStats?.power_watts?.avg ?? starlinkFieldStats?.power_w?.avg;
+  // Starlink metrics - prefer dedicated power endpoint
+  const starlinkPowerAvg = starlinkPowerData?.device_summaries?.[0]?.overall?.avg_watts ?? 
+    starlinkFieldStats?.power_watts?.avg ?? starlinkFieldStats?.power_w?.avg;
+  const starlinkPowerMin = starlinkPowerData?.device_summaries?.[0]?.overall?.min_watts;
+  const starlinkPowerMax = starlinkPowerData?.device_summaries?.[0]?.overall?.max_watts;
   const starlinkLatency = starlinkFieldStats?.pop_ping_latency_ms?.avg;
   const starlinkObstruction = starlinkFieldStats?.obstruction_percent?.avg;
   const starlinkDownlink = starlinkFieldStats?.downlink_throughput_bps?.avg;
@@ -165,7 +172,7 @@ const DashboardContent = () => {
   const avgTemp = dashboardStats?.avg_temp_c ?? thermalAvgTemp ?? bmtTemp?.avg ?? ahtTemp?.avg;
   const avgHumidity = dashboardStats?.avg_humidity ?? bmtHumidity?.avg ?? ahtHumidity?.avg;
   const avgSignal = dashboardStats?.avg_signal_dbm;
-  const avgPower = dashboardStats?.avg_power_w ?? starlinkPower;
+  const avgPower = dashboardStats?.avg_power_w ?? starlinkPowerAvg;
 
   // 24h sensor statistics - use API stats instead of timeseries
   const tempStats = useMemo((): SensorStats => {
@@ -199,6 +206,19 @@ const DashboardContent = () => {
   }, []);
 
   const powerStats = useMemo((): SensorStats => {
+    // Use dedicated Starlink power endpoint data first (most accurate)
+    const powerSummary = starlinkPowerData?.device_summaries?.[0]?.overall;
+    if (powerSummary) {
+      return {
+        min: powerSummary.min_watts ?? null,
+        max: powerSummary.max_watts ?? null,
+        avg: powerSummary.avg_watts ?? null,
+        current: powerSummary.avg_watts ?? null, // Use avg as current approximation
+        trend: 'stable'
+      };
+    }
+    
+    // Fallback to sensor type stats if available
     const stats = starlinkFieldStats?.power_watts;
     if (!stats) return { min: null, max: null, avg: null, current: null, trend: 'stable' };
     return {
@@ -208,7 +228,7 @@ const DashboardContent = () => {
       current: stats.avg ?? null,
       trend: 'stable'
     };
-  }, [starlinkFieldStats]);
+  }, [starlinkPowerData, starlinkFieldStats]);
 
   // Devices pending adoption (auto-registered but not manually adopted)
   const pendingDevices = clients?.filter((c: Client) => c.auto_registered && !c.adopted_at) || [];
@@ -250,7 +270,7 @@ const DashboardContent = () => {
           iconBgColor="bg-green-500/20"
           isLoading={clientsLoading}
           devices={activeClients.map((c, idx) => ({
-            device_id: c.hostname || c.client_id,
+            device_id: `${c.client_id}_${idx}`, // Ensure unique key
             device_type: 'client',
             color: ['#22c55e', '#3b82f6', '#f59e0b', '#ec4899'][idx % 4],
             reading_count: c.batches_received * 50,
@@ -338,14 +358,16 @@ const DashboardContent = () => {
           />
           <StatCardWithChart
             title="POWER CONSUMPTION"
-            value={starlinkPower !== undefined ? starlinkPower.toFixed(0) : "—"}
+            value={starlinkPowerAvg !== undefined ? starlinkPowerAvg.toFixed(0) : "—"}
             unit=" W"
-            subtitle={starlinkObstruction !== undefined 
-              ? `Obstruction: ${starlinkObstruction.toFixed(1)}%`
-              : `${starlinkStats?.count ?? 0} readings`}
+            subtitle={starlinkPowerMin !== undefined && starlinkPowerMax !== undefined
+              ? `Min: ${starlinkPowerMin.toFixed(1)}W / Max: ${starlinkPowerMax.toFixed(1)}W`
+              : starlinkObstruction !== undefined 
+                ? `Obstruction: ${starlinkObstruction.toFixed(1)}%`
+                : `${starlinkStats?.count ?? 0} readings`}
             icon={Zap}
             iconBgColor="bg-orange-500/20"
-            isLoading={starlinkLoading || starlinkTimeseriesLoading}
+            isLoading={starlinkLoading || starlinkTimeseriesLoading || starlinkPowerLoading}
             timeseries={(starlinkTimeseries?.readings || []).map(r => ({
               timestamp: r.timestamp,
               value: r.power_w ?? 0,

@@ -1699,7 +1699,33 @@ export interface StarlinkPerformance {
   timestamp?: string;
 }
 
+export interface StarlinkPowerDeviceSummary {
+  device_id: string;
+  overall: {
+    avg_watts: number;
+    min_watts: number;
+    max_watts: number;
+    samples: number;
+  };
+  when_connected?: {
+    avg_watts: number;
+    samples: number;
+  };
+}
+
+export interface StarlinkPowerDataPoint {
+  device_id: string;
+  timestamp: string;
+  power_watts: number;
+  state?: string;
+}
+
 export interface StarlinkPower {
+  time_period_hours: number;
+  device_filter?: string | null;
+  device_summaries: StarlinkPowerDeviceSummary[];
+  power_data: StarlinkPowerDataPoint[];
+  // Legacy fields for backwards compatibility
   device_id?: string;
   power_w?: number;
   voltage?: number;
