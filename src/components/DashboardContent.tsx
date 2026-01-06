@@ -125,6 +125,29 @@ const DashboardContent = () => {
   // Dedicated Starlink power endpoint for accurate power data
   const { data: starlinkPowerData, isLoading: starlinkPowerLoading } = useStarlinkPower();
 
+  // Check if thermal timeseries has actual temperature values (not just timestamps)
+  const thermalHasValidData = useMemo(() => {
+    if (!thermalTimeseries?.readings || thermalTimeseries.readings.length === 0) return false;
+    return thermalTimeseries.readings.some(r => 
+      r.temp_c !== undefined || r.probe_c !== undefined || r.ambient_c !== undefined
+    );
+  }, [thermalTimeseries?.readings]);
+
+  // Effective thermal timeseries - use dashboard timeseries if thermal probe returns empty data
+  const effectiveThermalTimeseries = useMemo(() => {
+    if (thermalHasValidData && thermalTimeseries?.readings) {
+      return thermalTimeseries.readings.map(r => ({
+        timestamp: r.timestamp,
+        value: r.temp_c ?? r.probe_c ?? r.ambient_c ?? 0,
+      }));
+    }
+    // Fall back to dashboard timeseries which has real temperature data
+    return (timeseries?.temperature || []).map(t => ({
+      timestamp: t.timestamp,
+      value: t.value,
+    }));
+  }, [thermalHasValidData, thermalTimeseries?.readings, timeseries?.temperature]);
+
   // Extract key metrics from comprehensive stats
   const global = stats?.global;
   const devicesSummary = stats?.devices_summary;
@@ -178,19 +201,34 @@ const DashboardContent = () => {
   const avgSignal = dashboardStats?.avg_signal_dbm;
   const avgPower = dashboardStats?.avg_power_w ?? starlinkPowerAvg;
 
-  // 24h sensor statistics - use API stats instead of timeseries
+  // 24h sensor statistics - use API stats, then effective timeseries as fallback
   const tempStats = useMemo((): SensorStats => {
     // Try thermal probe first, then BMT, then AHT
     const stats = thermalFieldStats?.temp_c ?? thermalFieldStats?.temperature_c ?? bmtTemp ?? ahtTemp;
-    if (!stats) return { min: null, max: null, avg: null, current: null, trend: 'stable' };
-    return {
-      min: stats.min ?? null,
-      max: stats.max ?? null,
-      avg: stats.avg ?? null,
-      current: stats.avg ?? null,
-      trend: 'stable'
-    };
-  }, [thermalFieldStats, bmtTemp, ahtTemp]);
+    if (stats && (stats.min !== undefined || stats.avg !== undefined)) {
+      return {
+        min: stats.min ?? null,
+        max: stats.max ?? null,
+        avg: stats.avg ?? null,
+        current: stats.avg ?? null,
+        trend: 'stable'
+      };
+    }
+    
+    // Fall back to calculating from effective timeseries
+    if (effectiveThermalTimeseries.length > 0) {
+      const values = effectiveThermalTimeseries.map(t => t.value).filter(v => v !== undefined && v !== null && v !== 0);
+      if (values.length > 0) {
+        const min = Math.min(...values);
+        const max = Math.max(...values);
+        const avg = values.reduce((a, b) => a + b, 0) / values.length;
+        const current = values[values.length - 1];
+        return { min, max, avg, current, trend: 'stable' };
+      }
+    }
+    
+    return { min: null, max: null, avg: null, current: null, trend: 'stable' };
+  }, [thermalFieldStats, bmtTemp, ahtTemp, effectiveThermalTimeseries]);
 
   const humidityStats = useMemo((): SensorStats => {
     const stats = bmtHumidity ?? ahtHumidity;
@@ -334,20 +372,22 @@ const DashboardContent = () => {
           {/* Current Temperature */}
           <StatCardWithChart
             title="TEMPERATURE"
-            value={thermalAvgTemp !== undefined ? thermalAvgTemp.toFixed(1) : avgTemp !== undefined && avgTemp !== null ? avgTemp.toFixed(1) : "—"}
+            value={thermalAvgTemp !== undefined ? thermalAvgTemp.toFixed(1) 
+              : avgTemp !== undefined && avgTemp !== null ? avgTemp.toFixed(1) 
+              : tempStats.current !== null ? tempStats.current.toFixed(1)
+              : "—"}
             unit="°C"
             subtitle={thermalAvgTemp !== undefined 
               ? `${cToF(thermalAvgTemp)?.toFixed(1)}°F` 
               : avgTemp !== undefined && avgTemp !== null 
                 ? `${cToF(avgTemp)?.toFixed(1)}°F`
-                : "No data"}
+                : tempStats.current !== null
+                  ? `${cToF(tempStats.current)?.toFixed(1)}°F`
+                  : "No data"}
             icon={Thermometer}
             iconBgColor="bg-red-500/20"
-            isLoading={thermalLoading || thermalTimeseriesLoading}
-            timeseries={(thermalTimeseries?.readings || []).map(r => ({
-              timestamp: r.timestamp,
-              value: r.temp_c ?? r.probe_c ?? r.ambient_c ?? 0,
-            }))}
+            isLoading={thermalLoading || thermalTimeseriesLoading || timeseriesLoading}
+            timeseries={effectiveThermalTimeseries}
             devices={[{
               device_id: "thermal_probe",
               device_type: "thermal_probe",

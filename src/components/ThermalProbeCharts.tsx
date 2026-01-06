@@ -31,7 +31,15 @@ const ThermalProbeCharts = () => {
   // Format thermal probe data for multi-line chart
   const formatThermalData = (readings: ThermalProbeTimeseriesPoint[] | undefined): ChartData[] => {
     if (!readings || readings.length === 0) return [];
-    return readings.map(r => ({
+    
+    // Filter out readings with no actual temperature data
+    const validReadings = readings.filter(r => 
+      r.temp_c !== undefined || r.ambient_c !== undefined || r.probe_c !== undefined
+    );
+    
+    if (validReadings.length === 0) return [];
+    
+    return validReadings.map(r => ({
       time: new Date(r.timestamp).toLocaleTimeString('en-US', { 
         hour12: false, 
         hour: '2-digit', 
@@ -43,7 +51,7 @@ const ThermalProbeCharts = () => {
     }));
   };
 
-  // Format dashboard temperature as fallback
+  // Format dashboard temperature - this is the reliable data source
   const formatDashboardTemp = (points: { timestamp: string; value: number }[] | undefined): ChartData[] => {
     if (!points || points.length === 0) return [];
     return points.map(p => ({
@@ -57,8 +65,13 @@ const ThermalProbeCharts = () => {
   };
 
   const chartData = useMemo(() => {
+    // First try thermal probe specific data
     const thermalFormatted = formatThermalData(thermalData?.readings);
-    if (thermalFormatted.length > 0) return thermalFormatted;
+    if (thermalFormatted.length > 0) {
+      return thermalFormatted;
+    }
+    
+    // Fall back to dashboard timeseries which has real data
     return formatDashboardTemp(dashboardTimeseries?.temperature);
   }, [thermalData?.readings, dashboardTimeseries?.temperature]);
 
