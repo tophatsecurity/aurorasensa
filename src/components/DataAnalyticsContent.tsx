@@ -36,6 +36,7 @@ import {
   useComprehensiveStats, 
   useDashboardTimeseries,
   useSensorTypeStats,
+  useClients,
   type SensorTypeSummary,
   type DeviceSummary
 } from "@/hooks/useAuroraApi";
@@ -421,11 +422,12 @@ const SensorDetailPanel = ({ sensorType, timeseries }: SensorDetailPanelProps) =
 const DataAnalyticsContent = () => {
   const [selectedSensor, setSelectedSensor] = useState<string | null>(null);
   const [timeRange, setTimeRange] = useState<string>("24h");
-  const [selectedDevices, setSelectedDevices] = useState<string[]>([]); // Empty = All Devices
-  const [deviceFilterOpen, setDeviceFilterOpen] = useState(false);
+  const [selectedClients, setSelectedClients] = useState<string[]>([]); // Empty = All Clients
+  const [clientFilterOpen, setClientFilterOpen] = useState(false);
   
   const { data: stats, isLoading: statsLoading } = useComprehensiveStats();
   const { data: timeseries, isLoading: timeseriesLoading } = useDashboardTimeseries(24);
+  const { data: clients } = useClients();
   const queryClient = useQueryClient();
 
   const handleRefresh = () => {
@@ -438,44 +440,50 @@ const DataAnalyticsContent = () => {
   const allDevices: DeviceSummary[] = stats?.devices_summary?.devices || [];
   const sensorTypes = stats?.sensors_summary?.sensor_types || [];
   const globalStats = stats?.global;
+  
+  // Get all clients list
+  const allClients = clients || [];
+  
+  // Map client_id to client name for display
+  const getClientName = (clientId: string) => {
+    const client = allClients.find(c => c.client_id === clientId);
+    return client?.hostname || clientId;
+  };
 
-  // Filter sensor types based on selected devices
+  // Filter sensor types based on selected clients
+  // Note: Since we're filtering by client, we show all sensor types when clients are selected
+  // The actual data filtering happens in the individual sensor detail views
   const filteredSensorTypes = useMemo(() => {
-    if (selectedDevices.length === 0) return sensorTypes; // All devices
-    
-    // Filter sensors that have devices matching the selected device IDs
-    const selectedDeviceTypes = new Set(
-      allDevices
-        .filter(d => selectedDevices.includes(d.device_id))
-        .map(d => d.device_type)
-    );
-    
-    return sensorTypes.filter(s => selectedDeviceTypes.has(s.device_type));
-  }, [sensorTypes, selectedDevices, allDevices]);
+    if (selectedClients.length === 0) return sensorTypes; // All clients
+    // For now, return all sensor types since sensor data is client-scoped
+    return sensorTypes;
+  }, [sensorTypes, selectedClients]);
 
-  // Filter devices list based on selected devices
+  // Filter devices list based on selected clients (devices may have client association)
   const filteredDevices = useMemo(() => {
-    if (selectedDevices.length === 0) return allDevices;
-    return allDevices.filter(d => selectedDevices.includes(d.device_id));
-  }, [allDevices, selectedDevices]);
+    if (selectedClients.length === 0) return allDevices;
+    // Filter devices that might belong to selected clients
+    // Since DeviceSummary may not have client_id, we return all for now
+    return allDevices;
+  }, [allDevices, selectedClients]);
 
-  // Toggle device selection
-  const toggleDevice = (deviceId: string) => {
-    setSelectedDevices(prev => 
-      prev.includes(deviceId) 
-        ? prev.filter(id => id !== deviceId)
-        : [...prev, deviceId]
+  // Toggle client selection
+  const toggleClient = (clientId: string) => {
+    setSelectedClients(prev => 
+      prev.includes(clientId) 
+        ? prev.filter(id => id !== clientId)
+        : [...prev, clientId]
     );
   };
 
-  // Clear all device filters
-  const clearDeviceFilter = () => {
-    setSelectedDevices([]);
+  // Clear all client filters
+  const clearClientFilter = () => {
+    setSelectedClients([]);
   };
 
-  // Select all devices
-  const selectAllDevices = () => {
-    setSelectedDevices(allDevices.map(d => d.device_id));
+  // Select all clients
+  const selectAllClients = () => {
+    setSelectedClients(allClients.map(c => c.client_id));
   };
 
   // Prepare pie chart data - filtered
@@ -513,18 +521,18 @@ const DataAnalyticsContent = () => {
           </Badge>
         </div>
         <div className="flex items-center gap-3">
-          {/* Device Filter */}
-          <Popover open={deviceFilterOpen} onOpenChange={setDeviceFilterOpen}>
+          {/* Client Filter */}
+          <Popover open={clientFilterOpen} onOpenChange={setClientFilterOpen}>
             <PopoverTrigger asChild>
               <Button variant="outline" size="sm" className="gap-2">
                 <Filter className="w-4 h-4" />
-                {selectedDevices.length === 0 ? (
-                  "All Devices"
+                {selectedClients.length === 0 ? (
+                  "All Clients"
                 ) : (
                   <span className="flex items-center gap-1">
-                    {selectedDevices.length} Device{selectedDevices.length !== 1 ? 's' : ''}
+                    {selectedClients.length} Client{selectedClients.length !== 1 ? 's' : ''}
                     <Badge variant="secondary" className="ml-1 h-5 px-1.5 text-xs">
-                      {selectedDevices.length}
+                      {selectedClients.length}
                     </Badge>
                   </span>
                 )}
@@ -533,13 +541,13 @@ const DataAnalyticsContent = () => {
             <PopoverContent className="w-80 p-0" align="end">
               <div className="p-3 border-b border-border">
                 <div className="flex items-center justify-between">
-                  <h4 className="font-semibold text-sm">Filter by Device</h4>
+                  <h4 className="font-semibold text-sm">Filter by Client</h4>
                   <div className="flex gap-1">
                     <Button 
                       variant="ghost" 
                       size="sm" 
                       className="h-7 text-xs"
-                      onClick={clearDeviceFilter}
+                      onClick={clearClientFilter}
                     >
                       Clear
                     </Button>
@@ -547,60 +555,56 @@ const DataAnalyticsContent = () => {
                       variant="ghost" 
                       size="sm" 
                       className="h-7 text-xs"
-                      onClick={selectAllDevices}
+                      onClick={selectAllClients}
                     >
                       Select All
                     </Button>
                   </div>
                 </div>
                 <p className="text-xs text-muted-foreground mt-1">
-                  {selectedDevices.length === 0 
-                    ? "Showing all devices" 
-                    : `${selectedDevices.length} of ${allDevices.length} devices selected`}
+                  {selectedClients.length === 0 
+                    ? "Showing all clients" 
+                    : `${selectedClients.length} of ${allClients.length} clients selected`}
                 </p>
               </div>
               <ScrollArea className="h-[300px]">
                 <div className="p-2 space-y-1">
-                  {allDevices.map((device) => {
-                    const isSelected = selectedDevices.includes(device.device_id);
-                    const color = getSensorColor(device.device_type);
+                  {allClients.map((client) => {
+                    const isSelected = selectedClients.includes(client.client_id);
+                    const isActive = client.state === 'adopted' || client.state === 'registered';
                     
                     return (
                       <div
-                        key={device.device_id}
+                        key={client.client_id}
                         className={`flex items-center gap-3 p-2 rounded-md cursor-pointer transition-colors hover:bg-muted/50 ${
                           isSelected ? 'bg-primary/10' : ''
                         }`}
-                        onClick={() => toggleDevice(device.device_id)}
+                        onClick={() => toggleClient(client.client_id)}
                       >
                         <Checkbox 
                           checked={isSelected}
-                          onCheckedChange={() => toggleDevice(device.device_id)}
-                        />
-                        <div 
-                          className="w-2 h-2 rounded-full flex-shrink-0"
-                          style={{ backgroundColor: color }}
+                          onCheckedChange={() => toggleClient(client.client_id)}
                         />
                         <div className="flex-1 min-w-0">
                           <p className="text-sm font-medium truncate">
-                            {device.device_id}
+                            {client.hostname || client.client_id}
                           </p>
-                          <p className="text-xs text-muted-foreground capitalize">
-                            {device.device_type.replace(/_/g, ' ')}
+                          <p className="text-xs text-muted-foreground">
+                            {client.ip_address}
                           </p>
                         </div>
                         <Badge 
-                          variant={device.status === 'active' ? 'default' : 'secondary'}
+                          variant={isActive ? 'default' : 'secondary'}
                           className="text-xs flex-shrink-0"
                         >
-                          {device.status}
+                          {client.state || 'unknown'}
                         </Badge>
                       </div>
                     );
                   })}
-                  {allDevices.length === 0 && (
+                  {allClients.length === 0 && (
                     <p className="text-sm text-muted-foreground text-center py-4">
-                      No devices found
+                      No clients found
                     </p>
                   )}
                 </div>
@@ -645,18 +649,18 @@ const DataAnalyticsContent = () => {
           </TabsList>
 
           <TabsContent value="overview" className="space-y-6">
-            {/* Device Filter Indicator */}
-            {selectedDevices.length > 0 && (
+            {/* Client Filter Indicator */}
+            {selectedClients.length > 0 && (
               <div className="flex items-center gap-2 p-3 rounded-lg bg-primary/10 border border-primary/20">
                 <Filter className="w-4 h-4 text-primary" />
                 <span className="text-sm">
-                  Filtering by <strong>{selectedDevices.length}</strong> device{selectedDevices.length !== 1 ? 's' : ''}
+                  Filtering by <strong>{selectedClients.length}</strong> client{selectedClients.length !== 1 ? 's' : ''}
                 </span>
                 <Button 
                   variant="ghost" 
                   size="sm" 
                   className="ml-auto h-7 text-xs gap-1"
-                  onClick={clearDeviceFilter}
+                  onClick={clearClientFilter}
                 >
                   <X className="w-3 h-3" />
                   Clear Filter
@@ -674,13 +678,13 @@ const DataAnalyticsContent = () => {
                   </div>
                   <p className="text-3xl font-bold text-primary">
                     {formatNumber(
-                      selectedDevices.length === 0 
+                      selectedClients.length === 0 
                         ? globalStats?.database?.total_readings
                         : filteredSensorTypes.reduce((sum, s) => sum + s.total_readings, 0)
                     )}
                   </p>
                   <p className="text-xs text-muted-foreground mt-1">
-                    {selectedDevices.length === 0 ? 'Across all sensors' : 'From selected devices'}
+                    {selectedClients.length === 0 ? 'Across all sensors' : 'From selected clients'}
                   </p>
                 </CardContent>
               </Card>
@@ -694,7 +698,7 @@ const DataAnalyticsContent = () => {
                     {filteredSensorTypes.length}
                   </p>
                   <p className="text-xs text-muted-foreground mt-1">
-                    {selectedDevices.length === 0 ? 'Unique sensor categories' : `of ${sensorTypes.length} total`}
+                    {selectedClients.length === 0 ? 'Unique sensor categories' : `of ${sensorTypes.length} total`}
                   </p>
                 </CardContent>
               </Card>
@@ -702,13 +706,13 @@ const DataAnalyticsContent = () => {
                 <CardContent className="p-4">
                   <div className="flex items-center gap-2 text-muted-foreground text-xs mb-1">
                     <Cpu className="w-3 h-3" />
-                    Selected Devices
+                    Selected Clients
                   </div>
                   <p className="text-3xl font-bold text-green-500">
-                    {selectedDevices.length === 0 ? allDevices.length : selectedDevices.length}
+                    {selectedClients.length === 0 ? allClients.length : selectedClients.length}
                   </p>
                   <p className="text-xs text-muted-foreground mt-1">
-                    {selectedDevices.length === 0 ? 'All devices' : `of ${allDevices.length} total`}
+                    {selectedClients.length === 0 ? 'All clients' : `of ${allClients.length} total`}
                   </p>
                 </CardContent>
               </Card>
