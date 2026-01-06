@@ -2240,6 +2240,7 @@ export function useAhtSensorTimeseries(hours: number = 24) {
 export interface WifiScannerReading {
   timestamp: string;
   device_id?: string;
+  client_id?: string;
   ssid?: string;
   bssid?: string;
   channel?: number;
@@ -2330,6 +2331,7 @@ export function useWifiScannerTimeseries(hours: number = 24) {
 export interface BluetoothScannerReading {
   timestamp: string;
   device_id?: string;
+  client_id?: string;
   mac_address?: string;
   name?: string;
   rssi?: number;
@@ -2419,6 +2421,7 @@ export function useBluetoothScannerTimeseries(hours: number = 24) {
 export interface LoraDetectorReading {
   timestamp: string;
   device_id?: string;
+  client_id?: string;
   frequency?: number;
   rssi?: number;
   snr?: number;

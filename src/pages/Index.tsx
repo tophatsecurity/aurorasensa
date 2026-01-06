@@ -15,7 +15,7 @@ import SettingsContent from "@/components/SettingsContent";
 import StarlinkContent from "@/components/StarlinkContent";
 import AuditLogsContent from "@/components/AuditLogsContent";
 import ConfigurationContent from "@/components/ConfigurationContent";
-import RadioContent from "@/components/RadioContent";
+import RadioAnalyticsContent from "@/components/RadioAnalyticsContent";
 import DataAnalyticsContent from "@/components/DataAnalyticsContent";
 import WeatherAnalyticsContent from "@/components/WeatherAnalyticsContent";
 import SoundLightAnalyticsContent from "@/components/SoundLightAnalyticsContent";
@@ -53,7 +53,7 @@ const Index = () => {
       case "starlink":
         return <StarlinkContent />;
       case "radio":
-        return <RadioContent />;
+        return <RadioAnalyticsContent />;
       case "audit-logs":
         return <AuditLogsContent />;
       case "configuration":
