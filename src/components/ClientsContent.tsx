@@ -219,6 +219,8 @@ const ClientsContent = () => {
       {
         onSuccess: () => {
           toast.success(`Successfully ${label} ${hostname || clientId}`);
+          // Force refetch to ensure UI updates immediately
+          refetch();
         },
         onError: (error) => {
           toast.error(`Failed to ${action} client: ${error.message}`);
