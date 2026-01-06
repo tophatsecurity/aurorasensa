@@ -54,7 +54,8 @@ async function makeRequest(
   method: string,
   body: unknown,
   useApiKey: boolean,
-  cookie: string | null
+  cookie: string | null,
+  retries = 3
 ): Promise<Response> {
   const headers: Record<string, string> = { 'Content-Type': 'application/json' };
   
@@ -71,7 +72,25 @@ async function makeRequest(
     options.body = JSON.stringify(body);
   }
 
-  return fetch(url, options);
+  for (let attempt = 1; attempt <= retries; attempt++) {
+    try {
+      const response = await fetch(url, options);
+      return response;
+    } catch (error) {
+      const isRetryable = String(error).includes('connection') || 
+                          String(error).includes('reset') ||
+                          String(error).includes('closed');
+      
+      if (attempt === retries || !isRetryable) {
+        throw error;
+      }
+      
+      console.log(`Retry ${attempt}/${retries} for ${url} after error: ${error}`);
+      await new Promise(r => setTimeout(r, 500 * attempt)); // Exponential backoff
+    }
+  }
+  
+  throw new Error('Max retries exceeded');
 }
 
 serve(async (req) => {
