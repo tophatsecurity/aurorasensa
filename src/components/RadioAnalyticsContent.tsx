@@ -82,11 +82,21 @@ const COLORS = {
   adsb: "#ef4444",
 };
 
+const SENSOR_TYPES = ["wifi_scanner", "bluetooth_scanner", "lora_detector", "adsb"] as const;
+type RadioSensorType = typeof SENSOR_TYPES[number];
+
+const SENSOR_TYPE_LABELS: Record<RadioSensorType, string> = {
+  wifi_scanner: "WiFi Scanner",
+  bluetooth_scanner: "Bluetooth Scanner",
+  lora_detector: "LoRa Detector",
+  adsb: "ADS-B Receiver",
+};
+
 const RadioAnalyticsContent = () => {
   const queryClient = useQueryClient();
   const [timeRange, setTimeRange] = useState("24");
   const [selectedClients, setSelectedClients] = useState<string[]>([]);
-  
+  const [selectedSensorTypes, setSelectedSensorTypes] = useState<RadioSensorType[]>([]);
   const hours = parseInt(timeRange);
   
   // Fetch radio data
@@ -134,8 +144,20 @@ const RadioAnalyticsContent = () => {
     );
   };
 
+  const isSensorTypeSelected = (type: RadioSensorType) => 
+    selectedSensorTypes.length === 0 || selectedSensorTypes.includes(type);
+
+  const toggleSensorType = (type: RadioSensorType) => {
+    setSelectedSensorTypes(prev => 
+      prev.includes(type)
+        ? prev.filter(t => t !== type)
+        : [...prev, type]
+    );
+  };
+
   // Process WiFi signal strength over time
   const wifiChartData = useMemo(() => {
+    if (!isSensorTypeSelected("wifi_scanner")) return [];
     const timeMap = new Map<string, { rssi: number[]; networks: number }>();
     
     wifiData?.readings?.forEach((r) => {
@@ -154,10 +176,11 @@ const RadioAnalyticsContent = () => {
         networks: data.networks,
       }))
       .sort((a, b) => a.time.localeCompare(b.time));
-  }, [wifiData, selectedClients]);
+  }, [wifiData, selectedClients, selectedSensorTypes]);
 
   // Process Bluetooth devices over time
   const bluetoothChartData = useMemo(() => {
+    if (!isSensorTypeSelected("bluetooth_scanner")) return [];
     const timeMap = new Map<string, { rssi: number[]; devices: number }>();
     
     bluetoothData?.readings?.forEach((r) => {
@@ -176,10 +199,11 @@ const RadioAnalyticsContent = () => {
         devices: data.devices,
       }))
       .sort((a, b) => a.time.localeCompare(b.time));
-  }, [bluetoothData, selectedClients]);
+  }, [bluetoothData, selectedClients, selectedSensorTypes]);
 
   // Process LoRa packets over time
   const loraChartData = useMemo(() => {
+    if (!isSensorTypeSelected("lora_detector")) return [];
     const timeMap = new Map<string, { rssi: number[]; snr: number[]; packets: number }>();
     
     loraData?.readings?.forEach((r) => {
@@ -200,7 +224,7 @@ const RadioAnalyticsContent = () => {
         packets: data.packets,
       }))
       .sort((a, b) => a.time.localeCompare(b.time));
-  }, [loraData, selectedClients]);
+  }, [loraData, selectedClients, selectedSensorTypes]);
 
   // Combined signal chart data
   const combinedSignalData = useMemo(() => {
@@ -231,25 +255,26 @@ const RadioAnalyticsContent = () => {
 
   // Calculate summary statistics
   const stats = useMemo(() => {
-    const wifiReadings = wifiData?.readings?.filter((r) => 
-      !r.client_id || isClientSelected(r.client_id)
-    ) || [];
-    const bluetoothReadings = bluetoothData?.readings?.filter((r) => 
-      !r.client_id || isClientSelected(r.client_id)
-    ) || [];
-    const loraReadings = loraData?.readings?.filter((r) => 
-      !r.client_id || isClientSelected(r.client_id)
-    ) || [];
+    const wifiReadings = isSensorTypeSelected("wifi_scanner") 
+      ? (wifiData?.readings?.filter((r) => !r.client_id || isClientSelected(r.client_id)) || [])
+      : [];
+    const bluetoothReadings = isSensorTypeSelected("bluetooth_scanner")
+      ? (bluetoothData?.readings?.filter((r) => !r.client_id || isClientSelected(r.client_id)) || [])
+      : [];
+    const loraReadings = isSensorTypeSelected("lora_detector")
+      ? (loraData?.readings?.filter((r) => !r.client_id || isClientSelected(r.client_id)) || [])
+      : [];
 
     const wifiRssi = wifiReadings.map((r) => r.rssi).filter((v): v is number => v !== undefined);
     const bluetoothRssi = bluetoothReadings.map((r) => r.rssi).filter((v): v is number => v !== undefined);
     const loraRssi = loraReadings.map((r) => r.rssi).filter((v): v is number => v !== undefined);
     const loraSNR = loraReadings.map((r) => r.snr).filter((v): v is number => v !== undefined);
 
-    // ADS-B stats
-    const activeAircraft = adsbAircraft?.filter(a => (a.seen || 0) < 60) || [];
-    const aircraftWithAlt = adsbAircraft?.filter(a => a.alt_baro !== undefined) || [];
-    const avgAltitude = aircraftWithAlt.length > 0 
+    // ADS-B stats (only if adsb sensor type is selected)
+    const showAdsb = isSensorTypeSelected("adsb");
+    const activeAircraft = showAdsb ? (adsbAircraft?.filter(a => (a.seen || 0) < 60) || []) : [];
+    const aircraftWithAlt = showAdsb ? (adsbAircraft?.filter(a => a.alt_baro !== undefined) || []) : [];
+    const avgAltitude = aircraftWithAlt.length > 0
       ? aircraftWithAlt.reduce((sum, a) => sum + (a.alt_baro || 0), 0) / aircraftWithAlt.length 
       : null;
 
@@ -263,11 +288,11 @@ const RadioAnalyticsContent = () => {
       avgLoraSNR: loraSNR.length > 0 ? loraSNR.reduce((a, b) => a + b, 0) / loraSNR.length : null,
       totalReadings: wifiReadings.length + bluetoothReadings.length + loraReadings.length,
       // ADS-B stats
-      totalAircraft: adsbAircraft?.length || 0,
+      totalAircraft: showAdsb ? (adsbAircraft?.length || 0) : 0,
       activeAircraft: activeAircraft.length,
       avgAltitude,
     };
-  }, [wifiData, bluetoothData, loraData, adsbAircraft, selectedClients]);
+  }, [wifiData, bluetoothData, loraData, adsbAircraft, selectedClients, selectedSensorTypes]);
 
   return (
     <div className="h-full flex flex-col overflow-hidden">
@@ -329,6 +354,53 @@ const RadioAnalyticsContent = () => {
                     ))}
                   </div>
                 )}
+              </div>
+            </PopoverContent>
+          </Popover>
+
+          {/* Sensor Type Filter */}
+          <Popover>
+            <PopoverTrigger asChild>
+              <Button variant="outline" className="gap-2">
+                <Filter className="w-4 h-4" />
+                Sensor Types
+                {selectedSensorTypes.length > 0 && (
+                  <Badge variant="secondary" className="ml-1">
+                    {selectedSensorTypes.length}
+                  </Badge>
+                )}
+              </Button>
+            </PopoverTrigger>
+            <PopoverContent className="w-64 p-3" align="end">
+              <div className="space-y-2">
+                <div className="flex items-center justify-between pb-2 border-b border-white/10">
+                  <span className="text-sm font-medium">Filter by Sensor Type</span>
+                  {selectedSensorTypes.length > 0 && (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => setSelectedSensorTypes([])}
+                      className="h-6 px-2 text-xs"
+                    >
+                      Clear
+                    </Button>
+                  )}
+                </div>
+                {SENSOR_TYPES.map((type) => (
+                  <div
+                    key={type}
+                    className="flex items-center gap-2 p-1.5 rounded hover:bg-white/5 cursor-pointer"
+                    onClick={() => toggleSensorType(type)}
+                  >
+                    <Checkbox
+                      checked={selectedSensorTypes.includes(type)}
+                      className="pointer-events-none"
+                    />
+                    <span className="text-sm truncate">
+                      {SENSOR_TYPE_LABELS[type]}
+                    </span>
+                  </div>
+                ))}
               </div>
             </PopoverContent>
           </Popover>

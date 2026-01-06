@@ -57,10 +57,20 @@ const COLORS = {
   latency: "#ef4444",
 };
 
+const SENSOR_TYPES = ["starlink_power", "starlink_network", "dashboard_power"] as const;
+type PowerSensorType = typeof SENSOR_TYPES[number];
+
+const SENSOR_TYPE_LABELS: Record<PowerSensorType, string> = {
+  starlink_power: "Starlink Power",
+  starlink_network: "Starlink Network",
+  dashboard_power: "Dashboard Power",
+};
+
 const PowerAnalyticsContent = () => {
   const queryClient = useQueryClient();
   const [timeRange, setTimeRange] = useState("24");
   const [selectedClients, setSelectedClients] = useState<string[]>([]);
+  const [selectedSensorTypes, setSelectedSensorTypes] = useState<PowerSensorType[]>([]);
 
   const hours = parseInt(timeRange);
 
@@ -99,8 +109,24 @@ const PowerAnalyticsContent = () => {
     );
   };
 
+  const isSensorTypeSelected = (type: PowerSensorType) => 
+    selectedSensorTypes.length === 0 || selectedSensorTypes.includes(type);
+
+  const toggleSensorType = (type: PowerSensorType) => {
+    setSelectedSensorTypes(prev => 
+      prev.includes(type)
+        ? prev.filter(t => t !== type)
+        : [...prev, type]
+    );
+  };
+
   // Process Starlink power data
   const powerChartData = useMemo(() => {
+    const showStarlinkPower = isSensorTypeSelected("starlink_power");
+    const showStarlinkNetwork = isSensorTypeSelected("starlink_network");
+    
+    if (!showStarlinkPower && !showStarlinkNetwork) return [];
+    
     const data: Array<{ time: string; power?: number; downlink?: number; uplink?: number; latency?: number }> = [];
 
     starlinkTimeseries?.readings?.forEach((r: any) => {
@@ -110,34 +136,38 @@ const PowerAnalyticsContent = () => {
       const existing = data.find(d => d.time === time);
 
       if (existing) {
-        if (r.power_w !== undefined) existing.power = r.power_w;
-        if (r.downlink_mbps !== undefined) existing.downlink = r.downlink_mbps;
-        if (r.uplink_mbps !== undefined) existing.uplink = r.uplink_mbps;
-        if (r.latency_ms !== undefined) existing.latency = r.latency_ms;
+        if (showStarlinkPower && r.power_w !== undefined) existing.power = r.power_w;
+        if (showStarlinkNetwork && r.downlink_mbps !== undefined) existing.downlink = r.downlink_mbps;
+        if (showStarlinkNetwork && r.uplink_mbps !== undefined) existing.uplink = r.uplink_mbps;
+        if (showStarlinkNetwork && r.latency_ms !== undefined) existing.latency = r.latency_ms;
       } else {
         data.push({
           time,
-          power: r.power_w,
-          downlink: r.downlink_mbps,
-          uplink: r.uplink_mbps,
-          latency: r.latency_ms,
+          power: showStarlinkPower ? r.power_w : undefined,
+          downlink: showStarlinkNetwork ? r.downlink_mbps : undefined,
+          uplink: showStarlinkNetwork ? r.uplink_mbps : undefined,
+          latency: showStarlinkNetwork ? r.latency_ms : undefined,
         });
       }
     });
 
     return data.sort((a, b) => a.time.localeCompare(b.time));
-  }, [starlinkTimeseries, selectedClients]);
+  }, [starlinkTimeseries, selectedClients, selectedSensorTypes]);
 
   // Dashboard power data
   const dashboardPowerData = useMemo(() => {
+    if (!isSensorTypeSelected("dashboard_power")) return [];
     return (dashboardTimeseries?.power || []).map(p => ({
       time: format(new Date(p.timestamp), "HH:mm"),
       power: p.value,
     })).sort((a, b) => a.time.localeCompare(b.time));
-  }, [dashboardTimeseries]);
+  }, [dashboardTimeseries, selectedSensorTypes]);
 
   // Calculate stats
   const stats = useMemo(() => {
+    const showStarlinkPower = isSensorTypeSelected("starlink_power");
+    const showStarlinkNetwork = isSensorTypeSelected("starlink_network");
+    
     const powerValues: number[] = [];
     const downlinkValues: number[] = [];
     const uplinkValues: number[] = [];
@@ -145,10 +175,10 @@ const PowerAnalyticsContent = () => {
 
     starlinkTimeseries?.readings?.forEach((r: any) => {
       if (r.client_id && !isClientSelected(r.client_id)) return;
-      if (r.power_w !== undefined) powerValues.push(r.power_w);
-      if (r.downlink_mbps !== undefined) downlinkValues.push(r.downlink_mbps);
-      if (r.uplink_mbps !== undefined) uplinkValues.push(r.uplink_mbps);
-      if (r.latency_ms !== undefined) latencyValues.push(r.latency_ms);
+      if (showStarlinkPower && r.power_w !== undefined) powerValues.push(r.power_w);
+      if (showStarlinkNetwork && r.downlink_mbps !== undefined) downlinkValues.push(r.downlink_mbps);
+      if (showStarlinkNetwork && r.uplink_mbps !== undefined) uplinkValues.push(r.uplink_mbps);
+      if (showStarlinkNetwork && r.latency_ms !== undefined) latencyValues.push(r.latency_ms);
     });
 
     return {
@@ -161,7 +191,7 @@ const PowerAnalyticsContent = () => {
       avgLatency: latencyValues.length > 0 ? latencyValues.reduce((a, b) => a + b, 0) / latencyValues.length : null,
       totalReadings: powerValues.length,
     };
-  }, [starlinkTimeseries, starlinkPower, selectedClients]);
+  }, [starlinkTimeseries, starlinkPower, selectedClients, selectedSensorTypes]);
 
   // Power efficiency percentage (mock calculation based on average vs max)
   const powerEfficiency = stats.maxPower && stats.avgPower
@@ -224,6 +254,48 @@ const PowerAnalyticsContent = () => {
                     </div>
                   ))
                 )}
+              </div>
+            </PopoverContent>
+          </Popover>
+
+          {/* Sensor Type Filter */}
+          <Popover>
+            <PopoverTrigger asChild>
+              <Button variant="outline" size="sm" className="gap-2">
+                <Filter className="w-4 h-4" />
+                Sensor Types
+                {selectedSensorTypes.length > 0 && (
+                  <Badge variant="secondary" className="ml-1">
+                    {selectedSensorTypes.length}
+                  </Badge>
+                )}
+              </Button>
+            </PopoverTrigger>
+            <PopoverContent className="w-64 p-3" align="end">
+              <div className="space-y-2">
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-sm font-medium">Filter by Sensor Type</span>
+                  {selectedSensorTypes.length > 0 && (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="h-6 text-xs"
+                      onClick={() => setSelectedSensorTypes([])}
+                    >
+                      Clear
+                    </Button>
+                  )}
+                </div>
+                {SENSOR_TYPES.map(type => (
+                  <div
+                    key={type}
+                    className="flex items-center gap-2 p-2 hover:bg-muted/50 rounded cursor-pointer"
+                    onClick={() => toggleSensorType(type)}
+                  >
+                    <Checkbox checked={selectedSensorTypes.includes(type)} />
+                    <span className="text-sm truncate">{SENSOR_TYPE_LABELS[type]}</span>
+                  </div>
+                ))}
               </div>
             </PopoverContent>
           </Popover>
