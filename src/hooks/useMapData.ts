@@ -180,6 +180,19 @@ export function useMapData(options: UseMapDataOptions = {}) {
     setLastUpdate(new Date());
   }, [sensorsUpdated, geoUpdated]);
 
+  // Debug logging for map data sources
+  useEffect(() => {
+    console.log('[MapData] Data sources:', {
+      sensors: sensors?.length || 0,
+      clients: clients?.length || 0,
+      latestReadings: latestReadings?.length || 0,
+      geoLocations: geoLocations?.length || 0,
+      adsbAircraft: adsbAircraft?.length || 0,
+      starlinkStats: !!starlinkStats,
+      starlinkLatest: !!starlinkLatest?.data,
+    });
+  }, [sensors, clients, latestReadings, geoLocations, adsbAircraft, starlinkStats, starlinkLatest]);
+
   const handleRefresh = useCallback(() => {
     queryClient.invalidateQueries({ queryKey: ["aurora"] });
   }, [queryClient]);
@@ -187,11 +200,104 @@ export function useMapData(options: UseMapDataOptions = {}) {
   // Extract GPS coordinates from latest readings
   const readingsGps = useMemo(() => {
     if (!latestReadings) return {};
-    return extractGpsFromReadings(latestReadings);
+    const gps = extractGpsFromReadings(latestReadings);
+    if (Object.keys(gps).length > 0) {
+      console.log('[MapData] Extracted GPS from readings:', Object.keys(gps));
+    }
+    return gps;
   }, [latestReadings]);
 
   // Extract GPS from Starlink stats (avg lat/lng from 24h data)
   const starlinkGps = useMemo<{ lat: number; lng: number; altitude?: number } | null>(() => {
+    // Helper to extract lat/lng from various field formats
+    const extractCoords = (data: Record<string, unknown>): { lat: number; lng: number; altitude?: number } | null => {
+      let lat: number | undefined;
+      let lng: number | undefined;
+      let alt: number | undefined;
+
+      // Try various field names
+      if (typeof data.latitude === 'number' && data.latitude !== null && 
+          typeof data.longitude === 'number' && data.longitude !== null) {
+        lat = data.latitude;
+        lng = data.longitude;
+        alt = typeof data.altitude === 'number' ? data.altitude : undefined;
+      } else if (typeof data.lat === 'number' && typeof data.lon === 'number') {
+        lat = data.lat;
+        lng = data.lon;
+        alt = typeof data.alt === 'number' ? data.alt : undefined;
+      } else if (typeof data.lat === 'number' && typeof data.lng === 'number') {
+        lat = data.lat;
+        lng = data.lng;
+        alt = typeof data.altitude === 'number' ? data.altitude : undefined;
+      } else if (typeof data.gps_latitude === 'number' && typeof data.gps_longitude === 'number') {
+        lat = data.gps_latitude;
+        lng = data.gps_longitude;
+        alt = typeof data.gps_altitude === 'number' ? data.gps_altitude : undefined;
+      } else if (data.location && typeof data.location === 'object') {
+        const loc = data.location as Record<string, unknown>;
+        if (typeof loc.lat === 'number' && (typeof loc.lng === 'number' || typeof loc.lon === 'number')) {
+          lat = loc.lat;
+          lng = (loc.lng ?? loc.lon) as number;
+          alt = typeof loc.altitude === 'number' ? loc.altitude : undefined;
+        } else if (typeof loc.latitude === 'number' && loc.latitude !== null && 
+                   typeof loc.longitude === 'number' && loc.longitude !== null) {
+          lat = loc.latitude;
+          lng = loc.longitude;
+          alt = typeof loc.altitude === 'number' ? loc.altitude : undefined;
+        }
+      } else if (data.gps && typeof data.gps === 'object') {
+        const gps = data.gps as Record<string, unknown>;
+        if (typeof gps.latitude === 'number' && gps.latitude !== null && 
+            typeof gps.longitude === 'number' && gps.longitude !== null) {
+          lat = gps.latitude;
+          lng = gps.longitude;
+          alt = typeof gps.altitude === 'number' ? gps.altitude : undefined;
+        }
+      } else if (data.position && typeof data.position === 'object') {
+        const pos = data.position as Record<string, unknown>;
+        if (typeof pos.lat === 'number' && (typeof pos.lng === 'number' || typeof pos.lon === 'number')) {
+          lat = pos.lat;
+          lng = (pos.lng ?? pos.lon) as number;
+          alt = typeof pos.altitude === 'number' ? pos.altitude : undefined;
+        }
+      } else if (data.location_detail && typeof data.location_detail === 'object') {
+        // Starlink location_detail format
+        const loc = data.location_detail as Record<string, unknown>;
+        if (typeof loc.latitude === 'number' && loc.latitude !== null && 
+            typeof loc.longitude === 'number' && loc.longitude !== null) {
+          lat = loc.latitude;
+          lng = loc.longitude;
+          alt = typeof loc.altitude === 'number' ? loc.altitude : undefined;
+        }
+      } else if (data.starlink && typeof data.starlink === 'object') {
+        // Nested starlink object
+        const starlink = data.starlink as Record<string, unknown>;
+        if (typeof starlink.latitude === 'number' && starlink.latitude !== null && 
+            typeof starlink.longitude === 'number' && starlink.longitude !== null) {
+          lat = starlink.latitude;
+          lng = starlink.longitude;
+          alt = typeof starlink.altitude === 'number' ? starlink.altitude : undefined;
+        } else if (starlink.location_detail && typeof starlink.location_detail === 'object') {
+          const loc = starlink.location_detail as Record<string, unknown>;
+          if (typeof loc.latitude === 'number' && loc.latitude !== null && 
+              typeof loc.longitude === 'number' && loc.longitude !== null) {
+            lat = loc.latitude;
+            lng = loc.longitude;
+            alt = typeof loc.altitude === 'number' ? loc.altitude : undefined;
+          }
+        }
+      }
+
+      if (lat !== undefined && lng !== undefined && 
+          lat >= -90 && lat <= 90 && 
+          lng >= -180 && lng <= 180 &&
+          !(lat === 0 && lng === 0)) {
+        return { lat, lng, altitude: alt };
+      }
+      return null;
+    };
+
+    // Try Starlink stats numeric fields
     if (starlinkStats?.numeric_field_stats_24h) {
       const stats = starlinkStats.numeric_field_stats_24h as Record<string, { avg?: number }>;
       const lat = stats.latitude?.avg;
@@ -202,27 +308,44 @@ export function useMapData(options: UseMapDataOptions = {}) {
           lat >= -90 && lat <= 90 && 
           lng >= -180 && lng <= 180 &&
           !(lat === 0 && lng === 0)) {
+        console.log('[MapData] Found Starlink GPS from stats:', { lat, lng, alt });
         return { lat, lng, altitude: alt };
       }
     }
     
-    // Try to get from latest reading
+    // Try Starlink latest reading with flexible field detection
     if (starlinkLatest?.data) {
       const data = starlinkLatest.data as Record<string, unknown>;
-      const lat = data.latitude as number;
-      const lng = data.longitude as number;
-      const alt = data.altitude as number;
-      
-      if (lat !== undefined && lng !== undefined && 
-          lat >= -90 && lat <= 90 && 
-          lng >= -180 && lng <= 180 &&
-          !(lat === 0 && lng === 0)) {
-        return { lat, lng, altitude: alt };
+      const coords = extractCoords(data);
+      if (coords) {
+        console.log('[MapData] Found Starlink GPS from latest:', coords);
+        return coords;
+      }
+    }
+
+    // Try latest readings for starlink devices
+    if (latestReadings) {
+      for (const reading of latestReadings) {
+        if (reading.device_type?.toLowerCase().includes('starlink') || 
+            reading.device_id?.toLowerCase().includes('starlink')) {
+          const coords = extractCoords(reading.data);
+          if (coords) {
+            console.log('[MapData] Found Starlink GPS from readings:', coords);
+            return coords;
+          }
+        }
       }
     }
     
     return null;
-  }, [starlinkStats, starlinkLatest]);
+  }, [starlinkStats, starlinkLatest, latestReadings]);
+
+  // Debug starlinkGps
+  useEffect(() => {
+    if (starlinkGps) {
+      console.log('[MapData] Starlink GPS found:', starlinkGps);
+    }
+  }, [starlinkGps]);
 
   // Merge geo locations API with readings GPS and Starlink GPS
   const gpsCoordinates = useMemo(() => {
@@ -235,6 +358,10 @@ export function useMapData(options: UseMapDataOptions = {}) {
         lng: starlinkGps.lng,
         altitude: starlinkGps.altitude,
       };
+    }
+    
+    if (Object.keys(merged).length > 0) {
+      console.log('[MapData] GPS coordinates merged:', Object.keys(merged));
     }
     
     return merged;
@@ -683,14 +810,18 @@ export function useMapData(options: UseMapDataOptions = {}) {
   }, [sensorMarkers, clientMarkers, adsbMarkers]);
 
   // Calculate statistics
-  const stats = useMemo<MapStats>(() => ({
-    total: sensorMarkers.length + clientMarkers.length + adsbMarkers.length,
-    gps: sensorMarkers.filter(s => s.type === 'gps').length,
-    starlink: sensorMarkers.filter(s => s.type === 'starlink').length,
-    clients: clientMarkers.length,
-    lora: sensorMarkers.filter(s => s.type === 'lora').length,
-    adsb: adsbMarkers.length,
-  }), [sensorMarkers, clientMarkers, adsbMarkers]);
+  const stats = useMemo<MapStats>(() => {
+    const result = {
+      total: sensorMarkers.length + clientMarkers.length + adsbMarkers.length,
+      gps: sensorMarkers.filter(s => s.type === 'gps').length,
+      starlink: sensorMarkers.filter(s => s.type === 'starlink').length,
+      clients: clientMarkers.length,
+      lora: sensorMarkers.filter(s => s.type === 'lora').length,
+      adsb: adsbMarkers.length,
+    };
+    console.log('[MapData] Final stats:', result);
+    return result;
+  }, [sensorMarkers, clientMarkers, adsbMarkers]);
 
   const isLoading = sensorsLoading || clientsLoading || readingsLoading || geoLoading || adsbLoading;
 
