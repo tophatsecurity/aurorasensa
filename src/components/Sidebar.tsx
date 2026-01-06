@@ -14,7 +14,8 @@ import {
   ScrollText,
   Cog,
   Users,
-  Radio
+  Radio,
+  BarChart3
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -38,6 +39,7 @@ const menuSections = [
     title: "DATA & ANALYTICS",
     items: [
       { id: "sensors", label: "Sensors", icon: Thermometer },
+      { id: "data-analytics", label: "Data Analytics", icon: BarChart3 },
       { id: "radio", label: "Radio", icon: Radio },
       { id: "starlink", label: "Starlink", icon: Satellite },
       { id: "power", label: "Power", icon: Zap },
