@@ -105,28 +105,50 @@ function extractGpsFromReadings(readings: Array<{ device_id: string; device_type
   return gpsData;
 }
 
+// Helper to convert geoLocations to array format (API may return object or array)
+function normalizeGeoLocations(geoLocations: unknown): GeoLocation[] {
+  if (!geoLocations) return [];
+  if (Array.isArray(geoLocations)) return geoLocations;
+  if (typeof geoLocations === 'object') {
+    // Handle object format where keys are device_ids
+    return Object.entries(geoLocations as Record<string, unknown>).map(([key, value]) => {
+      if (value && typeof value === 'object') {
+        const v = value as Record<string, unknown>;
+        return {
+          device_id: (v.device_id as string) || key,
+          lat: (v.lat ?? v.latitude) as number,
+          lng: (v.lng ?? v.longitude ?? v.lon) as number,
+          altitude: v.altitude as number | undefined,
+          timestamp: v.timestamp as string | undefined,
+        } as GeoLocation;
+      }
+      return null;
+    }).filter((g): g is GeoLocation => g !== null && typeof g.lat === 'number' && typeof g.lng === 'number');
+  }
+  return [];
+}
+
 // Merge geo locations with readings data, prioritizing geo locations (more accurate)
 function mergeGpsData(
-  geoLocations: GeoLocation[] | undefined,
+  geoLocations: unknown,
   readingsGps: Record<string, { lat: number; lng: number; altitude?: number; timestamp?: string }>
 ): Record<string, { lat: number; lng: number; altitude?: number; timestamp?: string }> {
   const merged = { ...readingsGps };
   
-  if (geoLocations && Array.isArray(geoLocations)) {
-    geoLocations.forEach(geo => {
-      // Validate coordinates
-      if (geo.lat >= -90 && geo.lat <= 90 && 
-          geo.lng >= -180 && geo.lng <= 180 &&
-          !(geo.lat === 0 && geo.lng === 0)) {
-        merged[geo.device_id] = {
-          lat: geo.lat,
-          lng: geo.lng,
-          altitude: geo.altitude,
-          timestamp: geo.timestamp,
-        };
-      }
-    });
-  }
+  const geoArray = normalizeGeoLocations(geoLocations);
+  geoArray.forEach(geo => {
+    // Validate coordinates
+    if (geo.lat >= -90 && geo.lat <= 90 && 
+        geo.lng >= -180 && geo.lng <= 180 &&
+        !(geo.lat === 0 && geo.lng === 0)) {
+      merged[geo.device_id] = {
+        lat: geo.lat,
+        lng: geo.lng,
+        altitude: geo.altitude,
+        timestamp: geo.timestamp,
+      };
+    }
+  });
   
   return merged;
 }
@@ -388,29 +410,28 @@ export function useMapData(options: UseMapDataOptions = {}) {
     }
 
     // Add geo locations as GPS markers
-    if (geoLocations && Array.isArray(geoLocations)) {
-      geoLocations.forEach(geo => {
-        const id = `geo-${geo.device_id}`;
-        if (addedIds.has(id)) return;
-        
-        // Validate coordinates
-        if (geo.lat >= -90 && geo.lat <= 90 &&
-            geo.lng >= -180 && geo.lng <= 180 &&
-            !(geo.lat === 0 && geo.lng === 0)) {
-          markers.push({
-            id,
-            name: geo.device_id,
-            type: 'gps',
-            value: geo.altitude || 0,
-            unit: 'm',
-            status: 'active',
-            lastUpdate: geo.timestamp || new Date().toISOString(),
-            location: { lat: geo.lat, lng: geo.lng }
-          });
-          addedIds.add(id);
-        }
-      });
-    }
+    const geoArray = normalizeGeoLocations(geoLocations);
+    geoArray.forEach(geo => {
+      const id = `geo-${geo.device_id}`;
+      if (addedIds.has(id)) return;
+      
+      // Validate coordinates
+      if (geo.lat >= -90 && geo.lat <= 90 &&
+          geo.lng >= -180 && geo.lng <= 180 &&
+          !(geo.lat === 0 && geo.lng === 0)) {
+        markers.push({
+          id,
+          name: geo.device_id,
+          type: 'gps',
+          value: geo.altitude || 0,
+          unit: 'm',
+          status: 'active',
+          lastUpdate: geo.timestamp || new Date().toISOString(),
+          location: { lat: geo.lat, lng: geo.lng }
+        });
+        addedIds.add(id);
+      }
+    });
 
     // Add Starlink marker from stats GPS if we have it
     if (starlinkGps && !addedIds.has('starlink_dish_1')) {
