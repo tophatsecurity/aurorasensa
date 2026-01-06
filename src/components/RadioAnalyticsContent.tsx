@@ -9,8 +9,9 @@ import {
   TrendingUp,
   Activity,
   Filter,
-  Check,
   Zap,
+  Plane,
+  AlertTriangle,
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -28,6 +29,15 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover";
 import { Checkbox } from "@/components/ui/checkbox";
+import { ScrollArea } from "@/components/ui/scroll-area";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
 import {
   LineChart,
   Line,
@@ -41,6 +51,9 @@ import {
   Legend,
   BarChart,
   Bar,
+  ScatterChart,
+  Scatter,
+  ZAxis,
 } from "recharts";
 import {
   useWifiScannerTimeseries,
@@ -48,10 +61,16 @@ import {
   useLoraDetectorTimeseries,
   useLoraGlobalStats,
   useClients,
+  useAdsbAircraftWithHistory,
+  useAdsbStats,
+  useAdsbCoverage,
   LoraGlobalStats,
+  AdsbAircraft,
+  AdsbStats,
+  AdsbCoverage,
 } from "@/hooks/useAuroraApi";
 import { useQueryClient } from "@tanstack/react-query";
-import { format } from "date-fns";
+import { format, formatDistanceToNow } from "date-fns";
 
 const COLORS = {
   wifi: "#06b6d4",
@@ -60,6 +79,7 @@ const COLORS = {
   signal: "#22c55e",
   packets: "#ec4899",
   devices: "#3b82f6",
+  adsb: "#ef4444",
 };
 
 const RadioAnalyticsContent = () => {
@@ -76,7 +96,12 @@ const RadioAnalyticsContent = () => {
   const { data: loraStats } = useLoraGlobalStats();
   const { data: clients } = useClients();
   
-  const isLoading = wifiLoading || bluetoothLoading || loraLoading;
+  // Fetch ADS-B data
+  const { aircraft: adsbAircraft, isLoading: adsbLoading, isHistorical: adsbIsHistorical } = useAdsbAircraftWithHistory(hours * 60);
+  const { data: adsbStats } = useAdsbStats();
+  const { data: adsbCoverage } = useAdsbCoverage();
+  
+  const isLoading = wifiLoading || bluetoothLoading || loraLoading || adsbLoading;
 
   const handleRefresh = () => {
     queryClient.invalidateQueries({ queryKey: ["aurora"] });
@@ -221,6 +246,13 @@ const RadioAnalyticsContent = () => {
     const loraRssi = loraReadings.map((r) => r.rssi).filter((v): v is number => v !== undefined);
     const loraSNR = loraReadings.map((r) => r.snr).filter((v): v is number => v !== undefined);
 
+    // ADS-B stats
+    const activeAircraft = adsbAircraft?.filter(a => (a.seen || 0) < 60) || [];
+    const aircraftWithAlt = adsbAircraft?.filter(a => a.alt_baro !== undefined) || [];
+    const avgAltitude = aircraftWithAlt.length > 0 
+      ? aircraftWithAlt.reduce((sum, a) => sum + (a.alt_baro || 0), 0) / aircraftWithAlt.length 
+      : null;
+
     return {
       wifiNetworks: wifiReadings.reduce((sum, r) => sum + (r.networks_count || 0), 0),
       bluetoothDevices: bluetoothReadings.reduce((sum, r) => sum + (r.devices_count || 0), 0),
@@ -230,8 +262,12 @@ const RadioAnalyticsContent = () => {
       avgLoraRssi: loraRssi.length > 0 ? loraRssi.reduce((a, b) => a + b, 0) / loraRssi.length : null,
       avgLoraSNR: loraSNR.length > 0 ? loraSNR.reduce((a, b) => a + b, 0) / loraSNR.length : null,
       totalReadings: wifiReadings.length + bluetoothReadings.length + loraReadings.length,
+      // ADS-B stats
+      totalAircraft: adsbAircraft?.length || 0,
+      activeAircraft: activeAircraft.length,
+      avgAltitude,
     };
-  }, [wifiData, bluetoothData, loraData, selectedClients]);
+  }, [wifiData, bluetoothData, loraData, adsbAircraft, selectedClients]);
 
   return (
     <div className="h-full flex flex-col overflow-hidden">
@@ -327,7 +363,7 @@ const RadioAnalyticsContent = () => {
       {/* Content */}
       <div className="flex-1 overflow-y-auto p-6 space-y-6">
         {/* Summary Stats */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
           <Card className="glass-card">
             <CardContent className="p-6">
               <div className="flex items-center justify-between">
@@ -398,6 +434,23 @@ const RadioAnalyticsContent = () => {
                   </p>
                 </div>
                 <Activity className="w-8 h-8 text-aurora-blue opacity-50" />
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card className="glass-card">
+            <CardContent className="p-6">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm text-muted-foreground">Aircraft Tracked</p>
+                  <p className="text-2xl font-bold text-destructive">
+                    {stats.totalAircraft}
+                  </p>
+                  <p className="text-xs text-muted-foreground">
+                    {stats.activeAircraft} active now
+                  </p>
+                </div>
+                <Plane className="w-8 h-8 text-destructive opacity-50" />
               </div>
             </CardContent>
           </Card>
@@ -633,6 +686,182 @@ const RadioAnalyticsContent = () => {
                       : "N/A"}
                   </p>
                 </div>
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
+        {/* ADS-B Aircraft Tracking Section */}
+        <Card className="glass-card">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Plane className="w-5 h-5 text-destructive" />
+              ADS-B Aircraft Tracking
+              {adsbIsHistorical && (
+                <Badge variant="outline" className="ml-2 text-xs">Historical</Badge>
+              )}
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            {/* ADS-B Stats Grid */}
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+              <div className="p-4 rounded-lg bg-white/5">
+                <p className="text-sm text-muted-foreground">Messages Decoded</p>
+                <p className="text-xl font-bold">
+                  {(adsbStats as AdsbStats)?.messages_decoded?.toLocaleString() || 0}
+                </p>
+              </div>
+              <div className="p-4 rounded-lg bg-white/5">
+                <p className="text-sm text-muted-foreground">Positions Received</p>
+                <p className="text-xl font-bold">
+                  {(adsbStats as AdsbStats)?.positions_received?.toLocaleString() || 0}
+                </p>
+              </div>
+              <div className="p-4 rounded-lg bg-white/5">
+                <p className="text-sm text-muted-foreground">Max Range</p>
+                <p className="text-xl font-bold">
+                  {(adsbCoverage as AdsbCoverage)?.max_range_km 
+                    ? `${(adsbCoverage as AdsbCoverage).max_range_km?.toFixed(1)} km` 
+                    : "N/A"}
+                </p>
+              </div>
+              <div className="p-4 rounded-lg bg-white/5">
+                <p className="text-sm text-muted-foreground">Avg Altitude</p>
+                <p className="text-xl font-bold">
+                  {stats.avgAltitude 
+                    ? `${Math.round(stats.avgAltitude).toLocaleString()} ft` 
+                    : "N/A"}
+                </p>
+              </div>
+            </div>
+
+            {/* Aircraft Table */}
+            {adsbAircraft && adsbAircraft.length > 0 ? (
+              <ScrollArea className="h-[400px]">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Flight</TableHead>
+                      <TableHead>ICAO</TableHead>
+                      <TableHead>Altitude</TableHead>
+                      <TableHead>Speed</TableHead>
+                      <TableHead>Track</TableHead>
+                      <TableHead>Squawk</TableHead>
+                      <TableHead>RSSI</TableHead>
+                      <TableHead>Last Seen</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {adsbAircraft.slice(0, 50).map((aircraft) => (
+                      <TableRow key={aircraft.hex}>
+                        <TableCell className="font-medium">
+                          <div className="flex items-center gap-2">
+                            {aircraft.emergency && (
+                              <AlertTriangle className="w-4 h-4 text-destructive" />
+                            )}
+                            {aircraft.flight?.trim() || "—"}
+                          </div>
+                        </TableCell>
+                        <TableCell className="font-mono text-xs">
+                          {aircraft.hex.toUpperCase()}
+                        </TableCell>
+                        <TableCell>
+                          {aircraft.alt_baro 
+                            ? `${aircraft.alt_baro.toLocaleString()} ft` 
+                            : "—"}
+                        </TableCell>
+                        <TableCell>
+                          {aircraft.gs 
+                            ? `${Math.round(aircraft.gs)} kts` 
+                            : "—"}
+                        </TableCell>
+                        <TableCell>
+                          {aircraft.track 
+                            ? `${Math.round(aircraft.track)}°` 
+                            : "—"}
+                        </TableCell>
+                        <TableCell className="font-mono text-xs">
+                          {aircraft.squawk || "—"}
+                        </TableCell>
+                        <TableCell>
+                          {aircraft.rssi 
+                            ? `${aircraft.rssi.toFixed(1)} dB` 
+                            : "—"}
+                        </TableCell>
+                        <TableCell className="text-muted-foreground text-xs">
+                          {aircraft.seen !== undefined
+                            ? aircraft.seen < 60 
+                              ? `${aircraft.seen}s ago` 
+                              : `${Math.floor(aircraft.seen / 60)}m ago`
+                            : "—"}
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </ScrollArea>
+            ) : (
+              <div className="text-center py-8 text-muted-foreground">
+                No aircraft currently being tracked
+              </div>
+            )}
+          </CardContent>
+        </Card>
+
+        {/* Altitude vs Speed Scatter Plot */}
+        {adsbAircraft && adsbAircraft.length > 0 && (
+          <Card className="glass-card">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <TrendingUp className="w-5 h-5 text-destructive" />
+                Aircraft Altitude vs Speed Distribution
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="h-[300px]">
+                <ResponsiveContainer width="100%" height="100%">
+                  <ScatterChart>
+                    <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.1)" />
+                    <XAxis 
+                      type="number" 
+                      dataKey="gs" 
+                      name="Speed" 
+                      unit=" kts"
+                      stroke="#888" 
+                      fontSize={12}
+                      label={{ value: 'Speed (knots)', position: 'insideBottom', offset: -5, fill: '#888' }}
+                    />
+                    <YAxis 
+                      type="number" 
+                      dataKey="alt_baro" 
+                      name="Altitude" 
+                      unit=" ft"
+                      stroke="#888" 
+                      fontSize={12}
+                      label={{ value: 'Altitude (ft)', angle: -90, position: 'insideLeft', fill: '#888' }}
+                    />
+                    <ZAxis range={[50, 200]} />
+                    <Tooltip
+                      contentStyle={{
+                        backgroundColor: "rgba(0,0,0,0.8)",
+                        border: "1px solid rgba(255,255,255,0.1)",
+                      }}
+                      formatter={(value: number, name: string) => [
+                        name === "gs" ? `${value} kts` : `${value?.toLocaleString()} ft`,
+                        name === "gs" ? "Speed" : "Altitude"
+                      ]}
+                      labelFormatter={(_, payload) => {
+                        const aircraft = payload?.[0]?.payload as AdsbAircraft;
+                        return aircraft?.flight?.trim() || aircraft?.hex?.toUpperCase() || "Unknown";
+                      }}
+                    />
+                    <Scatter
+                      data={adsbAircraft.filter(a => a.gs && a.alt_baro)}
+                      fill={COLORS.adsb}
+                      fillOpacity={0.7}
+                    />
+                  </ScatterChart>
+                </ResponsiveContainer>
               </div>
             </CardContent>
           </Card>
