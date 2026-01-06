@@ -1676,6 +1676,9 @@ export interface StarlinkDevice {
   client_id?: string;
   status?: string;
   last_seen?: string;
+  latitude?: number;
+  longitude?: number;
+  altitude?: number;
 }
 
 export interface StarlinkDeviceStats {
