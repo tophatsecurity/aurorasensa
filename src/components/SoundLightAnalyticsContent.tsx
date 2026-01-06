@@ -52,7 +52,7 @@ const COLORS = {
 const SoundLightAnalyticsContent = () => {
   const queryClient = useQueryClient();
   const [timeRange, setTimeRange] = useState("24");
-  const [selectedDevices, setSelectedDevices] = useState<string[]>([]);
+  const [selectedClients, setSelectedClients] = useState<string[]>([]);
   
   const hours = parseInt(timeRange);
   
@@ -63,21 +63,27 @@ const SoundLightAnalyticsContent = () => {
     queryClient.invalidateQueries({ queryKey: ["aurora", "arduino_sensor_kit"] });
   };
 
-  // Get all unique devices
-  const allDevices = useMemo(() => {
-    const devices = new Set<string>();
-    arduinoData?.readings?.forEach(r => r.device_id && devices.add(r.device_id));
-    return Array.from(devices).sort();
+  // Get all unique clients
+  const allClients = useMemo(() => {
+    const clientIds = new Set<string>();
+    arduinoData?.readings?.forEach(r => r.client_id && clientIds.add(r.client_id));
+    return Array.from(clientIds).sort();
   }, [arduinoData]);
 
-  const isDeviceSelected = (deviceId: string) => 
-    selectedDevices.length === 0 || selectedDevices.includes(deviceId);
+  // Map client_id to client name for display
+  const getClientName = (clientId: string) => {
+    const client = clients?.find(c => c.client_id === clientId);
+    return client?.hostname || clientId;
+  };
 
-  const toggleDevice = (deviceId: string) => {
-    setSelectedDevices(prev => 
-      prev.includes(deviceId)
-        ? prev.filter(d => d !== deviceId)
-        : [...prev, deviceId]
+  const isClientSelected = (clientId: string) => 
+    selectedClients.length === 0 || selectedClients.includes(clientId);
+
+  const toggleClient = (clientId: string) => {
+    setSelectedClients(prev => 
+      prev.includes(clientId)
+        ? prev.filter(c => c !== clientId)
+        : [...prev, clientId]
     );
   };
 
@@ -85,17 +91,17 @@ const SoundLightAnalyticsContent = () => {
   const chartData = useMemo(() => {
     return (arduinoData?.readings || [])
       .filter(r => {
-        if (r.device_id && !isDeviceSelected(r.device_id)) return false;
+        if (r.client_id && !isClientSelected(r.client_id)) return false;
         return r.light_raw !== undefined || r.sound_raw !== undefined;
       })
       .map(r => ({
         time: format(new Date(r.timestamp), "HH:mm"),
         light: r.light_raw,
         sound: r.sound_raw,
-        device: r.device_id,
+        client: r.client_id,
       }))
       .sort((a, b) => a.time.localeCompare(b.time));
-  }, [arduinoData, selectedDevices]);
+  }, [arduinoData, selectedClients]);
 
   // Calculate stats
   const stats = useMemo(() => {
@@ -103,7 +109,7 @@ const SoundLightAnalyticsContent = () => {
     const soundValues: number[] = [];
 
     arduinoData?.readings?.forEach(r => {
-      if (r.device_id && !isDeviceSelected(r.device_id)) return;
+      if (r.client_id && !isClientSelected(r.client_id)) return;
       if (r.light_raw !== undefined) lightValues.push(r.light_raw);
       if (r.sound_raw !== undefined) soundValues.push(r.sound_raw);
     });
@@ -119,7 +125,7 @@ const SoundLightAnalyticsContent = () => {
       currentSound: soundValues.length > 0 ? soundValues[soundValues.length - 1] : null,
       totalReadings: lightValues.length + soundValues.length,
     };
-  }, [arduinoData, selectedDevices]);
+  }, [arduinoData, selectedClients]);
 
   // Normalize for progress bars (assuming max raw value ~1023 for analog sensors)
   const lightPercent = stats.currentLight !== null ? Math.min(100, (stats.currentLight / 1023) * 100) : 0;
@@ -160,15 +166,15 @@ const SoundLightAnalyticsContent = () => {
           </div>
         </div>
         <div className="flex items-center gap-3">
-          {/* Device Filter */}
+          {/* Client Filter */}
           <Popover>
             <PopoverTrigger asChild>
               <Button variant="outline" size="sm" className="gap-2">
                 <Filter className="w-4 h-4" />
-                Devices
-                {selectedDevices.length > 0 && (
+                Clients
+                {selectedClients.length > 0 && (
                   <Badge variant="secondary" className="ml-1">
-                    {selectedDevices.length}
+                    {selectedClients.length}
                   </Badge>
                 )}
               </Button>
@@ -176,29 +182,29 @@ const SoundLightAnalyticsContent = () => {
             <PopoverContent className="w-64 p-3" align="end">
               <div className="space-y-2">
                 <div className="flex items-center justify-between mb-2">
-                  <span className="text-sm font-medium">Filter by Device</span>
-                  {selectedDevices.length > 0 && (
+                  <span className="text-sm font-medium">Filter by Client</span>
+                  {selectedClients.length > 0 && (
                     <Button
                       variant="ghost"
                       size="sm"
                       className="h-6 text-xs"
-                      onClick={() => setSelectedDevices([])}
+                      onClick={() => setSelectedClients([])}
                     >
                       Clear
                     </Button>
                   )}
                 </div>
-                {allDevices.length === 0 ? (
-                  <p className="text-sm text-muted-foreground">No devices found</p>
+                {allClients.length === 0 ? (
+                  <p className="text-sm text-muted-foreground">No clients found</p>
                 ) : (
-                  allDevices.map(device => (
+                  allClients.map(clientId => (
                     <div
-                      key={device}
+                      key={clientId}
                       className="flex items-center gap-2 p-2 hover:bg-muted/50 rounded cursor-pointer"
-                      onClick={() => toggleDevice(device)}
+                      onClick={() => toggleClient(clientId)}
                     >
-                      <Checkbox checked={selectedDevices.includes(device)} />
-                      <span className="text-sm truncate">{device}</span>
+                      <Checkbox checked={selectedClients.includes(clientId)} />
+                      <span className="text-sm truncate">{getClientName(clientId)}</span>
                     </div>
                   ))
                 )}
