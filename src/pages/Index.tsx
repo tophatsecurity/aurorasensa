@@ -17,6 +17,9 @@ import AuditLogsContent from "@/components/AuditLogsContent";
 import ConfigurationContent from "@/components/ConfigurationContent";
 import RadioContent from "@/components/RadioContent";
 import DataAnalyticsContent from "@/components/DataAnalyticsContent";
+import WeatherAnalyticsContent from "@/components/WeatherAnalyticsContent";
+import SoundLightAnalyticsContent from "@/components/SoundLightAnalyticsContent";
+import MovementAnalyticsContent from "@/components/MovementAnalyticsContent";
 
 const Index = () => {
   const [activeItem, setActiveItem] = useState("dashboard");
@@ -55,6 +58,12 @@ const Index = () => {
         return <AuditLogsContent />;
       case "configuration":
         return <ConfigurationContent />;
+      case "weather":
+        return <WeatherAnalyticsContent />;
+      case "sound-light":
+        return <SoundLightAnalyticsContent />;
+      case "movement":
+        return <MovementAnalyticsContent />;
       default:
         return <DashboardContent />;
     }
