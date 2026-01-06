@@ -3637,3 +3637,199 @@ export function useDeleteSensor() {
     },
   });
 }
+
+// =============================================
+// HISTORICAL STATS TYPES
+// =============================================
+
+export interface GlobalStatsHistoryPoint {
+  timestamp: string;
+  total_readings: number;
+  total_devices: number;
+  total_sensors: number;
+  total_clients: number;
+  active_devices?: number;
+  active_sensors?: number;
+}
+
+export interface SensorStatsHistoryPoint {
+  timestamp: string;
+  sensor_type: string;
+  reading_count: number;
+  device_count: number;
+  avg_value?: number;
+  min_value?: number;
+  max_value?: number;
+}
+
+export interface DeviceStatsHistoryPoint {
+  timestamp: string;
+  device_id: string;
+  device_type: string;
+  reading_count: number;
+  status?: string;
+  avg_value?: number;
+}
+
+export interface AlertStatsHistoryPoint {
+  timestamp: string;
+  total_alerts: number;
+  critical_count: number;
+  warning_count: number;
+  info_count: number;
+  acknowledged_count: number;
+  resolved_count: number;
+}
+
+export interface SystemResourceStatsHistoryPoint {
+  timestamp: string;
+  cpu_usage?: number;
+  memory_usage?: number;
+  disk_usage?: number;
+  network_in?: number;
+  network_out?: number;
+}
+
+export interface EndpointStats {
+  endpoint: string;
+  method: string;
+  total_calls: number;
+  avg_response_time_ms: number;
+  error_count: number;
+  success_rate: number;
+}
+
+export interface EndpointStatsHistory {
+  endpoint: string;
+  method: string;
+  timestamp: string;
+  call_count: number;
+  avg_response_time_ms: number;
+  error_count: number;
+}
+
+
+// =============================================
+// LORA ENHANCED TYPES
+// =============================================
+
+export interface LoRaChannelStats {
+  channel: number;
+  frequency_mhz: number;
+  packet_count: number;
+  avg_rssi: number;
+  avg_snr: number;
+  bandwidth_khz?: number;
+  spreading_factor?: number;
+}
+
+export interface LoRaSpectrumAnalysis {
+  frequencies: number[];
+  power_levels: number[];
+  noise_floor: number;
+  peak_frequency?: number;
+  peak_power?: number;
+  channel_activity: { channel: number; activity_percent: number }[];
+}
+
+// =============================================
+// CLIENT STATISTICS TYPES
+// =============================================
+
+export interface ClientStatistics {
+  total_clients: number;
+  pending_count: number;
+  registered_count: number;
+  adopted_count: number;
+  disabled_count: number;
+  suspended_count: number;
+  deleted_count: number;
+  active_last_hour: number;
+  active_last_24h: number;
+}
+
+export interface ClientsByState {
+  pending: Client[];
+  registered: Client[];
+  adopted: Client[];
+  disabled: Client[];
+  suspended: Client[];
+  deleted: Client[];
+}
+
+// =============================================
+// HISTORICAL STATS HOOKS
+// =============================================
+
+export function useGlobalStatsHistory(hours: number = 24) {
+  return useQuery({
+    queryKey: ["aurora", "stats", "history", "global", hours],
+    queryFn: () => callAuroraApi<GlobalStatsHistoryPoint[]>(`/api/stats/history/global?hours=${hours}`),
+    refetchInterval: 60000,
+    staleTime: 30000,
+  });
+}
+
+export function useSensorStatsHistory(hours: number = 24, sensorType?: string) {
+  const params = new URLSearchParams({ hours: hours.toString() });
+  if (sensorType) params.append("sensor_type", sensorType);
+  
+  return useQuery({
+    queryKey: ["aurora", "stats", "history", "sensors", hours, sensorType],
+    queryFn: () => callAuroraApi<SensorStatsHistoryPoint[]>(`/api/stats/history/sensors?${params}`),
+    refetchInterval: 60000,
+    staleTime: 30000,
+  });
+}
+
+export function useDeviceStatsHistory(hours: number = 24, deviceId?: string) {
+  const params = new URLSearchParams({ hours: hours.toString() });
+  if (deviceId) params.append("device_id", deviceId);
+  
+  return useQuery({
+    queryKey: ["aurora", "stats", "history", "devices", hours, deviceId],
+    queryFn: () => callAuroraApi<DeviceStatsHistoryPoint[]>(`/api/stats/history/devices?${params}`),
+    refetchInterval: 60000,
+    staleTime: 30000,
+  });
+}
+
+export function useAlertStatsHistory(hours: number = 24) {
+  return useQuery({
+    queryKey: ["aurora", "stats", "history", "alerts", hours],
+    queryFn: () => callAuroraApi<AlertStatsHistoryPoint[]>(`/api/stats/history/alerts?hours=${hours}`),
+    refetchInterval: 60000,
+    staleTime: 30000,
+  });
+}
+
+export function useSystemResourceStatsHistory(hours: number = 24) {
+  return useQuery({
+    queryKey: ["aurora", "stats", "history", "system", hours],
+    queryFn: () => callAuroraApi<SystemResourceStatsHistoryPoint[]>(`/api/stats/history/system?hours=${hours}`),
+    refetchInterval: 60000,
+    staleTime: 30000,
+  });
+}
+
+// =============================================
+// ENHANCED LORA HOOKS
+// =============================================
+
+export function useLoRaChannelStats() {
+  return useQuery({
+    queryKey: ["aurora", "lora", "channels"],
+    queryFn: () => callAuroraApi<LoRaChannelStats[]>("/api/lora/channels"),
+    refetchInterval: 30000,
+    staleTime: 15000,
+  });
+}
+
+export function useLoRaSpectrumAnalysis() {
+  return useQuery({
+    queryKey: ["aurora", "lora", "spectrum"],
+    queryFn: () => callAuroraApi<LoRaSpectrumAnalysis>("/api/lora/spectrum"),
+    refetchInterval: 30000,
+    staleTime: 15000,
+  });
+}
