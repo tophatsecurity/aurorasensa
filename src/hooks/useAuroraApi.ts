@@ -1321,12 +1321,17 @@ export function useAdsbLowAltitude() {
   });
 }
 
-export function useAdsbCoverage() {
+export function useAdsbCoverage(deviceId?: string) {
+  // First get the list of ADS-B devices to use as default
+  const { data: devices } = useAdsbDevices();
+  const effectiveDeviceId = deviceId || devices?.[0]?.device_id;
+  
   return useQuery({
-    queryKey: ["aurora", "adsb", "coverage"],
-    queryFn: () => callAuroraApi<AdsbCoverage>("/api/adsb/coverage"),
+    queryKey: ["aurora", "adsb", "coverage", effectiveDeviceId],
+    queryFn: () => callAuroraApi<AdsbCoverage>(`/api/adsb/coverage?device_id=${effectiveDeviceId}`),
     refetchInterval: 60000,
     retry: 2,
+    enabled: !!effectiveDeviceId,
   });
 }
 
