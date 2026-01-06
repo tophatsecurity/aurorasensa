@@ -423,7 +423,9 @@ const DataAnalyticsContent = () => {
   const [selectedSensor, setSelectedSensor] = useState<string | null>(null);
   const [timeRange, setTimeRange] = useState<string>("24h");
   const [selectedClients, setSelectedClients] = useState<string[]>([]); // Empty = All Clients
+  const [selectedSensorTypes, setSelectedSensorTypes] = useState<string[]>([]); // Empty = All Types
   const [clientFilterOpen, setClientFilterOpen] = useState(false);
+  const [sensorTypeFilterOpen, setSensorTypeFilterOpen] = useState(false);
   
   const { data: stats, isLoading: statsLoading } = useComprehensiveStats();
   const { data: timeseries, isLoading: timeseriesLoading } = useDashboardTimeseries(24);
@@ -444,28 +446,28 @@ const DataAnalyticsContent = () => {
   // Get all clients list
   const allClients = clients || [];
   
+  // Get unique sensor types for the filter dropdown
+  const availableSensorTypes = useMemo(() => {
+    return sensorTypes.map(s => s.device_type).sort();
+  }, [sensorTypes]);
+  
   // Map client_id to client name for display
   const getClientName = (clientId: string) => {
     const client = allClients.find(c => c.client_id === clientId);
     return client?.hostname || clientId;
   };
 
-  // Filter sensor types based on selected clients
-  // Note: Since we're filtering by client, we show all sensor types when clients are selected
-  // The actual data filtering happens in the individual sensor detail views
+  // Filter sensor types based on selected sensor types filter
   const filteredSensorTypes = useMemo(() => {
-    if (selectedClients.length === 0) return sensorTypes; // All clients
-    // For now, return all sensor types since sensor data is client-scoped
-    return sensorTypes;
-  }, [sensorTypes, selectedClients]);
+    if (selectedSensorTypes.length === 0) return sensorTypes;
+    return sensorTypes.filter(s => selectedSensorTypes.includes(s.device_type));
+  }, [sensorTypes, selectedSensorTypes]);
 
-  // Filter devices list based on selected clients (devices may have client association)
+  // Filter devices list based on selected sensor types
   const filteredDevices = useMemo(() => {
-    if (selectedClients.length === 0) return allDevices;
-    // Filter devices that might belong to selected clients
-    // Since DeviceSummary may not have client_id, we return all for now
-    return allDevices;
-  }, [allDevices, selectedClients]);
+    if (selectedSensorTypes.length === 0) return allDevices;
+    return allDevices.filter(d => selectedSensorTypes.includes(d.device_type));
+  }, [allDevices, selectedSensorTypes]);
 
   // Toggle client selection
   const toggleClient = (clientId: string) => {
@@ -476,14 +478,33 @@ const DataAnalyticsContent = () => {
     );
   };
 
+  // Toggle sensor type selection
+  const toggleSensorType = (sensorType: string) => {
+    setSelectedSensorTypes(prev => 
+      prev.includes(sensorType) 
+        ? prev.filter(id => id !== sensorType)
+        : [...prev, sensorType]
+    );
+  };
+
   // Clear all client filters
   const clearClientFilter = () => {
     setSelectedClients([]);
   };
 
+  // Clear all sensor type filters
+  const clearSensorTypeFilter = () => {
+    setSelectedSensorTypes([]);
+  };
+
   // Select all clients
   const selectAllClients = () => {
     setSelectedClients(allClients.map(c => c.client_id));
+  };
+
+  // Select all sensor types
+  const selectAllSensorTypes = () => {
+    setSelectedSensorTypes(availableSensorTypes);
   };
 
   // Prepare pie chart data - filtered
@@ -612,6 +633,105 @@ const DataAnalyticsContent = () => {
             </PopoverContent>
           </Popover>
 
+          {/* Sensor Type Filter */}
+          <Popover open={sensorTypeFilterOpen} onOpenChange={setSensorTypeFilterOpen}>
+            <PopoverTrigger asChild>
+              <Button variant="outline" size="sm" className="gap-2">
+                <Cpu className="w-4 h-4" />
+                {selectedSensorTypes.length === 0 ? (
+                  "All Sensors"
+                ) : (
+                  <span className="flex items-center gap-1">
+                    {selectedSensorTypes.length} Type{selectedSensorTypes.length !== 1 ? 's' : ''}
+                    <Badge variant="secondary" className="ml-1 h-5 px-1.5 text-xs">
+                      {selectedSensorTypes.length}
+                    </Badge>
+                  </span>
+                )}
+              </Button>
+            </PopoverTrigger>
+            <PopoverContent className="w-80 p-0" align="end">
+              <div className="p-3 border-b border-border">
+                <div className="flex items-center justify-between">
+                  <h4 className="font-semibold text-sm">Filter by Sensor Type</h4>
+                  <div className="flex gap-1">
+                    <Button 
+                      variant="ghost" 
+                      size="sm" 
+                      className="h-7 text-xs"
+                      onClick={clearSensorTypeFilter}
+                    >
+                      Clear
+                    </Button>
+                    <Button 
+                      variant="ghost" 
+                      size="sm" 
+                      className="h-7 text-xs"
+                      onClick={selectAllSensorTypes}
+                    >
+                      Select All
+                    </Button>
+                  </div>
+                </div>
+                <p className="text-xs text-muted-foreground mt-1">
+                  {selectedSensorTypes.length === 0 
+                    ? "Showing all sensor types" 
+                    : `${selectedSensorTypes.length} of ${availableSensorTypes.length} types selected`}
+                </p>
+              </div>
+              <ScrollArea className="h-[300px]">
+                <div className="p-2 space-y-1">
+                  {availableSensorTypes.map((sensorType) => {
+                    const isSelected = selectedSensorTypes.includes(sensorType);
+                    const color = getSensorColor(sensorType);
+                    const icon = getSensorIcon(sensorType);
+                    const sensorData = sensorTypes.find(s => s.device_type === sensorType);
+                    
+                    return (
+                      <div
+                        key={sensorType}
+                        className={`flex items-center gap-3 p-2 rounded-md cursor-pointer transition-colors hover:bg-muted/50 ${
+                          isSelected ? 'bg-primary/10' : ''
+                        }`}
+                        onClick={() => toggleSensorType(sensorType)}
+                      >
+                        <Checkbox 
+                          checked={isSelected}
+                          onCheckedChange={() => toggleSensorType(sensorType)}
+                        />
+                        <div 
+                          className="w-8 h-8 rounded-md flex items-center justify-center"
+                          style={{ backgroundColor: `${color}20`, color }}
+                        >
+                          {icon}
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm font-medium truncate capitalize">
+                            {sensorType.replace(/_/g, ' ')}
+                          </p>
+                          <p className="text-xs text-muted-foreground">
+                            {sensorData?.device_count || 0} device{(sensorData?.device_count || 0) !== 1 ? 's' : ''}
+                          </p>
+                        </div>
+                        <Badge 
+                          variant={sensorData?.active_last_hour ? 'default' : 'secondary'}
+                          className="text-xs flex-shrink-0"
+                        >
+                          {sensorData?.active_last_hour ? 'Active' : 'Inactive'}
+                        </Badge>
+                      </div>
+                    );
+                  })}
+                  {availableSensorTypes.length === 0 && (
+                    <p className="text-sm text-muted-foreground text-center py-4">
+                      No sensor types found
+                    </p>
+                  )}
+                </div>
+              </ScrollArea>
+            </PopoverContent>
+          </Popover>
+
           <Select value={timeRange} onValueChange={setTimeRange}>
             <SelectTrigger className="w-[120px]">
               <SelectValue placeholder="Time range" />
@@ -649,21 +769,44 @@ const DataAnalyticsContent = () => {
           </TabsList>
 
           <TabsContent value="overview" className="space-y-6">
-            {/* Client Filter Indicator */}
-            {selectedClients.length > 0 && (
-              <div className="flex items-center gap-2 p-3 rounded-lg bg-primary/10 border border-primary/20">
+            {/* Active Filters Indicator */}
+            {(selectedClients.length > 0 || selectedSensorTypes.length > 0) && (
+              <div className="flex flex-wrap items-center gap-2 p-3 rounded-lg bg-primary/10 border border-primary/20">
                 <Filter className="w-4 h-4 text-primary" />
-                <span className="text-sm">
-                  Filtering by <strong>{selectedClients.length}</strong> client{selectedClients.length !== 1 ? 's' : ''}
-                </span>
+                <span className="text-sm">Active filters:</span>
+                {selectedClients.length > 0 && (
+                  <Badge variant="secondary" className="gap-1">
+                    {selectedClients.length} Client{selectedClients.length !== 1 ? 's' : ''}
+                    <button 
+                      onClick={clearClientFilter}
+                      className="ml-1 hover:text-destructive"
+                    >
+                      <X className="w-3 h-3" />
+                    </button>
+                  </Badge>
+                )}
+                {selectedSensorTypes.length > 0 && (
+                  <Badge variant="secondary" className="gap-1">
+                    {selectedSensorTypes.length} Sensor Type{selectedSensorTypes.length !== 1 ? 's' : ''}
+                    <button 
+                      onClick={clearSensorTypeFilter}
+                      className="ml-1 hover:text-destructive"
+                    >
+                      <X className="w-3 h-3" />
+                    </button>
+                  </Badge>
+                )}
                 <Button 
                   variant="ghost" 
                   size="sm" 
                   className="ml-auto h-7 text-xs gap-1"
-                  onClick={clearClientFilter}
+                  onClick={() => {
+                    clearClientFilter();
+                    clearSensorTypeFilter();
+                  }}
                 >
                   <X className="w-3 h-3" />
-                  Clear Filter
+                  Clear All
                 </Button>
               </div>
             )}
@@ -678,13 +821,15 @@ const DataAnalyticsContent = () => {
                   </div>
                   <p className="text-3xl font-bold text-primary">
                     {formatNumber(
-                      selectedClients.length === 0 
+                      (selectedClients.length === 0 && selectedSensorTypes.length === 0)
                         ? globalStats?.database?.total_readings
                         : filteredSensorTypes.reduce((sum, s) => sum + s.total_readings, 0)
                     )}
                   </p>
                   <p className="text-xs text-muted-foreground mt-1">
-                    {selectedClients.length === 0 ? 'Across all sensors' : 'From selected clients'}
+                    {(selectedClients.length === 0 && selectedSensorTypes.length === 0) 
+                      ? 'Across all sensors' 
+                      : 'From selected filters'}
                   </p>
                 </CardContent>
               </Card>
@@ -698,7 +843,9 @@ const DataAnalyticsContent = () => {
                     {filteredSensorTypes.length}
                   </p>
                   <p className="text-xs text-muted-foreground mt-1">
-                    {selectedClients.length === 0 ? 'Unique sensor categories' : `of ${sensorTypes.length} total`}
+                    {selectedSensorTypes.length === 0 
+                      ? 'Unique sensor categories' 
+                      : `of ${sensorTypes.length} total`}
                   </p>
                 </CardContent>
               </Card>
@@ -706,7 +853,7 @@ const DataAnalyticsContent = () => {
                 <CardContent className="p-4">
                   <div className="flex items-center gap-2 text-muted-foreground text-xs mb-1">
                     <Cpu className="w-3 h-3" />
-                    Selected Clients
+                    Clients
                   </div>
                   <p className="text-3xl font-bold text-green-500">
                     {selectedClients.length === 0 ? allClients.length : selectedClients.length}
