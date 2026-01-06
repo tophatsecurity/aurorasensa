@@ -3236,11 +3236,9 @@ export function useAdoptClientDirect() {
   
   return useMutation({
     mutationFn: async ({ clientId, reason, metadata }: { clientId: string; reason?: string; metadata?: Record<string, unknown> }) => {
-      // Use the simple adopt endpoint which should work for state transitions
-      return callAuroraApi<StateTransitionResponse>(`/api/clients/${clientId}/adopt`, "POST", { reason, metadata });
+      return callAuroraApi<StateTransitionResponse>(`/api/clients/${clientId}/adopt-direct`, "POST", { reason, metadata });
     },
     onSuccess: () => {
-      // Invalidate all client-related queries to ensure UI refreshes
       queryClient.invalidateQueries({ queryKey: ["aurora", "clients"] });
       queryClient.invalidateQueries({ queryKey: ["aurora", "clients", "all-states"] });
       queryClient.invalidateQueries({ queryKey: ["aurora", "clients", "statistics"] });
@@ -3329,6 +3327,21 @@ export function useRestoreClient() {
   return useMutation({
     mutationFn: async ({ clientId, reason, metadata }: { clientId: string; reason?: string; metadata?: Record<string, unknown> }) => {
       return callAuroraApi<StateTransitionResponse>(`/api/clients/${clientId}/restore`, "POST", { reason, metadata });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["aurora", "clients"] });
+      queryClient.invalidateQueries({ queryKey: ["aurora", "clients", "all-states"] });
+      queryClient.invalidateQueries({ queryKey: ["aurora", "clients", "statistics"] });
+    },
+  });
+}
+
+export function useHardDeleteClient() {
+  const queryClient = useQueryClient();
+  
+  return useMutation({
+    mutationFn: async ({ clientId }: { clientId: string }) => {
+      return callAuroraApi<{ success: boolean; message: string }>(`/api/clients/${clientId}`, "DELETE");
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["aurora", "clients"] });
