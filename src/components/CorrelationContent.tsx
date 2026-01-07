@@ -22,7 +22,8 @@ import {
   GitCompare,
   Droplets,
   Radio,
-  Wifi
+  Wifi,
+  Cpu
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -36,6 +37,9 @@ import {
 import { 
   useStarlinkTimeseries,
   useDashboardTimeseries,
+  useStarlinkPower,
+  useThermalProbeTimeseries,
+  useArduinoSensorTimeseries,
 } from "@/hooks/useAuroraApi";
 
 interface CorrelationStats {
@@ -226,77 +230,94 @@ const CorrelationChart = ({
 
 const CorrelationContent = () => {
   const [timeRange, setTimeRange] = useState<number>(24);
-  const [activeTab, setActiveTab] = useState("throughput-temp");
+  const [activeTab, setActiveTab] = useState("power-thermal");
   
   const { data: starlinkData, isLoading: starlinkLoading } = useStarlinkTimeseries(timeRange);
   const { data: dashboardData, isLoading: dashboardLoading } = useDashboardTimeseries(timeRange);
+  const { data: starlinkPower, isLoading: powerLoading } = useStarlinkPower();
+  const { data: thermalData, isLoading: thermalLoading } = useThermalProbeTimeseries(timeRange);
+  const { data: arduinoData, isLoading: arduinoLoading } = useArduinoSensorTimeseries(timeRange);
 
-  const isLoading = starlinkLoading || dashboardLoading;
+  const isLoading = starlinkLoading || dashboardLoading || powerLoading || thermalLoading || arduinoLoading;
 
   // Helper to format timestamp
   const formatTime = (timestamp: string) => 
     new Date(timestamp).toLocaleTimeString('en-US', { hour12: false, hour: '2-digit', minute: '2-digit' });
 
-  // Correlation 1: Throughput vs Temperature (Starlink throughput correlates with ambient temp)
-  const throughputTempData = useMemo(() => {
+  // Correlation 1: Starlink Power vs Thermal Probe Temperature
+  const powerThermalData = useMemo(() => {
     const dataMap = new Map<string, { time: string; x?: number; y?: number }>();
 
-    starlinkData?.readings?.forEach(r => {
-      const time = formatTime(r.timestamp);
+    // Get Starlink power data from the power_data array
+    starlinkPower?.power_data?.forEach(p => {
+      const time = formatTime(p.timestamp);
       const existing = dataMap.get(time) || { time };
-      // Convert bps to Mbps for readability
-      existing.x = r.downlink_throughput_bps ? r.downlink_throughput_bps / 1e6 : undefined;
+      existing.x = p.power_watts ?? undefined;
       dataMap.set(time, existing);
     });
 
-    dashboardData?.temperature?.forEach(p => {
-      const time = formatTime(p.timestamp);
+    // Get thermal probe temperature
+    thermalData?.readings?.forEach(r => {
+      const time = formatTime(r.timestamp);
       const existing = dataMap.get(time) || { time };
-      existing.y = p.value;
+      existing.y = r.temp_c ?? r.probe_c ?? r.ambient_c ?? undefined;
       dataMap.set(time, existing);
     });
 
     return Array.from(dataMap.values())
       .filter(d => d.x !== undefined || d.y !== undefined)
       .sort((a, b) => a.time.localeCompare(b.time));
-  }, [starlinkData, dashboardData]);
+  }, [starlinkPower, thermalData]);
 
-  // Correlation 2: Latency vs Humidity (Weather proxy)
-  const latencyHumidityData = useMemo(() => {
+  // Correlation 2: Starlink Power vs Arduino Temperature
+  const powerArduinoData = useMemo(() => {
     const dataMap = new Map<string, { time: string; x?: number; y?: number }>();
 
-    starlinkData?.readings?.forEach(r => {
-      const time = formatTime(r.timestamp);
+    // Get Starlink power data
+    starlinkPower?.power_data?.forEach(p => {
+      const time = formatTime(p.timestamp);
       const existing = dataMap.get(time) || { time };
-      existing.x = r.pop_ping_latency_ms ?? undefined;
+      existing.x = p.power_watts ?? undefined;
       dataMap.set(time, existing);
     });
 
-    dashboardData?.humidity?.forEach(p => {
-      const time = formatTime(p.timestamp);
+    // Get Arduino sensor temperature (DHT/AHT or BMP)
+    arduinoData?.readings?.forEach(r => {
+      const time = formatTime(r.timestamp);
       const existing = dataMap.get(time) || { time };
-      existing.y = p.value;
+      existing.y = r.th_temp_c ?? r.bmp_temp_c ?? undefined;
       dataMap.set(time, existing);
     });
 
     return Array.from(dataMap.values())
       .filter(d => d.x !== undefined || d.y !== undefined)
       .sort((a, b) => a.time.localeCompare(b.time));
-  }, [starlinkData, dashboardData]);
+  }, [starlinkPower, arduinoData]);
 
-  // Correlation 3: Obstruction vs Network Throughput
-  const obstructionThroughputData = useMemo(() => {
-    if (!starlinkData?.readings) return [];
+  // Correlation 3: Thermal Probe vs Arduino Sensors
+  const thermalArduinoData = useMemo(() => {
+    const dataMap = new Map<string, { time: string; x?: number; y?: number }>();
 
-    return starlinkData.readings
-      .filter(r => r.obstruction_percent !== undefined || r.downlink_throughput_bps !== undefined)
-      .map(r => ({
-        time: formatTime(r.timestamp),
-        x: r.obstruction_percent ?? undefined,
-        y: r.downlink_throughput_bps ? r.downlink_throughput_bps / 1e6 : undefined, // Convert to Mbps
-      }))
+    // Get thermal probe temperature
+    thermalData?.readings?.forEach(r => {
+      const time = formatTime(r.timestamp);
+      const existing = dataMap.get(time) || { time };
+      existing.x = r.temp_c ?? r.probe_c ?? r.ambient_c ?? undefined;
+      dataMap.set(time, existing);
+    });
+
+    // Get Arduino sensor temperature
+    arduinoData?.readings?.forEach(r => {
+      const time = formatTime(r.timestamp);
+      const existing = dataMap.get(time) || { time };
+      existing.y = r.th_temp_c ?? r.bmp_temp_c ?? undefined;
+      dataMap.set(time, existing);
+    });
+
+    return Array.from(dataMap.values())
+      .filter(d => d.x !== undefined || d.y !== undefined)
       .sort((a, b) => a.time.localeCompare(b.time));
-  }, [starlinkData]);
+  }, [thermalData, arduinoData]);
 
   // Correlation 4: Latency vs Throughput (inverse relationship expected)
   const latencyThroughputData = useMemo(() => {
@@ -313,25 +334,25 @@ const CorrelationContent = () => {
   }, [starlinkData]);
 
   // Calculate stats for each pair
-  const throughputTempStats = useMemo(() => calculateCorrelation(throughputTempData), [throughputTempData]);
-  const latencyHumidityStats = useMemo(() => calculateCorrelation(latencyHumidityData), [latencyHumidityData]);
-  const obstructionThroughputStats = useMemo(() => calculateCorrelation(obstructionThroughputData), [obstructionThroughputData]);
+  const powerThermalStats = useMemo(() => calculateCorrelation(powerThermalData), [powerThermalData]);
+  const powerArduinoStats = useMemo(() => calculateCorrelation(powerArduinoData), [powerArduinoData]);
+  const thermalArduinoStats = useMemo(() => calculateCorrelation(thermalArduinoData), [thermalArduinoData]);
   const latencyThroughputStats = useMemo(() => calculateCorrelation(latencyThroughputData), [latencyThroughputData]);
 
   const correlationPairs = [
-    { id: "throughput-temp", label: "Throughput vs Temp", icon: <Zap className="w-4 h-4" /> },
-    { id: "latency-humidity", label: "Latency vs Humidity", icon: <Droplets className="w-4 h-4" /> },
-    { id: "obstruction-throughput", label: "Obstruction vs Network", icon: <Wifi className="w-4 h-4" /> },
+    { id: "power-thermal", label: "Power vs Thermal", icon: <Zap className="w-4 h-4" /> },
+    { id: "power-arduino", label: "Power vs Arduino", icon: <Cpu className="w-4 h-4" /> },
+    { id: "thermal-arduino", label: "Thermal vs Arduino", icon: <Thermometer className="w-4 h-4" /> },
     { id: "latency-throughput", label: "Latency vs Throughput", icon: <Radio className="w-4 h-4" /> },
   ];
 
   const getCurrentData = () => {
     switch (activeTab) {
-      case "throughput-temp": return { data: throughputTempData, stats: throughputTempStats, xLabel: "Download", yLabel: "Temperature", xUnit: "Mbps", yUnit: "°C", xColor: "#06b6d4", yColor: "#f59e0b" };
-      case "latency-humidity": return { data: latencyHumidityData, stats: latencyHumidityStats, xLabel: "Latency", yLabel: "Humidity", xUnit: "ms", yUnit: "%", xColor: "#8b5cf6", yColor: "#22c55e" };
-      case "obstruction-throughput": return { data: obstructionThroughputData, stats: obstructionThroughputStats, xLabel: "Obstruction", yLabel: "Download", xUnit: "%", yUnit: "Mbps", xColor: "#ef4444", yColor: "#06b6d4" };
+      case "power-thermal": return { data: powerThermalData, stats: powerThermalStats, xLabel: "Starlink Power", yLabel: "Thermal Probe", xUnit: "W", yUnit: "°C", xColor: "#f59e0b", yColor: "#ef4444" };
+      case "power-arduino": return { data: powerArduinoData, stats: powerArduinoStats, xLabel: "Starlink Power", yLabel: "Arduino Temp", xUnit: "W", yUnit: "°C", xColor: "#f59e0b", yColor: "#22c55e" };
+      case "thermal-arduino": return { data: thermalArduinoData, stats: thermalArduinoStats, xLabel: "Thermal Probe", yLabel: "Arduino Temp", xUnit: "°C", yUnit: "°C", xColor: "#ef4444", yColor: "#22c55e" };
       case "latency-throughput": return { data: latencyThroughputData, stats: latencyThroughputStats, xLabel: "Latency", yLabel: "Download", xUnit: "ms", yUnit: "Mbps", xColor: "#8b5cf6", yColor: "#06b6d4" };
-      default: return { data: throughputTempData, stats: throughputTempStats, xLabel: "Download", yLabel: "Temperature", xUnit: "Mbps", yUnit: "°C", xColor: "#06b6d4", yColor: "#f59e0b" };
+      default: return { data: powerThermalData, stats: powerThermalStats, xLabel: "Starlink Power", yLabel: "Thermal Probe", xUnit: "W", yUnit: "°C", xColor: "#f59e0b", yColor: "#ef4444" };
     }
   };
 
@@ -373,48 +394,48 @@ const CorrelationContent = () => {
       {/* Correlation Summary Cards */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
         <div 
-          className={`glass-card rounded-xl p-4 border cursor-pointer transition-all ${activeTab === 'throughput-temp' ? 'border-cyan-500/50 bg-cyan-500/10' : 'border-border/50 hover:border-border'}`}
-          onClick={() => setActiveTab('throughput-temp')}
+          className={`glass-card rounded-xl p-4 border cursor-pointer transition-all ${activeTab === 'power-thermal' ? 'border-amber-500/50 bg-amber-500/10' : 'border-border/50 hover:border-border'}`}
+          onClick={() => setActiveTab('power-thermal')}
         >
           <div className="flex items-center gap-2 mb-2">
-            <Wifi className="w-4 h-4 text-cyan-400" />
-            <Thermometer className="w-4 h-4 text-amber-400" />
+            <Zap className="w-4 h-4 text-amber-400" />
+            <Thermometer className="w-4 h-4 text-red-400" />
           </div>
-          <p className="text-xs text-muted-foreground">Throughput ↔ Temperature</p>
-          <p className={`text-lg font-bold ${getCorrelationColor(throughputTempStats.correlation)}`}>
-            r = {throughputTempStats.correlation.toFixed(3)}
+          <p className="text-xs text-muted-foreground">Starlink Power ↔ Thermal</p>
+          <p className={`text-lg font-bold ${getCorrelationColor(powerThermalStats.correlation)}`}>
+            r = {powerThermalStats.correlation.toFixed(3)}
           </p>
-          <p className="text-xs text-muted-foreground">{getCorrelationLabel(throughputTempStats.correlation)}</p>
+          <p className="text-xs text-muted-foreground">{getCorrelationLabel(powerThermalStats.correlation)}</p>
         </div>
 
         <div 
-          className={`glass-card rounded-xl p-4 border cursor-pointer transition-all ${activeTab === 'latency-humidity' ? 'border-violet-500/50 bg-violet-500/10' : 'border-border/50 hover:border-border'}`}
-          onClick={() => setActiveTab('latency-humidity')}
+          className={`glass-card rounded-xl p-4 border cursor-pointer transition-all ${activeTab === 'power-arduino' ? 'border-amber-500/50 bg-amber-500/10' : 'border-border/50 hover:border-border'}`}
+          onClick={() => setActiveTab('power-arduino')}
         >
           <div className="flex items-center gap-2 mb-2">
-            <Activity className="w-4 h-4 text-violet-400" />
-            <Droplets className="w-4 h-4 text-emerald-400" />
+            <Zap className="w-4 h-4 text-amber-400" />
+            <Cpu className="w-4 h-4 text-emerald-400" />
           </div>
-          <p className="text-xs text-muted-foreground">Latency ↔ Humidity</p>
-          <p className={`text-lg font-bold ${getCorrelationColor(latencyHumidityStats.correlation)}`}>
-            r = {latencyHumidityStats.correlation.toFixed(3)}
+          <p className="text-xs text-muted-foreground">Starlink Power ↔ Arduino</p>
+          <p className={`text-lg font-bold ${getCorrelationColor(powerArduinoStats.correlation)}`}>
+            r = {powerArduinoStats.correlation.toFixed(3)}
           </p>
-          <p className="text-xs text-muted-foreground">{getCorrelationLabel(latencyHumidityStats.correlation)}</p>
+          <p className="text-xs text-muted-foreground">{getCorrelationLabel(powerArduinoStats.correlation)}</p>
         </div>
 
         <div 
-          className={`glass-card rounded-xl p-4 border cursor-pointer transition-all ${activeTab === 'obstruction-throughput' ? 'border-red-500/50 bg-red-500/10' : 'border-border/50 hover:border-border'}`}
-          onClick={() => setActiveTab('obstruction-throughput')}
+          className={`glass-card rounded-xl p-4 border cursor-pointer transition-all ${activeTab === 'thermal-arduino' ? 'border-red-500/50 bg-red-500/10' : 'border-border/50 hover:border-border'}`}
+          onClick={() => setActiveTab('thermal-arduino')}
         >
           <div className="flex items-center gap-2 mb-2">
-            <Radio className="w-4 h-4 text-red-400" />
-            <Wifi className="w-4 h-4 text-cyan-400" />
+            <Thermometer className="w-4 h-4 text-red-400" />
+            <Cpu className="w-4 h-4 text-emerald-400" />
           </div>
-          <p className="text-xs text-muted-foreground">Obstruction ↔ Network</p>
-          <p className={`text-lg font-bold ${getCorrelationColor(obstructionThroughputStats.correlation)}`}>
-            r = {obstructionThroughputStats.correlation.toFixed(3)}
+          <p className="text-xs text-muted-foreground">Thermal ↔ Arduino</p>
+          <p className={`text-lg font-bold ${getCorrelationColor(thermalArduinoStats.correlation)}`}>
+            r = {thermalArduinoStats.correlation.toFixed(3)}
           </p>
-          <p className="text-xs text-muted-foreground">{getCorrelationLabel(obstructionThroughputStats.correlation)}</p>
+          <p className="text-xs text-muted-foreground">{getCorrelationLabel(thermalArduinoStats.correlation)}</p>
         </div>
 
         <div 
