@@ -23,6 +23,7 @@ import MovementAnalyticsContent from "@/components/MovementAnalyticsContent";
 import WebhooksContent from "@/components/WebhooksContent";
 import UserManagementContent from "@/components/UserManagementContent";
 import SystemLogsContent from "@/components/SystemLogsContent";
+import StatsHistoryCharts from "@/components/StatsHistoryCharts";
 
 const Index = () => {
   const [activeItem, setActiveItem] = useState("dashboard");
@@ -73,6 +74,12 @@ const Index = () => {
         return <UserManagementContent />;
       case "system-logs":
         return <SystemLogsContent />;
+      case "stats-history":
+        return (
+          <div className="flex-1 overflow-y-auto p-8">
+            <StatsHistoryCharts />
+          </div>
+        );
       default:
         return <DashboardContent />;
     }

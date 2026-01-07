@@ -21,7 +21,8 @@ import {
   Move,
   Webhook,
   UserCog,
-  Terminal
+  Terminal,
+  TrendingUp
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -57,6 +58,7 @@ const menuSections = [
     items: [
       { id: "sensors", label: "Sensors", icon: Thermometer },
       { id: "data-analytics", label: "Data Analytics", icon: BarChart3 },
+      { id: "stats-history", label: "Stats History", icon: TrendingUp },
       { id: "data-batches", label: "Data Batches", icon: Database },
       { id: "export", label: "Export", icon: Download },
     ],
