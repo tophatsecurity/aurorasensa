@@ -824,7 +824,7 @@ const RadioAnalyticsContent = () => {
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {adsbAircraft.slice(0, 50).map((aircraft) => (
+                    {adsbAircraft.slice(0, 50).filter(a => a?.hex).map((aircraft) => (
                       <TableRow key={aircraft.hex}>
                         <TableCell className="font-medium">
                           <div className="flex items-center gap-2">
@@ -835,7 +835,7 @@ const RadioAnalyticsContent = () => {
                           </div>
                         </TableCell>
                         <TableCell className="font-mono text-xs">
-                          {aircraft.hex.toUpperCase()}
+                          {aircraft.hex?.toUpperCase() || "—"}
                         </TableCell>
                         <TableCell>
                           {aircraft.alt_baro 
