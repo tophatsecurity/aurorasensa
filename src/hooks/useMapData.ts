@@ -405,15 +405,40 @@ export function useMapData(options: UseMapDataOptions = {}) {
     return null;
   }, [gpsdStatus]);
 
-  // Extract GPS from all Starlink devices - combine API devices and status data
+  // Extract GPS from all Starlink devices - combine geo locations, API devices, and status data
   const starlinkDevices = useMemo<Array<{ device_id: string; lat: number; lng: number; altitude?: number; timestamp?: string }>>(() => {
     const devices: Array<{ device_id: string; lat: number; lng: number; altitude?: number; timestamp?: string }> = [];
     const addedIds = new Set<string>();
     
-    // First, add devices from the dedicated API endpoint (most reliable)
+    // First, check geo locations for Starlink devices (most reliable for GPS)
+    const geoArray = normalizeGeoLocations(geoLocations);
+    geoArray.forEach(geo => {
+      // Match Starlink devices by device_id containing 'starlink'
+      if (geo.device_id?.toLowerCase().includes('starlink')) {
+        if (geo.lat >= -90 && geo.lat <= 90 && 
+            geo.lng >= -180 && geo.lng <= 180 &&
+            !(geo.lat === 0 && geo.lng === 0)) {
+          devices.push({
+            device_id: geo.device_id,
+            lat: geo.lat,
+            lng: geo.lng,
+            altitude: geo.altitude,
+            timestamp: geo.timestamp
+          });
+          addedIds.add(geo.device_id);
+        }
+      }
+    });
+    
+    if (devices.length > 0) {
+      console.log('[MapData] Found Starlink devices from geo locations:', devices.map(d => d.device_id));
+    }
+    
+    // Second, add devices from the dedicated API endpoint
     if (starlinkDevicesApi && starlinkDevicesApi.length > 0) {
       starlinkDevicesApi.forEach(device => {
-        // Check if device has GPS coordinates - use the typed interface
+        if (addedIds.has(device.device_id)) return;
+        
         const lat = device.latitude;
         const lng = device.longitude;
         const alt = device.altitude;
@@ -433,12 +458,12 @@ export function useMapData(options: UseMapDataOptions = {}) {
         }
       });
       
-      if (devices.length > 0) {
-        console.log('[MapData] Found Starlink devices from API:', devices.map(d => d.device_id));
+      if (devices.length > addedIds.size) {
+        console.log('[MapData] Added Starlink devices from API:', devices.filter(d => !addedIds.has(d.device_id)).map(d => d.device_id));
       }
     }
     
-    // Then add from status data (real-time updates)
+    // Third, add from status data (real-time updates)
     if (starlinkStatusData && starlinkStatusData.length > 0) {
       // Group by device_id and get the latest entry for each
       const deviceMap = new Map<string, typeof starlinkStatusData[0]>();
@@ -462,18 +487,21 @@ export function useMapData(options: UseMapDataOptions = {}) {
             lng >= -180 && lng <= 180 &&
             !(lat === 0 && lng === 0)) {
           
-          // If already added from API, update with newer GPS if available
+          // If already added, update with newer GPS if available
           if (addedIds.has(deviceId)) {
             const existingIdx = devices.findIndex(d => d.device_id === deviceId);
-            if (existingIdx >= 0) {
-              // Update with real-time data
-              devices[existingIdx] = {
-                device_id: deviceId,
-                lat,
-                lng,
-                altitude: entry.altitude,
-                timestamp: entry.timestamp
-              };
+            if (existingIdx >= 0 && entry.timestamp) {
+              // Only update if status data is newer
+              const existingTimestamp = devices[existingIdx].timestamp;
+              if (!existingTimestamp || new Date(entry.timestamp) > new Date(existingTimestamp)) {
+                devices[existingIdx] = {
+                  device_id: deviceId,
+                  lat,
+                  lng,
+                  altitude: entry.altitude,
+                  timestamp: entry.timestamp
+                };
+              }
             }
           } else {
             devices.push({
@@ -490,11 +518,11 @@ export function useMapData(options: UseMapDataOptions = {}) {
     }
     
     if (devices.length > 0) {
-      console.log('[MapData] Total Starlink devices with GPS:', devices.map(d => d.device_id));
+      console.log('[MapData] Total Starlink devices with GPS:', devices.length, devices.map(d => d.device_id));
     }
     
     return devices;
-  }, [starlinkDevicesApi, starlinkStatusData]);
+  }, [geoLocations, starlinkDevicesApi, starlinkStatusData]);
 
   // Keep backward compatibility - get first device GPS
   const starlinkStatusGps = useMemo<{ lat: number; lng: number; altitude?: number } | null>(() => {
