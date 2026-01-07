@@ -1571,6 +1571,37 @@ export function useGeoLocations() {
   });
 }
 
+// Hook to fetch Starlink sensor readings with GPS data
+export interface StarlinkSensorReading {
+  device_id: string;
+  timestamp: string;
+  data: {
+    latitude?: number;
+    longitude?: number;
+    altitude?: number;
+    gps_latitude?: number;
+    gps_longitude?: number;
+    gps_altitude?: number;
+    [key: string]: unknown;
+  };
+}
+
+export function useStarlinkSensorReadings() {
+  return useQuery({
+    queryKey: ["aurora", "readings", "sensor", "starlink"],
+    queryFn: async () => {
+      try {
+        return await callAuroraApi<StarlinkSensorReading[]>("/api/readings/sensor/starlink");
+      } catch (error) {
+        console.warn("Failed to fetch Starlink sensor readings:", error);
+        return [];
+      }
+    },
+    refetchInterval: 30000,
+    retry: 1,
+  });
+}
+
 // =============================================
 // HOOKS - SYSTEM INFO
 // =============================================
