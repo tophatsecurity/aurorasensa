@@ -59,6 +59,7 @@ import {
   useClients,
   StarlinkTimeseriesPoint 
 } from "@/hooks/useAuroraApi";
+import { StarlinkMonitoringPanel, StarlinkPerformanceCharts } from "@/components/starlink";
 
 // Chart color palette
 const COLORS = {
@@ -417,6 +418,16 @@ const StarlinkContent = () => {
           </Button>
         </div>
       )}
+
+      {/* Real-time Monitoring Panel */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">
+        <div className="lg:col-span-1">
+          <StarlinkMonitoringPanel />
+        </div>
+        <div className="lg:col-span-2">
+          <StarlinkPerformanceCharts hours={24} />
+        </div>
+      </div>
 
       {/* Status Overview */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
