@@ -255,9 +255,79 @@ export function useMapData(options: UseMapDataOptions = {}) {
     return gps;
   }, [latestReadings]);
 
+  // Helper to extract lat/lng and unique device_id from various field formats
+  const extractStarlinkCoordsWithId = (data: Record<string, unknown>, fallbackId: string): { device_id: string; lat: number; lng: number; altitude?: number } | null => {
+    let lat: number | undefined;
+    let lng: number | undefined;
+    let alt: number | undefined;
+    let uniqueDeviceId: string = fallbackId;
+
+    // Check for nested starlink object first (contains the unique device_id)
+    if (data.starlink && typeof data.starlink === 'object') {
+      const starlink = data.starlink as Record<string, unknown>;
+      // Extract the unique device_id from inside the starlink object
+      if (typeof starlink.device_id === 'string' && starlink.device_id) {
+        uniqueDeviceId = starlink.device_id;
+      }
+      if (typeof starlink.latitude === 'number' && starlink.latitude !== null && 
+          typeof starlink.longitude === 'number' && starlink.longitude !== null) {
+        lat = starlink.latitude;
+        lng = starlink.longitude;
+        alt = typeof starlink.altitude === 'number' ? starlink.altitude : undefined;
+      } else if (starlink.location_detail && typeof starlink.location_detail === 'object') {
+        const loc = starlink.location_detail as Record<string, unknown>;
+        if (typeof loc.latitude === 'number' && loc.latitude !== null && 
+            typeof loc.longitude === 'number' && loc.longitude !== null) {
+          lat = loc.latitude;
+          lng = loc.longitude;
+          alt = typeof loc.altitude === 'number' ? loc.altitude : undefined;
+        }
+      }
+    }
+
+    // If no coords from starlink object, try other field formats
+    if (lat === undefined || lng === undefined) {
+      if (typeof data.latitude === 'number' && data.latitude !== null && 
+          typeof data.longitude === 'number' && data.longitude !== null) {
+        lat = data.latitude;
+        lng = data.longitude;
+        alt = typeof data.altitude === 'number' ? data.altitude : undefined;
+      } else if (typeof data.lat === 'number' && typeof data.lon === 'number') {
+        lat = data.lat;
+        lng = data.lon;
+        alt = typeof data.alt === 'number' ? data.alt : undefined;
+      } else if (typeof data.lat === 'number' && typeof data.lng === 'number') {
+        lat = data.lat;
+        lng = data.lng;
+        alt = typeof data.altitude === 'number' ? data.altitude : undefined;
+      } else if (data.location_detail && typeof data.location_detail === 'object') {
+        const loc = data.location_detail as Record<string, unknown>;
+        if (typeof loc.latitude === 'number' && loc.latitude !== null && 
+            typeof loc.longitude === 'number' && loc.longitude !== null) {
+          lat = loc.latitude;
+          lng = loc.longitude;
+          alt = typeof loc.altitude === 'number' ? loc.altitude : undefined;
+        }
+      }
+    }
+
+    // Also check for device_id at the top level if not found in starlink object
+    if (uniqueDeviceId === fallbackId && typeof data.device_id === 'string' && data.device_id) {
+      uniqueDeviceId = data.device_id;
+    }
+
+    if (lat !== undefined && lng !== undefined && 
+        lat >= -90 && lat <= 90 && 
+        lng >= -180 && lng <= 180 &&
+        !(lat === 0 && lng === 0)) {
+      return { device_id: uniqueDeviceId, lat, lng, altitude: alt };
+    }
+    return null;
+  };
+
   // Extract GPS from Starlink stats (avg lat/lng from 24h data)
   const starlinkGps = useMemo<{ lat: number; lng: number; altitude?: number } | null>(() => {
-    // Helper to extract lat/lng from various field formats
+    // Helper to extract lat/lng from various field formats (without device_id tracking)
     const extractCoords = (data: Record<string, unknown>): { lat: number; lng: number; altitude?: number } | null => {
       let lat: number | undefined;
       let lng: number | undefined;
@@ -537,61 +607,90 @@ export function useMapData(options: UseMapDataOptions = {}) {
     
     // Fourth, add from Starlink sensor readings (/api/readings/sensor/starlink)
     if (starlinkSensorReadings && starlinkSensorReadings.length > 0) {
-      // Group by device_id and get the latest entry for each
-      const sensorMap = new Map<string, typeof starlinkSensorReadings[0]>();
+      // Group by unique device_id (extracted from nested starlink object) and get the latest entry for each
+      const sensorMap = new Map<string, { reading: typeof starlinkSensorReadings[0]; uniqueId: string; coords: { lat: number; lng: number; altitude?: number } }>();
       
       starlinkSensorReadings.forEach(reading => {
-        const deviceId = reading.device_id;
-        const existing = sensorMap.get(deviceId);
+        const data = reading.data as Record<string, unknown>;
+        const result = extractStarlinkCoordsWithId(data, reading.device_id);
         
-        // Keep the latest reading for each device
-        if (!existing || (reading.timestamp && existing.timestamp && new Date(reading.timestamp) > new Date(existing.timestamp))) {
-          sensorMap.set(deviceId, reading);
+        if (result) {
+          const uniqueId = result.device_id;
+          const existing = sensorMap.get(uniqueId);
+          
+          // Keep the latest reading for each unique device
+          if (!existing || (reading.timestamp && existing.reading.timestamp && new Date(reading.timestamp) > new Date(existing.reading.timestamp))) {
+            sensorMap.set(uniqueId, { reading, uniqueId, coords: result });
+          }
         }
       });
       
       // Add or update devices with GPS from sensor readings
-      sensorMap.forEach((reading, deviceId) => {
-        const data = reading.data;
-        // Try various GPS field names
-        const lat = data.latitude ?? data.gps_latitude;
-        const lng = data.longitude ?? data.gps_longitude;
-        const alt = data.altitude ?? data.gps_altitude;
-        
-        if (lat !== undefined && lng !== undefined &&
-            lat >= -90 && lat <= 90 && 
-            lng >= -180 && lng <= 180 &&
-            !(lat === 0 && lng === 0)) {
-          
-          // If already added, update with newer GPS if available
-          if (addedIds.has(deviceId)) {
-            const existingIdx = devices.findIndex(d => d.device_id === deviceId);
-            if (existingIdx >= 0 && reading.timestamp) {
-              // Only update if sensor data is newer
-              const existingTimestamp = devices[existingIdx].timestamp;
-              if (!existingTimestamp || new Date(reading.timestamp) > new Date(existingTimestamp)) {
-                devices[existingIdx] = {
-                  device_id: deviceId,
-                  lat,
-                  lng,
-                  altitude: alt,
-                  timestamp: reading.timestamp
-                };
-              }
+      sensorMap.forEach(({ reading, uniqueId, coords }) => {
+        if (addedIds.has(uniqueId)) {
+          const existingIdx = devices.findIndex(d => d.device_id === uniqueId);
+          if (existingIdx >= 0 && reading.timestamp) {
+            // Only update if sensor data is newer
+            const existingTimestamp = devices[existingIdx].timestamp;
+            if (!existingTimestamp || new Date(reading.timestamp) > new Date(existingTimestamp)) {
+              devices[existingIdx] = {
+                device_id: uniqueId,
+                lat: coords.lat,
+                lng: coords.lng,
+                altitude: coords.altitude,
+                timestamp: reading.timestamp
+              };
             }
-          } else {
-            devices.push({
-              device_id: deviceId,
-              lat,
-              lng,
-              altitude: alt,
-              timestamp: reading.timestamp
-            });
-            addedIds.add(deviceId);
-            console.log('[MapData] Added Starlink device from sensor readings:', deviceId);
           }
+        } else {
+          devices.push({
+            device_id: uniqueId,
+            lat: coords.lat,
+            lng: coords.lng,
+            altitude: coords.altitude,
+            timestamp: reading.timestamp
+          });
+          addedIds.add(uniqueId);
+          console.log('[MapData] Added Starlink device from sensor readings with unique ID:', uniqueId);
         }
       });
+    }
+    
+    // Fifth, add from starlinkLatest which contains the unique device_id inside the starlink object
+    if (starlinkLatest?.data) {
+      const data = starlinkLatest.data as Record<string, unknown>;
+      const result = extractStarlinkCoordsWithId(data, 'starlink_dish_1');
+      if (result) {
+        // Use the unique device_id from inside the starlink object
+        const uniqueId = result.device_id;
+        
+        if (!addedIds.has(uniqueId)) {
+          devices.push({
+            device_id: uniqueId,
+            lat: result.lat,
+            lng: result.lng,
+            altitude: result.altitude,
+            timestamp: starlinkLatest.timestamp
+          });
+          addedIds.add(uniqueId);
+          console.log('[MapData] Added Starlink device from latest with unique ID:', uniqueId, { lat: result.lat, lng: result.lng });
+        } else {
+          // Update if newer
+          const existingIdx = devices.findIndex(d => d.device_id === uniqueId);
+          if (existingIdx >= 0) {
+            const existingTimestamp = devices[existingIdx].timestamp;
+            if (!existingTimestamp || (starlinkLatest.timestamp && new Date(starlinkLatest.timestamp) > new Date(existingTimestamp))) {
+              devices[existingIdx] = {
+                device_id: uniqueId,
+                lat: result.lat,
+                lng: result.lng,
+                altitude: result.altitude,
+                timestamp: starlinkLatest.timestamp
+              };
+            }
+          }
+        }
+      }
     }
     
     if (devices.length > 0) {
@@ -599,7 +698,7 @@ export function useMapData(options: UseMapDataOptions = {}) {
     }
     
     return devices;
-  }, [geoLocations, starlinkDevicesApi, starlinkStatusData, starlinkSensorReadings]);
+  }, [geoLocations, starlinkDevicesApi, starlinkStatusData, starlinkSensorReadings, starlinkLatest]);
 
   // Keep backward compatibility - get first device GPS
   const starlinkStatusGps = useMemo<{ lat: number; lng: number; altitude?: number } | null>(() => {
@@ -664,7 +763,7 @@ export function useMapData(options: UseMapDataOptions = {}) {
     }
     
     return merged;
-  }, [geoLocations, readingsGps, starlinkGps, starlinkStatusGps, gpsdGps, gpsReadings]);
+  }, [geoLocations, readingsGps, starlinkGps, starlinkStatusGps, gpsdGps, gpsReadings, starlinkDevices]);
 
   // Build sensor markers from sensors API, geo locations, and clients with GPS
   const sensorMarkers = useMemo<SensorMarker[]>(() => {
@@ -714,9 +813,24 @@ export function useMapData(options: UseMapDataOptions = {}) {
     if (starlinkDevices.length > 0) {
       starlinkDevices.forEach(device => {
         if (!addedIds.has(device.device_id)) {
-          const displayName = device.device_id === 'starlink_dish_1' 
-            ? 'Starlink Dish' 
-            : `Starlink ${device.device_id.replace(/_/g, ' ').replace(/starlink/i, '').trim() || 'Dish'}`;
+          // Format the unique device_id for display
+          // e.g., "ut00c80094-00f2641c-191db305" -> "Starlink ut00c...db305"
+          let displayName: string;
+          if (device.device_id === 'starlink_dish_1') {
+            displayName = 'Starlink Dish';
+          } else if (device.device_id.toLowerCase().startsWith('ut')) {
+            // Starlink unique terminal ID format - show abbreviated version
+            const parts = device.device_id.split('-');
+            if (parts.length >= 1) {
+              const firstPart = parts[0].substring(0, 8);
+              const lastPart = parts[parts.length - 1]?.slice(-6) || '';
+              displayName = `Starlink ${firstPart}...${lastPart}`;
+            } else {
+              displayName = `Starlink ${device.device_id.substring(0, 12)}...`;
+            }
+          } else {
+            displayName = `Starlink ${device.device_id.replace(/_/g, ' ').replace(/starlink/i, '').trim() || 'Dish'}`;
+          }
           
           markers.push({
             id: device.device_id,
