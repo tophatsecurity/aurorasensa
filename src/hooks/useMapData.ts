@@ -236,8 +236,9 @@ export function useMapData(options: UseMapDataOptions = {}) {
       gpsReadings: gpsReadings?.count || 0,
       starlinkStatusData: starlinkStatusData?.length || 0,
       starlinkSensorReadings: starlinkSensorReadings?.length || 0,
+      starlinkDevicesApi: starlinkDevicesApi?.length || 0,
     });
-  }, [sensors, clients, latestReadings, geoLocations, adsbAircraft, starlinkStats, starlinkLatest, gpsdStatus, gpsReadings, starlinkStatusData, starlinkSensorReadings]);
+  }, [sensors, clients, latestReadings, geoLocations, adsbAircraft, starlinkStats, starlinkLatest, gpsdStatus, gpsReadings, starlinkStatusData, starlinkSensorReadings, starlinkDevicesApi]);
 
 
   const handleRefresh = useCallback(() => {
@@ -871,9 +872,13 @@ export function useMapData(options: UseMapDataOptions = {}) {
           }
         }
         
-        // Add Starlink sensors
+        // Add Starlink sensors - but only one marker per client pointing to actual Starlink device
+        // Skip adding starlink markers here as they're handled separately via starlinkDevices or starlinkGps
+        // This prevents duplicate markers with identical GPS coordinates
         const starlink = config.starlink;
-        if (starlink?.enabled) {
+        const hasStarlinkDeviceData = starlinkDevices.length > 0 || starlinkGps !== null;
+        if (starlink?.enabled && !hasStarlinkDeviceData) {
+          // Only add client-based Starlink marker if no actual Starlink device data available
           const id = `${client.client_id}-starlink`;
           if (!addedIds.has(id)) {
             markers.push({
