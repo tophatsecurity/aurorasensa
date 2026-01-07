@@ -36,6 +36,7 @@ const menuSections = [
     title: "OVERVIEW",
     items: [
       { id: "dashboard", label: "Dashboard", icon: LayoutDashboard },
+      { id: "correlation", label: "Correlation", icon: TrendingUp },
       { id: "map", label: "Map", icon: Map },
       { id: "clients", label: "Clients", icon: Users },
       { id: "alerts", label: "Alerts", icon: Bell },
