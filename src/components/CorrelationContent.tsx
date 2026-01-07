@@ -37,7 +37,6 @@ import {
 import { 
   useStarlinkTimeseries,
   useDashboardTimeseries,
-  useStarlinkPower,
   useThermalProbeTimeseries,
   useArduinoSensorTimeseries,
 } from "@/hooks/useAuroraApi";
@@ -234,11 +233,10 @@ const CorrelationContent = () => {
   
   const { data: starlinkData, isLoading: starlinkLoading } = useStarlinkTimeseries(timeRange);
   const { data: dashboardData, isLoading: dashboardLoading } = useDashboardTimeseries(timeRange);
-  const { data: starlinkPower, isLoading: powerLoading } = useStarlinkPower();
   const { data: thermalData, isLoading: thermalLoading } = useThermalProbeTimeseries(timeRange);
   const { data: arduinoData, isLoading: arduinoLoading } = useArduinoSensorTimeseries(timeRange);
 
-  const isLoading = starlinkLoading || dashboardLoading || powerLoading || thermalLoading || arduinoLoading;
+  const isLoading = starlinkLoading || dashboardLoading || thermalLoading || arduinoLoading;
 
   // Helper to format timestamp
   const formatTime = (timestamp: string) => 
@@ -248,11 +246,11 @@ const CorrelationContent = () => {
   const powerThermalData = useMemo(() => {
     const dataMap = new Map<string, { time: string; x?: number; y?: number }>();
 
-    // Get Starlink power data from the power_data array
-    starlinkPower?.power_data?.forEach(p => {
-      const time = formatTime(p.timestamp);
+    // Get Starlink power data from timeseries (power_w now correctly extracts from data.starlink.power_watts)
+    starlinkData?.readings?.forEach(r => {
+      const time = formatTime(r.timestamp);
       const existing = dataMap.get(time) || { time };
-      existing.x = p.power_watts ?? undefined;
+      existing.x = r.power_w ?? undefined;
       dataMap.set(time, existing);
     });
 
@@ -267,17 +265,17 @@ const CorrelationContent = () => {
     return Array.from(dataMap.values())
       .filter(d => d.x !== undefined || d.y !== undefined)
       .sort((a, b) => a.time.localeCompare(b.time));
-  }, [starlinkPower, thermalData]);
+  }, [starlinkData, thermalData]);
 
   // Correlation 2: Starlink Power vs Arduino Temperature
   const powerArduinoData = useMemo(() => {
     const dataMap = new Map<string, { time: string; x?: number; y?: number }>();
 
-    // Get Starlink power data
-    starlinkPower?.power_data?.forEach(p => {
-      const time = formatTime(p.timestamp);
+    // Get Starlink power data from timeseries
+    starlinkData?.readings?.forEach(r => {
+      const time = formatTime(r.timestamp);
       const existing = dataMap.get(time) || { time };
-      existing.x = p.power_watts ?? undefined;
+      existing.x = r.power_w ?? undefined;
       dataMap.set(time, existing);
     });
 
@@ -292,7 +290,7 @@ const CorrelationContent = () => {
     return Array.from(dataMap.values())
       .filter(d => d.x !== undefined || d.y !== undefined)
       .sort((a, b) => a.time.localeCompare(b.time));
-  }, [starlinkPower, arduinoData]);
+  }, [starlinkData, arduinoData]);
 
   // Correlation 3: Thermal Probe vs Arduino Sensors
   const thermalArduinoData = useMemo(() => {

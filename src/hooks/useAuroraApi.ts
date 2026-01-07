@@ -1955,6 +1955,7 @@ export function useStarlinkTimeseries(hours: number = 24) {
               snr?: number;
               signal_strength?: number;
               uptime_seconds?: number;
+              power_watts?: number;
               ping_latency?: {
                 'Mean RTT, drop == 0'?: number;
                 'Mean RTT, drop < 1'?: number;
@@ -1994,8 +1995,8 @@ export function useStarlinkTimeseries(hours: number = 24) {
           
           return {
             timestamp: r.timestamp,
-            // Power is not available in Starlink data - leave undefined
-            power_w: r.data?.power_w ?? r.data?.power_watts ?? r.power_w,
+            // Power from nested starlink object (power_watts is the correct field)
+            power_w: starlinkData?.power_watts ?? r.data?.power_watts ?? r.data?.power_w ?? r.power_w,
             // Signal from starlink object
             signal_dbm: r.data?.signal_dbm ?? r.signal_dbm,
             snr: starlinkData?.snr ?? r.data?.snr ?? r.snr,
