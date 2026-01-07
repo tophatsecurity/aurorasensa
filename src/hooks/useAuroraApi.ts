@@ -765,6 +765,7 @@ export interface StarlinkTimeseriesPoint {
   downlink_throughput_bps?: number;
   uplink_throughput_bps?: number;
   pop_ping_latency_ms?: number;
+  obstruction_percent?: number;
 }
 
 export interface StarlinkTimeseriesResponse {
@@ -1938,14 +1939,27 @@ export function useStarlinkTimeseries(hours: number = 24) {
     queryKey: ["aurora", "starlink", "timeseries", hours],
     queryFn: async () => {
       try {
-        // The API may return data in a nested structure: readings[].data.power_w
-        // We need to transform it to our flat structure
+        // The API returns data in a nested structure: readings[].data.starlink.{field}
+        // We need to extract the starlink object and flatten it
         interface RawReading {
           timestamp: string;
           device_id?: string;
           device_type?: string;
           client_id?: string;
           data?: {
+            starlink?: {
+              downlink_throughput_bps?: number;
+              uplink_throughput_bps?: number;
+              obstruction_percent?: number;
+              pop_ping_latency_ms?: number;
+              snr?: number;
+              signal_strength?: number;
+              uptime_seconds?: number;
+              ping_latency?: {
+                'Mean RTT, drop == 0'?: number;
+                'Mean RTT, drop < 1'?: number;
+              };
+            };
             power_w?: number;
             power_watts?: number;
             signal_dbm?: number;
@@ -1973,16 +1987,31 @@ export function useStarlinkTimeseries(hours: number = 24) {
         const response = await callAuroraApi<RawResponse>(`/api/readings/sensor/starlink?hours=${hours}`);
         
         // Transform nested data structure to flat structure
-        const transformedReadings: StarlinkTimeseriesPoint[] = (response.readings || []).map(r => ({
-          timestamp: r.timestamp,
-          // Try nested data first, then fall back to direct properties
-          power_w: r.data?.power_w ?? r.data?.power_watts ?? r.power_w,
-          signal_dbm: r.data?.signal_dbm ?? r.signal_dbm,
-          snr: r.data?.snr ?? r.snr,
-          downlink_throughput_bps: r.data?.downlink_throughput_bps ?? r.downlink_throughput_bps,
-          uplink_throughput_bps: r.data?.uplink_throughput_bps ?? r.uplink_throughput_bps,
-          pop_ping_latency_ms: r.data?.pop_ping_latency_ms ?? r.pop_ping_latency_ms,
-        }));
+        // Starlink data is nested under data.starlink.{field}
+        const transformedReadings: StarlinkTimeseriesPoint[] = (response.readings || []).map(r => {
+          const starlinkData = r.data?.starlink;
+          const pingLatency = starlinkData?.ping_latency;
+          
+          return {
+            timestamp: r.timestamp,
+            // Power is not available in Starlink data - leave undefined
+            power_w: r.data?.power_w ?? r.data?.power_watts ?? r.power_w,
+            // Signal from starlink object
+            signal_dbm: r.data?.signal_dbm ?? r.signal_dbm,
+            snr: starlinkData?.snr ?? r.data?.snr ?? r.snr,
+            // Throughput from nested starlink object
+            downlink_throughput_bps: starlinkData?.downlink_throughput_bps ?? r.data?.downlink_throughput_bps ?? r.downlink_throughput_bps,
+            uplink_throughput_bps: starlinkData?.uplink_throughput_bps ?? r.data?.uplink_throughput_bps ?? r.uplink_throughput_bps,
+            // Latency from nested ping_latency object or direct field
+            pop_ping_latency_ms: starlinkData?.pop_ping_latency_ms ?? 
+                                  pingLatency?.['Mean RTT, drop == 0'] ?? 
+                                  pingLatency?.['Mean RTT, drop < 1'] ?? 
+                                  r.data?.pop_ping_latency_ms ?? 
+                                  r.pop_ping_latency_ms,
+            // Obstruction
+            obstruction_percent: starlinkData?.obstruction_percent ?? r.data?.obstruction_percent,
+          };
+        });
         
         return { 
           count: response.count ?? transformedReadings.length, 
