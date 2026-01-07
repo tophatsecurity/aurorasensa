@@ -610,14 +610,26 @@ export function useMapData(options: UseMapDataOptions = {}) {
   const gpsCoordinates = useMemo(() => {
     const merged = mergeGpsData(geoLocations, readingsGps);
     
-    // Add Starlink GPS if available (priority: starlinkStatusGps > starlinkGps)
-    const effectiveStarlinkGps = starlinkStatusGps || starlinkGps;
-    if (effectiveStarlinkGps) {
-      merged['starlink_dish_1'] = {
-        lat: effectiveStarlinkGps.lat,
-        lng: effectiveStarlinkGps.lng,
-        altitude: effectiveStarlinkGps.altitude,
+    // Add ALL Starlink devices with GPS coordinates
+    starlinkDevices.forEach(device => {
+      merged[device.device_id] = {
+        lat: device.lat,
+        lng: device.lng,
+        altitude: device.altitude,
+        timestamp: device.timestamp,
       };
+    });
+    
+    // Fallback: Add legacy single Starlink GPS if no devices found
+    if (starlinkDevices.length === 0) {
+      const effectiveStarlinkGps = starlinkStatusGps || starlinkGps;
+      if (effectiveStarlinkGps) {
+        merged['starlink_dish_1'] = {
+          lat: effectiveStarlinkGps.lat,
+          lng: effectiveStarlinkGps.lng,
+          altitude: effectiveStarlinkGps.altitude,
+        };
+      }
     }
 
     // Add GPSD GPS if available
