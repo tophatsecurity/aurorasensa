@@ -226,7 +226,7 @@ const CorrelationChart = ({
 
 const CorrelationContent = () => {
   const [timeRange, setTimeRange] = useState<number>(24);
-  const [activeTab, setActiveTab] = useState("power-temp");
+  const [activeTab, setActiveTab] = useState("throughput-temp");
   
   const { data: starlinkData, isLoading: starlinkLoading } = useStarlinkTimeseries(timeRange);
   const { data: dashboardData, isLoading: dashboardLoading } = useDashboardTimeseries(timeRange);
@@ -237,14 +237,15 @@ const CorrelationContent = () => {
   const formatTime = (timestamp: string) => 
     new Date(timestamp).toLocaleTimeString('en-US', { hour12: false, hour: '2-digit', minute: '2-digit' });
 
-  // Correlation 1: Power vs Temperature
-  const powerTempData = useMemo(() => {
+  // Correlation 1: Throughput vs Temperature (Starlink throughput correlates with ambient temp)
+  const throughputTempData = useMemo(() => {
     const dataMap = new Map<string, { time: string; x?: number; y?: number }>();
 
     starlinkData?.readings?.forEach(r => {
       const time = formatTime(r.timestamp);
       const existing = dataMap.get(time) || { time };
-      existing.x = r.power_w ?? undefined;
+      // Convert bps to Mbps for readability
+      existing.x = r.downlink_throughput_bps ? r.downlink_throughput_bps / 1e6 : undefined;
       dataMap.set(time, existing);
     });
 
@@ -260,14 +261,14 @@ const CorrelationContent = () => {
       .sort((a, b) => a.time.localeCompare(b.time));
   }, [starlinkData, dashboardData]);
 
-  // Correlation 2: Signal Strength vs Humidity (Weather proxy)
-  const signalHumidityData = useMemo(() => {
+  // Correlation 2: Latency vs Humidity (Weather proxy)
+  const latencyHumidityData = useMemo(() => {
     const dataMap = new Map<string, { time: string; x?: number; y?: number }>();
 
     starlinkData?.readings?.forEach(r => {
       const time = formatTime(r.timestamp);
       const existing = dataMap.get(time) || { time };
-      existing.x = r.signal_dbm ?? undefined;
+      existing.x = r.pop_ping_latency_ms ?? undefined;
       dataMap.set(time, existing);
     });
 
@@ -283,54 +284,54 @@ const CorrelationContent = () => {
       .sort((a, b) => a.time.localeCompare(b.time));
   }, [starlinkData, dashboardData]);
 
-  // Correlation 3: Power vs Network Throughput
-  const powerThroughputData = useMemo(() => {
+  // Correlation 3: Obstruction vs Network Throughput
+  const obstructionThroughputData = useMemo(() => {
     if (!starlinkData?.readings) return [];
 
     return starlinkData.readings
-      .filter(r => r.power_w !== undefined || r.downlink_throughput_bps !== undefined)
+      .filter(r => r.obstruction_percent !== undefined || r.downlink_throughput_bps !== undefined)
       .map(r => ({
         time: formatTime(r.timestamp),
-        x: r.power_w ?? undefined,
+        x: r.obstruction_percent ?? undefined,
         y: r.downlink_throughput_bps ? r.downlink_throughput_bps / 1e6 : undefined, // Convert to Mbps
       }))
       .sort((a, b) => a.time.localeCompare(b.time));
   }, [starlinkData]);
 
-  // Correlation 4: Signal Strength vs Latency
-  const signalLatencyData = useMemo(() => {
+  // Correlation 4: Latency vs Throughput (inverse relationship expected)
+  const latencyThroughputData = useMemo(() => {
     if (!starlinkData?.readings) return [];
 
     return starlinkData.readings
-      .filter(r => r.signal_dbm !== undefined || r.pop_ping_latency_ms !== undefined)
+      .filter(r => r.pop_ping_latency_ms !== undefined || r.downlink_throughput_bps !== undefined)
       .map(r => ({
         time: formatTime(r.timestamp),
-        x: r.signal_dbm ?? undefined,
-        y: r.pop_ping_latency_ms ?? undefined,
+        x: r.pop_ping_latency_ms ?? undefined,
+        y: r.downlink_throughput_bps ? r.downlink_throughput_bps / 1e6 : undefined,
       }))
       .sort((a, b) => a.time.localeCompare(b.time));
   }, [starlinkData]);
 
   // Calculate stats for each pair
-  const powerTempStats = useMemo(() => calculateCorrelation(powerTempData), [powerTempData]);
-  const signalHumidityStats = useMemo(() => calculateCorrelation(signalHumidityData), [signalHumidityData]);
-  const powerThroughputStats = useMemo(() => calculateCorrelation(powerThroughputData), [powerThroughputData]);
-  const signalLatencyStats = useMemo(() => calculateCorrelation(signalLatencyData), [signalLatencyData]);
+  const throughputTempStats = useMemo(() => calculateCorrelation(throughputTempData), [throughputTempData]);
+  const latencyHumidityStats = useMemo(() => calculateCorrelation(latencyHumidityData), [latencyHumidityData]);
+  const obstructionThroughputStats = useMemo(() => calculateCorrelation(obstructionThroughputData), [obstructionThroughputData]);
+  const latencyThroughputStats = useMemo(() => calculateCorrelation(latencyThroughputData), [latencyThroughputData]);
 
   const correlationPairs = [
-    { id: "power-temp", label: "Power vs Temp", icon: <Zap className="w-4 h-4" /> },
-    { id: "signal-humidity", label: "Signal vs Humidity", icon: <Droplets className="w-4 h-4" /> },
-    { id: "power-throughput", label: "Power vs Network", icon: <Wifi className="w-4 h-4" /> },
-    { id: "signal-latency", label: "Signal vs Latency", icon: <Radio className="w-4 h-4" /> },
+    { id: "throughput-temp", label: "Throughput vs Temp", icon: <Zap className="w-4 h-4" /> },
+    { id: "latency-humidity", label: "Latency vs Humidity", icon: <Droplets className="w-4 h-4" /> },
+    { id: "obstruction-throughput", label: "Obstruction vs Network", icon: <Wifi className="w-4 h-4" /> },
+    { id: "latency-throughput", label: "Latency vs Throughput", icon: <Radio className="w-4 h-4" /> },
   ];
 
   const getCurrentData = () => {
     switch (activeTab) {
-      case "power-temp": return { data: powerTempData, stats: powerTempStats, xLabel: "Power", yLabel: "Temperature", xUnit: "W", yUnit: "°C", xColor: "#f59e0b", yColor: "#06b6d4" };
-      case "signal-humidity": return { data: signalHumidityData, stats: signalHumidityStats, xLabel: "Signal", yLabel: "Humidity", xUnit: "dBm", yUnit: "%", xColor: "#8b5cf6", yColor: "#22c55e" };
-      case "power-throughput": return { data: powerThroughputData, stats: powerThroughputStats, xLabel: "Power", yLabel: "Download", xUnit: "W", yUnit: "Mbps", xColor: "#f59e0b", yColor: "#06b6d4" };
-      case "signal-latency": return { data: signalLatencyData, stats: signalLatencyStats, xLabel: "Signal", yLabel: "Latency", xUnit: "dBm", yUnit: "ms", xColor: "#8b5cf6", yColor: "#ef4444" };
-      default: return { data: powerTempData, stats: powerTempStats, xLabel: "Power", yLabel: "Temperature", xUnit: "W", yUnit: "°C", xColor: "#f59e0b", yColor: "#06b6d4" };
+      case "throughput-temp": return { data: throughputTempData, stats: throughputTempStats, xLabel: "Download", yLabel: "Temperature", xUnit: "Mbps", yUnit: "°C", xColor: "#06b6d4", yColor: "#f59e0b" };
+      case "latency-humidity": return { data: latencyHumidityData, stats: latencyHumidityStats, xLabel: "Latency", yLabel: "Humidity", xUnit: "ms", yUnit: "%", xColor: "#8b5cf6", yColor: "#22c55e" };
+      case "obstruction-throughput": return { data: obstructionThroughputData, stats: obstructionThroughputStats, xLabel: "Obstruction", yLabel: "Download", xUnit: "%", yUnit: "Mbps", xColor: "#ef4444", yColor: "#06b6d4" };
+      case "latency-throughput": return { data: latencyThroughputData, stats: latencyThroughputStats, xLabel: "Latency", yLabel: "Download", xUnit: "ms", yUnit: "Mbps", xColor: "#8b5cf6", yColor: "#06b6d4" };
+      default: return { data: throughputTempData, stats: throughputTempStats, xLabel: "Download", yLabel: "Temperature", xUnit: "Mbps", yUnit: "°C", xColor: "#06b6d4", yColor: "#f59e0b" };
     }
   };
 
@@ -372,63 +373,63 @@ const CorrelationContent = () => {
       {/* Correlation Summary Cards */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
         <div 
-          className={`glass-card rounded-xl p-4 border cursor-pointer transition-all ${activeTab === 'power-temp' ? 'border-amber-500/50 bg-amber-500/10' : 'border-border/50 hover:border-border'}`}
-          onClick={() => setActiveTab('power-temp')}
+          className={`glass-card rounded-xl p-4 border cursor-pointer transition-all ${activeTab === 'throughput-temp' ? 'border-cyan-500/50 bg-cyan-500/10' : 'border-border/50 hover:border-border'}`}
+          onClick={() => setActiveTab('throughput-temp')}
         >
           <div className="flex items-center gap-2 mb-2">
-            <Zap className="w-4 h-4 text-amber-400" />
-            <Thermometer className="w-4 h-4 text-cyan-400" />
+            <Wifi className="w-4 h-4 text-cyan-400" />
+            <Thermometer className="w-4 h-4 text-amber-400" />
           </div>
-          <p className="text-xs text-muted-foreground">Power ↔ Temperature</p>
-          <p className={`text-lg font-bold ${getCorrelationColor(powerTempStats.correlation)}`}>
-            r = {powerTempStats.correlation.toFixed(3)}
+          <p className="text-xs text-muted-foreground">Throughput ↔ Temperature</p>
+          <p className={`text-lg font-bold ${getCorrelationColor(throughputTempStats.correlation)}`}>
+            r = {throughputTempStats.correlation.toFixed(3)}
           </p>
-          <p className="text-xs text-muted-foreground">{getCorrelationLabel(powerTempStats.correlation)}</p>
+          <p className="text-xs text-muted-foreground">{getCorrelationLabel(throughputTempStats.correlation)}</p>
         </div>
 
         <div 
-          className={`glass-card rounded-xl p-4 border cursor-pointer transition-all ${activeTab === 'signal-humidity' ? 'border-violet-500/50 bg-violet-500/10' : 'border-border/50 hover:border-border'}`}
-          onClick={() => setActiveTab('signal-humidity')}
+          className={`glass-card rounded-xl p-4 border cursor-pointer transition-all ${activeTab === 'latency-humidity' ? 'border-violet-500/50 bg-violet-500/10' : 'border-border/50 hover:border-border'}`}
+          onClick={() => setActiveTab('latency-humidity')}
         >
           <div className="flex items-center gap-2 mb-2">
-            <Radio className="w-4 h-4 text-violet-400" />
+            <Activity className="w-4 h-4 text-violet-400" />
             <Droplets className="w-4 h-4 text-emerald-400" />
           </div>
-          <p className="text-xs text-muted-foreground">Signal ↔ Humidity</p>
-          <p className={`text-lg font-bold ${getCorrelationColor(signalHumidityStats.correlation)}`}>
-            r = {signalHumidityStats.correlation.toFixed(3)}
+          <p className="text-xs text-muted-foreground">Latency ↔ Humidity</p>
+          <p className={`text-lg font-bold ${getCorrelationColor(latencyHumidityStats.correlation)}`}>
+            r = {latencyHumidityStats.correlation.toFixed(3)}
           </p>
-          <p className="text-xs text-muted-foreground">{getCorrelationLabel(signalHumidityStats.correlation)}</p>
+          <p className="text-xs text-muted-foreground">{getCorrelationLabel(latencyHumidityStats.correlation)}</p>
         </div>
 
         <div 
-          className={`glass-card rounded-xl p-4 border cursor-pointer transition-all ${activeTab === 'power-throughput' ? 'border-cyan-500/50 bg-cyan-500/10' : 'border-border/50 hover:border-border'}`}
-          onClick={() => setActiveTab('power-throughput')}
+          className={`glass-card rounded-xl p-4 border cursor-pointer transition-all ${activeTab === 'obstruction-throughput' ? 'border-red-500/50 bg-red-500/10' : 'border-border/50 hover:border-border'}`}
+          onClick={() => setActiveTab('obstruction-throughput')}
         >
           <div className="flex items-center gap-2 mb-2">
-            <Zap className="w-4 h-4 text-amber-400" />
+            <Radio className="w-4 h-4 text-red-400" />
             <Wifi className="w-4 h-4 text-cyan-400" />
           </div>
-          <p className="text-xs text-muted-foreground">Power ↔ Network</p>
-          <p className={`text-lg font-bold ${getCorrelationColor(powerThroughputStats.correlation)}`}>
-            r = {powerThroughputStats.correlation.toFixed(3)}
+          <p className="text-xs text-muted-foreground">Obstruction ↔ Network</p>
+          <p className={`text-lg font-bold ${getCorrelationColor(obstructionThroughputStats.correlation)}`}>
+            r = {obstructionThroughputStats.correlation.toFixed(3)}
           </p>
-          <p className="text-xs text-muted-foreground">{getCorrelationLabel(powerThroughputStats.correlation)}</p>
+          <p className="text-xs text-muted-foreground">{getCorrelationLabel(obstructionThroughputStats.correlation)}</p>
         </div>
 
         <div 
-          className={`glass-card rounded-xl p-4 border cursor-pointer transition-all ${activeTab === 'signal-latency' ? 'border-rose-500/50 bg-rose-500/10' : 'border-border/50 hover:border-border'}`}
-          onClick={() => setActiveTab('signal-latency')}
+          className={`glass-card rounded-xl p-4 border cursor-pointer transition-all ${activeTab === 'latency-throughput' ? 'border-violet-500/50 bg-violet-500/10' : 'border-border/50 hover:border-border'}`}
+          onClick={() => setActiveTab('latency-throughput')}
         >
           <div className="flex items-center gap-2 mb-2">
-            <Radio className="w-4 h-4 text-violet-400" />
-            <Activity className="w-4 h-4 text-rose-400" />
+            <Activity className="w-4 h-4 text-violet-400" />
+            <Wifi className="w-4 h-4 text-cyan-400" />
           </div>
-          <p className="text-xs text-muted-foreground">Signal ↔ Latency</p>
-          <p className={`text-lg font-bold ${getCorrelationColor(signalLatencyStats.correlation)}`}>
-            r = {signalLatencyStats.correlation.toFixed(3)}
+          <p className="text-xs text-muted-foreground">Latency ↔ Throughput</p>
+          <p className={`text-lg font-bold ${getCorrelationColor(latencyThroughputStats.correlation)}`}>
+            r = {latencyThroughputStats.correlation.toFixed(3)}
           </p>
-          <p className="text-xs text-muted-foreground">{getCorrelationLabel(signalLatencyStats.correlation)}</p>
+          <p className="text-xs text-muted-foreground">{getCorrelationLabel(latencyThroughputStats.correlation)}</p>
         </div>
       </div>
 
