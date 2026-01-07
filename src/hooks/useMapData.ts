@@ -401,23 +401,54 @@ export function useMapData(options: UseMapDataOptions = {}) {
     return null;
   }, [gpsdStatus]);
 
-  // Extract GPS from Starlink status data
-  const starlinkStatusGps = useMemo<{ lat: number; lng: number; altitude?: number } | null>(() => {
+  // Extract GPS from all Starlink devices in status data
+  const starlinkDevices = useMemo<Array<{ device_id: string; lat: number; lng: number; altitude?: number; timestamp?: string }>>(() => {
+    const devices: Array<{ device_id: string; lat: number; lng: number; altitude?: number; timestamp?: string }> = [];
+    
     if (starlinkStatusData && starlinkStatusData.length > 0) {
-      // Get the latest entry
-      const latest = starlinkStatusData[starlinkStatusData.length - 1];
-      const lat = latest.latitude;
-      const lng = latest.longitude;
-      if (lat !== undefined && lng !== undefined &&
-          lat >= -90 && lat <= 90 && 
-          lng >= -180 && lng <= 180 &&
-          !(lat === 0 && lng === 0)) {
-        console.log('[MapData] Found Starlink status GPS:', { lat, lng, altitude: latest.altitude });
-        return { lat, lng, altitude: latest.altitude };
+      // Group by device_id and get the latest entry for each
+      const deviceMap = new Map<string, typeof starlinkStatusData[0]>();
+      
+      starlinkStatusData.forEach(entry => {
+        const deviceId = entry.device_id || 'starlink_dish_1';
+        const existing = deviceMap.get(deviceId);
+        
+        // Keep the latest entry for each device
+        if (!existing || (entry.timestamp && existing.timestamp && new Date(entry.timestamp) > new Date(existing.timestamp))) {
+          deviceMap.set(deviceId, entry);
+        }
+      });
+      
+      // Convert to array with validated GPS
+      deviceMap.forEach((entry, deviceId) => {
+        const lat = entry.latitude;
+        const lng = entry.longitude;
+        if (lat !== undefined && lng !== undefined &&
+            lat >= -90 && lat <= 90 && 
+            lng >= -180 && lng <= 180 &&
+            !(lat === 0 && lng === 0)) {
+          devices.push({
+            device_id: deviceId,
+            lat,
+            lng,
+            altitude: entry.altitude,
+            timestamp: entry.timestamp
+          });
+        }
+      });
+      
+      if (devices.length > 0) {
+        console.log('[MapData] Found Starlink devices with GPS:', devices.map(d => d.device_id));
       }
     }
-    return null;
+    
+    return devices;
   }, [starlinkStatusData]);
+
+  // Keep backward compatibility - get first device GPS
+  const starlinkStatusGps = useMemo<{ lat: number; lng: number; altitude?: number } | null>(() => {
+    return starlinkDevices.length > 0 ? starlinkDevices[0] : null;
+  }, [starlinkDevices]);
 
   // Merge geo locations API with readings GPS, Starlink GPS, GPSD GPS
   const gpsCoordinates = useMemo(() => {
@@ -511,18 +542,38 @@ export function useMapData(options: UseMapDataOptions = {}) {
       }
     });
 
-    // Add Starlink marker from stats GPS if we have it
-    const effectiveStarlinkGps = starlinkStatusGps || starlinkGps;
-    if (effectiveStarlinkGps && !addedIds.has('starlink_dish_1')) {
+    // Add all Starlink devices as markers
+    if (starlinkDevices.length > 0) {
+      starlinkDevices.forEach(device => {
+        if (!addedIds.has(device.device_id)) {
+          const displayName = device.device_id === 'starlink_dish_1' 
+            ? 'Starlink Dish' 
+            : `Starlink ${device.device_id.replace(/_/g, ' ').replace(/starlink/i, '').trim() || 'Dish'}`;
+          
+          markers.push({
+            id: device.device_id,
+            name: displayName,
+            type: 'starlink',
+            value: device.altitude || 0,
+            unit: 'm',
+            status: 'active',
+            lastUpdate: device.timestamp || new Date().toISOString(),
+            location: { lat: device.lat, lng: device.lng }
+          });
+          addedIds.add(device.device_id);
+        }
+      });
+    } else if (starlinkGps && !addedIds.has('starlink_dish_1')) {
+      // Fallback to stats GPS if no devices from status data
       markers.push({
         id: 'starlink_dish_1',
         name: 'Starlink Dish',
         type: 'starlink',
-        value: effectiveStarlinkGps.altitude || 0,
+        value: starlinkGps.altitude || 0,
         unit: 'm',
         status: 'active',
         lastUpdate: new Date().toISOString(),
-        location: { lat: effectiveStarlinkGps.lat, lng: effectiveStarlinkGps.lng }
+        location: { lat: starlinkGps.lat, lng: starlinkGps.lng }
       });
       addedIds.add('starlink_dish_1');
     }
@@ -779,7 +830,7 @@ export function useMapData(options: UseMapDataOptions = {}) {
     }
     
     return markers;
-  }, [sensors, clients, gpsCoordinates, geoLocations, starlinkGps, starlinkStatusGps, gpsdGps, gpsdStatus, gpsReadings]);
+  }, [sensors, clients, gpsCoordinates, geoLocations, starlinkGps, starlinkDevices, gpsdGps, gpsdStatus, gpsReadings]);
 
   // Get client markers for the clients filter
   const clientMarkers = useMemo<ClientMarker[]>(() => {
