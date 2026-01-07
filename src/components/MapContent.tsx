@@ -131,6 +131,84 @@ const MapContent = () => {
 
     const existingMarkerIds = new Set<string>();
 
+    // Helper function to create Starlink popup content
+    const createStarlinkPopup = (sensor: typeof sensorMarkers[0]) => {
+      const data = sensor.starlinkData;
+      const formatThroughput = (bps?: number) => {
+        if (!bps) return 'N/A';
+        if (bps >= 1_000_000) return `${(bps / 1_000_000).toFixed(1)} Mbps`;
+        if (bps >= 1_000) return `${(bps / 1_000).toFixed(1)} Kbps`;
+        return `${bps.toFixed(0)} bps`;
+      };
+      const formatUptime = (seconds?: number) => {
+        if (!seconds) return 'N/A';
+        const hours = Math.floor(seconds / 3600);
+        const mins = Math.floor((seconds % 3600) / 60);
+        if (hours >= 24) {
+          const days = Math.floor(hours / 24);
+          return `${days}d ${hours % 24}h`;
+        }
+        return `${hours}h ${mins}m`;
+      };
+      const connStatus = data?.connected ? 'Connected' : data?.connected === false ? 'Disconnected' : 'Unknown';
+      const connClass = data?.connected ? 'text-green-400' : data?.connected === false ? 'text-red-400' : 'text-gray-400';
+      const obstructionClass = (data?.obstructionPercent ?? 0) < 1 ? 'text-green-400' : 
+                               (data?.obstructionPercent ?? 0) < 5 ? 'text-amber-400' : 'text-red-400';
+      
+      return `
+        <div class="p-3 min-w-[280px] max-w-[340px]">
+          <div class="font-bold mb-2 flex items-center gap-2 text-base border-b pb-2">
+            📡 ${sensor.name}
+            <span class="${connClass} text-xs font-medium px-1.5 py-0.5 rounded bg-opacity-20 ${data?.connected ? 'bg-green-500' : 'bg-red-500'}">${connStatus}</span>
+          </div>
+          <div class="text-sm space-y-1.5">
+            <div class="grid grid-cols-2 gap-2 pb-2 border-b">
+              <div class="flex flex-col">
+                <span class="text-gray-500 text-xs">Download</span>
+                <span class="font-semibold text-cyan-400">${formatThroughput(data?.downlinkThroughputBps)}</span>
+              </div>
+              <div class="flex flex-col">
+                <span class="text-gray-500 text-xs">Upload</span>
+                <span class="font-semibold text-emerald-400">${formatThroughput(data?.uplinkThroughputBps)}</span>
+              </div>
+            </div>
+            <div class="flex justify-between">
+              <span class="text-gray-500">Latency:</span>
+              <span class="font-medium">${data?.latencyMs ? `${data.latencyMs.toFixed(0)} ms` : 'N/A'}</span>
+            </div>
+            <div class="flex justify-between">
+              <span class="text-gray-500">Signal (SNR):</span>
+              <span class="font-medium">${data?.snr ? `${data.snr.toFixed(1)} dB` : data?.signalStrength ? `${data.signalStrength.toFixed(1)} dBm` : 'N/A'}</span>
+            </div>
+            <div class="flex justify-between">
+              <span class="text-gray-500">Obstruction:</span>
+              <span class="font-medium ${obstructionClass}">${data?.obstructionPercent !== undefined ? `${data.obstructionPercent.toFixed(1)}%` : 'N/A'}</span>
+            </div>
+            <div class="flex justify-between">
+              <span class="text-gray-500">Power:</span>
+              <span class="font-medium">${data?.powerWatts ? `${data.powerWatts.toFixed(1)} W` : 'N/A'}</span>
+            </div>
+            <div class="flex justify-between">
+              <span class="text-gray-500">Uptime:</span>
+              <span class="font-medium">${formatUptime(data?.uptimeSeconds)}</span>
+            </div>
+            <div class="flex justify-between pt-1 border-t mt-1">
+              <span class="text-gray-500">Altitude:</span>
+              <span class="font-medium">${data?.altitude ? `${data.altitude.toFixed(0)} m` : sensor.value ? `${sensor.value} ${sensor.unit}` : 'N/A'}</span>
+            </div>
+            <div class="flex justify-between">
+              <span class="text-gray-500">Position:</span>
+              <span class="font-medium text-xs">${sensor.location.lat.toFixed(5)}, ${sensor.location.lng.toFixed(5)}</span>
+            </div>
+            <div class="flex justify-between">
+              <span class="text-gray-500">Updated:</span>
+              <span class="font-medium text-xs">${formatDateTime(sensor.lastUpdate)}</span>
+            </div>
+          </div>
+        </div>
+      `;
+    };
+
     // Update/add sensor markers
     sensorMarkers.forEach((sensor) => {
       const sensorType = sensor.type.toLowerCase() as Exclude<FilterType, 'all'>;
@@ -141,17 +219,20 @@ const MapContent = () => {
       
       const icon = mapIcons[sensorType as IconType] || mapIcons.gps;
       
-      const popupContent = `
-        <div class="p-2 min-w-[180px]">
-          <div class="font-bold mb-2">${sensor.name}</div>
-          <div class="text-sm space-y-1">
-            <div><span class="text-gray-500">Type:</span> ${sensor.type}</div>
-            <div><span class="text-gray-500">Value:</span> ${sensor.value} ${sensor.unit}</div>
-            <div><span class="text-gray-500">Status:</span> ${sensor.status}</div>
-            <div><span class="text-gray-500">Updated:</span> ${formatDateTime(sensor.lastUpdate)}</div>
+      // Use detailed popup for Starlink, simple popup for others
+      const popupContent = sensorType === 'starlink' && sensor.starlinkData
+        ? createStarlinkPopup(sensor)
+        : `
+          <div class="p-2 min-w-[180px]">
+            <div class="font-bold mb-2">${sensor.name}</div>
+            <div class="text-sm space-y-1">
+              <div><span class="text-gray-500">Type:</span> ${sensor.type}</div>
+              <div><span class="text-gray-500">Value:</span> ${sensor.value} ${sensor.unit}</div>
+              <div><span class="text-gray-500">Status:</span> ${sensor.status}</div>
+              <div><span class="text-gray-500">Updated:</span> ${formatDateTime(sensor.lastUpdate)}</div>
+            </div>
           </div>
-        </div>
-      `;
+        `;
 
       const existingMarker = markersRef.current.get(markerId);
       
