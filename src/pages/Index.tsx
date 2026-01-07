@@ -2,6 +2,7 @@ import { useState } from "react";
 import AuroraBackground from "@/components/AuroraBackground";
 import Sidebar from "@/components/Sidebar";
 import DashboardContent from "@/components/DashboardContent";
+import CorrelationContent from "@/components/CorrelationContent";
 import SensorsContent from "@/components/SensorsContent";
 import AlertsContent from "@/components/AlertsContent";
 import MapContent from "@/components/MapContent";
@@ -32,6 +33,8 @@ const Index = () => {
     switch (activeItem) {
       case "dashboard":
         return <DashboardContent />;
+      case "correlation":
+        return <CorrelationContent />;
       case "sensors":
         return <SensorsContent />;
       case "data-analytics":
