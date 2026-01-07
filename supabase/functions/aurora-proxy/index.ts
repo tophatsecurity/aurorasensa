@@ -4,6 +4,42 @@ const corsHeaders = {
 };
 
 const AURORA_ENDPOINT = "http://aurora.tophatsecurity.com:9151";
+const MAX_RETRIES = 3;
+const TIMEOUT_MS = 15000;
+
+async function fetchWithRetry(url: string, options: RequestInit, retries = MAX_RETRIES): Promise<Response> {
+  for (let attempt = 1; attempt <= retries; attempt++) {
+    try {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), TIMEOUT_MS);
+      
+      const response = await fetch(url, {
+        ...options,
+        signal: controller.signal,
+      });
+      
+      clearTimeout(timeoutId);
+      return response;
+    } catch (error) {
+      const isLastAttempt = attempt === retries;
+      const isRetryable = error instanceof Error && (
+        error.message.includes('connection') ||
+        error.message.includes('reset') ||
+        error.message.includes('timeout') ||
+        error.message.includes('aborted') ||
+        error.name === 'AbortError'
+      );
+      
+      if (isLastAttempt || !isRetryable) {
+        throw error;
+      }
+      
+      console.log(`Retry ${attempt}/${retries} for ${url}`);
+      await new Promise(resolve => setTimeout(resolve, 500 * attempt));
+    }
+  }
+  throw new Error('Max retries exceeded');
+}
 
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') {
@@ -25,7 +61,6 @@ Deno.serve(async (req) => {
 
     const headers: Record<string, string> = { 'Content-Type': 'application/json' };
     
-    // Add API key if available
     const apiKey = Deno.env.get('AURORA_API_KEY');
     if (apiKey) {
       headers['X-API-Key'] = apiKey;
@@ -36,7 +71,7 @@ Deno.serve(async (req) => {
       options.body = JSON.stringify(body);
     }
 
-    const response = await fetch(url, options);
+    const response = await fetchWithRetry(url, options);
     const data = await response.text();
     
     return new Response(data, {
