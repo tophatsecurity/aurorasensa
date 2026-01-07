@@ -445,9 +445,24 @@ export function useMapData(options: UseMapDataOptions = {}) {
       starlinkDevicesApi.forEach(device => {
         if (addedIds.has(device.device_id)) return;
         
-        const lat = device.latitude;
-        const lng = device.longitude;
-        const alt = device.altitude;
+        // Try various GPS field locations
+        let lat: number | undefined = device.latitude ?? device.gps_latitude ?? device.lat;
+        let lng: number | undefined = device.longitude ?? device.gps_longitude ?? device.lng ?? device.lon;
+        let alt: number | undefined = device.altitude ?? device.gps_altitude ?? device.alt;
+        
+        // Try nested location object
+        if ((lat === undefined || lng === undefined) && device.location) {
+          lat = lat ?? device.location.latitude ?? device.location.lat;
+          lng = lng ?? device.location.longitude ?? device.location.lng ?? device.location.lon;
+          alt = alt ?? device.location.altitude;
+        }
+        
+        // Try location_detail object (Starlink specific)
+        if ((lat === undefined || lng === undefined) && device.location_detail) {
+          lat = lat ?? device.location_detail.latitude;
+          lng = lng ?? device.location_detail.longitude;
+          alt = alt ?? device.location_detail.altitude;
+        }
         
         if (lat !== undefined && lng !== undefined &&
             lat >= -90 && lat <= 90 && 
@@ -461,12 +476,9 @@ export function useMapData(options: UseMapDataOptions = {}) {
             timestamp: device.last_seen
           });
           addedIds.add(device.device_id);
+          console.log('[MapData] Added Starlink device from API:', device.device_id, { lat, lng });
         }
       });
-      
-      if (devices.length > addedIds.size) {
-        console.log('[MapData] Added Starlink devices from API:', devices.filter(d => !addedIds.has(d.device_id)).map(d => d.device_id));
-      }
     }
     
     // Third, add from status data (real-time updates)

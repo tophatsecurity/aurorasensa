@@ -1684,6 +1684,27 @@ export interface StarlinkDevice {
   latitude?: number;
   longitude?: number;
   altitude?: number;
+  // Alternative GPS field names from various API responses
+  gps_latitude?: number;
+  gps_longitude?: number;
+  gps_altitude?: number;
+  lat?: number;
+  lng?: number;
+  lon?: number;
+  alt?: number;
+  location?: {
+    latitude?: number;
+    longitude?: number;
+    altitude?: number;
+    lat?: number;
+    lng?: number;
+    lon?: number;
+  };
+  location_detail?: {
+    latitude?: number;
+    longitude?: number;
+    altitude?: number;
+  };
 }
 
 export interface StarlinkDeviceStats {
