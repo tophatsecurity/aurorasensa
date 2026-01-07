@@ -425,7 +425,7 @@ const StarlinkContent = () => {
           <StarlinkMonitoringPanel />
         </div>
         <div className="lg:col-span-2">
-          <StarlinkPerformanceCharts hours={24} />
+          <StarlinkPerformanceCharts hours={24} deviceId={selectedDevice} />
         </div>
       </div>
 

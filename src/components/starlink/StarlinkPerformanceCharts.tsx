@@ -26,6 +26,7 @@ import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { 
   useStarlinkTimeseries,
+  useStarlinkDeviceTimeseries,
   StarlinkTimeseriesPoint 
 } from "@/hooks/useAuroraApi";
 
@@ -68,11 +69,21 @@ ChartContainer.displayName = 'ChartContainer';
 
 interface PerformanceChartsProps {
   hours?: number;
+  deviceId?: string | null;
 }
 
-const StarlinkPerformanceCharts = memo(({ hours = 24 }: PerformanceChartsProps) => {
+const StarlinkPerformanceCharts = memo(({ hours = 24, deviceId = null }: PerformanceChartsProps) => {
   const [activeTab, setActiveTab] = useState('throughput');
-  const { data: timeseriesData, isLoading } = useStarlinkTimeseries(hours);
+  
+  // Use device-specific data when a device is selected, otherwise use aggregate
+  const { data: aggregateData, isLoading: aggregateLoading } = useStarlinkTimeseries(hours);
+  const { data: deviceData, isLoading: deviceLoading } = useStarlinkDeviceTimeseries(
+    deviceId && deviceId !== "all" ? deviceId : null,
+    hours
+  );
+  
+  const timeseriesData = deviceId && deviceId !== "all" ? deviceData : aggregateData;
+  const isLoading = deviceId && deviceId !== "all" ? deviceLoading : aggregateLoading;
 
   // Process data for charts
   const processedData = useMemo(() => {
