@@ -10,6 +10,8 @@ import {
   Legend,
   ComposedChart,
   Area,
+  ScatterChart,
+  Scatter,
 } from "recharts";
 import { 
   Activity, 
@@ -17,9 +19,13 @@ import {
   Thermometer, 
   Loader2,
   TrendingUp,
-  GitCompare
+  GitCompare,
+  Droplets,
+  Radio,
+  Wifi
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   Select,
   SelectContent,
@@ -32,95 +38,303 @@ import {
   useDashboardTimeseries,
 } from "@/hooks/useAuroraApi";
 
+interface CorrelationStats {
+  avgX: number;
+  avgY: number;
+  correlation: number;
+  dataPoints: number;
+}
+
+const calculateCorrelation = (
+  data: Array<{ x?: number; y?: number }>
+): CorrelationStats => {
+  const validPoints = data.filter(d => d.x !== undefined && d.y !== undefined);
+  
+  if (validPoints.length < 2) {
+    return { avgX: 0, avgY: 0, correlation: 0, dataPoints: 0 };
+  }
+
+  const avgX = validPoints.reduce((sum, d) => sum + (d.x || 0), 0) / validPoints.length;
+  const avgY = validPoints.reduce((sum, d) => sum + (d.y || 0), 0) / validPoints.length;
+
+  const n = validPoints.length;
+  const sumXY = validPoints.reduce((sum, d) => sum + (d.x || 0) * (d.y || 0), 0);
+  const sumX = validPoints.reduce((sum, d) => sum + (d.x || 0), 0);
+  const sumY = validPoints.reduce((sum, d) => sum + (d.y || 0), 0);
+  const sumX2 = validPoints.reduce((sum, d) => sum + (d.x || 0) ** 2, 0);
+  const sumY2 = validPoints.reduce((sum, d) => sum + (d.y || 0) ** 2, 0);
+
+  const numerator = n * sumXY - sumX * sumY;
+  const denominator = Math.sqrt((n * sumX2 - sumX ** 2) * (n * sumY2 - sumY ** 2));
+  const correlation = denominator !== 0 ? numerator / denominator : 0;
+
+  return { avgX, avgY, correlation, dataPoints: validPoints.length };
+};
+
+const getCorrelationLabel = (r: number) => {
+  const abs = Math.abs(r);
+  if (abs >= 0.7) return r > 0 ? "Strong Positive" : "Strong Negative";
+  if (abs >= 0.4) return r > 0 ? "Moderate Positive" : "Moderate Negative";
+  if (abs >= 0.2) return r > 0 ? "Weak Positive" : "Weak Negative";
+  return "No Correlation";
+};
+
+const getCorrelationColor = (r: number) => {
+  const abs = Math.abs(r);
+  if (abs >= 0.7) return r > 0 ? "text-emerald-400" : "text-rose-400";
+  if (abs >= 0.4) return r > 0 ? "text-cyan-400" : "text-amber-400";
+  return "text-muted-foreground";
+};
+
+interface StatCardProps {
+  icon: React.ReactNode;
+  label: string;
+  value: string;
+  subValue?: string;
+  colorClass?: string;
+  isLoading?: boolean;
+}
+
+const StatCard = ({ icon, label, value, subValue, colorClass = "text-foreground", isLoading }: StatCardProps) => (
+  <div className="glass-card rounded-xl p-4 border border-border/50">
+    <div className="flex items-center gap-3 mb-2">
+      {icon}
+      <div>
+        <p className="text-xs text-muted-foreground uppercase tracking-wider">{label}</p>
+        <p className={`text-xl font-bold ${colorClass}`}>
+          {isLoading ? '...' : value}
+        </p>
+        {subValue && <p className="text-xs text-muted-foreground">{subValue}</p>}
+      </div>
+    </div>
+  </div>
+);
+
+interface CorrelationChartProps {
+  data: Array<{ time: string; x?: number; y?: number }>;
+  xLabel: string;
+  yLabel: string;
+  xUnit: string;
+  yUnit: string;
+  xColor: string;
+  yColor: string;
+  isLoading: boolean;
+  hours: number;
+}
+
+const CorrelationChart = ({ 
+  data, xLabel, yLabel, xUnit, yUnit, xColor, yColor, isLoading, hours 
+}: CorrelationChartProps) => (
+  <div className="glass-card rounded-xl border border-border/50">
+    <div className="p-4 border-b border-border/30 flex items-center justify-between">
+      <div className="flex items-center gap-3">
+        <div className="w-8 h-8 rounded-lg bg-primary/20 flex items-center justify-center">
+          <GitCompare className="w-4 h-4 text-primary" />
+        </div>
+        <div>
+          <h4 className="font-semibold text-sm">{xLabel} vs {yLabel}</h4>
+          <p className="text-xs text-muted-foreground">Last {hours} hours</p>
+        </div>
+      </div>
+      <Badge variant="outline" className="text-xs">
+        {data.length} samples
+      </Badge>
+    </div>
+    <div className="p-4">
+      {isLoading ? (
+        <div className="h-[350px] flex items-center justify-center">
+          <Loader2 className="w-8 h-8 animate-spin text-muted-foreground" />
+        </div>
+      ) : data.length === 0 ? (
+        <div className="h-[350px] flex items-center justify-center text-muted-foreground">
+          No data available
+        </div>
+      ) : (
+        <div className="h-[350px]">
+          <ResponsiveContainer width="100%" height="100%">
+            <ComposedChart data={data} margin={{ top: 20, right: 30, left: 0, bottom: 0 }}>
+              <defs>
+                <linearGradient id={`gradient-${xLabel}`} x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="5%" stopColor={xColor} stopOpacity={0.3} />
+                  <stop offset="95%" stopColor={xColor} stopOpacity={0} />
+                </linearGradient>
+              </defs>
+              <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" opacity={0.3} />
+              <XAxis
+                dataKey="time"
+                tick={{ fontSize: 10, fill: 'hsl(var(--muted-foreground))' }}
+                tickLine={false}
+                axisLine={false}
+                interval="preserveStartEnd"
+              />
+              <YAxis
+                yAxisId="x"
+                tick={{ fontSize: 10, fill: 'hsl(var(--muted-foreground))' }}
+                tickLine={false}
+                axisLine={false}
+                tickFormatter={(v) => `${v}${xUnit}`}
+              />
+              <YAxis
+                yAxisId="y"
+                orientation="right"
+                tick={{ fontSize: 10, fill: 'hsl(var(--muted-foreground))' }}
+                tickLine={false}
+                axisLine={false}
+                tickFormatter={(v) => `${v}${yUnit}`}
+              />
+              <Tooltip
+                contentStyle={{
+                  backgroundColor: 'hsl(var(--card))',
+                  border: '1px solid hsl(var(--border))',
+                  borderRadius: '8px',
+                  fontSize: '12px',
+                }}
+                formatter={(value: number, name: string) => {
+                  if (name === 'x') return [`${value?.toFixed(1)}${xUnit}`, xLabel];
+                  if (name === 'y') return [`${value?.toFixed(1)}${yUnit}`, yLabel];
+                  return [value, name];
+                }}
+              />
+              <Legend formatter={(value) => value === 'x' ? xLabel : yLabel} />
+              <Area
+                yAxisId="x"
+                type="monotone"
+                dataKey="x"
+                name="x"
+                stroke={xColor}
+                strokeWidth={2}
+                fill={`url(#gradient-${xLabel})`}
+                connectNulls
+              />
+              <Line
+                yAxisId="y"
+                type="monotone"
+                dataKey="y"
+                name="y"
+                stroke={yColor}
+                strokeWidth={2}
+                dot={false}
+                connectNulls
+              />
+            </ComposedChart>
+          </ResponsiveContainer>
+        </div>
+      )}
+    </div>
+  </div>
+);
+
 const CorrelationContent = () => {
   const [timeRange, setTimeRange] = useState<number>(24);
+  const [activeTab, setActiveTab] = useState("power-temp");
   
   const { data: starlinkData, isLoading: starlinkLoading } = useStarlinkTimeseries(timeRange);
   const { data: dashboardData, isLoading: dashboardLoading } = useDashboardTimeseries(timeRange);
 
   const isLoading = starlinkLoading || dashboardLoading;
 
-  // Merge Starlink power and temperature data by timestamp
-  const correlatedData = useMemo(() => {
-    if (!starlinkData?.readings && !dashboardData?.temperature) return [];
+  // Helper to format timestamp
+  const formatTime = (timestamp: string) => 
+    new Date(timestamp).toLocaleTimeString('en-US', { hour12: false, hour: '2-digit', minute: '2-digit' });
 
-    // Create a map of timestamps to data points
-    const dataMap = new Map<string, { time: string; power?: number; temperature?: number }>();
+  // Correlation 1: Power vs Temperature
+  const powerTempData = useMemo(() => {
+    const dataMap = new Map<string, { time: string; x?: number; y?: number }>();
 
-    // Process Starlink power data
-    if (starlinkData?.readings) {
-      starlinkData.readings.forEach(reading => {
-        const time = new Date(reading.timestamp).toLocaleTimeString('en-US', {
-          hour12: false,
-          hour: '2-digit',
-          minute: '2-digit',
-        });
-        const existing = dataMap.get(time) || { time };
-        existing.power = reading.power_w ?? undefined;
-        dataMap.set(time, existing);
-      });
-    }
+    starlinkData?.readings?.forEach(r => {
+      const time = formatTime(r.timestamp);
+      const existing = dataMap.get(time) || { time };
+      existing.x = r.power_w ?? undefined;
+      dataMap.set(time, existing);
+    });
 
-    // Process temperature data
-    if (dashboardData?.temperature) {
-      dashboardData.temperature.forEach(point => {
-        const time = new Date(point.timestamp).toLocaleTimeString('en-US', {
-          hour12: false,
-          hour: '2-digit',
-          minute: '2-digit',
-        });
-        const existing = dataMap.get(time) || { time };
-        existing.temperature = point.value;
-        dataMap.set(time, existing);
-      });
-    }
+    dashboardData?.temperature?.forEach(p => {
+      const time = formatTime(p.timestamp);
+      const existing = dataMap.get(time) || { time };
+      existing.y = p.value;
+      dataMap.set(time, existing);
+    });
 
-    // Convert map to sorted array
     return Array.from(dataMap.values())
-      .filter(d => d.power !== undefined || d.temperature !== undefined)
+      .filter(d => d.x !== undefined || d.y !== undefined)
       .sort((a, b) => a.time.localeCompare(b.time));
   }, [starlinkData, dashboardData]);
 
-  // Calculate correlation stats
-  const stats = useMemo(() => {
-    const validPoints = correlatedData.filter(d => d.power !== undefined && d.temperature !== undefined);
-    
-    if (validPoints.length < 2) {
-      return { avgPower: 0, avgTemp: 0, correlation: 0, dataPoints: 0 };
+  // Correlation 2: Signal Strength vs Humidity (Weather proxy)
+  const signalHumidityData = useMemo(() => {
+    const dataMap = new Map<string, { time: string; x?: number; y?: number }>();
+
+    starlinkData?.readings?.forEach(r => {
+      const time = formatTime(r.timestamp);
+      const existing = dataMap.get(time) || { time };
+      existing.x = r.signal_dbm ?? undefined;
+      dataMap.set(time, existing);
+    });
+
+    dashboardData?.humidity?.forEach(p => {
+      const time = formatTime(p.timestamp);
+      const existing = dataMap.get(time) || { time };
+      existing.y = p.value;
+      dataMap.set(time, existing);
+    });
+
+    return Array.from(dataMap.values())
+      .filter(d => d.x !== undefined || d.y !== undefined)
+      .sort((a, b) => a.time.localeCompare(b.time));
+  }, [starlinkData, dashboardData]);
+
+  // Correlation 3: Power vs Network Throughput
+  const powerThroughputData = useMemo(() => {
+    if (!starlinkData?.readings) return [];
+
+    return starlinkData.readings
+      .filter(r => r.power_w !== undefined || r.downlink_throughput_bps !== undefined)
+      .map(r => ({
+        time: formatTime(r.timestamp),
+        x: r.power_w ?? undefined,
+        y: r.downlink_throughput_bps ? r.downlink_throughput_bps / 1e6 : undefined, // Convert to Mbps
+      }))
+      .sort((a, b) => a.time.localeCompare(b.time));
+  }, [starlinkData]);
+
+  // Correlation 4: Signal Strength vs Latency
+  const signalLatencyData = useMemo(() => {
+    if (!starlinkData?.readings) return [];
+
+    return starlinkData.readings
+      .filter(r => r.signal_dbm !== undefined || r.pop_ping_latency_ms !== undefined)
+      .map(r => ({
+        time: formatTime(r.timestamp),
+        x: r.signal_dbm ?? undefined,
+        y: r.pop_ping_latency_ms ?? undefined,
+      }))
+      .sort((a, b) => a.time.localeCompare(b.time));
+  }, [starlinkData]);
+
+  // Calculate stats for each pair
+  const powerTempStats = useMemo(() => calculateCorrelation(powerTempData), [powerTempData]);
+  const signalHumidityStats = useMemo(() => calculateCorrelation(signalHumidityData), [signalHumidityData]);
+  const powerThroughputStats = useMemo(() => calculateCorrelation(powerThroughputData), [powerThroughputData]);
+  const signalLatencyStats = useMemo(() => calculateCorrelation(signalLatencyData), [signalLatencyData]);
+
+  const correlationPairs = [
+    { id: "power-temp", label: "Power vs Temp", icon: <Zap className="w-4 h-4" /> },
+    { id: "signal-humidity", label: "Signal vs Humidity", icon: <Droplets className="w-4 h-4" /> },
+    { id: "power-throughput", label: "Power vs Network", icon: <Wifi className="w-4 h-4" /> },
+    { id: "signal-latency", label: "Signal vs Latency", icon: <Radio className="w-4 h-4" /> },
+  ];
+
+  const getCurrentData = () => {
+    switch (activeTab) {
+      case "power-temp": return { data: powerTempData, stats: powerTempStats, xLabel: "Power", yLabel: "Temperature", xUnit: "W", yUnit: "°C", xColor: "#f59e0b", yColor: "#06b6d4" };
+      case "signal-humidity": return { data: signalHumidityData, stats: signalHumidityStats, xLabel: "Signal", yLabel: "Humidity", xUnit: "dBm", yUnit: "%", xColor: "#8b5cf6", yColor: "#22c55e" };
+      case "power-throughput": return { data: powerThroughputData, stats: powerThroughputStats, xLabel: "Power", yLabel: "Download", xUnit: "W", yUnit: "Mbps", xColor: "#f59e0b", yColor: "#06b6d4" };
+      case "signal-latency": return { data: signalLatencyData, stats: signalLatencyStats, xLabel: "Signal", yLabel: "Latency", xUnit: "dBm", yUnit: "ms", xColor: "#8b5cf6", yColor: "#ef4444" };
+      default: return { data: powerTempData, stats: powerTempStats, xLabel: "Power", yLabel: "Temperature", xUnit: "W", yUnit: "°C", xColor: "#f59e0b", yColor: "#06b6d4" };
     }
-
-    const avgPower = validPoints.reduce((sum, d) => sum + (d.power || 0), 0) / validPoints.length;
-    const avgTemp = validPoints.reduce((sum, d) => sum + (d.temperature || 0), 0) / validPoints.length;
-
-    // Calculate Pearson correlation coefficient
-    const n = validPoints.length;
-    const sumXY = validPoints.reduce((sum, d) => sum + (d.power || 0) * (d.temperature || 0), 0);
-    const sumX = validPoints.reduce((sum, d) => sum + (d.power || 0), 0);
-    const sumY = validPoints.reduce((sum, d) => sum + (d.temperature || 0), 0);
-    const sumX2 = validPoints.reduce((sum, d) => sum + (d.power || 0) ** 2, 0);
-    const sumY2 = validPoints.reduce((sum, d) => sum + (d.temperature || 0) ** 2, 0);
-
-    const numerator = n * sumXY - sumX * sumY;
-    const denominator = Math.sqrt((n * sumX2 - sumX ** 2) * (n * sumY2 - sumY ** 2));
-    const correlation = denominator !== 0 ? numerator / denominator : 0;
-
-    return { avgPower, avgTemp, correlation, dataPoints: validPoints.length };
-  }, [correlatedData]);
-
-  const getCorrelationLabel = (r: number) => {
-    const abs = Math.abs(r);
-    if (abs >= 0.7) return r > 0 ? "Strong Positive" : "Strong Negative";
-    if (abs >= 0.4) return r > 0 ? "Moderate Positive" : "Moderate Negative";
-    if (abs >= 0.2) return r > 0 ? "Weak Positive" : "Weak Negative";
-    return "No Correlation";
   };
 
-  const getCorrelationColor = (r: number) => {
-    const abs = Math.abs(r);
-    if (abs >= 0.7) return r > 0 ? "text-emerald-400" : "text-rose-400";
-    if (abs >= 0.4) return r > 0 ? "text-cyan-400" : "text-amber-400";
-    return "text-muted-foreground";
-  };
+  const current = getCurrentData();
 
   return (
     <div className="flex-1 overflow-y-auto p-8">
@@ -132,7 +346,7 @@ const CorrelationContent = () => {
         <div>
           <h1 className="text-3xl font-bold text-foreground">Correlation Analysis</h1>
           <p className="text-muted-foreground">
-            Starlink Power vs Temperature over time
+            Analyze relationships between sensor metrics
           </p>
         </div>
 
@@ -155,131 +369,159 @@ const CorrelationContent = () => {
         </div>
       </div>
 
-      {/* Stats Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-8">
-        <div className="glass-card rounded-xl p-4 border border-border/50">
-          <div className="flex items-center gap-3 mb-2">
-            <div className="w-10 h-10 rounded-lg bg-amber-500/20 flex items-center justify-center">
-              <Zap className="w-5 h-5 text-amber-400" />
-            </div>
-            <div>
-              <p className="text-xs text-muted-foreground uppercase tracking-wider">Avg Power</p>
-              <p className="text-xl font-bold text-amber-400">
-                {isLoading ? '...' : `${stats.avgPower.toFixed(1)} W`}
-              </p>
-            </div>
+      {/* Correlation Summary Cards */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+        <div 
+          className={`glass-card rounded-xl p-4 border cursor-pointer transition-all ${activeTab === 'power-temp' ? 'border-amber-500/50 bg-amber-500/10' : 'border-border/50 hover:border-border'}`}
+          onClick={() => setActiveTab('power-temp')}
+        >
+          <div className="flex items-center gap-2 mb-2">
+            <Zap className="w-4 h-4 text-amber-400" />
+            <Thermometer className="w-4 h-4 text-cyan-400" />
           </div>
+          <p className="text-xs text-muted-foreground">Power ↔ Temperature</p>
+          <p className={`text-lg font-bold ${getCorrelationColor(powerTempStats.correlation)}`}>
+            r = {powerTempStats.correlation.toFixed(3)}
+          </p>
+          <p className="text-xs text-muted-foreground">{getCorrelationLabel(powerTempStats.correlation)}</p>
         </div>
 
-        <div className="glass-card rounded-xl p-4 border border-border/50">
-          <div className="flex items-center gap-3 mb-2">
-            <div className="w-10 h-10 rounded-lg bg-cyan-500/20 flex items-center justify-center">
-              <Thermometer className="w-5 h-5 text-cyan-400" />
-            </div>
-            <div>
-              <p className="text-xs text-muted-foreground uppercase tracking-wider">Avg Temp</p>
-              <p className="text-xl font-bold text-cyan-400">
-                {isLoading ? '...' : `${stats.avgTemp.toFixed(1)} °C`}
-              </p>
-            </div>
+        <div 
+          className={`glass-card rounded-xl p-4 border cursor-pointer transition-all ${activeTab === 'signal-humidity' ? 'border-violet-500/50 bg-violet-500/10' : 'border-border/50 hover:border-border'}`}
+          onClick={() => setActiveTab('signal-humidity')}
+        >
+          <div className="flex items-center gap-2 mb-2">
+            <Radio className="w-4 h-4 text-violet-400" />
+            <Droplets className="w-4 h-4 text-emerald-400" />
           </div>
+          <p className="text-xs text-muted-foreground">Signal ↔ Humidity</p>
+          <p className={`text-lg font-bold ${getCorrelationColor(signalHumidityStats.correlation)}`}>
+            r = {signalHumidityStats.correlation.toFixed(3)}
+          </p>
+          <p className="text-xs text-muted-foreground">{getCorrelationLabel(signalHumidityStats.correlation)}</p>
         </div>
 
-        <div className="glass-card rounded-xl p-4 border border-border/50">
-          <div className="flex items-center gap-3 mb-2">
-            <div className="w-10 h-10 rounded-lg bg-violet-500/20 flex items-center justify-center">
-              <TrendingUp className="w-5 h-5 text-violet-400" />
-            </div>
-            <div>
-              <p className="text-xs text-muted-foreground uppercase tracking-wider">Correlation</p>
-              <p className={`text-xl font-bold ${getCorrelationColor(stats.correlation)}`}>
-                {isLoading ? '...' : stats.correlation.toFixed(3)}
-              </p>
-              <p className="text-xs text-muted-foreground">
-                {getCorrelationLabel(stats.correlation)}
-              </p>
-            </div>
+        <div 
+          className={`glass-card rounded-xl p-4 border cursor-pointer transition-all ${activeTab === 'power-throughput' ? 'border-cyan-500/50 bg-cyan-500/10' : 'border-border/50 hover:border-border'}`}
+          onClick={() => setActiveTab('power-throughput')}
+        >
+          <div className="flex items-center gap-2 mb-2">
+            <Zap className="w-4 h-4 text-amber-400" />
+            <Wifi className="w-4 h-4 text-cyan-400" />
           </div>
+          <p className="text-xs text-muted-foreground">Power ↔ Network</p>
+          <p className={`text-lg font-bold ${getCorrelationColor(powerThroughputStats.correlation)}`}>
+            r = {powerThroughputStats.correlation.toFixed(3)}
+          </p>
+          <p className="text-xs text-muted-foreground">{getCorrelationLabel(powerThroughputStats.correlation)}</p>
         </div>
 
-        <div className="glass-card rounded-xl p-4 border border-border/50">
-          <div className="flex items-center gap-3 mb-2">
-            <div className="w-10 h-10 rounded-lg bg-emerald-500/20 flex items-center justify-center">
-              <Activity className="w-5 h-5 text-emerald-400" />
-            </div>
-            <div>
-              <p className="text-xs text-muted-foreground uppercase tracking-wider">Data Points</p>
-              <p className="text-xl font-bold text-emerald-400">
-                {isLoading ? '...' : stats.dataPoints}
-              </p>
-            </div>
+        <div 
+          className={`glass-card rounded-xl p-4 border cursor-pointer transition-all ${activeTab === 'signal-latency' ? 'border-rose-500/50 bg-rose-500/10' : 'border-border/50 hover:border-border'}`}
+          onClick={() => setActiveTab('signal-latency')}
+        >
+          <div className="flex items-center gap-2 mb-2">
+            <Radio className="w-4 h-4 text-violet-400" />
+            <Activity className="w-4 h-4 text-rose-400" />
           </div>
+          <p className="text-xs text-muted-foreground">Signal ↔ Latency</p>
+          <p className={`text-lg font-bold ${getCorrelationColor(signalLatencyStats.correlation)}`}>
+            r = {signalLatencyStats.correlation.toFixed(3)}
+          </p>
+          <p className="text-xs text-muted-foreground">{getCorrelationLabel(signalLatencyStats.correlation)}</p>
         </div>
       </div>
 
-      {/* Combined Chart */}
-      <div className="glass-card rounded-xl border border-border/50 mb-8">
-        <div className="p-4 border-b border-border/30 flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <div className="w-8 h-8 rounded-lg bg-primary/20 flex items-center justify-center">
-              <GitCompare className="w-4 h-4 text-primary" />
-            </div>
-            <div>
-              <h4 className="font-semibold text-sm">Power & Temperature Correlation</h4>
-              <p className="text-xs text-muted-foreground">Last {timeRange} hours</p>
-            </div>
+      {/* Stats for Selected Pair */}
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-8">
+        <StatCard
+          icon={<div className="w-10 h-10 rounded-lg bg-amber-500/20 flex items-center justify-center"><TrendingUp className="w-5 h-5" style={{ color: current.xColor }} /></div>}
+          label={`Avg ${current.xLabel}`}
+          value={`${current.stats.avgX.toFixed(1)} ${current.xUnit}`}
+          colorClass="text-amber-400"
+          isLoading={isLoading}
+        />
+        <StatCard
+          icon={<div className="w-10 h-10 rounded-lg bg-cyan-500/20 flex items-center justify-center"><TrendingUp className="w-5 h-5" style={{ color: current.yColor }} /></div>}
+          label={`Avg ${current.yLabel}`}
+          value={`${current.stats.avgY.toFixed(1)} ${current.yUnit}`}
+          colorClass="text-cyan-400"
+          isLoading={isLoading}
+        />
+        <StatCard
+          icon={<div className="w-10 h-10 rounded-lg bg-violet-500/20 flex items-center justify-center"><GitCompare className="w-5 h-5 text-violet-400" /></div>}
+          label="Correlation"
+          value={current.stats.correlation.toFixed(3)}
+          subValue={getCorrelationLabel(current.stats.correlation)}
+          colorClass={getCorrelationColor(current.stats.correlation)}
+          isLoading={isLoading}
+        />
+        <StatCard
+          icon={<div className="w-10 h-10 rounded-lg bg-emerald-500/20 flex items-center justify-center"><Activity className="w-5 h-5 text-emerald-400" /></div>}
+          label="Data Points"
+          value={current.stats.dataPoints.toString()}
+          colorClass="text-emerald-400"
+          isLoading={isLoading}
+        />
+      </div>
+
+      {/* Main Chart */}
+      <CorrelationChart
+        data={current.data}
+        xLabel={current.xLabel}
+        yLabel={current.yLabel}
+        xUnit={current.xUnit}
+        yUnit={current.yUnit}
+        xColor={current.xColor}
+        yColor={current.yColor}
+        isLoading={isLoading}
+        hours={timeRange}
+      />
+
+      {/* Scatter Plot */}
+      <div className="glass-card rounded-xl border border-border/50 mt-6">
+        <div className="p-4 border-b border-border/30 flex items-center gap-3">
+          <div className="w-8 h-8 rounded-lg bg-primary/20 flex items-center justify-center">
+            <TrendingUp className="w-4 h-4 text-primary" />
           </div>
-          <Badge variant="outline" className="text-xs">
-            {correlatedData.length} samples
-          </Badge>
+          <div>
+            <h4 className="font-semibold text-sm">Scatter Plot: {current.xLabel} vs {current.yLabel}</h4>
+            <p className="text-xs text-muted-foreground">Direct relationship visualization</p>
+          </div>
         </div>
         <div className="p-4">
           {isLoading ? (
-            <div className="h-[400px] flex items-center justify-center">
+            <div className="h-[300px] flex items-center justify-center">
               <Loader2 className="w-8 h-8 animate-spin text-muted-foreground" />
             </div>
-          ) : correlatedData.length === 0 ? (
-            <div className="h-[400px] flex items-center justify-center text-muted-foreground">
-              No data available for the selected time range
+          ) : current.data.filter(d => d.x !== undefined && d.y !== undefined).length === 0 ? (
+            <div className="h-[300px] flex items-center justify-center text-muted-foreground">
+              No paired data available
             </div>
           ) : (
-            <div className="h-[400px]">
+            <div className="h-[300px]">
               <ResponsiveContainer width="100%" height="100%">
-                <ComposedChart data={correlatedData} margin={{ top: 20, right: 30, left: 0, bottom: 0 }}>
-                  <defs>
-                    <linearGradient id="powerGradient" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="5%" stopColor="#f59e0b" stopOpacity={0.3} />
-                      <stop offset="95%" stopColor="#f59e0b" stopOpacity={0} />
-                    </linearGradient>
-                    <linearGradient id="tempGradient" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="5%" stopColor="#06b6d4" stopOpacity={0.3} />
-                      <stop offset="95%" stopColor="#06b6d4" stopOpacity={0} />
-                    </linearGradient>
-                  </defs>
+                <ScatterChart margin={{ top: 20, right: 30, left: 0, bottom: 0 }}>
                   <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" opacity={0.3} />
                   <XAxis
-                    dataKey="time"
+                    dataKey="x"
+                    type="number"
+                    name={current.xLabel}
                     tick={{ fontSize: 10, fill: 'hsl(var(--muted-foreground))' }}
                     tickLine={false}
                     axisLine={false}
-                    interval="preserveStartEnd"
+                    tickFormatter={(v) => `${v}${current.xUnit}`}
+                    label={{ value: `${current.xLabel} (${current.xUnit})`, position: 'bottom', fontSize: 11, fill: 'hsl(var(--muted-foreground))' }}
                   />
                   <YAxis
-                    yAxisId="power"
+                    dataKey="y"
+                    type="number"
+                    name={current.yLabel}
                     tick={{ fontSize: 10, fill: 'hsl(var(--muted-foreground))' }}
                     tickLine={false}
                     axisLine={false}
-                    tickFormatter={(v) => `${v}W`}
-                    label={{ value: 'Power (W)', angle: -90, position: 'insideLeft', fontSize: 10, fill: '#f59e0b' }}
-                  />
-                  <YAxis
-                    yAxisId="temp"
-                    orientation="right"
-                    tick={{ fontSize: 10, fill: 'hsl(var(--muted-foreground))' }}
-                    tickLine={false}
-                    axisLine={false}
-                    tickFormatter={(v) => `${v}°C`}
-                    label={{ value: 'Temp (°C)', angle: 90, position: 'insideRight', fontSize: 10, fill: '#06b6d4' }}
+                    tickFormatter={(v) => `${v}${current.yUnit}`}
+                    label={{ value: `${current.yLabel} (${current.yUnit})`, angle: -90, position: 'insideLeft', fontSize: 11, fill: 'hsl(var(--muted-foreground))' }}
                   />
                   <Tooltip
                     contentStyle={{
@@ -289,149 +531,21 @@ const CorrelationContent = () => {
                       fontSize: '12px',
                     }}
                     formatter={(value: number, name: string) => {
-                      if (name === 'power') return [`${value?.toFixed(1)} W`, 'Power'];
-                      if (name === 'temperature') return [`${value?.toFixed(1)} °C`, 'Temperature'];
+                      if (name === current.xLabel) return [`${value?.toFixed(1)} ${current.xUnit}`, current.xLabel];
+                      if (name === current.yLabel) return [`${value?.toFixed(1)} ${current.yUnit}`, current.yLabel];
                       return [value, name];
                     }}
                   />
-                  <Legend />
-                  <Area
-                    yAxisId="power"
-                    type="monotone"
-                    dataKey="power"
-                    name="Power"
-                    stroke="#f59e0b"
-                    strokeWidth={2}
-                    fill="url(#powerGradient)"
-                    connectNulls
+                  <Scatter
+                    name="Correlation"
+                    data={current.data.filter(d => d.x !== undefined && d.y !== undefined)}
+                    fill={current.xColor}
+                    fillOpacity={0.6}
                   />
-                  <Line
-                    yAxisId="temp"
-                    type="monotone"
-                    dataKey="temperature"
-                    name="Temperature"
-                    stroke="#06b6d4"
-                    strokeWidth={2}
-                    dot={false}
-                    connectNulls
-                  />
-                </ComposedChart>
+                </ScatterChart>
               </ResponsiveContainer>
             </div>
           )}
-        </div>
-      </div>
-
-      {/* Individual Charts */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Power Chart */}
-        <div className="glass-card rounded-xl border border-border/50">
-          <div className="p-4 border-b border-border/30 flex items-center gap-3">
-            <div className="w-8 h-8 rounded-lg bg-amber-500/20 flex items-center justify-center">
-              <Zap className="w-4 h-4 text-amber-400" />
-            </div>
-            <h4 className="font-semibold text-sm">Starlink Power Consumption</h4>
-          </div>
-          <div className="p-4">
-            {isLoading ? (
-              <div className="h-[250px] flex items-center justify-center">
-                <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
-              </div>
-            ) : (
-              <div className="h-[250px]">
-                <ResponsiveContainer width="100%" height="100%">
-                  <LineChart data={correlatedData.filter(d => d.power !== undefined)} margin={{ top: 10, right: 10, left: -10, bottom: 0 }}>
-                    <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" opacity={0.3} />
-                    <XAxis
-                      dataKey="time"
-                      tick={{ fontSize: 10, fill: 'hsl(var(--muted-foreground))' }}
-                      tickLine={false}
-                      axisLine={false}
-                      interval="preserveStartEnd"
-                    />
-                    <YAxis
-                      tick={{ fontSize: 10, fill: 'hsl(var(--muted-foreground))' }}
-                      tickLine={false}
-                      axisLine={false}
-                      tickFormatter={(v) => `${v}W`}
-                    />
-                    <Tooltip
-                      contentStyle={{
-                        backgroundColor: 'hsl(var(--card))',
-                        border: '1px solid hsl(var(--border))',
-                        borderRadius: '8px',
-                        fontSize: '12px',
-                      }}
-                      formatter={(value: number) => [`${value?.toFixed(1)} W`, 'Power']}
-                    />
-                    <Line
-                      type="monotone"
-                      dataKey="power"
-                      stroke="#f59e0b"
-                      strokeWidth={2}
-                      dot={false}
-                      connectNulls
-                    />
-                  </LineChart>
-                </ResponsiveContainer>
-              </div>
-            )}
-          </div>
-        </div>
-
-        {/* Temperature Chart */}
-        <div className="glass-card rounded-xl border border-border/50">
-          <div className="p-4 border-b border-border/30 flex items-center gap-3">
-            <div className="w-8 h-8 rounded-lg bg-cyan-500/20 flex items-center justify-center">
-              <Thermometer className="w-4 h-4 text-cyan-400" />
-            </div>
-            <h4 className="font-semibold text-sm">Temperature Over Time</h4>
-          </div>
-          <div className="p-4">
-            {isLoading ? (
-              <div className="h-[250px] flex items-center justify-center">
-                <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
-              </div>
-            ) : (
-              <div className="h-[250px]">
-                <ResponsiveContainer width="100%" height="100%">
-                  <LineChart data={correlatedData.filter(d => d.temperature !== undefined)} margin={{ top: 10, right: 10, left: -10, bottom: 0 }}>
-                    <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" opacity={0.3} />
-                    <XAxis
-                      dataKey="time"
-                      tick={{ fontSize: 10, fill: 'hsl(var(--muted-foreground))' }}
-                      tickLine={false}
-                      axisLine={false}
-                      interval="preserveStartEnd"
-                    />
-                    <YAxis
-                      tick={{ fontSize: 10, fill: 'hsl(var(--muted-foreground))' }}
-                      tickLine={false}
-                      axisLine={false}
-                      tickFormatter={(v) => `${v}°C`}
-                    />
-                    <Tooltip
-                      contentStyle={{
-                        backgroundColor: 'hsl(var(--card))',
-                        border: '1px solid hsl(var(--border))',
-                        borderRadius: '8px',
-                        fontSize: '12px',
-                      }}
-                      formatter={(value: number) => [`${value?.toFixed(1)} °C`, 'Temperature']}
-                    />
-                    <Line
-                      type="monotone"
-                      dataKey="temperature"
-                      stroke="#06b6d4"
-                      strokeWidth={2}
-                      dot={false}
-                      connectNulls
-                    />
-                  </LineChart>
-                </ResponsiveContainer>
-              </div>
-            )}
-          </div>
         </div>
       </div>
     </div>
