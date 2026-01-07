@@ -13,6 +13,7 @@ import {
   useGpsReadings,
   useStarlinkStatusData,
   useStarlinkDevices,
+  useStarlinkSensorReadings,
   GeoLocation,
   AdsbAircraft
 } from "@/hooks/useAuroraApi";
@@ -202,6 +203,9 @@ export function useMapData(options: UseMapDataOptions = {}) {
   // Get all Starlink devices from the dedicated endpoint
   const { data: starlinkDevicesApi } = useStarlinkDevices();
 
+  // Get Starlink sensor readings with GPS data
+  const { data: starlinkSensorReadings } = useStarlinkSensorReadings();
+
   // Get ADS-B aircraft data with historical fallback based on timeframe
   const { 
     aircraft: adsbAircraft, 
@@ -231,8 +235,9 @@ export function useMapData(options: UseMapDataOptions = {}) {
       gpsdStatus: !!gpsdStatus,
       gpsReadings: gpsReadings?.count || 0,
       starlinkStatusData: starlinkStatusData?.length || 0,
+      starlinkSensorReadings: starlinkSensorReadings?.length || 0,
     });
-  }, [sensors, clients, latestReadings, geoLocations, adsbAircraft, starlinkStats, starlinkLatest, gpsdStatus, gpsReadings, starlinkStatusData]);
+  }, [sensors, clients, latestReadings, geoLocations, adsbAircraft, starlinkStats, starlinkLatest, gpsdStatus, gpsReadings, starlinkStatusData, starlinkSensorReadings]);
 
 
   const handleRefresh = useCallback(() => {
@@ -517,12 +522,71 @@ export function useMapData(options: UseMapDataOptions = {}) {
       });
     }
     
+    // Fourth, add from Starlink sensor readings (/api/readings/sensor/starlink)
+    if (starlinkSensorReadings && starlinkSensorReadings.length > 0) {
+      // Group by device_id and get the latest entry for each
+      const sensorMap = new Map<string, typeof starlinkSensorReadings[0]>();
+      
+      starlinkSensorReadings.forEach(reading => {
+        const deviceId = reading.device_id;
+        const existing = sensorMap.get(deviceId);
+        
+        // Keep the latest reading for each device
+        if (!existing || (reading.timestamp && existing.timestamp && new Date(reading.timestamp) > new Date(existing.timestamp))) {
+          sensorMap.set(deviceId, reading);
+        }
+      });
+      
+      // Add or update devices with GPS from sensor readings
+      sensorMap.forEach((reading, deviceId) => {
+        const data = reading.data;
+        // Try various GPS field names
+        const lat = data.latitude ?? data.gps_latitude;
+        const lng = data.longitude ?? data.gps_longitude;
+        const alt = data.altitude ?? data.gps_altitude;
+        
+        if (lat !== undefined && lng !== undefined &&
+            lat >= -90 && lat <= 90 && 
+            lng >= -180 && lng <= 180 &&
+            !(lat === 0 && lng === 0)) {
+          
+          // If already added, update with newer GPS if available
+          if (addedIds.has(deviceId)) {
+            const existingIdx = devices.findIndex(d => d.device_id === deviceId);
+            if (existingIdx >= 0 && reading.timestamp) {
+              // Only update if sensor data is newer
+              const existingTimestamp = devices[existingIdx].timestamp;
+              if (!existingTimestamp || new Date(reading.timestamp) > new Date(existingTimestamp)) {
+                devices[existingIdx] = {
+                  device_id: deviceId,
+                  lat,
+                  lng,
+                  altitude: alt,
+                  timestamp: reading.timestamp
+                };
+              }
+            }
+          } else {
+            devices.push({
+              device_id: deviceId,
+              lat,
+              lng,
+              altitude: alt,
+              timestamp: reading.timestamp
+            });
+            addedIds.add(deviceId);
+            console.log('[MapData] Added Starlink device from sensor readings:', deviceId);
+          }
+        }
+      });
+    }
+    
     if (devices.length > 0) {
       console.log('[MapData] Total Starlink devices with GPS:', devices.length, devices.map(d => d.device_id));
     }
     
     return devices;
-  }, [geoLocations, starlinkDevicesApi, starlinkStatusData]);
+  }, [geoLocations, starlinkDevicesApi, starlinkStatusData, starlinkSensorReadings]);
 
   // Keep backward compatibility - get first device GPS
   const starlinkStatusGps = useMemo<{ lat: number; lng: number; altitude?: number } | null>(() => {
