@@ -4,8 +4,8 @@ const corsHeaders = {
 };
 
 const AURORA_ENDPOINT = "http://aurora.tophatsecurity.com:9151";
-const MAX_RETRIES = 2;
-const TIMEOUT_MS = 30000; // 30 second timeout
+const MAX_RETRIES = 3;
+const TIMEOUT_MS = 45000; // 45 second timeout for slow upstream
 
 async function fetchWithRetry(url: string, options: RequestInit, retries = MAX_RETRIES): Promise<Response> {
   for (let attempt = 1; attempt <= retries; attempt++) {
