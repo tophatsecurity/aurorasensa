@@ -360,6 +360,11 @@ const DashboardContent = () => {
         <PowerConsumptionCharts hours={periodHours} />
       </div>
 
+      {/* All Temperatures Over Time - moved below Power Consumption */}
+      <div className="mb-8">
+        <ThermalProbeDeviceChart hours={periodHours} />
+      </div>
+
       {/* Thermal - All Temperature Sources */}
       <div className="mb-8">
         <h2 className="text-lg font-semibold mb-4 flex items-center gap-2">
@@ -670,7 +675,6 @@ const DashboardContent = () => {
           />
         </div>
         
-        <ThermalProbeDeviceChart hours={periodHours} />
         <div className="mt-4">
           <ThermalProbeCharts />
         </div>
