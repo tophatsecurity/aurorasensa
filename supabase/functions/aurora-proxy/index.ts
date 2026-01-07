@@ -4,15 +4,15 @@ const corsHeaders = {
 };
 
 const AURORA_ENDPOINT = "http://aurora.tophatsecurity.com:9151";
-const MAX_RETRIES = 3;
-const TIMEOUT_MS = 15000;
+const MAX_RETRIES = 2;
+const TIMEOUT_MS = 30000; // Increased timeout to 30 seconds
 
 async function fetchWithRetry(url: string, options: RequestInit, retries = MAX_RETRIES): Promise<Response> {
   for (let attempt = 1; attempt <= retries; attempt++) {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), TIMEOUT_MS);
+    
     try {
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), TIMEOUT_MS);
-      
       const response = await fetch(url, {
         ...options,
         signal: controller.signal,
@@ -21,21 +21,23 @@ async function fetchWithRetry(url: string, options: RequestInit, retries = MAX_R
       clearTimeout(timeoutId);
       return response;
     } catch (error) {
+      clearTimeout(timeoutId);
+      
       const isLastAttempt = attempt === retries;
-      const isRetryable = error instanceof Error && (
-        error.message.includes('connection') ||
-        error.message.includes('reset') ||
-        error.message.includes('timeout') ||
-        error.message.includes('aborted') ||
-        error.name === 'AbortError'
-      );
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      const isAbort = error instanceof Error && error.name === 'AbortError';
+      const isRetryable = isAbort || 
+        errorMessage.includes('connection') ||
+        errorMessage.includes('reset') ||
+        errorMessage.includes('timeout');
+      
+      console.log(`Attempt ${attempt}/${retries} failed for ${url}: ${errorMessage}`);
       
       if (isLastAttempt || !isRetryable) {
-        throw error;
+        throw new Error(isAbort ? `Request timeout after ${TIMEOUT_MS}ms` : errorMessage);
       }
       
-      console.log(`Retry ${attempt}/${retries} for ${url}`);
-      await new Promise(resolve => setTimeout(resolve, 500 * attempt));
+      await new Promise(resolve => setTimeout(resolve, 1000 * attempt));
     }
   }
   throw new Error('Max retries exceeded');
