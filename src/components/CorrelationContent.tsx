@@ -227,9 +227,19 @@ const CorrelationChart = ({
   </div>
 );
 
+type TempMeasurement = 'thermal-probe' | 'arduino-dht' | 'arduino-bmp' | 'humidity';
+
+const TEMP_MEASUREMENTS: { value: TempMeasurement; label: string }[] = [
+  { value: 'thermal-probe', label: 'Thermal Probe' },
+  { value: 'arduino-dht', label: 'Arduino DHT/AHT' },
+  { value: 'arduino-bmp', label: 'Arduino BMP' },
+  { value: 'humidity', label: 'Humidity' },
+];
+
 const CorrelationContent = () => {
   const [timeRange, setTimeRange] = useState<number>(24);
   const [activeTab, setActiveTab] = useState("power-thermal");
+  const [tempMeasurement, setTempMeasurement] = useState<TempMeasurement>('thermal-probe');
   
   const { data: starlinkData, isLoading: starlinkLoading } = useStarlinkTimeseries(timeRange);
   const { data: dashboardData, isLoading: dashboardLoading } = useDashboardTimeseries(timeRange);
@@ -242,11 +252,21 @@ const CorrelationContent = () => {
   const formatTime = (timestamp: string) => 
     new Date(timestamp).toLocaleTimeString('en-US', { hour12: false, hour: '2-digit', minute: '2-digit' });
 
-  // Correlation 1: Starlink Power vs Thermal Probe Temperature
+  // Get temperature label and unit based on selected measurement
+  const getTempConfig = (measurement: TempMeasurement) => {
+    switch (measurement) {
+      case 'thermal-probe': return { label: 'Thermal Probe', unit: '°C', color: '#ef4444' };
+      case 'arduino-dht': return { label: 'Arduino DHT/AHT', unit: '°C', color: '#22c55e' };
+      case 'arduino-bmp': return { label: 'Arduino BMP', unit: '°C', color: '#3b82f6' };
+      case 'humidity': return { label: 'Humidity', unit: '%', color: '#06b6d4' };
+    }
+  };
+
+  // Correlation 1: Starlink Power vs Selected Temperature Measurement
   const powerThermalData = useMemo(() => {
     const dataMap = new Map<string, { time: string; x?: number; y?: number }>();
 
-    // Get Starlink power data from timeseries (power_w now correctly extracts from data.starlink.power_watts)
+    // Get Starlink power data from timeseries
     starlinkData?.readings?.forEach(r => {
       const time = formatTime(r.timestamp);
       const existing = dataMap.get(time) || { time };
@@ -254,18 +274,41 @@ const CorrelationContent = () => {
       dataMap.set(time, existing);
     });
 
-    // Get thermal probe temperature
-    thermalData?.readings?.forEach(r => {
-      const time = formatTime(r.timestamp);
-      const existing = dataMap.get(time) || { time };
-      existing.y = r.temp_c ?? r.probe_c ?? r.ambient_c ?? undefined;
-      dataMap.set(time, existing);
-    });
+    // Get temperature based on selected measurement
+    if (tempMeasurement === 'thermal-probe') {
+      thermalData?.readings?.forEach(r => {
+        const time = formatTime(r.timestamp);
+        const existing = dataMap.get(time) || { time };
+        existing.y = r.temp_c ?? r.probe_c ?? r.ambient_c ?? undefined;
+        dataMap.set(time, existing);
+      });
+    } else if (tempMeasurement === 'arduino-dht') {
+      arduinoData?.readings?.forEach(r => {
+        const time = formatTime(r.timestamp);
+        const existing = dataMap.get(time) || { time };
+        existing.y = r.th_temp_c ?? undefined;
+        dataMap.set(time, existing);
+      });
+    } else if (tempMeasurement === 'arduino-bmp') {
+      arduinoData?.readings?.forEach(r => {
+        const time = formatTime(r.timestamp);
+        const existing = dataMap.get(time) || { time };
+        existing.y = r.bmp_temp_c ?? undefined;
+        dataMap.set(time, existing);
+      });
+    } else if (tempMeasurement === 'humidity') {
+      arduinoData?.readings?.forEach(r => {
+        const time = formatTime(r.timestamp);
+        const existing = dataMap.get(time) || { time };
+        existing.y = r.th_humidity ?? undefined;
+        dataMap.set(time, existing);
+      });
+    }
 
     return Array.from(dataMap.values())
       .filter(d => d.x !== undefined || d.y !== undefined)
       .sort((a, b) => a.time.localeCompare(b.time));
-  }, [starlinkData, thermalData]);
+  }, [starlinkData, thermalData, arduinoData, tempMeasurement]);
 
   // Correlation 2: Starlink Power vs Arduino Temperature
   const powerArduinoData = useMemo(() => {
@@ -338,19 +381,21 @@ const CorrelationContent = () => {
   const latencyThroughputStats = useMemo(() => calculateCorrelation(latencyThroughputData), [latencyThroughputData]);
 
   const correlationPairs = [
-    { id: "power-thermal", label: "Power vs Thermal", icon: <Zap className="w-4 h-4" /> },
+    { id: "power-thermal", label: "Power vs Temp", icon: <Zap className="w-4 h-4" /> },
     { id: "power-arduino", label: "Power vs Arduino", icon: <Cpu className="w-4 h-4" /> },
     { id: "thermal-arduino", label: "Thermal vs Arduino", icon: <Thermometer className="w-4 h-4" /> },
     { id: "latency-throughput", label: "Latency vs Throughput", icon: <Radio className="w-4 h-4" /> },
   ];
 
+  const tempConfig = getTempConfig(tempMeasurement);
+
   const getCurrentData = () => {
     switch (activeTab) {
-      case "power-thermal": return { data: powerThermalData, stats: powerThermalStats, xLabel: "Starlink Power", yLabel: "Thermal Probe", xUnit: "W", yUnit: "°C", xColor: "#f59e0b", yColor: "#ef4444" };
+      case "power-thermal": return { data: powerThermalData, stats: powerThermalStats, xLabel: "Starlink Power", yLabel: tempConfig.label, xUnit: "W", yUnit: tempConfig.unit, xColor: "#f59e0b", yColor: tempConfig.color };
       case "power-arduino": return { data: powerArduinoData, stats: powerArduinoStats, xLabel: "Starlink Power", yLabel: "Arduino Temp", xUnit: "W", yUnit: "°C", xColor: "#f59e0b", yColor: "#22c55e" };
       case "thermal-arduino": return { data: thermalArduinoData, stats: thermalArduinoStats, xLabel: "Thermal Probe", yLabel: "Arduino Temp", xUnit: "°C", yUnit: "°C", xColor: "#ef4444", yColor: "#22c55e" };
       case "latency-throughput": return { data: latencyThroughputData, stats: latencyThroughputStats, xLabel: "Latency", yLabel: "Download", xUnit: "ms", yUnit: "Mbps", xColor: "#8b5cf6", yColor: "#06b6d4" };
-      default: return { data: powerThermalData, stats: powerThermalStats, xLabel: "Starlink Power", yLabel: "Thermal Probe", xUnit: "W", yUnit: "°C", xColor: "#f59e0b", yColor: "#ef4444" };
+      default: return { data: powerThermalData, stats: powerThermalStats, xLabel: "Starlink Power", yLabel: tempConfig.label, xUnit: "W", yUnit: tempConfig.unit, xColor: "#f59e0b", yColor: tempConfig.color };
     }
   };
 
@@ -371,6 +416,18 @@ const CorrelationContent = () => {
         </div>
 
         <div className="ml-auto flex items-center gap-3">
+          {activeTab === 'power-thermal' && (
+            <Select value={tempMeasurement} onValueChange={(v) => setTempMeasurement(v as TempMeasurement)}>
+              <SelectTrigger className="w-[160px] bg-background border-border">
+                <SelectValue placeholder="Temp Measurement" />
+              </SelectTrigger>
+              <SelectContent className="bg-background border-border z-50">
+                {TEMP_MEASUREMENTS.map(m => (
+                  <SelectItem key={m.value} value={m.value}>{m.label}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          )}
           <Select value={timeRange.toString()} onValueChange={(v) => setTimeRange(Number(v))}>
             <SelectTrigger className="w-[150px] bg-background border-border">
               <SelectValue placeholder="Time range" />
@@ -397,9 +454,9 @@ const CorrelationContent = () => {
         >
           <div className="flex items-center gap-2 mb-2">
             <Zap className="w-4 h-4 text-amber-400" />
-            <Thermometer className="w-4 h-4 text-red-400" />
+            <Thermometer className="w-4 h-4" style={{ color: tempConfig.color }} />
           </div>
-          <p className="text-xs text-muted-foreground">Starlink Power ↔ Thermal</p>
+          <p className="text-xs text-muted-foreground">Starlink Power ↔ {tempConfig.label}</p>
           <p className={`text-lg font-bold ${getCorrelationColor(powerThermalStats.correlation)}`}>
             r = {powerThermalStats.correlation.toFixed(3)}
           </p>
