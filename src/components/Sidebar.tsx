@@ -19,7 +19,9 @@ import {
   Cloud,
   Sun,
   Move,
-  Webhook
+  Webhook,
+  UserCog,
+  Terminal
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -65,7 +67,9 @@ const menuSections = [
       { id: "performance", label: "Performance", icon: Activity },
       { id: "webhooks", label: "Webhooks", icon: Webhook },
       { id: "configuration", label: "Configuration", icon: Cog },
+      { id: "system-logs", label: "System Logs", icon: Terminal },
       { id: "audit-logs", label: "Audit Logs", icon: ScrollText },
+      { id: "users", label: "Users", icon: UserCog },
       { id: "settings", label: "Settings", icon: Settings },
     ],
   },
