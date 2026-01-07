@@ -18,7 +18,8 @@ import {
   BarChart3,
   Cloud,
   Sun,
-  Move
+  Move,
+  Webhook
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -62,6 +63,7 @@ const menuSections = [
     title: "SYSTEM",
     items: [
       { id: "performance", label: "Performance", icon: Activity },
+      { id: "webhooks", label: "Webhooks", icon: Webhook },
       { id: "configuration", label: "Configuration", icon: Cog },
       { id: "audit-logs", label: "Audit Logs", icon: ScrollText },
       { id: "settings", label: "Settings", icon: Settings },
