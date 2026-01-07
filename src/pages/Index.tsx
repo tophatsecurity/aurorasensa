@@ -21,6 +21,8 @@ import WeatherAnalyticsContent from "@/components/WeatherAnalyticsContent";
 import SoundLightAnalyticsContent from "@/components/SoundLightAnalyticsContent";
 import MovementAnalyticsContent from "@/components/MovementAnalyticsContent";
 import WebhooksContent from "@/components/WebhooksContent";
+import UserManagementContent from "@/components/UserManagementContent";
+import SystemLogsContent from "@/components/SystemLogsContent";
 
 const Index = () => {
   const [activeItem, setActiveItem] = useState("dashboard");
@@ -67,6 +69,10 @@ const Index = () => {
         return <MovementAnalyticsContent />;
       case "webhooks":
         return <WebhooksContent />;
+      case "users":
+        return <UserManagementContent />;
+      case "system-logs":
+        return <SystemLogsContent />;
       default:
         return <DashboardContent />;
     }
