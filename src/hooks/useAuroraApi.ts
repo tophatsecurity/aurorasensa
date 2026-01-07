@@ -1557,9 +1557,17 @@ export function useLatestReadings() {
 export function useGeoLocations() {
   return useQuery({
     queryKey: ["aurora", "geo", "locations"],
-    queryFn: () => callAuroraApi<GeoLocation[]>("/api/geo/locations"),
+    queryFn: async () => {
+      try {
+        return await callAuroraApi<GeoLocation[]>("/api/geo/locations");
+      } catch (error) {
+        // Backend may fail if some locations have null lat/lng values
+        console.warn("Failed to fetch geo locations:", error);
+        return [];
+      }
+    },
     refetchInterval: 30000,
-    retry: 2,
+    retry: 1,
   });
 }
 
