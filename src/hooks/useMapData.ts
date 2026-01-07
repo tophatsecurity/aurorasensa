@@ -14,9 +14,14 @@ import {
   useStarlinkStatusData,
   useStarlinkDevices,
   useStarlinkSensorReadings,
+  useStarlinkSignalStrength,
+  useStarlinkPerformance,
+  useStarlinkPower,
+  useStarlinkConnectivity,
   GeoLocation,
   AdsbAircraft
 } from "@/hooks/useAuroraApi";
+import type { StarlinkMetrics } from "@/types/map";
 import { useQueryClient } from "@tanstack/react-query";
 import type { MapStats, SensorMarker, ClientMarker, AdsbMarker } from "@/types/map";
 
@@ -205,6 +210,12 @@ export function useMapData(options: UseMapDataOptions = {}) {
 
   // Get Starlink sensor readings with GPS data
   const { data: starlinkSensorReadings } = useStarlinkSensorReadings();
+
+  // Get Starlink metrics for detailed popup
+  const { data: starlinkSignal } = useStarlinkSignalStrength();
+  const { data: starlinkPerformance } = useStarlinkPerformance();
+  const { data: starlinkPower } = useStarlinkPower();
+  const { data: starlinkConnectivity } = useStarlinkConnectivity();
 
   // Get ADS-B aircraft data with historical fallback based on timeframe
   const { 
@@ -809,6 +820,19 @@ export function useMapData(options: UseMapDataOptions = {}) {
       }
     });
 
+    // Build Starlink metrics from the various hooks
+    const starlinkMetrics: StarlinkMetrics = {
+      connected: starlinkConnectivity?.connected,
+      signalStrength: starlinkSignal?.signal_strength_dbm,
+      snr: starlinkSignal?.snr,
+      obstructionPercent: starlinkConnectivity?.obstruction_percent,
+      uptimeSeconds: starlinkConnectivity?.uptime_seconds,
+      downlinkThroughputBps: starlinkPerformance?.downlink_throughput_bps,
+      uplinkThroughputBps: starlinkPerformance?.uplink_throughput_bps,
+      latencyMs: starlinkPerformance?.pop_ping_latency_ms,
+      powerWatts: starlinkPower?.device_summaries?.[0]?.overall?.avg_watts,
+    };
+
     // Add all Starlink devices as markers
     if (starlinkDevices.length > 0) {
       starlinkDevices.forEach(device => {
@@ -838,9 +862,14 @@ export function useMapData(options: UseMapDataOptions = {}) {
             type: 'starlink',
             value: device.altitude || 0,
             unit: 'm',
-            status: 'active',
+            status: starlinkMetrics.connected ? 'active' : 'warning',
             lastUpdate: device.timestamp || new Date().toISOString(),
-            location: { lat: device.lat, lng: device.lng }
+            location: { lat: device.lat, lng: device.lng },
+            starlinkData: {
+              ...starlinkMetrics,
+              altitude: device.altitude,
+              deviceId: device.device_id,
+            }
           });
           addedIds.add(device.device_id);
         }
@@ -853,9 +882,14 @@ export function useMapData(options: UseMapDataOptions = {}) {
         type: 'starlink',
         value: starlinkGps.altitude || 0,
         unit: 'm',
-        status: 'active',
+        status: starlinkMetrics.connected ? 'active' : 'warning',
         lastUpdate: new Date().toISOString(),
-        location: { lat: starlinkGps.lat, lng: starlinkGps.lng }
+        location: { lat: starlinkGps.lat, lng: starlinkGps.lng },
+        starlinkData: {
+          ...starlinkMetrics,
+          altitude: starlinkGps.altitude,
+          deviceId: 'starlink_dish_1',
+        }
       });
       addedIds.add('starlink_dish_1');
     }
@@ -1116,7 +1150,7 @@ export function useMapData(options: UseMapDataOptions = {}) {
     }
     
     return markers;
-  }, [sensors, clients, gpsCoordinates, geoLocations, starlinkGps, starlinkDevices, gpsdGps, gpsdStatus, gpsReadings]);
+  }, [sensors, clients, gpsCoordinates, geoLocations, starlinkGps, starlinkDevices, gpsdGps, gpsdStatus, gpsReadings, starlinkSignal, starlinkPerformance, starlinkPower, starlinkConnectivity]);
 
   // Get client markers for the clients filter
   const clientMarkers = useMemo<ClientMarker[]>(() => {

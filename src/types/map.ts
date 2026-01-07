@@ -22,6 +22,20 @@ export interface FilterButton {
   count: number;
 }
 
+export interface StarlinkMetrics {
+  connected?: boolean;
+  signalStrength?: number;
+  snr?: number;
+  obstructionPercent?: number;
+  uptimeSeconds?: number;
+  downlinkThroughputBps?: number;
+  uplinkThroughputBps?: number;
+  latencyMs?: number;
+  powerWatts?: number;
+  altitude?: number;
+  deviceId?: string;
+}
+
 export interface SensorMarker {
   id: string;
   name: string;
@@ -34,6 +48,7 @@ export interface SensorMarker {
     lat: number;
     lng: number;
   };
+  starlinkData?: StarlinkMetrics;
 }
 
 export interface AdsbMarker extends SensorMarker {
