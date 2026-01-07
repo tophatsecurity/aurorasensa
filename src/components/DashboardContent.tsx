@@ -277,11 +277,11 @@ const DashboardContent = () => {
   const adoptedDevices = clients?.filter((c: Client) => c.adopted_at) || [];
   
   // Time period state for stats tabs
-  const [timePeriod, setTimePeriod] = useState<'hourly' | 'daily' | 'monthly'>('hourly');
+  const [timePeriod, setTimePeriod] = useState<'1h' | '24h' | 'weekly'>('1h');
   
   // Convert time period to hours for API calls
-  const periodHours = timePeriod === 'hourly' ? 24 : timePeriod === 'daily' ? 168 : 720;
-  const periodLabel = timePeriod === 'hourly' ? '24h' : timePeriod === 'daily' ? '7d' : '30d';
+  const periodHours = timePeriod === '1h' ? 1 : timePeriod === '24h' ? 24 : 168;
+  const periodLabel = timePeriod === '1h' ? '1h' : timePeriod === '24h' ? '24h' : '7d';
   
   return (
     <div className="flex-1 overflow-y-auto p-8">
@@ -293,11 +293,11 @@ const DashboardContent = () => {
             LIVE
           </Badge>
         </div>
-        <Tabs value={timePeriod} onValueChange={(v) => setTimePeriod(v as 'hourly' | 'daily' | 'monthly')}>
+        <Tabs value={timePeriod} onValueChange={(v) => setTimePeriod(v as '1h' | '24h' | 'weekly')}>
           <TabsList className="bg-muted/50">
-            <TabsTrigger value="hourly" className="text-xs">Hourly</TabsTrigger>
-            <TabsTrigger value="daily" className="text-xs">Daily</TabsTrigger>
-            <TabsTrigger value="monthly" className="text-xs">Monthly</TabsTrigger>
+            <TabsTrigger value="1h" className="text-xs">1h</TabsTrigger>
+            <TabsTrigger value="24h" className="text-xs">24hr</TabsTrigger>
+            <TabsTrigger value="weekly" className="text-xs">Weekly</TabsTrigger>
           </TabsList>
         </Tabs>
       </div>
