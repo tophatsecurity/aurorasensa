@@ -2,35 +2,14 @@ import { useMemo } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 
-const AURORA_DIRECT_URL = "http://aurora.tophatsecurity.com:9151";
-const USE_DIRECT_API = true; // Try direct API calls first, fallback to proxy
+// All API requests go through the edge function proxy to include the API key
+// The AURORA_API_KEY secret is only accessible server-side in the edge function
 
 interface AuroraProxyResponse {
   error?: string;
 }
 
-async function callAuroraApiDirect<T>(path: string, method: string = "GET", body?: unknown): Promise<T> {
-  const url = `${AURORA_DIRECT_URL}${path}`;
-  
-  const options: RequestInit = {
-    method,
-    headers: { 'Content-Type': 'application/json' },
-  };
-
-  if (body && method !== 'GET') {
-    options.body = JSON.stringify(body);
-  }
-
-  const response = await fetch(url, options);
-  
-  if (!response.ok) {
-    throw new Error(`Aurora API error: ${response.status} ${response.statusText}`);
-  }
-
-  return response.json();
-}
-
-async function callAuroraApiProxy<T>(path: string, method: string = "GET", body?: unknown): Promise<T> {
+async function callAuroraApi<T>(path: string, method: string = "GET", body?: unknown): Promise<T> {
   const { data, error } = await supabase.functions.invoke("aurora-proxy", {
     body: { path, method, body },
   });
@@ -51,19 +30,6 @@ async function callAuroraApiProxy<T>(path: string, method: string = "GET", body?
   }
 
   return data as T;
-}
-
-async function callAuroraApi<T>(path: string, method: string = "GET", body?: unknown): Promise<T> {
-  if (USE_DIRECT_API) {
-    try {
-      return await callAuroraApiDirect<T>(path, method, body);
-    } catch (error) {
-      // If direct call fails (likely CORS), fall back to proxy
-      console.warn(`Direct API call failed for ${path}, falling back to proxy:`, error);
-      return callAuroraApiProxy<T>(path, method, body);
-    }
-  }
-  return callAuroraApiProxy<T>(path, method, body);
 }
 
 // =============================================
