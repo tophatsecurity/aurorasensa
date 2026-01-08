@@ -25,6 +25,8 @@ import {
   TrendingUp
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { UserMenu } from "@/components/UserMenu";
+import { useAuth } from "@/hooks/useAuth";
 
 interface SidebarProps {
   activeItem: string;
@@ -79,6 +81,11 @@ const menuSections = [
 ];
 
 const Sidebar = ({ activeItem, onNavigate }: SidebarProps) => {
+  const { profile, user, isAdmin } = useAuth();
+  
+  const displayName = profile?.display_name || user?.email?.split('@')[0] || 'User';
+  const roleLabel = isAdmin ? 'Admin' : 'User';
+
   return (
     <aside className="w-64 min-h-screen bg-sidebar-background border-r border-sidebar-border flex flex-col relative z-20 shrink-0">
       {/* Logo */}
@@ -130,12 +137,10 @@ const Sidebar = ({ activeItem, onNavigate }: SidebarProps) => {
       {/* User Section */}
       <div className="p-4 border-t border-sidebar-border">
         <div className="flex items-center gap-3">
-          <div className="w-9 h-9 rounded-full bg-primary flex items-center justify-center text-primary-foreground font-semibold text-sm">
-            U
-          </div>
+          <UserMenu onNavigateToSettings={() => onNavigate('settings')} />
           <div className="flex-1 min-w-0">
-            <p className="text-sm font-medium truncate">User</p>
-            <p className="text-xs text-muted-foreground">Loading...</p>
+            <p className="text-sm font-medium truncate">{displayName}</p>
+            <p className="text-xs text-muted-foreground">{roleLabel}</p>
           </div>
         </div>
       </div>
