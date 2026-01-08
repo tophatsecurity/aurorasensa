@@ -26,15 +26,15 @@ import UserManagementContent from "@/components/UserManagementContent";
 import SystemLogsContent from "@/components/SystemLogsContent";
 import StatsHistoryCharts from "@/components/StatsHistoryCharts";
 import SetupPage from "@/components/SetupPage";
-import { AuthPage } from "@/components/auth";
-import { useAuth } from "@/hooks/useAuth";
+import { AuroraAuthPage } from "@/components/auth/AuroraAuthPage";
+import { useAuroraAuth } from "@/hooks/useAuroraAuth";
 import { useCheckSetupRequired } from "@/hooks/useAuroraApi";
 import { Loader2 } from "lucide-react";
 
 const Index = () => {
   const [activeItem, setActiveItem] = useState("dashboard");
   const [setupComplete, setSetupComplete] = useState(false);
-  const { user, loading } = useAuth();
+  const { user, loading, signIn } = useAuroraAuth();
   const { data: setupData, isLoading: checkingSetup } = useCheckSetupRequired();
 
   // Show loading spinner while checking auth or setup status
@@ -57,7 +57,7 @@ const Index = () => {
 
   // Show auth page if not logged in
   if (!user) {
-    return <AuthPage />;
+    return <AuroraAuthPage onLogin={signIn} isLoading={loading} />;
   }
 
   const renderContent = () => {

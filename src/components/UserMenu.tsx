@@ -1,4 +1,4 @@
-import { User, LogOut, Settings } from 'lucide-react';
+import { LogOut, Settings } from 'lucide-react';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -8,7 +8,7 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { Button } from '@/components/ui/button';
-import { useAuth } from '@/hooks/useAuth';
+import { useAuroraAuth } from '@/hooks/useAuroraAuth';
 import { useToast } from '@/hooks/use-toast';
 
 interface UserMenuProps {
@@ -16,26 +16,18 @@ interface UserMenuProps {
 }
 
 export function UserMenu({ onNavigateToSettings }: UserMenuProps) {
-  const { user, profile, signOut, isAdmin } = useAuth();
+  const { user, signOut, isAdmin } = useAuroraAuth();
   const { toast } = useToast();
 
   const handleSignOut = async () => {
-    const { error } = await signOut();
-    if (error) {
-      toast({
-        title: 'Sign out failed',
-        description: error.message,
-        variant: 'destructive',
-      });
-    } else {
-      toast({
-        title: 'Signed out',
-        description: 'You have been signed out successfully.',
-      });
-    }
+    await signOut();
+    toast({
+      title: 'Signed out',
+      description: 'You have been signed out successfully.',
+    });
   };
 
-  const displayName = profile?.display_name || user?.email || 'User';
+  const displayName = user?.username || 'User';
   const initials = displayName
     .split(' ')
     .map((n) => n[0])
@@ -57,7 +49,7 @@ export function UserMenu({ onNavigateToSettings }: UserMenuProps) {
         <DropdownMenuLabel className="font-normal">
           <div className="flex flex-col space-y-1">
             <p className="text-sm font-medium text-slate-200">{displayName}</p>
-            <p className="text-xs text-slate-400">{user?.email}</p>
+            <p className="text-xs text-slate-400 capitalize">{user?.role || 'user'}</p>
             {isAdmin && (
               <span className="text-xs text-cyan-400 font-medium">Admin</span>
             )}
