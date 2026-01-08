@@ -7,8 +7,11 @@ const AURORA_ENDPOINT = "http://aurora.tophatsecurity.com:9151";
 const MAX_RETRIES = 3;
 const TIMEOUT_MS = 45000;
 
-// Store user sessions by a simple token (in-memory per isolate)
+// Store user sessions by token (in-memory per isolate)
 const userSessions: Map<string, string> = new Map();
+
+// Get API key from environment
+const AURORA_API_KEY = Deno.env.get('AURORA_API_KEY');
 
 async function fetchWithRetry(url: string, options: RequestInit, retries = MAX_RETRIES): Promise<Response> {
   for (let attempt = 1; attempt <= retries; attempt++) {
@@ -16,30 +19,16 @@ async function fetchWithRetry(url: string, options: RequestInit, retries = MAX_R
     const timeoutId = setTimeout(() => controller.abort(), TIMEOUT_MS);
     
     try {
-      const response = await fetch(url, {
-        ...options,
-        signal: controller.signal,
-      });
-      
+      const response = await fetch(url, { ...options, signal: controller.signal });
       clearTimeout(timeoutId);
       return response;
     } catch (error) {
       clearTimeout(timeoutId);
-      
       const isLastAttempt = attempt === retries;
       const errorMessage = error instanceof Error ? error.message : String(error);
-      const isAbort = error instanceof Error && error.name === 'AbortError';
-      const isRetryable = isAbort || 
-        errorMessage.includes('connection') ||
-        errorMessage.includes('reset') ||
-        errorMessage.includes('timeout');
+      console.log(`Attempt ${attempt}/${retries} failed: ${errorMessage}`);
       
-      console.log(`Attempt ${attempt}/${retries} failed for ${url}: ${errorMessage}`);
-      
-      if (isLastAttempt || !isRetryable) {
-        throw new Error(isAbort ? `Request timeout after ${TIMEOUT_MS}ms` : errorMessage);
-      }
-      
+      if (isLastAttempt) throw new Error(errorMessage);
       await new Promise(resolve => setTimeout(resolve, 1000 * attempt));
     }
   }
@@ -66,7 +55,12 @@ Deno.serve(async (req) => {
 
     const headers: Record<string, string> = { 'Content-Type': 'application/json' };
     
-    // Use session cookie if provided via sessionToken
+    // Add API key for server authentication
+    if (AURORA_API_KEY) {
+      headers['X-API-Key'] = AURORA_API_KEY;
+    }
+    
+    // Add session cookie if user has one
     if (sessionToken && userSessions.has(sessionToken)) {
       headers['Cookie'] = userSessions.get(sessionToken)!;
     }
@@ -86,7 +80,6 @@ Deno.serve(async (req) => {
       const setCookie = response.headers.get('set-cookie');
       if (setCookie) {
         const cookie = setCookie.split(';')[0];
-        // Generate a simple session token
         newSessionToken = crypto.randomUUID();
         userSessions.set(newSessionToken, cookie);
         console.log('Session stored for token:', newSessionToken);
@@ -98,29 +91,22 @@ Deno.serve(async (req) => {
       userSessions.delete(sessionToken);
     }
     
-    // Parse response
     const data = await response.text();
     let responseBody = data;
     
-    // If login was successful, include the session token in response
+    // Include session token in login response
     if (isLoginEndpoint && response.ok && newSessionToken) {
       try {
         const parsed = JSON.parse(data);
-        responseBody = JSON.stringify({
-          ...parsed,
-          sessionToken: newSessionToken,
-        });
+        responseBody = JSON.stringify({ ...parsed, sessionToken: newSessionToken });
       } catch {
-        // If not JSON, return as-is
+        // Keep as-is if not JSON
       }
     }
     
     return new Response(responseBody, {
       status: response.status,
-      headers: { 
-        ...corsHeaders, 
-        'Content-Type': response.headers.get('Content-Type') || 'application/json',
-      },
+      headers: { ...corsHeaders, 'Content-Type': response.headers.get('Content-Type') || 'application/json' },
     });
 
   } catch (error) {
