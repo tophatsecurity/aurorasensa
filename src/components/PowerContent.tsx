@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { Zap, Battery, Sun, Plug, RefreshCw, Loader2 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
@@ -6,11 +7,21 @@ import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContai
 import { useDashboardTimeseries, useComprehensiveStats } from "@/hooks/useAuroraApi";
 import { useQueryClient } from "@tanstack/react-query";
 import { format } from "date-fns";
+import { 
+  ContextFilters, 
+  TimePeriodOption, 
+  timePeriodToHours 
+} from "@/components/ui/context-selectors";
 
 const PowerContent = () => {
   const queryClient = useQueryClient();
+  const [timePeriod, setTimePeriod] = useState<TimePeriodOption>('24h');
+  const [selectedClient, setSelectedClient] = useState<string>('all');
+  
+  const periodHours = timePeriodToHours(timePeriod);
+  
   const { data: stats, isLoading: statsLoading } = useComprehensiveStats();
-  const { data: timeseries, isLoading: timeseriesLoading } = useDashboardTimeseries(24);
+  const { data: timeseries, isLoading: timeseriesLoading } = useDashboardTimeseries(periodHours);
 
   const isLoading = statsLoading || timeseriesLoading;
 
@@ -40,10 +51,19 @@ const PowerContent = () => {
           <h1 className="text-2xl font-bold">Power Management</h1>
           <p className="text-muted-foreground">Monitor power consumption and battery status</p>
         </div>
-        <Button variant="outline" size="sm" onClick={handleRefresh} disabled={isLoading}>
-          {isLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <RefreshCw className="w-4 h-4" />}
-          <span className="ml-2">Refresh</span>
-        </Button>
+        <div className="flex items-center gap-3">
+          <ContextFilters
+            timePeriod={timePeriod}
+            onTimePeriodChange={setTimePeriod}
+            clientId={selectedClient}
+            onClientChange={setSelectedClient}
+            showClientFilter={true}
+          />
+          <Button variant="outline" size="sm" onClick={handleRefresh} disabled={isLoading}>
+            {isLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <RefreshCw className="w-4 h-4" />}
+            <span className="ml-2">Refresh</span>
+          </Button>
+        </div>
       </div>
 
       <div className="grid grid-cols-4 gap-4 mb-6">

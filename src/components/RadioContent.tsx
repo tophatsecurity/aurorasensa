@@ -60,6 +60,11 @@ import {
   Bar,
   Legend
 } from "recharts";
+import { 
+  TimePeriodSelector, 
+  TimePeriodOption, 
+  timePeriodToHours 
+} from "@/components/ui/context-selectors";
 import { useClients, useLatestReadings, useSensorTypeStats, useAllSensorStats, useWifiScannerTimeseries, useBluetoothScannerTimeseries, useLoraDetectorTimeseries, useAdsbAircraftWithHistory, useLoraDevices, useLoraGlobalStats, useRecentLoraDetections } from "@/hooks/useAuroraApi";
 import { formatDistanceToNow } from "date-fns";
 
@@ -157,7 +162,7 @@ const StatCard = ({
 const RadioContent = () => {
   const [mainView, setMainView] = useState<"dashboard" | "tabular">("dashboard");
   const [tabularTab, setTabularTab] = useState<"wifi" | "bluetooth" | "adsb" | "lora">("wifi");
-  const [timeRange, setTimeRange] = useState("24h");
+  const [timePeriod, setTimePeriod] = useState<TimePeriodOption>("24h");
   const [selectedDevice, setSelectedDevice] = useState<string>("all");
   const [expandedSections, setExpandedSections] = useState<string[]>(["wifi", "bluetooth"]);
   const [wifiViewMode, setWifiViewMode] = useState<"cards" | "table">("table");
@@ -169,16 +174,8 @@ const RadioContent = () => {
   const [adsbSearch, setAdsbSearch] = useState("");
   const [loraSearch, setLoraSearch] = useState("");
   
-  // Convert timeRange to hours for API calls
-  const hoursForTimeRange = useMemo(() => {
-    switch (timeRange) {
-      case "1h": return 1;
-      case "6h": return 6;
-      case "24h": return 24;
-      case "7d": return 168;
-      default: return 24;
-    }
-  }, [timeRange]);
+  // Convert timePeriod to hours for API calls
+  const hoursForTimeRange = timePeriodToHours(timePeriod);
   
   // Fetch data - using correct sensor type names from API
   const { data: clients, isLoading: clientsLoading } = useClients();
@@ -524,11 +521,11 @@ const RadioContent = () => {
     // Group readings by hour buckets
     const buckets: Record<string, { wifiCount: number; bleCount: number; wifiRssiSum: number; wifiRssiCount: number; bleRssiSum: number; bleRssiCount: number }> = {};
     
-    // Get the time interval based on timeRange
-    const intervalMs = timeRange === "1h" ? 5 * 60 * 1000 : // 5 min intervals
-                       timeRange === "6h" ? 30 * 60 * 1000 : // 30 min intervals
-                       timeRange === "24h" ? 60 * 60 * 1000 : // 1 hour intervals
-                       4 * 60 * 60 * 1000; // 4 hour intervals for 7d
+    // Get the time interval based on timePeriod
+    const intervalMs = timePeriod === "1h" ? 5 * 60 * 1000 : // 5 min intervals
+                       timePeriod === "6h" ? 30 * 60 * 1000 : // 30 min intervals
+                       timePeriod === "24h" ? 60 * 60 * 1000 : // 1 hour intervals
+                       4 * 60 * 60 * 1000; // 4 hour intervals for weekly
     
     // Process WiFi readings
     wifiData.forEach(reading => {
@@ -565,7 +562,7 @@ const RadioContent = () => {
     if (sortedKeys.length === 0) {
       // Return placeholder data for empty state
       const now = new Date();
-      const numBuckets = timeRange === "1h" ? 12 : timeRange === "6h" ? 12 : timeRange === "24h" ? 24 : 42;
+      const numBuckets = timePeriod === "1h" ? 12 : timePeriod === "6h" ? 12 : timePeriod === "24h" ? 24 : 42;
       return Array.from({ length: numBuckets }, (_, i) => {
         const time = new Date(now.getTime() - (numBuckets - 1 - i) * intervalMs);
         return {
@@ -581,7 +578,7 @@ const RadioContent = () => {
     return sortedKeys.map(key => {
       const bucket = buckets[key];
       const time = new Date(key);
-      const formatOptions: Intl.DateTimeFormatOptions = timeRange === "7d" 
+      const formatOptions: Intl.DateTimeFormatOptions = timePeriod === "weekly" 
         ? { month: 'short', day: 'numeric', hour: '2-digit' }
         : { hour: '2-digit', minute: '2-digit' };
       
@@ -593,7 +590,7 @@ const RadioContent = () => {
         avgBleRssi: bucket.bleRssiCount > 0 ? Math.round(bucket.bleRssiSum / bucket.bleRssiCount) : null,
       };
     });
-  }, [wifiTimeseries, bluetoothTimeseries, timeRange]);
+  }, [wifiTimeseries, bluetoothTimeseries, timePeriod]);
 
   const isLoading = clientsLoading || readingsLoading || statsLoading;
   const isTimeseriesLoading = wifiTimeseriesLoading || bluetoothTimeseriesLoading;
@@ -625,17 +622,7 @@ const RadioContent = () => {
               ))}
             </SelectContent>
           </Select>
-          <Select value={timeRange} onValueChange={setTimeRange}>
-            <SelectTrigger className="w-32 bg-background">
-              <SelectValue placeholder="Time range" />
-            </SelectTrigger>
-            <SelectContent className="bg-background border border-border z-50">
-              <SelectItem value="1h">Last Hour</SelectItem>
-              <SelectItem value="6h">Last 6 Hours</SelectItem>
-              <SelectItem value="24h">Last 24 Hours</SelectItem>
-              <SelectItem value="7d">Last 7 Days</SelectItem>
-            </SelectContent>
-          </Select>
+          <TimePeriodSelector value={timePeriod} onChange={setTimePeriod} />
           <Button variant="outline" size="sm" onClick={() => refetchReadings()}>
             <RefreshCw className={`w-4 h-4 mr-2 ${readingsLoading ? 'animate-spin' : ''}`} />
             Refresh

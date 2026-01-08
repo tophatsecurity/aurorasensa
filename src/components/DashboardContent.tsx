@@ -1,5 +1,4 @@
 import { useMemo, useState } from "react";
-import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { 
   Thermometer, 
   Radio, 
@@ -39,6 +38,12 @@ import ThermalProbeDeviceChart from "./ThermalProbeDeviceChart";
 import HumidityCharts from "./HumidityCharts";
 import PowerConsumptionCharts from "./PowerConsumptionCharts";
 import SystemMonitorCharts from "./SystemMonitorCharts";
+import { 
+  ContextFilters, 
+  TimePeriodOption, 
+  timePeriodToHours, 
+  timePeriodLabel 
+} from "@/components/ui/context-selectors";
 import { 
   useComprehensiveStats, 
   useAlerts, 
@@ -276,12 +281,13 @@ const DashboardContent = () => {
   const pendingDevices = clients?.filter((c: Client) => c.auto_registered && !c.adopted_at) || [];
   const adoptedDevices = clients?.filter((c: Client) => c.adopted_at) || [];
   
-  // Time period state for stats tabs
-  const [timePeriod, setTimePeriod] = useState<'1h' | '24h' | 'weekly'>('1h');
+  // Time period state and client filter
+  const [timePeriod, setTimePeriod] = useState<TimePeriodOption>('1h');
+  const [selectedClient, setSelectedClient] = useState<string>('all');
   
   // Convert time period to hours for API calls
-  const periodHours = timePeriod === '1h' ? 1 : timePeriod === '24h' ? 24 : 168;
-  const periodLabel = timePeriod === '1h' ? '1h' : timePeriod === '24h' ? '24h' : '7d';
+  const periodHours = timePeriodToHours(timePeriod);
+  const periodLabel = timePeriodLabel(timePeriod);
   
   return (
     <div className="flex-1 overflow-y-auto p-8">
@@ -293,13 +299,13 @@ const DashboardContent = () => {
             LIVE
           </Badge>
         </div>
-        <Tabs value={timePeriod} onValueChange={(v) => setTimePeriod(v as '1h' | '24h' | 'weekly')}>
-          <TabsList className="bg-muted/50">
-            <TabsTrigger value="1h" className="text-xs">1h</TabsTrigger>
-            <TabsTrigger value="24h" className="text-xs">24hr</TabsTrigger>
-            <TabsTrigger value="weekly" className="text-xs">Weekly</TabsTrigger>
-          </TabsList>
-        </Tabs>
+        <ContextFilters
+          timePeriod={timePeriod}
+          onTimePeriodChange={setTimePeriod}
+          clientId={selectedClient}
+          onClientChange={setSelectedClient}
+          showClientFilter={true}
+        />
       </div>
 
       {/* Top Stats with Charts */}

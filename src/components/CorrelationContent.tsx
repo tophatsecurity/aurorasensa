@@ -35,6 +35,13 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { 
+  ContextFilters, 
+  TimePeriodOption, 
+  timePeriodToHours, 
+  timePeriodLabel,
+  ClientSelector
+} from "@/components/ui/context-selectors";
+import { 
   useStarlinkTimeseries,
   useDashboardTimeseries,
   useThermalProbeTimeseries,
@@ -237,9 +244,12 @@ const TEMP_MEASUREMENTS: { value: TempMeasurement; label: string }[] = [
 ];
 
 const CorrelationContent = () => {
-  const [timeRange, setTimeRange] = useState<number>(24);
+  const [timePeriod, setTimePeriod] = useState<TimePeriodOption>('24h');
+  const [selectedClient, setSelectedClient] = useState<string>('all');
   const [activeTab, setActiveTab] = useState("power-thermal");
   const [tempMeasurement, setTempMeasurement] = useState<TempMeasurement>('thermal-probe');
+  
+  const timeRange = timePeriodToHours(timePeriod);
   
   const { data: starlinkData, isLoading: starlinkLoading } = useStarlinkTimeseries(timeRange);
   const { data: dashboardData, isLoading: dashboardLoading } = useDashboardTimeseries(timeRange);
@@ -428,18 +438,13 @@ const CorrelationContent = () => {
               </SelectContent>
             </Select>
           )}
-          <Select value={timeRange.toString()} onValueChange={(v) => setTimeRange(Number(v))}>
-            <SelectTrigger className="w-[150px] bg-background border-border">
-              <SelectValue placeholder="Time range" />
-            </SelectTrigger>
-            <SelectContent className="bg-background border-border z-50">
-              <SelectItem value="6">Last 6 hours</SelectItem>
-              <SelectItem value="12">Last 12 hours</SelectItem>
-              <SelectItem value="24">Last 24 hours</SelectItem>
-              <SelectItem value="48">Last 48 hours</SelectItem>
-              <SelectItem value="72">Last 72 hours</SelectItem>
-            </SelectContent>
-          </Select>
+          <ContextFilters
+            timePeriod={timePeriod}
+            onTimePeriodChange={setTimePeriod}
+            clientId={selectedClient}
+            onClientChange={setSelectedClient}
+            showClientFilter={true}
+          />
           <Badge className="bg-primary/20 text-primary border-primary/30">
             {isLoading ? 'Loading...' : 'Live'}
           </Badge>
