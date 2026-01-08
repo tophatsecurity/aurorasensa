@@ -25,16 +25,20 @@ import WebhooksContent from "@/components/WebhooksContent";
 import UserManagementContent from "@/components/UserManagementContent";
 import SystemLogsContent from "@/components/SystemLogsContent";
 import StatsHistoryCharts from "@/components/StatsHistoryCharts";
+import SetupPage from "@/components/SetupPage";
 import { AuthPage } from "@/components/auth";
 import { useAuth } from "@/hooks/useAuth";
+import { useCheckSetupRequired } from "@/hooks/useAuroraApi";
 import { Loader2 } from "lucide-react";
 
 const Index = () => {
   const [activeItem, setActiveItem] = useState("dashboard");
+  const [setupComplete, setSetupComplete] = useState(false);
   const { user, loading } = useAuth();
+  const { data: setupData, isLoading: checkingSetup } = useCheckSetupRequired();
 
-  // Show loading spinner while checking auth
-  if (loading) {
+  // Show loading spinner while checking auth or setup status
+  if (loading || checkingSetup) {
     return (
       <div className="h-screen flex items-center justify-center relative">
         <AuroraBackground />
@@ -44,6 +48,11 @@ const Index = () => {
         </div>
       </div>
     );
+  }
+
+  // Show setup page if no users exist and setup not completed
+  if (setupData?.setupRequired && !setupComplete) {
+    return <SetupPage onSetupComplete={() => setSetupComplete(true)} />;
   }
 
   // Show auth page if not logged in

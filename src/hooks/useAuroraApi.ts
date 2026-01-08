@@ -4250,3 +4250,43 @@ export function useGpsReadings(hours: number = 24) {
     retry: 1,
   });
 }
+
+// =============================================
+// HOOKS - SETUP & INITIAL ADMIN
+// =============================================
+
+export function useCheckSetupRequired() {
+  return useQuery({
+    queryKey: ["aurora", "setup", "required"],
+    queryFn: async () => {
+      try {
+        // Try to get users list - if it fails with auth error or returns empty, setup is required
+        const result = await callAuroraApi<{ users: User[] }>("/api/users");
+        return { setupRequired: !result.users || result.users.length === 0 };
+      } catch {
+        // If we can't access users, assume setup might be required
+        return { setupRequired: true };
+      }
+    },
+    retry: 1,
+    staleTime: 60000,
+  });
+}
+
+export function useCreateInitialAdmin() {
+  const queryClient = useQueryClient();
+  
+  return useMutation({
+    mutationFn: async (data: { username: string; password: string }) => {
+      return callAuroraApi<{ success: boolean; message: string }>("/api/users", "POST", {
+        username: data.username,
+        password: data.password,
+        role: "admin",
+      });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["aurora", "users"] });
+      queryClient.invalidateQueries({ queryKey: ["aurora", "setup"] });
+    },
+  });
+}
