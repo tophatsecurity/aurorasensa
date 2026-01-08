@@ -64,8 +64,12 @@ Deno.serve(async (req) => {
     const headers: Record<string, string> = { 'Content-Type': 'application/json' };
     
     const apiKey = Deno.env.get('AURORA_API_KEY');
+    console.log(`API Key present: ${!!apiKey}, length: ${apiKey?.length || 0}`);
     if (apiKey) {
+      // Try common API key header formats
       headers['X-API-Key'] = apiKey;
+      headers['x-api-key'] = apiKey;
+      headers['api-key'] = apiKey;
     }
 
     const options: RequestInit = { method, headers };
