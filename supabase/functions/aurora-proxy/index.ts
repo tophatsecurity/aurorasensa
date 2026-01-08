@@ -46,20 +46,16 @@ async function fetchWithRetry(url: string, options: RequestInit, retries = MAX_R
   throw new Error('Max retries exceeded');
 }
 
-async function ensureAuthenticated(): Promise<boolean> {
-  if (sessionCookie) {
-    return true;
-  }
-  
+async function authenticate(): Promise<string | null> {
   const apiKey = Deno.env.get('AURORA_API_KEY');
   if (!apiKey) {
     console.error('No AURORA_API_KEY configured');
-    return false;
+    return null;
   }
   
   // Parse API key as username:password
   const [username, password] = apiKey.includes(':') 
-    ? apiKey.split(':') 
+    ? [apiKey.split(':')[0], apiKey.split(':').slice(1).join(':')] 
     : ['admin', apiKey];
   
   console.log(`Authenticating as user: ${username}`);
@@ -74,19 +70,32 @@ async function ensureAuthenticated(): Promise<boolean> {
     if (response.ok) {
       const setCookie = response.headers.get('set-cookie');
       if (setCookie) {
-        sessionCookie = setCookie.split(';')[0];
+        const cookie = setCookie.split(';')[0];
         console.log('Session authenticated successfully');
-        return true;
+        return cookie;
       }
     }
     
     const errorText = await response.text();
     console.error(`Auth failed: ${response.status} - ${errorText}`);
-    return false;
+    return null;
   } catch (error) {
     console.error('Auth error:', error);
-    return false;
+    return null;
   }
+}
+
+async function ensureAuthenticated(): Promise<boolean> {
+  if (sessionCookie) {
+    return true;
+  }
+  
+  const cookie = await authenticate();
+  if (cookie) {
+    sessionCookie = cookie;
+    return true;
+  }
+  return false;
 }
 
 Deno.serve(async (req) => {
@@ -104,13 +113,16 @@ Deno.serve(async (req) => {
       });
     }
     
-    // Skip auth for login endpoint
+    // Skip auth for login endpoint - pass through directly
     const isLoginEndpoint = path === '/api/auth/login';
     
     if (!isLoginEndpoint) {
       const authenticated = await ensureAuthenticated();
       if (!authenticated) {
-        return new Response(JSON.stringify({ error: 'Failed to authenticate with Aurora API' }), {
+        return new Response(JSON.stringify({ 
+          error: 'Failed to authenticate with Aurora API',
+          hint: 'Ensure AURORA_API_KEY is set in format username:password'
+        }), {
           status: 401,
           headers: { ...corsHeaders, 'Content-Type': 'application/json' },
         });
@@ -141,9 +153,25 @@ Deno.serve(async (req) => {
       }
     }
     
-    // Clear session on 401 to force re-auth
-    if (response.status === 401) {
+    // Clear session on 401 to force re-auth on next request
+    if (response.status === 401 && !isLoginEndpoint) {
+      console.log('Got 401, clearing session and retrying...');
       sessionCookie = null;
+      
+      // Retry once with fresh auth
+      const reauthed = await ensureAuthenticated();
+      if (reauthed) {
+        headers['Cookie'] = sessionCookie!;
+        const retryResponse = await fetchWithRetry(url, { ...options, headers });
+        const retryData = await retryResponse.text();
+        return new Response(retryData, {
+          status: retryResponse.status,
+          headers: { 
+            ...corsHeaders, 
+            'Content-Type': retryResponse.headers.get('Content-Type') || 'application/json',
+          },
+        });
+      }
     }
     
     const data = await response.text();
