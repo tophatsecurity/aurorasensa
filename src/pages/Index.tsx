@@ -25,9 +25,31 @@ import WebhooksContent from "@/components/WebhooksContent";
 import UserManagementContent from "@/components/UserManagementContent";
 import SystemLogsContent from "@/components/SystemLogsContent";
 import StatsHistoryCharts from "@/components/StatsHistoryCharts";
+import { AuthPage } from "@/components/auth";
+import { useAuth } from "@/hooks/useAuth";
+import { Loader2 } from "lucide-react";
 
 const Index = () => {
   const [activeItem, setActiveItem] = useState("dashboard");
+  const { user, loading } = useAuth();
+
+  // Show loading spinner while checking auth
+  if (loading) {
+    return (
+      <div className="h-screen flex items-center justify-center relative">
+        <AuroraBackground />
+        <div className="relative z-10 flex flex-col items-center gap-4">
+          <Loader2 className="w-10 h-10 text-cyan-400 animate-spin" />
+          <p className="text-slate-400">Loading Aurora Sense...</p>
+        </div>
+      </div>
+    );
+  }
+
+  // Show auth page if not logged in
+  if (!user) {
+    return <AuthPage />;
+  }
 
   const renderContent = () => {
     switch (activeItem) {
