@@ -21,12 +21,15 @@ interface AuroraAuthContextValue extends AuroraAuthState {
   isAdmin: boolean;
 }
 
-// Session storage key
+// Session storage keys
 const SESSION_KEY = 'aurora_session';
+const SESSION_TOKEN_KEY = 'aurora_session_token';
 
 async function callAuroraApi<T>(path: string, method: string = "GET", body?: unknown): Promise<T> {
+  const sessionToken = sessionStorage.getItem(SESSION_TOKEN_KEY);
+  
   const { data, error } = await supabase.functions.invoke("aurora-proxy", {
-    body: { path, method, body },
+    body: { path, method, body, sessionToken },
   });
 
   if (error) {
@@ -85,21 +88,35 @@ export function useAuroraAuth(): AuroraAuthContextValue {
     setAuthState(prev => ({ ...prev, loading: true, error: null }));
     
     try {
-      const response = await callAuroraApi<{ success: boolean; user?: AuroraUser; message?: string }>(
+      const response = await callAuroraApi<{ success?: boolean; user?: AuroraUser; message?: string; sessionToken?: string; username?: string; role?: string }>(
         "/api/auth/login",
         "POST",
         { username, password }
       );
 
-      if (response.success && response.user) {
-        // Store session
+      // Aurora API returns user data directly on success (username, role, etc.)
+      const isSuccess = response.sessionToken || response.username || response.success;
+      
+      if (isSuccess) {
+        // Store session token for future API calls
+        if (response.sessionToken) {
+          sessionStorage.setItem(SESSION_TOKEN_KEY, response.sessionToken);
+        }
+        
+        // Build user object from response
+        const user: AuroraUser = response.user || {
+          username: response.username || username,
+          role: response.role || 'user',
+        };
+        
+        // Store session info
         sessionStorage.setItem(SESSION_KEY, JSON.stringify({
-          username: response.user.username,
+          username: user.username,
           loggedInAt: new Date().toISOString(),
         }));
 
         setAuthState({
-          user: response.user,
+          user,
           loading: false,
           error: null,
         });
@@ -133,6 +150,7 @@ export function useAuroraAuth(): AuroraAuthContextValue {
     }
     
     sessionStorage.removeItem(SESSION_KEY);
+    sessionStorage.removeItem(SESSION_TOKEN_KEY);
     setAuthState({
       user: null,
       loading: false,
