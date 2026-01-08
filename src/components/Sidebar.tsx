@@ -26,7 +26,7 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { UserMenu } from "@/components/UserMenu";
-import { useAuth } from "@/hooks/useAuth";
+import { useAuroraAuth } from "@/hooks/useAuroraAuth";
 
 interface SidebarProps {
   activeItem: string;
@@ -81,9 +81,9 @@ const menuSections = [
 ];
 
 const Sidebar = ({ activeItem, onNavigate }: SidebarProps) => {
-  const { profile, user, isAdmin } = useAuth();
+  const { user, isAdmin } = useAuroraAuth();
   
-  const displayName = profile?.display_name || user?.email?.split('@')[0] || 'User';
+  const displayName = user?.username || 'User';
   const roleLabel = isAdmin ? 'Admin' : 'User';
 
   return (
