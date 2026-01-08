@@ -64,12 +64,11 @@ Deno.serve(async (req) => {
     const headers: Record<string, string> = { 'Content-Type': 'application/json' };
     
     const apiKey = Deno.env.get('AURORA_API_KEY');
-    console.log(`API Key present: ${!!apiKey}, length: ${apiKey?.length || 0}`);
+    console.log(`API Key present: ${!!apiKey}, length: ${apiKey?.length || 0}, starts: ${apiKey?.substring(0, 15) || 'N/A'}`);
     if (apiKey) {
-      // Try common API key header formats
+      // Try all common API key header formats
       headers['X-API-Key'] = apiKey;
-      headers['x-api-key'] = apiKey;
-      headers['api-key'] = apiKey;
+      headers['Authorization'] = `Bearer ${apiKey}`;
     }
 
     const options: RequestInit = { method, headers };
