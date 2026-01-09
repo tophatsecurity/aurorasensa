@@ -170,25 +170,36 @@ export function useMapData(options: UseMapDataOptions = {}) {
   const [lastUpdate, setLastUpdate] = useState<Date>(new Date());
   const queryClient = useQueryClient();
   
-  // When refetchInterval is false (manual mode), we disable all query auto-refetching
-  // by setting refetchInterval to false on QueryClient for these specific queries
+  // When refetchInterval is false (manual mode), we disable all aurora query auto-refetching
+  // by setting their individual refetchInterval to false in the cache
   useEffect(() => {
+    const auroraQueries = queryClient.getQueryCache().findAll({ queryKey: ["aurora"] });
+    
     if (refetchInterval === false) {
-      // Set default options to disable refetching for map-related queries
-      queryClient.setDefaultOptions({
-        queries: {
+      // Disable auto-refetch for all aurora queries
+      auroraQueries.forEach(query => {
+        queryClient.setQueryDefaults(query.queryKey, {
           refetchInterval: false,
           refetchOnWindowFocus: false,
-        }
+        });
+      });
+    } else if (typeof refetchInterval === 'number') {
+      // Use custom interval for all aurora queries
+      auroraQueries.forEach(query => {
+        queryClient.setQueryDefaults(query.queryKey, {
+          refetchInterval: refetchInterval,
+          refetchOnWindowFocus: false,
+        });
       });
     }
+    
     return () => {
-      // Reset to default behavior when component unmounts or mode changes
-      queryClient.setDefaultOptions({
-        queries: {
+      // Reset to undefined (use individual hook defaults) when component unmounts
+      auroraQueries.forEach(query => {
+        queryClient.setQueryDefaults(query.queryKey, {
           refetchInterval: undefined,
-          refetchOnWindowFocus: true,
-        }
+          refetchOnWindowFocus: undefined,
+        });
       });
     };
   }, [refetchInterval, queryClient]);
