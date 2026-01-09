@@ -12,6 +12,8 @@ Deno.serve(async (req) => {
     return new Response(null, { headers: corsHeaders });
   }
 
+  const AURORA_API_KEY = Deno.env.get("AURORA_API_KEY");
+
   try {
     const body = await req.json().catch(() => ({}));
     const { path = "", method = "GET", body: requestBody, sessionCookie } = body;
@@ -27,6 +29,13 @@ Deno.serve(async (req) => {
     console.log(`Proxy ${method}: ${url}`);
 
     const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+    
+    // Add API key for authentication
+    if (AURORA_API_KEY) {
+      headers['X-API-Key'] = AURORA_API_KEY;
+    }
+    
+    // Also include session cookie if provided
     if (sessionCookie) {
       headers['Cookie'] = sessionCookie;
     }
