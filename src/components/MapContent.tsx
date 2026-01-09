@@ -826,6 +826,12 @@ const MapContent = () => {
                 setClientRetentionMinutes(minutes);
               }}
             />
+            <AutoRefreshSelector
+              value={autoRefreshInterval}
+              onChange={handleAutoRefreshChange}
+              isRefreshing={isLoading}
+              onManualRefresh={handleRefresh}
+            />
             <GpsHistorySettings
               sensorRetentionMinutes={sensorRetentionMinutes}
               clientRetentionMinutes={clientRetentionMinutes}
@@ -878,12 +884,6 @@ const MapContent = () => {
           >
             <Maximize2 className="w-4 h-4" />
           </Button>
-          <AutoRefreshSelector
-            value={autoRefreshInterval}
-            onChange={handleAutoRefreshChange}
-            isRefreshing={isLoading}
-            onManualRefresh={handleRefresh}
-          />
         </div>
 
         {/* Auto refresh indicator with countdown */}
