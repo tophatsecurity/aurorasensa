@@ -10,12 +10,13 @@ import {
   LineChart,
   Line
 } from "recharts";
-import { Cpu, MemoryStick, HardDrive, Thermometer, Loader2 } from "lucide-react";
+import { Cpu, MemoryStick, HardDrive, Thermometer, Loader2, RefreshCw } from "lucide-react";
 import { useSystemMonitorTimeseries } from "@/hooks/useAuroraApi";
-import { useSystemMonitorSSE } from "@/hooks/useSSE";
+import { useSystemMonitorRealTime } from "@/hooks/useSSE";
 import { SSEConnectionStatus } from "./SSEConnectionStatus";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
+import { Button } from "@/components/ui/button";
 
 interface ChartData {
   time: string;
@@ -211,12 +212,12 @@ interface SystemMonitorChartsProps {
 }
 
 const SystemMonitorCharts = ({ hours = 24, clientId }: SystemMonitorChartsProps) => {
-  const [sseEnabled, setSSEEnabled] = useState(true);
+  const [realTimeEnabled, setRealTimeEnabled] = useState(true);
   
-  const { data: systemData, isLoading } = useSystemMonitorTimeseries(hours);
+  const { data: systemData, isLoading, refetch } = useSystemMonitorTimeseries(hours);
   
-  // SSE for real-time system monitor updates
-  const systemSSE = useSystemMonitorSSE(sseEnabled, clientId);
+  // Polling-based real-time updates (replaces SSE)
+  const realTimeData = useSystemMonitorRealTime(realTimeEnabled, clientId);
 
   // Extract nested data from system_monitor readings
   const extractData = (
@@ -272,21 +273,30 @@ const SystemMonitorCharts = ({ hours = 24, clientId }: SystemMonitorChartsProps)
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
           <SSEConnectionStatus
-            isConnected={systemSSE.isConnected}
-            isConnecting={systemSSE.isConnecting}
-            error={systemSSE.error}
-            reconnectCount={systemSSE.reconnectCount}
-            onReconnect={systemSSE.reconnect}
+            isConnected={realTimeData.isConnected}
+            isConnecting={realTimeData.isConnecting}
+            error={realTimeData.error?.message || null}
+            reconnectCount={realTimeData.reconnectCount}
+            onReconnect={realTimeData.reconnect}
             label="System Monitor"
           />
         </div>
         <div className="flex items-center gap-2">
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-8 w-8"
+            onClick={() => refetch()}
+            title="Refresh data"
+          >
+            <RefreshCw className="h-4 w-4" />
+          </Button>
           <Switch
-            id="sse-toggle-system"
-            checked={sseEnabled}
-            onCheckedChange={setSSEEnabled}
+            id="realtime-toggle-system"
+            checked={realTimeEnabled}
+            onCheckedChange={setRealTimeEnabled}
           />
-          <Label htmlFor="sse-toggle-system" className="text-xs text-muted-foreground">
+          <Label htmlFor="realtime-toggle-system" className="text-xs text-muted-foreground">
             Real-time
           </Label>
         </div>

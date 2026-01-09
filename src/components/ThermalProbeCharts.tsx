@@ -11,12 +11,13 @@ import {
   Line,
   Legend
 } from "recharts";
-import { Thermometer, Loader2 } from "lucide-react";
+import { Thermometer, Loader2, RefreshCw } from "lucide-react";
 import { useThermalProbeTimeseries, useDashboardTimeseries, ThermalProbeTimeseriesPoint } from "@/hooks/useAuroraApi";
-import { useThermalProbeSSE } from "@/hooks/useSSE";
+import { useThermalProbeRealTime } from "@/hooks/useSSE";
 import { SSEConnectionStatus } from "./SSEConnectionStatus";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
+import { Button } from "@/components/ui/button";
 
 interface ChartData {
   time: string;
@@ -32,13 +33,13 @@ interface ThermalProbeChartsProps {
 }
 
 const ThermalProbeCharts = ({ hours = 24, clientId }: ThermalProbeChartsProps) => {
-  const [sseEnabled, setSSEEnabled] = useState(true);
+  const [realTimeEnabled, setRealTimeEnabled] = useState(true);
   
-  const { data: thermalData, isLoading: thermalLoading } = useThermalProbeTimeseries(hours);
+  const { data: thermalData, isLoading: thermalLoading, refetch } = useThermalProbeTimeseries(hours);
   const { data: dashboardTimeseries, isLoading: dashboardLoading } = useDashboardTimeseries(hours);
   
-  // SSE for real-time thermal probe updates
-  const thermalSSE = useThermalProbeSSE(sseEnabled, clientId);
+  // Polling-based real-time updates (replaces SSE)
+  const realTimeData = useThermalProbeRealTime(realTimeEnabled, clientId);
 
   const isLoading = thermalLoading || dashboardLoading;
 
@@ -134,11 +135,11 @@ const ThermalProbeCharts = ({ hours = 24, clientId }: ThermalProbeChartsProps) =
             <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider flex items-center gap-2">
               Thermal Probe Temperature
               <SSEConnectionStatus
-                isConnected={thermalSSE.isConnected}
-                isConnecting={thermalSSE.isConnecting}
-                error={thermalSSE.error}
-                reconnectCount={thermalSSE.reconnectCount}
-                onReconnect={thermalSSE.reconnect}
+                isConnected={realTimeData.isConnected}
+                isConnecting={realTimeData.isConnecting}
+                error={realTimeData.error?.message || null}
+                reconnectCount={realTimeData.reconnectCount}
+                onReconnect={realTimeData.reconnect}
               />
             </h4>
             <p className="text-2xl font-bold text-red-400">
@@ -160,13 +161,22 @@ const ThermalProbeCharts = ({ hours = 24, clientId }: ThermalProbeChartsProps) =
               </div>
             </div>
           )}
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-8 w-8"
+            onClick={() => refetch()}
+            title="Refresh data"
+          >
+            <RefreshCw className="h-4 w-4" />
+          </Button>
           <div className="flex items-center gap-2">
             <Switch
-              id="sse-toggle-thermal"
-              checked={sseEnabled}
-              onCheckedChange={setSSEEnabled}
+              id="realtime-toggle-thermal"
+              checked={realTimeEnabled}
+              onCheckedChange={setRealTimeEnabled}
             />
-            <Label htmlFor="sse-toggle-thermal" className="text-xs text-muted-foreground">
+            <Label htmlFor="realtime-toggle-thermal" className="text-xs text-muted-foreground">
               Live
             </Label>
           </div>
