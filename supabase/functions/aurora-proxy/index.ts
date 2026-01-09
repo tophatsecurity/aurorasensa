@@ -4,35 +4,17 @@ const corsHeaders = {
 };
 
 const AURORA_ENDPOINT = "http://aurora.tophatsecurity.com:9151";
-const TIMEOUT_MS = 25000; // 25 seconds - single attempt to avoid wasting time on retries
-
-async function fetchWithTimeout(url: string, options: RequestInit): Promise<Response> {
-  const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), TIMEOUT_MS);
-  
-  try {
-    const response = await fetch(url, { ...options, signal: controller.signal });
-    clearTimeout(timeoutId);
-    return response;
-  } catch (error) {
-    clearTimeout(timeoutId);
-    const errorMessage = error instanceof Error ? error.message : String(error);
-    
-    if (errorMessage.includes('aborted')) {
-      throw new Error('Aurora server took too long to respond. Please try again.');
-    }
-    
-    throw new Error(errorMessage);
-  }
-}
+const TIMEOUT_MS = 25000;
 
 Deno.serve(async (req) => {
+  // Handle CORS preflight
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
   }
 
   try {
-    const { path = "", method = "GET", body, sessionCookie } = await req.json().catch(() => ({}));
+    const body = await req.json().catch(() => ({}));
+    const { path = "", method = "GET", body: requestBody, sessionCookie } = body;
     
     if (!path) {
       return new Response(JSON.stringify({ error: 'Missing path' }), {
@@ -45,53 +27,63 @@ Deno.serve(async (req) => {
     console.log(`Proxy ${method}: ${url}`);
 
     const headers: Record<string, string> = { 'Content-Type': 'application/json' };
-    
-    // Use the session cookie passed from the client
     if (sessionCookie) {
       headers['Cookie'] = sessionCookie;
     }
 
-    const options: RequestInit = { method, headers };
-    if (body && method !== 'GET') {
-      options.body = JSON.stringify(body);
-    }
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), TIMEOUT_MS);
 
-    const response = await fetchWithTimeout(url, options);
+    let response: Response;
+    try {
+      response = await fetch(url, {
+        method,
+        headers,
+        body: requestBody && method !== 'GET' ? JSON.stringify(requestBody) : undefined,
+        signal: controller.signal,
+      });
+    } catch (fetchError) {
+      clearTimeout(timeoutId);
+      const msg = fetchError instanceof Error ? fetchError.message : String(fetchError);
+      if (msg.includes('aborted')) {
+        return new Response(JSON.stringify({ error: 'Aurora server timeout', details: 'Request took too long' }), {
+          status: 504,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
+      throw fetchError;
+    }
+    clearTimeout(timeoutId);
     
-    // Capture session cookie from login responses
+    // Handle login response with cookie capture
     const isLoginEndpoint = path === '/api/auth/login';
-    let auroraCookie: string | undefined;
+    let responseText = await response.text();
     
     if (isLoginEndpoint && response.ok) {
       const setCookie = response.headers.get('set-cookie');
       if (setCookie) {
-        // Extract just the cookie value (before the first semicolon)
-        auroraCookie = setCookie.split(';')[0];
+        const auroraCookie = setCookie.split(';')[0];
         console.log('Aurora session cookie captured');
+        try {
+          const parsed = JSON.parse(responseText);
+          responseText = JSON.stringify({ ...parsed, auroraCookie });
+        } catch {
+          // Keep original if not JSON
+        }
       }
     }
     
-    const data = await response.text();
-    let responseBody = data;
-    
-    // Include the actual Aurora cookie in login response for client to store
-    if (isLoginEndpoint && response.ok && auroraCookie) {
-      try {
-        const parsed = JSON.parse(data);
-        responseBody = JSON.stringify({ ...parsed, auroraCookie });
-      } catch {
-        // Keep as-is if not JSON
-      }
-    }
-    
-    return new Response(responseBody, {
+    return new Response(responseText, {
       status: response.status,
       headers: { ...corsHeaders, 'Content-Type': response.headers.get('Content-Type') || 'application/json' },
     });
 
   } catch (error) {
     console.error("Handler error:", error);
-    return new Response(JSON.stringify({ error: 'Request failed', details: String(error) }), {
+    return new Response(JSON.stringify({ 
+      error: 'Request failed', 
+      details: error instanceof Error ? error.message : String(error) 
+    }), {
       status: 500,
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });
