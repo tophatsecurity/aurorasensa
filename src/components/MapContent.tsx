@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect, useRef } from "react";
+import { useState, useCallback, useEffect, useRef, useMemo } from "react";
 import { ZoomIn, ZoomOut, Maximize2, Route, X } from "lucide-react";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
@@ -7,7 +7,7 @@ import "leaflet/dist/leaflet.css";
 import { FilterType, MAP_CONFIG, AdsbMarker, ActiveFilters } from "@/types/map";
 import { mapIcons, IconType, createAircraftIcon, getAircraftType, getAircraftColor } from "@/utils/mapIcons";
 import { formatDateTime } from "@/utils/dateUtils";
-
+import { spreadOverlappingPoints, COVERAGE_RANGES, ONE_MILE_METERS } from "@/utils/geoUtils";
 // Custom hooks
 import { useMapData, AircraftTrailData } from "@/hooks/useMapData";
 import { useGpsHistory } from "@/hooks/useGpsHistory";
@@ -57,7 +57,9 @@ const MapContent = () => {
   const markersRef = useRef<Map<string, L.Marker>>(new Map());
   const trailsRef = useRef<Map<string, L.Polyline>>(new Map());
   const adsbTrailsRef = useRef<Map<string, L.Polyline>>(new Map());
+  const coverageCirclesRef = useRef<Map<string, L.Circle>>(new Map());
   const [activeFilters, setActiveFilters] = useState<ActiveFilters>(new Set(['gps', 'starlink', 'clients', 'lora', 'adsb']));
+  const [showCoverage, setShowCoverage] = useState(true);
   const [hasInitialFit, setHasInitialFit] = useState(false);
   const [showTrails, setShowTrails] = useState(true);
   const [showAdsbTrails, setShowAdsbTrails] = useState(true);
@@ -183,8 +185,23 @@ const MapContent = () => {
       markersRef.current.clear();
       trailsRef.current.clear();
       adsbTrailsRef.current.clear();
+      coverageCirclesRef.current.clear();
     };
   }, []);
+
+  // Calculate spread positions for overlapping Starlink devices
+  const starlinkSpreadPositions = useMemo(() => {
+    const starlinkSensors = sensorMarkers.filter(s => s.type.toLowerCase() === 'starlink');
+    if (starlinkSensors.length < 2) return new Map<string, { lat: number; lng: number }>();
+    
+    const spreadable = starlinkSensors.map(s => ({
+      id: s.id,
+      lat: s.location.lat,
+      lng: s.location.lng
+    }));
+    
+    return spreadOverlappingPoints(spreadable, ONE_MILE_METERS);
+  }, [sensorMarkers]);
 
   // Update markers with animations
   useEffect(() => {
@@ -280,6 +297,11 @@ const MapContent = () => {
       
       const icon = mapIcons[sensorType as IconType] || mapIcons.gps;
       
+      // Get spread position for Starlink devices if they overlap
+      const spreadPos = sensorType === 'starlink' ? starlinkSpreadPositions.get(sensor.id) : undefined;
+      const displayLat = spreadPos?.lat ?? sensor.location.lat;
+      const displayLng = spreadPos?.lng ?? sensor.location.lng;
+      
       // Use detailed popup for Starlink, simple popup for others
       const popupContent = sensorType === 'starlink' && sensor.starlinkData
         ? createStarlinkPopup(sensor)
@@ -298,10 +320,10 @@ const MapContent = () => {
       const existingMarker = markersRef.current.get(markerId);
       
       if (existingMarker) {
-        animateMarker(existingMarker, sensor.location.lat, sensor.location.lng);
+        animateMarker(existingMarker, displayLat, displayLng);
         existingMarker.setPopupContent(popupContent);
       } else {
-        const marker = L.marker([sensor.location.lat, sensor.location.lng], { 
+        const marker = L.marker([displayLat, displayLng], { 
           icon,
           opacity: 0 
         })
@@ -556,7 +578,89 @@ const MapContent = () => {
       mapRef.current.fitBounds(bounds, { padding: [50, 50], maxZoom: 12 });
       setHasInitialFit(true);
     }
-  }, [sensorMarkers, clientMarkers, adsbMarkers, activeFilters, allPositions, hasInitialFit]);
+  }, [sensorMarkers, clientMarkers, adsbMarkers, activeFilters, allPositions, hasInitialFit, starlinkSpreadPositions]);
+
+  // Render coverage circles for Starlink devices (WiFi and Bluetooth range)
+  useEffect(() => {
+    if (!mapRef.current) return;
+
+    const existingCircleIds = new Set<string>();
+
+    // Clear all circles if coverage is disabled or Starlink filter is off
+    if (!showCoverage || !activeFilters.has('starlink')) {
+      coverageCirclesRef.current.forEach(circle => circle.remove());
+      coverageCirclesRef.current.clear();
+      return;
+    }
+
+    // Get Starlink sensors
+    const starlinkSensors = sensorMarkers.filter(s => s.type.toLowerCase() === 'starlink');
+
+    starlinkSensors.forEach(sensor => {
+      // Get spread position if available
+      const spreadPos = starlinkSpreadPositions.get(sensor.id);
+      const displayLat = spreadPos?.lat ?? sensor.location.lat;
+      const displayLng = spreadPos?.lng ?? sensor.location.lng;
+
+      // WiFi coverage circle (outer, larger)
+      const wifiCircleId = `wifi-${sensor.id}`;
+      existingCircleIds.add(wifiCircleId);
+
+      const existingWifiCircle = coverageCirclesRef.current.get(wifiCircleId);
+      if (existingWifiCircle) {
+        existingWifiCircle.setLatLng([displayLat, displayLng]);
+      } else {
+        const wifiCircle = L.circle([displayLat, displayLng], {
+          radius: COVERAGE_RANGES.wifi.outdoor,
+          color: '#3b82f6',
+          fillColor: '#3b82f6',
+          fillOpacity: 0.1,
+          weight: 2,
+          dashArray: '5, 5',
+        }).addTo(mapRef.current!);
+        
+        wifiCircle.bindTooltip(`WiFi Range: ${COVERAGE_RANGES.wifi.outdoor}m`, { 
+          permanent: false, 
+          direction: 'top' 
+        });
+        
+        coverageCirclesRef.current.set(wifiCircleId, wifiCircle);
+      }
+
+      // Bluetooth coverage circle (inner, smaller)
+      const btCircleId = `bt-${sensor.id}`;
+      existingCircleIds.add(btCircleId);
+
+      const existingBtCircle = coverageCirclesRef.current.get(btCircleId);
+      if (existingBtCircle) {
+        existingBtCircle.setLatLng([displayLat, displayLng]);
+      } else {
+        const btCircle = L.circle([displayLat, displayLng], {
+          radius: COVERAGE_RANGES.bluetooth.ble,
+          color: '#8b5cf6',
+          fillColor: '#8b5cf6',
+          fillOpacity: 0.15,
+          weight: 2,
+          dashArray: '3, 3',
+        }).addTo(mapRef.current!);
+        
+        btCircle.bindTooltip(`Bluetooth Range: ${COVERAGE_RANGES.bluetooth.ble}m`, { 
+          permanent: false, 
+          direction: 'top' 
+        });
+        
+        coverageCirclesRef.current.set(btCircleId, btCircle);
+      }
+    });
+
+    // Remove circles that no longer exist
+    coverageCirclesRef.current.forEach((circle, id) => {
+      if (!existingCircleIds.has(id)) {
+        circle.remove();
+        coverageCirclesRef.current.delete(id);
+      }
+    });
+  }, [sensorMarkers, activeFilters, showCoverage, starlinkSpreadPositions]);
 
   // Update trail polylines (sensor/client only)
   useEffect(() => {
@@ -883,6 +987,24 @@ const MapContent = () => {
             onClick={handleRecenter}
           >
             <Maximize2 className="w-4 h-4" />
+          </Button>
+          <Button 
+            variant="outline" 
+            size="icon"
+            className={`bg-card/90 backdrop-blur border-border/50 hover:bg-card ${showCoverage ? 'ring-2 ring-blue-500' : ''}`}
+            onClick={() => setShowCoverage(!showCoverage)}
+            title={showCoverage ? 'Hide coverage circles' : 'Show coverage circles'}
+          >
+            <svg 
+              className="w-4 h-4" 
+              viewBox="0 0 24 24" 
+              fill="none" 
+              stroke="currentColor" 
+              strokeWidth="2"
+            >
+              <circle cx="12" cy="12" r="10" strokeDasharray="4 2" />
+              <circle cx="12" cy="12" r="5" />
+            </svg>
           </Button>
         </div>
 
