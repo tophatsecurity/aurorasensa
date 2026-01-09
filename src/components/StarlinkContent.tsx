@@ -119,9 +119,10 @@ const StarlinkContent = () => {
   const { data: starlinkDevices, isLoading: devicesLoading } = useStarlinkDevices();
   const { data: allClients = [] } = useClients();
   
-  // Average stats (for "All" selection)
+  // Average stats (for "All" selection) - filter by first selected client if any
+  const activeClientFilter = selectedClients.length > 0 ? selectedClients[0] : undefined;
   const { data: starlinkStats, isLoading: statsLoading } = useStarlinkStats();
-  const { data: starlinkTimeseries, isLoading: timeseriesLoading } = useStarlinkTimeseries(24);
+  const { data: starlinkTimeseries, isLoading: timeseriesLoading } = useStarlinkTimeseries(24, activeClientFilter);
   const { data: sensorStats, isLoading: sensorLoading } = useSensorTypeStats("starlink");
   
   // New dedicated API endpoints for detailed metrics
