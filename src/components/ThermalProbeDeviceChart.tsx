@@ -50,9 +50,10 @@ const DEVICE_COLORS = [
 
 interface ThermalDeviceChartProps {
   hours?: number;
+  clientId?: string; // Filter by client_id, 'all' means no filter
 }
 
-const ThermalDeviceChart = ({ hours = 24 }: ThermalDeviceChartProps) => {
+const ThermalDeviceChart = ({ hours = 24, clientId = 'all' }: ThermalDeviceChartProps) => {
   // Fetch all temperature sources
   const { data: thermalData, isLoading: thermalLoading } = useThermalProbeTimeseries(hours);
   const { data: arduinoData, isLoading: arduinoLoading } = useArduinoSensorTimeseries(hours);
@@ -69,9 +70,17 @@ const ThermalDeviceChart = ({ hours = 24 }: ThermalDeviceChartProps) => {
     const timeMap = new Map<string, Record<string, number | string>>();
     const sourceSet = new Set<string>();
 
+    // Helper to check if a reading matches the client filter
+    const matchesClient = (reading: { client_id?: string; device_id?: string }) => {
+      if (clientId === 'all') return true;
+      return reading.client_id === clientId || reading.device_id?.includes(clientId);
+    };
+
     // Process thermal probe data
     if (thermalData?.readings && thermalData.readings.length > 0) {
       thermalData.readings.forEach((r) => {
+        if (!matchesClient(r)) return;
+        
         const timestamp = r.timestamp ? new Date(r.timestamp).getTime() : null;
         if (!timestamp) return;
         
@@ -96,6 +105,8 @@ const ThermalDeviceChart = ({ hours = 24 }: ThermalDeviceChartProps) => {
     // Process Arduino sensor kit data - both TH (DHT/AHT) and BMP sensors
     if (arduinoData?.readings && arduinoData.readings.length > 0) {
       arduinoData.readings.forEach((r) => {
+        if (!matchesClient(r as { client_id?: string; device_id?: string })) return;
+        
         const timestamp = r.timestamp ? new Date(r.timestamp).getTime() : null;
         if (!timestamp) return;
         
@@ -128,6 +139,8 @@ const ThermalDeviceChart = ({ hours = 24 }: ThermalDeviceChartProps) => {
     // Process standalone AHT sensor data
     if (ahtData?.readings && ahtData.readings.length > 0) {
       ahtData.readings.forEach((r) => {
+        if (!matchesClient(r as { client_id?: string; device_id?: string })) return;
+        
         const timestamp = r.timestamp ? new Date(r.timestamp).getTime() : null;
         if (!timestamp) return;
         
@@ -152,6 +165,8 @@ const ThermalDeviceChart = ({ hours = 24 }: ThermalDeviceChartProps) => {
     // Process BME/BMT sensor data
     if (bmtData?.readings && bmtData.readings.length > 0) {
       bmtData.readings.forEach((r) => {
+        if (!matchesClient(r as { client_id?: string; device_id?: string })) return;
+        
         const timestamp = r.timestamp ? new Date(r.timestamp).getTime() : null;
         if (!timestamp) return;
         
@@ -176,6 +191,8 @@ const ThermalDeviceChart = ({ hours = 24 }: ThermalDeviceChartProps) => {
     // Process System Monitor CPU temperature
     if (systemData?.readings && systemData.readings.length > 0) {
       systemData.readings.forEach((r) => {
+        if (!matchesClient(r as { client_id?: string; device_id?: string })) return;
+        
         const timestamp = r.timestamp ? new Date(r.timestamp).getTime() : null;
         if (!timestamp) return;
         
@@ -250,7 +267,7 @@ const ThermalDeviceChart = ({ hours = 24 }: ThermalDeviceChartProps) => {
       .sort((a, b) => (a.time as number) - (b.time as number));
 
     return { chartData, sources: Array.from(sourceSet) };
-  }, [thermalData?.readings, arduinoData?.readings, ahtData?.readings, bmtData?.readings, systemData?.readings, starlinkData?.readings, dashboardData?.temperature]);
+  }, [thermalData?.readings, arduinoData?.readings, ahtData?.readings, bmtData?.readings, systemData?.readings, starlinkData?.readings, dashboardData?.temperature, clientId]);
 
   // Calculate stats for each source and overall mean
   const sourceStats = useMemo(() => {
