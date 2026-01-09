@@ -1496,10 +1496,16 @@ export function useDashboardStats() {
   });
 }
 
-export function useDashboardTimeseries(hours: number = 24) {
+export function useDashboardTimeseries(hours: number = 24, clientId?: string) {
   return useQuery({
-    queryKey: ["aurora", "dashboard", "timeseries", hours],
-    queryFn: () => callAuroraApi<DashboardTimeseries>(`/api/dashboard/sensor-timeseries?hours=${hours}`),
+    queryKey: ["aurora", "dashboard", "timeseries", hours, clientId],
+    queryFn: () => {
+      const params = new URLSearchParams({ hours: hours.toString() });
+      if (clientId && clientId !== 'all') {
+        params.append('client_id', clientId);
+      }
+      return callAuroraApi<DashboardTimeseries>(`/api/dashboard/sensor-timeseries?${params.toString()}`);
+    },
     refetchInterval: 30000,
     retry: 2,
   });
@@ -2405,9 +2411,9 @@ export function useThermalProbeStats() {
   });
 }
 
-export function useThermalProbeTimeseries(hours: number = 24) {
+export function useThermalProbeTimeseries(hours: number = 24, clientId?: string) {
   return useQuery({
-    queryKey: ["aurora", "thermal_probe", "timeseries", hours],
+    queryKey: ["aurora", "thermal_probe", "timeseries", hours, clientId],
     queryFn: async () => {
       try {
         // The API returns data in a nested structure: readings[].data.temperature_c
@@ -2437,7 +2443,12 @@ export function useThermalProbeTimeseries(hours: number = 24) {
           sensor_type?: string;
         }
         
-        const response = await callAuroraApi<RawResponse>(`/api/readings/sensor/thermal_probe?hours=${hours}`);
+        const params = new URLSearchParams({ hours: hours.toString() });
+        if (clientId && clientId !== 'all') {
+          params.append('client_id', clientId);
+        }
+        
+        const response = await callAuroraApi<RawResponse>(`/api/readings/sensor/thermal_probe?${params.toString()}`);
         
         // Transform nested data structure to flat structure
         const transformedReadings: ThermalProbeTimeseriesPoint[] = (response.readings || []).map(r => ({
@@ -2499,9 +2510,9 @@ export interface ArduinoSensorTimeseriesResponse {
   readings: ArduinoSensorReading[];
 }
 
-export function useArduinoSensorTimeseries(hours: number = 24) {
+export function useArduinoSensorTimeseries(hours: number = 24, clientId?: string) {
   return useQuery({
-    queryKey: ["aurora", "arduino_sensor_kit", "timeseries", hours],
+    queryKey: ["aurora", "arduino_sensor_kit", "timeseries", hours, clientId],
     queryFn: async () => {
       try {
         interface RawReading {
@@ -2531,12 +2542,17 @@ export function useArduinoSensorTimeseries(hours: number = 24) {
           sensor_type?: string;
         }
         
+        const params = new URLSearchParams({ hours: hours.toString() });
+        if (clientId && clientId !== 'all') {
+          params.append('client_id', clientId);
+        }
+        
         // Try arduino_sensor_kit endpoint first, fall back to aht_sensor
         let response: RawResponse;
         try {
-          response = await callAuroraApi<RawResponse>(`/api/readings/sensor/arduino_sensor_kit?hours=${hours}`);
+          response = await callAuroraApi<RawResponse>(`/api/readings/sensor/arduino_sensor_kit?${params.toString()}`);
         } catch {
-          response = await callAuroraApi<RawResponse>(`/api/readings/sensor/aht_sensor?hours=${hours}`);
+          response = await callAuroraApi<RawResponse>(`/api/readings/sensor/aht_sensor?${params.toString()}`);
         }
         
         const transformedReadings: ArduinoSensorReading[] = (response.readings || []).map(r => {
@@ -2595,9 +2611,9 @@ export interface AhtSensorTimeseriesResponse {
   readings: AhtSensorReading[];
 }
 
-export function useAhtSensorTimeseries(hours: number = 24) {
+export function useAhtSensorTimeseries(hours: number = 24, clientId?: string) {
   return useQuery({
-    queryKey: ["aurora", "aht_sensor", "timeseries", hours],
+    queryKey: ["aurora", "aht_sensor", "timeseries", hours, clientId],
     queryFn: async () => {
       try {
         interface RawReading {
@@ -2624,7 +2640,12 @@ export function useAhtSensorTimeseries(hours: number = 24) {
           sensor_type?: string;
         }
         
-        const response = await callAuroraApi<RawResponse>(`/api/readings/sensor/aht_sensor?hours=${hours}`);
+        const params = new URLSearchParams({ hours: hours.toString() });
+        if (clientId && clientId !== 'all') {
+          params.append('client_id', clientId);
+        }
+        
+        const response = await callAuroraApi<RawResponse>(`/api/readings/sensor/aht_sensor?${params.toString()}`);
         
         const transformedReadings: AhtSensorReading[] = (response.readings || []).map(r => {
           // Handle nested Arduino sensor kit format

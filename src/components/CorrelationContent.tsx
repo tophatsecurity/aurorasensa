@@ -251,10 +251,10 @@ const CorrelationContent = () => {
   
   const timeRange = timePeriodToHours(timePeriod);
   
-  const { data: starlinkData, isLoading: starlinkLoading } = useStarlinkTimeseries(timeRange);
-  const { data: dashboardData, isLoading: dashboardLoading } = useDashboardTimeseries(timeRange);
-  const { data: thermalData, isLoading: thermalLoading } = useThermalProbeTimeseries(timeRange);
-  const { data: arduinoData, isLoading: arduinoLoading } = useArduinoSensorTimeseries(timeRange);
+  const { data: starlinkData, isLoading: starlinkLoading } = useStarlinkTimeseries(timeRange, selectedClient);
+  const { data: dashboardData, isLoading: dashboardLoading } = useDashboardTimeseries(timeRange, selectedClient);
+  const { data: thermalData, isLoading: thermalLoading } = useThermalProbeTimeseries(timeRange, selectedClient);
+  const { data: arduinoData, isLoading: arduinoLoading } = useArduinoSensorTimeseries(timeRange, selectedClient);
 
   const isLoading = starlinkLoading || dashboardLoading || thermalLoading || arduinoLoading;
 
