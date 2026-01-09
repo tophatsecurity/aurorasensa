@@ -506,6 +506,47 @@ export interface BatchInfo {
   timestamp: string;
   reading_count: number;
   device_types?: string[];
+  sensors?: string[];
+  file_path?: string;
+  file_size_bytes?: number;
+  processed?: boolean;
+  error?: string;
+}
+
+export interface BatchSensor {
+  device_id: string;
+  device_type: string;
+  reading_count?: number;
+}
+
+export interface BatchReading {
+  device_id: string;
+  device_type: string;
+  timestamp: string;
+  data: Record<string, unknown>;
+}
+
+export interface BatchRetentionConfig {
+  default_retention_days: number;
+  max_retention_days: number;
+  min_retention_days: number;
+  cleanup_enabled: boolean;
+  cleanup_interval_hours: number;
+}
+
+export interface ClientBatchRetention {
+  client_id: string;
+  retention_days: number;
+  debug_mode?: boolean;
+  last_cleanup?: string;
+}
+
+export interface DiskUsageInfo {
+  total_bytes: number;
+  used_bytes: number;
+  free_bytes: number;
+  usage_percent: number;
+  batch_storage_bytes?: number;
 }
 
 // =============================================
@@ -1601,6 +1642,127 @@ export function useBatchesList(limit: number = 50) {
     queryKey: ["aurora", "batches", "list", limit],
     queryFn: () => callAuroraApi<{ count: number; batches: BatchInfo[] }>(`/api/batches/list?limit=${limit}`),
     refetchInterval: 30000,
+    retry: 2,
+  });
+}
+
+export function useLatestBatch() {
+  return useQuery({
+    queryKey: ["aurora", "batches", "latest"],
+    queryFn: () => callAuroraApi<BatchInfo>("/api/batches/latest"),
+    refetchInterval: 15000,
+    retry: 2,
+  });
+}
+
+export function useBatchById(batchId: string) {
+  return useQuery({
+    queryKey: ["aurora", "batches", batchId],
+    queryFn: () => callAuroraApi<BatchInfo>(`/api/batches/${batchId}`),
+    retry: 2,
+    enabled: !!batchId,
+  });
+}
+
+export function useBatchSensors(batchId: string) {
+  return useQuery({
+    queryKey: ["aurora", "batches", batchId, "sensors"],
+    queryFn: () => callAuroraApi<BatchSensor[]>(`/api/batches/${batchId}/sensors`),
+    retry: 2,
+    enabled: !!batchId,
+  });
+}
+
+export function useBatchReadings(batchId: string) {
+  return useQuery({
+    queryKey: ["aurora", "batches", batchId, "readings"],
+    queryFn: () => callAuroraApi<{ count: number; readings: BatchReading[] }>(`/api/batches/${batchId}/readings`),
+    retry: 2,
+    enabled: !!batchId,
+  });
+}
+
+export function useBatchesByClient(clientId: string) {
+  return useQuery({
+    queryKey: ["aurora", "batches", "by-client", clientId],
+    queryFn: () => callAuroraApi<{ count: number; batches: BatchInfo[] }>(`/api/batches/by-client/${clientId}`),
+    refetchInterval: 30000,
+    retry: 2,
+    enabled: !!clientId,
+  });
+}
+
+// =============================================
+// HOOKS - BATCH RETENTION (ADMIN)
+// =============================================
+
+export function useBatchRetentionConfig() {
+  return useQuery({
+    queryKey: ["aurora", "admin", "batch-retention", "config"],
+    queryFn: () => callAuroraApi<BatchRetentionConfig>("/api/admin/batch-retention/config"),
+    staleTime: 60000,
+    retry: 2,
+  });
+}
+
+export function useUpdateBatchRetentionConfig() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (config: Partial<BatchRetentionConfig>) => 
+      callAuroraApi<BatchRetentionConfig>("/api/admin/batch-retention/config", "POST", config),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["aurora", "admin", "batch-retention"] });
+    },
+  });
+}
+
+export function useClientBatchRetention(clientId: string) {
+  return useQuery({
+    queryKey: ["aurora", "admin", "batch-retention", "clients", clientId],
+    queryFn: () => callAuroraApi<ClientBatchRetention>(`/api/admin/batch-retention/clients/${clientId}`),
+    retry: 2,
+    enabled: !!clientId,
+  });
+}
+
+export function useUpdateClientBatchRetention() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ clientId, config }: { clientId: string; config: Partial<ClientBatchRetention> }) => 
+      callAuroraApi<ClientBatchRetention>(`/api/admin/batch-retention/clients/${clientId}`, "POST", config),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["aurora", "admin", "batch-retention"] });
+    },
+  });
+}
+
+export function useDeleteClientBatchRetention() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (clientId: string) => 
+      callAuroraApi<{ success: boolean }>(`/api/admin/batch-retention/clients/${clientId}`, "DELETE"),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["aurora", "admin", "batch-retention"] });
+    },
+  });
+}
+
+export function useToggleClientDebugMode() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (clientId: string) => 
+      callAuroraApi<{ debug_mode: boolean }>(`/api/admin/batch-retention/clients/${clientId}/debug`, "POST"),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["aurora", "admin", "batch-retention"] });
+    },
+  });
+}
+
+export function useDiskUsageInfo() {
+  return useQuery({
+    queryKey: ["aurora", "admin", "batch-retention", "disk-usage"],
+    queryFn: () => callAuroraApi<DiskUsageInfo>("/api/admin/batch-retention/disk-usage"),
+    refetchInterval: 60000,
     retry: 2,
   });
 }
