@@ -27,8 +27,10 @@ import { SSEConnectionStatus } from "@/components/SSEConnectionStatus";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
+import { ClientSelector } from "@/components/ui/context-selectors";
 
 const STORAGE_KEY_AUTO_REFRESH = 'map-auto-refresh-interval';
+const STORAGE_KEY_CLIENT = 'map-selected-client';
 
 // Animate marker to new position
 const animateMarker = (marker: L.Marker, targetLat: number, targetLng: number, duration: number = 1000) => {
@@ -90,6 +92,18 @@ const MapContent = () => {
     return '5m';
   });
   
+  // Load selected client from localStorage
+  const [selectedClient, setSelectedClient] = useState<string>(() => {
+    return localStorage.getItem(STORAGE_KEY_CLIENT) || 'all';
+  });
+  
+  // Save selected client to localStorage
+  const handleClientChange = (value: string) => {
+    setSelectedClient(value);
+    localStorage.setItem(STORAGE_KEY_CLIENT, value);
+    setHasInitialFit(false); // Re-fit map bounds when client changes
+  };
+  
   // Get refresh interval in ms, or false for manual mode
   const mapRefetchInterval = autoRefreshInterval === 'manual' ? false : getRefreshIntervalMs(autoRefreshInterval);
   
@@ -108,6 +122,7 @@ const MapContent = () => {
   } = useMapData({ 
     adsbHistoryMinutes: timeframeToMinutes(timeframe),
     refetchInterval: mapRefetchInterval,
+    clientId: selectedClient,
   });
   
   // Refresh on page click/focus
@@ -948,6 +963,11 @@ const MapContent = () => {
             onToggleFilter={handleToggleFilter}
           />
           <div className="flex items-center gap-3">
+            <ClientSelector
+              value={selectedClient}
+              onChange={handleClientChange}
+              showAllOption={true}
+            />
             <TimeframeSelector 
               value={timeframe}
               onChange={(value) => {

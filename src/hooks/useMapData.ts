@@ -29,6 +29,8 @@ export interface UseMapDataOptions {
   adsbHistoryMinutes?: number;
   /** Set to false to disable auto-refetch, or a number in ms for custom interval */
   refetchInterval?: number | false;
+  /** Filter markers by client ID. "all" or undefined means no filtering */
+  clientId?: string;
 }
 
 // Trail type for aircraft history
@@ -166,7 +168,7 @@ function mergeGpsData(
 }
 
 export function useMapData(options: UseMapDataOptions = {}) {
-  const { adsbHistoryMinutes = 60, refetchInterval } = options;
+  const { adsbHistoryMinutes = 60, refetchInterval, clientId } = options;
   const [lastUpdate, setLastUpdate] = useState<Date>(new Date());
   const queryClient = useQueryClient();
   
@@ -1355,28 +1357,59 @@ export function useMapData(options: UseMapDataOptions = {}) {
       });
   }, [adsbHistoricalData]);
 
-  // All marker positions for bounds fitting
+  // Filter markers by selected client
+  const filteredSensorMarkers = useMemo<SensorMarker[]>(() => {
+    if (!clientId || clientId === 'all') return sensorMarkers;
+    
+    // Get the selected client's hostname for matching
+    const selectedClient = clients?.find(c => c.client_id === clientId);
+    if (!selectedClient) return sensorMarkers;
+    
+    // Filter sensors that belong to this client (by ID pattern or sensor association)
+    return sensorMarkers.filter(marker => {
+      // Check if marker ID contains client_id
+      if (marker.id.includes(clientId)) return true;
+      
+      // Check if marker ID contains client hostname
+      if (selectedClient.hostname && marker.id.toLowerCase().includes(selectedClient.hostname.toLowerCase())) return true;
+      
+      // Check if marker name contains client hostname
+      if (selectedClient.hostname && marker.name.toLowerCase().includes(selectedClient.hostname.toLowerCase())) return true;
+      
+      // Check if marker is in the client's sensors list
+      if (selectedClient.sensors?.includes(marker.id)) return true;
+      
+      return false;
+    });
+  }, [sensorMarkers, clientId, clients]);
+
+  const filteredClientMarkers = useMemo<ClientMarker[]>(() => {
+    if (!clientId || clientId === 'all') return clientMarkers;
+    return clientMarkers.filter(c => c.client_id === clientId);
+  }, [clientMarkers, clientId]);
+
+  // All marker positions for bounds fitting (using filtered markers)
   const allPositions = useMemo<LatLngExpression[]>(() => {
     const positions: LatLngExpression[] = [];
-    sensorMarkers.forEach(s => positions.push([s.location.lat, s.location.lng]));
-    clientMarkers.forEach(c => positions.push([c.location.lat, c.location.lng]));
+    filteredSensorMarkers.forEach(s => positions.push([s.location.lat, s.location.lng]));
+    filteredClientMarkers.forEach(c => positions.push([c.location.lat, c.location.lng]));
     adsbMarkers.forEach(a => positions.push([a.location.lat, a.location.lng]));
     return positions;
-  }, [sensorMarkers, clientMarkers, adsbMarkers]);
+  }, [filteredSensorMarkers, filteredClientMarkers, adsbMarkers]);
 
-  // Calculate statistics
+  // Calculate statistics (using filtered markers)
   const stats = useMemo<MapStats>(() => {
     const result = {
-      total: sensorMarkers.length + clientMarkers.length + adsbMarkers.length,
-      gps: sensorMarkers.filter(s => s.type === 'gps').length,
-      starlink: sensorMarkers.filter(s => s.type === 'starlink').length,
-      clients: clientMarkers.length,
-      lora: sensorMarkers.filter(s => s.type === 'lora').length,
+      total: filteredSensorMarkers.length + filteredClientMarkers.length + adsbMarkers.length,
+      gps: filteredSensorMarkers.filter(s => s.type === 'gps').length,
+      starlink: filteredSensorMarkers.filter(s => s.type === 'starlink').length,
+      clients: filteredClientMarkers.length,
+      lora: filteredSensorMarkers.filter(s => s.type === 'lora').length,
       adsb: adsbMarkers.length,
     };
-    console.log('[MapData] Final stats:', result);
+    console.log('[MapData] Final stats (filtered by client:', clientId || 'all', '):', result);
     return result;
-  }, [sensorMarkers, clientMarkers, adsbMarkers]);
+  }, [filteredSensorMarkers, filteredClientMarkers, adsbMarkers, clientId]);
 
   const isLoading = sensorsLoading || clientsLoading || readingsLoading || geoLoading || adsbLoading;
 
@@ -1388,8 +1421,8 @@ export function useMapData(options: UseMapDataOptions = {}) {
   }, [lastUpdate]);
 
   return {
-    sensorMarkers,
-    clientMarkers,
+    sensorMarkers: filteredSensorMarkers,
+    clientMarkers: filteredClientMarkers,
     adsbMarkers,
     adsbTrails,
     allPositions,
@@ -1401,5 +1434,7 @@ export function useMapData(options: UseMapDataOptions = {}) {
     geoLocations,
     adsbIsHistorical,
     adsbSource,
+    // Expose unfiltered markers for client list
+    allClients: clients,
   };
 }
