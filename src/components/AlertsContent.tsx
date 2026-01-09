@@ -1,14 +1,23 @@
-import { Bell, Loader2, RefreshCw } from "lucide-react";
+import { useState } from "react";
+import { Bell, Loader2, RefreshCw, Wifi } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Switch } from "@/components/ui/switch";
+import { Label } from "@/components/ui/label";
 import { useAlerts } from "@/hooks/useAuroraApi";
 import { useQueryClient } from "@tanstack/react-query";
 import { usePagination } from "@/hooks/usePagination";
 import { TablePagination } from "@/components/TablePagination";
+import { useAlertsSSE } from "@/hooks/useSSE";
+import { SSEConnectionStatus } from "@/components/SSEConnectionStatus";
 
 const AlertsContent = () => {
   const { data: alerts, isLoading, error } = useAlerts();
   const queryClient = useQueryClient();
+  const [sseEnabled, setSSEEnabled] = useState(true);
+
+  // SSE for real-time alerts
+  const sse = useAlertsSSE(sseEnabled);
 
   const handleRefresh = () => {
     queryClient.invalidateQueries({ queryKey: ["aurora", "alerts"] });
@@ -56,17 +65,37 @@ const AlertsContent = () => {
               {alerts.length} Active
             </Badge>
           )}
+          <SSEConnectionStatus
+            isConnected={sse.isConnected}
+            isConnecting={sse.isConnecting}
+            error={sse.error}
+            reconnectCount={sse.reconnectCount}
+            onReconnect={sse.reconnect}
+            label="Live Alerts"
+          />
         </div>
-        <Button 
-          variant="outline" 
-          size="sm" 
-          className="gap-2"
-          onClick={handleRefresh}
-          disabled={isLoading}
-        >
-          <RefreshCw className={`w-4 h-4 ${isLoading ? 'animate-spin' : ''}`} />
-          Refresh
-        </Button>
+        <div className="flex items-center gap-4">
+          <div className="flex items-center gap-2">
+            <Switch
+              id="sse-toggle"
+              checked={sseEnabled}
+              onCheckedChange={setSSEEnabled}
+            />
+            <Label htmlFor="sse-toggle" className="text-sm text-muted-foreground">
+              Real-time
+            </Label>
+          </div>
+          <Button 
+            variant="outline" 
+            size="sm" 
+            className="gap-2"
+            onClick={handleRefresh}
+            disabled={isLoading}
+          >
+            <RefreshCw className={`w-4 h-4 ${isLoading ? 'animate-spin' : ''}`} />
+            Refresh
+          </Button>
+        </div>
       </div>
 
       {isLoading ? (
