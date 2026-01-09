@@ -12,6 +12,7 @@ import { spreadOverlappingPoints, COVERAGE_RANGES, ONE_MILE_METERS } from "@/uti
 import { useMapData, AircraftTrailData } from "@/hooks/useMapData";
 import { useGpsHistory } from "@/hooks/useGpsHistory";
 import { useAdsbHistory, AircraftTrail } from "@/hooks/useAdsbHistory";
+import { useGpsSSE, useAdsbSSE } from "@/hooks/useSSE";
 
 // Map components (non-leaflet)
 import { MapLegend } from "@/components/map/MapLegend";
@@ -22,7 +23,10 @@ import { MapFilters } from "@/components/map/MapFilters";
 import { GpsHistorySettings } from "@/components/map/GpsHistorySettings";
 import { TimeframeSelector, TimeframeOption, timeframeToMinutes } from "@/components/map/TimeframeSelector";
 import { AutoRefreshSelector, AutoRefreshInterval, getRefreshIntervalMs } from "@/components/map/AutoRefreshSelector";
+import { SSEConnectionStatus } from "@/components/SSEConnectionStatus";
 import { Button } from "@/components/ui/button";
+import { Switch } from "@/components/ui/switch";
+import { Label } from "@/components/ui/label";
 
 const STORAGE_KEY_AUTO_REFRESH = 'map-auto-refresh-interval';
 
@@ -69,6 +73,13 @@ const MapContent = () => {
   const [hasInitialRefresh, setHasInitialRefresh] = useState(false);
   const [countdown, setCountdown] = useState<number>(0);
   const lastRefreshTimeRef = useRef<number>(Date.now());
+  
+  // SSE state for real-time updates
+  const [sseEnabled, setSSEEnabled] = useState(true);
+  
+  // SSE for real-time GPS and ADS-B updates
+  const gpsSSE = useGpsSSE(sseEnabled);
+  const adsbSSE = useAdsbSSE(sseEnabled);
   
   // Load auto-refresh interval from localStorage, default to 5 minutes
   const [autoRefreshInterval, setAutoRefreshInterval] = useState<AutoRefreshInterval>(() => {
@@ -913,6 +924,22 @@ const MapContent = () => {
           timeAgo={timeAgo}
           isLoading={isLoading}
           onRefresh={handleRefresh}
+          sseEnabled={sseEnabled}
+          onSSEToggle={setSSEEnabled}
+          gpsSSE={{
+            isConnected: gpsSSE.isConnected,
+            isConnecting: gpsSSE.isConnecting,
+            error: gpsSSE.error,
+            reconnectCount: gpsSSE.reconnectCount,
+            onReconnect: gpsSSE.reconnect,
+          }}
+          adsbSSE={{
+            isConnected: adsbSSE.isConnected,
+            isConnecting: adsbSSE.isConnecting,
+            error: adsbSSE.error,
+            reconnectCount: adsbSSE.reconnectCount,
+            onReconnect: adsbSSE.reconnect,
+          }}
         />
         <div className="flex items-center justify-between gap-4">
           <MapFilters 
