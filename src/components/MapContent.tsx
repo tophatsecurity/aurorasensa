@@ -65,6 +65,8 @@ const MapContent = () => {
   const [sensorRetentionMinutes, setSensorRetentionMinutes] = useState(60);
   const [clientRetentionMinutes, setClientRetentionMinutes] = useState(60);
   const [hasInitialRefresh, setHasInitialRefresh] = useState(false);
+  const [countdown, setCountdown] = useState<number>(0);
+  const lastRefreshTimeRef = useRef<number>(Date.now());
   
   // Load auto-refresh interval from localStorage, default to manual
   const [autoRefreshInterval, setAutoRefreshInterval] = useState<AutoRefreshInterval>(() => {
@@ -690,16 +692,36 @@ const MapContent = () => {
     }
   }, [hasInitialRefresh, handleRefresh]);
 
-  // Auto-refresh based on selected interval
+  // Auto-refresh based on selected interval with countdown
   useEffect(() => {
     const intervalMs = getRefreshIntervalMs(autoRefreshInterval);
-    if (!intervalMs) return; // Manual mode - no auto refresh
+    if (!intervalMs) {
+      setCountdown(0);
+      return; // Manual mode - no auto refresh
+    }
     
-    const interval = setInterval(() => {
+    // Reset countdown when interval changes
+    lastRefreshTimeRef.current = Date.now();
+    setCountdown(Math.ceil(intervalMs / 1000));
+    
+    // Countdown ticker (every second)
+    const countdownInterval = setInterval(() => {
+      const elapsed = Date.now() - lastRefreshTimeRef.current;
+      const remaining = Math.max(0, Math.ceil((intervalMs - elapsed) / 1000));
+      setCountdown(remaining);
+    }, 1000);
+    
+    // Actual refresh interval
+    const refreshInterval = setInterval(() => {
       handleRefresh();
+      lastRefreshTimeRef.current = Date.now();
+      setCountdown(Math.ceil(intervalMs / 1000));
     }, intervalMs);
     
-    return () => clearInterval(interval);
+    return () => {
+      clearInterval(countdownInterval);
+      clearInterval(refreshInterval);
+    };
   }, [autoRefreshInterval, handleRefresh]);
 
   // Persist auto-refresh interval to localStorage
@@ -823,11 +845,19 @@ const MapContent = () => {
           />
         </div>
 
-        {/* Auto refresh indicator */}
+        {/* Auto refresh indicator with countdown */}
         {autoRefreshInterval !== 'manual' && (
           <div className="absolute top-4 left-1/2 -translate-x-1/2 z-[1000] flex items-center gap-2 px-3 py-1.5 rounded-full bg-card/90 backdrop-blur border border-border/50">
             <div className="w-2 h-2 rounded-full bg-green-500 animate-pulse" />
             <span className="text-xs font-medium">AUTO</span>
+            <span className="text-xs text-muted-foreground">
+              {countdown >= 3600 
+                ? `${Math.floor(countdown / 3600)}h ${Math.floor((countdown % 3600) / 60)}m`
+                : countdown >= 60 
+                  ? `${Math.floor(countdown / 60)}:${String(countdown % 60).padStart(2, '0')}`
+                  : `${countdown}s`
+              }
+            </span>
           </div>
         )}
 
