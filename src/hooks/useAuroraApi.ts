@@ -12,6 +12,21 @@ interface AuroraProxyResponse {
 const MAX_RETRIES = 3;
 const INITIAL_BACKOFF_MS = 1000;
 
+// Session keys - must match useAuroraAuth.ts
+const SESSION_KEY = 'aurora_session';
+const SESSION_COOKIE_KEY = 'aurora_cookie';
+
+// Helper to check if user has a session
+export function hasAuroraSession(): boolean {
+  return !!sessionStorage.getItem(SESSION_COOKIE_KEY);
+}
+
+// Helper to clear session on auth failure
+function clearAuroraSession(): void {
+  sessionStorage.removeItem(SESSION_KEY);
+  sessionStorage.removeItem(SESSION_COOKIE_KEY);
+}
+
 async function sleep(ms: number): Promise<void> {
   return new Promise(resolve => setTimeout(resolve, ms));
 }
@@ -52,14 +67,15 @@ async function callAuroraApi<T>(path: string, method: string = "GET", body?: unk
       if (data && typeof data === 'object' && 'detail' in data) {
         const detailStr = String(data.detail);
         
-        // Handle 401 authentication errors - clear session and don't retry
+        // Handle 401 authentication errors - clear session and reload to show login
         const isAuthError = detailStr.toLowerCase().includes('not authenticated') || 
                            detailStr.toLowerCase().includes('invalid session') ||
                            detailStr.toLowerCase().includes('provide x-api-key');
         if (isAuthError) {
           // Clear invalid session
-          sessionStorage.removeItem('aurora_session');
-          sessionStorage.removeItem('aurora_cookie');
+          clearAuroraSession();
+          // Force page reload to trigger re-authentication
+          window.location.reload();
           const error = new Error('Session expired. Please log in again.');
           (error as any).status = 401;
           throw error;
