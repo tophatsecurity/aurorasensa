@@ -56,7 +56,17 @@ async function callAuroraApi<T>(path: string, method: string = "GET", body?: unk
   }
 
   if (data && typeof data === 'object' && 'detail' in data) {
-    throw new Error(String(data.detail));
+    const detailStr = String(data.detail);
+    // Check for auth errors
+    const isAuthError = detailStr.toLowerCase().includes('not authenticated') || 
+                       detailStr.toLowerCase().includes('invalid session') ||
+                       detailStr.toLowerCase().includes('provide x-api-key');
+    if (isAuthError) {
+      // Clear invalid session
+      sessionStorage.removeItem(SESSION_KEY);
+      sessionStorage.removeItem(SESSION_COOKIE_KEY);
+    }
+    throw new Error(detailStr);
   }
 
   return data as T;
