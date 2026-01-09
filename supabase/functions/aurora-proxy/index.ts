@@ -4,7 +4,7 @@ const corsHeaders = {
 };
 
 const AURORA_ENDPOINT = "http://aurora.tophatsecurity.com:9151";
-const TIMEOUT_MS = 25000;
+const TIMEOUT_MS = 55000; // Increased timeout for slow Aurora server
 
 Deno.serve(async (req) => {
   // Handle CORS preflight
@@ -55,12 +55,26 @@ Deno.serve(async (req) => {
       clearTimeout(timeoutId);
       const msg = fetchError instanceof Error ? fetchError.message : String(fetchError);
       if (msg.includes('aborted')) {
-        return new Response(JSON.stringify({ error: 'Aurora server timeout', details: 'Request took too long' }), {
+        console.error(`Timeout after ${TIMEOUT_MS}ms for ${url}`);
+        return new Response(JSON.stringify({ 
+          error: 'Aurora server timeout', 
+          details: 'The Aurora server is taking too long to respond. Please try again.',
+          retryable: true
+        }), {
           status: 504,
           headers: { ...corsHeaders, 'Content-Type': 'application/json' },
         });
       }
-      throw fetchError;
+      // Connection refused or network error
+      console.error(`Connection error for ${url}: ${msg}`);
+      return new Response(JSON.stringify({ 
+        error: 'Aurora server unavailable', 
+        details: 'Cannot connect to Aurora server. It may be offline.',
+        retryable: true
+      }), {
+        status: 503,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
     }
     clearTimeout(timeoutId);
     
@@ -91,7 +105,8 @@ Deno.serve(async (req) => {
     console.error("Handler error:", error);
     return new Response(JSON.stringify({ 
       error: 'Request failed', 
-      details: error instanceof Error ? error.message : String(error) 
+      details: error instanceof Error ? error.message : String(error),
+      retryable: true
     }), {
       status: 500,
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
