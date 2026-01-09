@@ -68,13 +68,13 @@ const MapContent = () => {
   const [countdown, setCountdown] = useState<number>(0);
   const lastRefreshTimeRef = useRef<number>(Date.now());
   
-  // Load auto-refresh interval from localStorage, default to manual
+  // Load auto-refresh interval from localStorage, default to 5 minutes
   const [autoRefreshInterval, setAutoRefreshInterval] = useState<AutoRefreshInterval>(() => {
     const stored = localStorage.getItem(STORAGE_KEY_AUTO_REFRESH);
     if (stored && ['manual', '1m', '5m', '10m', '30m', '1h', '6h', '24h'].includes(stored)) {
       return stored as AutoRefreshInterval;
     }
-    return 'manual';
+    return '5m';
   });
   
   // Get refresh interval in ms, or false for manual mode
@@ -96,6 +96,47 @@ const MapContent = () => {
     adsbHistoryMinutes: timeframeToMinutes(timeframe),
     refetchInterval: mapRefetchInterval,
   });
+  
+  // Refresh on page click/focus
+  useEffect(() => {
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        console.log('Page became visible, refreshing map data');
+        handleRefresh();
+        lastRefreshTimeRef.current = Date.now();
+      }
+    };
+    
+    const handleFocus = () => {
+      // Only refresh if it's been at least 10 seconds since last refresh
+      const timeSinceLastRefresh = Date.now() - lastRefreshTimeRef.current;
+      if (timeSinceLastRefresh > 10000) {
+        console.log('Window focused, refreshing map data');
+        handleRefresh();
+        lastRefreshTimeRef.current = Date.now();
+      }
+    };
+    
+    const handleClick = () => {
+      // Only refresh if it's been at least 10 seconds since last refresh
+      const timeSinceLastRefresh = Date.now() - lastRefreshTimeRef.current;
+      if (timeSinceLastRefresh > 10000) {
+        console.log('Page clicked, refreshing map data');
+        handleRefresh();
+        lastRefreshTimeRef.current = Date.now();
+      }
+    };
+    
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    window.addEventListener('focus', handleFocus);
+    document.addEventListener('click', handleClick, { capture: true, passive: true });
+    
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+      window.removeEventListener('focus', handleFocus);
+      document.removeEventListener('click', handleClick, { capture: true });
+    };
+  }, [handleRefresh]);
 
   // GPS history tracking
   const { trails, clearHistory } = useGpsHistory(
