@@ -10,12 +10,13 @@ import {
   ReferenceLine,
   ReferenceArea
 } from "recharts";
-import { Droplets, Loader2 } from "lucide-react";
+import { Droplets, Loader2, RefreshCw } from "lucide-react";
 import { useDashboardTimeseries } from "@/hooks/useAuroraApi";
-import { useArduinoSSE } from "@/hooks/useSSE";
+import { useArduinoRealTime } from "@/hooks/useSSE";
 import { SSEConnectionStatus } from "./SSEConnectionStatus";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
+import { Button } from "@/components/ui/button";
 
 interface ChartData {
   time: string;
@@ -35,12 +36,12 @@ interface HumidityChartsProps {
 }
 
 const HumidityCharts = ({ hours = 24, clientId }: HumidityChartsProps) => {
-  const [sseEnabled, setSSEEnabled] = useState(true);
+  const [realTimeEnabled, setRealTimeEnabled] = useState(true);
   
-  const { data: timeseries, isLoading } = useDashboardTimeseries(hours);
+  const { data: timeseries, isLoading, refetch } = useDashboardTimeseries(hours);
   
-  // SSE for real-time Arduino sensor updates (humidity comes from AHT/BME sensors)
-  const arduinoSSE = useArduinoSSE(sseEnabled, clientId);
+  // Polling-based real-time updates (replaces SSE)
+  const realTimeData = useArduinoRealTime(realTimeEnabled, clientId);
 
   const formatData = (points: { timestamp: string; value: number }[] | undefined): ChartData[] => {
     if (!points || points.length === 0) return [];
@@ -95,11 +96,11 @@ const HumidityCharts = ({ hours = 24, clientId }: HumidityChartsProps) => {
             <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider flex items-center gap-2">
               Humidity Level
               <SSEConnectionStatus
-                isConnected={arduinoSSE.isConnected}
-                isConnecting={arduinoSSE.isConnecting}
-                error={arduinoSSE.error}
-                reconnectCount={arduinoSSE.reconnectCount}
-                onReconnect={arduinoSSE.reconnect}
+                isConnected={realTimeData.isConnected}
+                isConnecting={realTimeData.isConnecting}
+                error={realTimeData.error?.message || null}
+                reconnectCount={realTimeData.reconnectCount}
+                onReconnect={realTimeData.reconnect}
               />
             </h4>
             <p className="text-2xl font-bold text-blue-400">
@@ -121,13 +122,22 @@ const HumidityCharts = ({ hours = 24, clientId }: HumidityChartsProps) => {
               </div>
             </div>
           )}
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-8 w-8"
+            onClick={() => refetch()}
+            title="Refresh data"
+          >
+            <RefreshCw className="h-4 w-4" />
+          </Button>
           <div className="flex items-center gap-2">
             <Switch
-              id="sse-toggle-humidity"
-              checked={sseEnabled}
-              onCheckedChange={setSSEEnabled}
+              id="realtime-toggle-humidity"
+              checked={realTimeEnabled}
+              onCheckedChange={setRealTimeEnabled}
             />
-            <Label htmlFor="sse-toggle-humidity" className="text-xs text-muted-foreground">
+            <Label htmlFor="realtime-toggle-humidity" className="text-xs text-muted-foreground">
               Live
             </Label>
           </div>

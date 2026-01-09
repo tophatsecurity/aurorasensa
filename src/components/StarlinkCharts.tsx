@@ -10,12 +10,13 @@ import {
   LineChart,
   Line
 } from "recharts";
-import { Satellite, Zap, Signal, Wifi, Loader2 } from "lucide-react";
+import { Satellite, Zap, Signal, Wifi, Loader2, RefreshCw } from "lucide-react";
 import { useStarlinkTimeseries, useDashboardTimeseries, StarlinkTimeseriesPoint } from "@/hooks/useAuroraApi";
-import { useStarlinkSSE } from "@/hooks/useSSE";
+import { useStarlinkRealTime } from "@/hooks/useSSE";
 import { SSEConnectionStatus } from "./SSEConnectionStatus";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
+import { Button } from "@/components/ui/button";
 
 interface ChartData {
   time: string;
@@ -193,13 +194,13 @@ interface StarlinkChartsProps {
 }
 
 const StarlinkCharts = ({ hours = 24, clientId }: StarlinkChartsProps) => {
-  const [sseEnabled, setSSEEnabled] = useState(true);
+  const [realTimeEnabled, setRealTimeEnabled] = useState(true);
   
-  const { data: starlinkData, isLoading: starlinkLoading } = useStarlinkTimeseries(hours);
+  const { data: starlinkData, isLoading: starlinkLoading, refetch } = useStarlinkTimeseries(hours);
   const { data: dashboardTimeseries, isLoading: dashboardLoading } = useDashboardTimeseries(hours);
   
-  // SSE for real-time Starlink updates
-  const starlinkSSE = useStarlinkSSE(sseEnabled, clientId);
+  // Polling-based real-time updates (replaces SSE)
+  const realTimeData = useStarlinkRealTime(realTimeEnabled, clientId);
 
   const isLoading = starlinkLoading || dashboardLoading;
 
@@ -255,23 +256,32 @@ const StarlinkCharts = ({ hours = 24, clientId }: StarlinkChartsProps) => {
     return formatStarlinkData(starlinkData?.readings, 'pop_ping_latency_ms');
   }, [starlinkData?.readings]);
 
-  const sseStatus = {
-    isConnected: starlinkSSE.isConnected,
-    isConnecting: starlinkSSE.isConnecting,
-    error: starlinkSSE.error,
-    reconnectCount: starlinkSSE.reconnectCount,
-    onReconnect: starlinkSSE.reconnect,
+  const realTimeStatus = {
+    isConnected: realTimeData.isConnected,
+    isConnecting: realTimeData.isConnecting,
+    error: realTimeData.error?.message || null,
+    reconnectCount: realTimeData.reconnectCount,
+    onReconnect: realTimeData.reconnect,
   };
 
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-end gap-2 mb-2">
+        <Button
+          variant="ghost"
+          size="icon"
+          className="h-8 w-8"
+          onClick={() => refetch()}
+          title="Refresh data"
+        >
+          <RefreshCw className="h-4 w-4" />
+        </Button>
         <Switch
-          id="sse-toggle-starlink"
-          checked={sseEnabled}
-          onCheckedChange={setSSEEnabled}
+          id="realtime-toggle-starlink"
+          checked={realTimeEnabled}
+          onCheckedChange={setRealTimeEnabled}
         />
-        <Label htmlFor="sse-toggle-starlink" className="text-xs text-muted-foreground">
+        <Label htmlFor="realtime-toggle-starlink" className="text-xs text-muted-foreground">
           Real-time
         </Label>
       </div>
@@ -283,7 +293,7 @@ const StarlinkCharts = ({ hours = 24, clientId }: StarlinkChartsProps) => {
           unit=" dBm"
           data={signalData}
           isLoading={isLoading}
-          sseStatus={sseStatus}
+          sseStatus={realTimeStatus}
         />
         <StarlinkChart
           title="Power Draw"

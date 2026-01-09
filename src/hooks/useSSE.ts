@@ -1,8 +1,18 @@
 import { useEffect, useRef, useState, useCallback, useMemo } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
+import { 
+  useRealTimeData, 
+  POLLING_INTERVALS,
+  useLatestReadingsPolling,
+  useSensorTypePolling,
+} from "./useRealTimePolling";
 
 const AURORA_ENDPOINT = "http://aurora.tophatsecurity.com:9151";
+
+// SSE availability state - starts as unknown, then checked on first use
+let sseAvailabilityChecked = false;
+let sseIsAvailable = false;
 
 interface SSEConfig {
   endpoint: string;
@@ -465,18 +475,29 @@ export function useRadioSSE(enabled = true, clientId?: string, radioType?: "wifi
 
 // Hook to check if SSE is supported by the backend
 export function useSSEAvailability() {
-  const [isAvailable, setIsAvailable] = useState<boolean | null>(null);
+  const [isAvailable, setIsAvailable] = useState<boolean | null>(
+    sseAvailabilityChecked ? sseIsAvailable : null
+  );
   const [isChecking, setIsChecking] = useState(false);
 
   const checkAvailability = useCallback(async () => {
+    if (sseAvailabilityChecked) {
+      setIsAvailable(sseIsAvailable);
+      return;
+    }
+    
     setIsChecking(true);
     try {
       const response = await fetch(`${AURORA_ENDPOINT}/api/stream/health`, {
         method: "GET",
         signal: AbortSignal.timeout(5000),
       });
+      sseIsAvailable = response.ok;
+      sseAvailabilityChecked = true;
       setIsAvailable(response.ok);
     } catch {
+      sseIsAvailable = false;
+      sseAvailabilityChecked = true;
       setIsAvailable(false);
     } finally {
       setIsChecking(false);
@@ -489,3 +510,79 @@ export function useSSEAvailability() {
 
   return { isAvailable, isChecking, checkAvailability };
 }
+
+// =============================================
+// POLLING-BASED REAL-TIME HOOKS (SSE FALLBACK)
+// These use REST polling when SSE is not available
+// =============================================
+
+/**
+ * Starlink real-time data with polling fallback
+ */
+export function useStarlinkRealTime(enabled = true, clientId?: string) {
+  return useRealTimeData('starlink', { enabled, clientId });
+}
+
+/**
+ * Thermal probe real-time data with polling fallback
+ */
+export function useThermalProbeRealTime(enabled = true, clientId?: string) {
+  return useRealTimeData('thermal', { enabled, clientId });
+}
+
+/**
+ * Arduino sensor real-time data with polling fallback
+ */
+export function useArduinoRealTime(enabled = true, clientId?: string) {
+  return useRealTimeData('arduino', { enabled, clientId });
+}
+
+/**
+ * GPS real-time data with polling fallback
+ */
+export function useGpsRealTime(enabled = true, clientId?: string) {
+  return useRealTimeData('gps', { enabled, clientId, interval: POLLING_INTERVALS.FAST });
+}
+
+/**
+ * ADS-B real-time data with polling fallback
+ */
+export function useAdsbRealTime(enabled = true, clientId?: string) {
+  return useRealTimeData('adsb', { enabled, clientId, interval: POLLING_INTERVALS.FAST });
+}
+
+/**
+ * System monitor real-time data with polling fallback
+ */
+export function useSystemMonitorRealTime(enabled = true, clientId?: string) {
+  return useRealTimeData('system', { enabled, clientId });
+}
+
+/**
+ * Power real-time data with polling fallback
+ */
+export function usePowerRealTime(enabled = true, clientId?: string) {
+  return useRealTimeData('power', { enabled, clientId });
+}
+
+/**
+ * Alerts real-time data with polling fallback
+ */
+export function useAlertsRealTime(enabled = true) {
+  return useRealTimeData('alerts', { enabled });
+}
+
+/**
+ * Dashboard stats real-time data with polling fallback
+ */
+export function useDashboardRealTime(enabled = true) {
+  return useRealTimeData('dashboard', { enabled });
+}
+
+// Re-export polling utilities for direct use
+export { 
+  useRealTimeData, 
+  POLLING_INTERVALS,
+  useLatestReadingsPolling,
+  useSensorTypePolling,
+} from "./useRealTimePolling";

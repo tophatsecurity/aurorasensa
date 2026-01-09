@@ -11,9 +11,9 @@ import {
   ReferenceDot,
   ReferenceArea
 } from "recharts";
-import { Zap, Loader2, TrendingUp, TrendingDown, Settings2, AlertTriangle, Bell, BellOff } from "lucide-react";
+import { Zap, Loader2, TrendingUp, TrendingDown, Settings2, AlertTriangle, Bell, BellOff, RefreshCw } from "lucide-react";
 import { useStarlinkPower, useStarlinkTimeseries } from "@/hooks/useAuroraApi";
-import { usePowerSSE } from "@/hooks/useSSE";
+import { usePowerRealTime } from "@/hooks/useSSE";
 import { SSEConnectionStatus } from "./SSEConnectionStatus";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -45,15 +45,15 @@ interface PowerConsumptionChartsProps {
 }
 
 const PowerConsumptionCharts = ({ hours = 24, clientId = 'all' }: PowerConsumptionChartsProps) => {
-  const [sseEnabled, setSSEEnabled] = useState(true);
+  const [realTimeEnabled, setRealTimeEnabled] = useState(true);
   
   // Use dedicated power endpoint for current reading, timeseries for history
-  const { data: starlinkPower, isLoading: isPowerLoading } = useStarlinkPower();
+  const { data: starlinkPower, isLoading: isPowerLoading, refetch } = useStarlinkPower();
   // Pass clientId to filter Starlink timeseries data by client
   const { data: starlinkTimeseries, isLoading: isTimeseriesLoading } = useStarlinkTimeseries(hours, clientId !== 'all' ? clientId : undefined);
   
-  // SSE for real-time power updates
-  const powerSSE = usePowerSSE(sseEnabled, clientId !== 'all' ? clientId : undefined);
+  // Polling-based real-time updates (replaces SSE)
+  const realTimeData = usePowerRealTime(realTimeEnabled, clientId !== 'all' ? clientId : undefined);
   
   const isLoading = isPowerLoading || isTimeseriesLoading;
   
@@ -232,11 +232,11 @@ const PowerConsumptionCharts = ({ hours = 24, clientId = 'all' }: PowerConsumpti
             <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider flex items-center gap-2">
               Power Consumption
               <SSEConnectionStatus
-                isConnected={powerSSE.isConnected}
-                isConnecting={powerSSE.isConnecting}
-                error={powerSSE.error}
-                reconnectCount={powerSSE.reconnectCount}
-                onReconnect={powerSSE.reconnect}
+                isConnected={realTimeData.isConnected}
+                isConnecting={realTimeData.isConnecting}
+                error={realTimeData.error?.message || null}
+                reconnectCount={realTimeData.reconnectCount}
+                onReconnect={realTimeData.reconnect}
               />
             </h4>
             <div className="flex items-center gap-2">
@@ -274,13 +274,22 @@ const PowerConsumptionCharts = ({ hours = 24, clientId = 'all' }: PowerConsumpti
               </div>
             </div>
           )}
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-8 w-8"
+            onClick={() => refetch()}
+            title="Refresh data"
+          >
+            <RefreshCw className="h-4 w-4" />
+          </Button>
           <div className="flex items-center gap-2 mr-2">
             <Switch
-              id="sse-toggle-power"
-              checked={sseEnabled}
-              onCheckedChange={setSSEEnabled}
+              id="realtime-toggle-power"
+              checked={realTimeEnabled}
+              onCheckedChange={setRealTimeEnabled}
             />
-            <Label htmlFor="sse-toggle-power" className="text-xs text-muted-foreground">
+            <Label htmlFor="realtime-toggle-power" className="text-xs text-muted-foreground">
               Live
             </Label>
           </div>
