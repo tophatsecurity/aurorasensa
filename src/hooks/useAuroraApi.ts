@@ -50,8 +50,16 @@ async function callAuroraApi<T>(path: string, method: string = "GET", body?: unk
       }
 
       if (data && typeof data === 'object' && 'detail' in data) {
-        console.error(`Aurora backend error for ${path}:`, data.detail);
-        throw new Error(String(data.detail));
+        const detailStr = String(data.detail);
+        // Don't log 404-style "not found" responses as errors - they're expected
+        const isNotFoundError = detailStr.toLowerCase().includes('not found') || 
+                                detailStr.toLowerCase().includes('no ') && detailStr.toLowerCase().includes('found');
+        if (!isNotFoundError) {
+          console.error(`Aurora backend error for ${path}:`, data.detail);
+        }
+        const error = new Error(detailStr);
+        (error as any).status = isNotFoundError ? 404 : 400;
+        throw error;
       }
 
       if ((data as AuroraProxyResponse)?.error) {
@@ -1090,18 +1098,28 @@ export function useClientSystemInfo(clientId: string) {
     queryFn: async () => {
       try {
         return await callAuroraApi<SystemInfo>(`/api/clients/${clientId}/system-info`);
-      } catch (error) {
-        // Return null for 404 errors (client has no system info)
-        if (error instanceof Error && (error.message.includes('No system info found') || error.message.includes('404'))) {
+      } catch (error: any) {
+        // Return null for 404/not-found errors (client has no system info) - this is expected
+        const isNotFound = error?.status === 404 || 
+                          (error instanceof Error && (
+                            error.message.toLowerCase().includes('not found') ||
+                            error.message.toLowerCase().includes('no system info')
+                          ));
+        if (isNotFound) {
           return null;
         }
         throw error;
       }
     },
     refetchInterval: 30000,
-    retry: (failureCount, error) => {
-      // Don't retry on 404 (no system info)
-      if (error instanceof Error && (error.message.includes('No system info found') || error.message.includes('404'))) {
+    retry: (failureCount, error: any) => {
+      // Don't retry on 404 (no system info) - it's expected
+      const isNotFound = error?.status === 404 || 
+                        (error instanceof Error && (
+                          error.message.toLowerCase().includes('not found') ||
+                          error.message.toLowerCase().includes('no system info')
+                        ));
+      if (isNotFound) {
         return false;
       }
       return failureCount < 2;
