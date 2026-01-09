@@ -75,6 +75,9 @@ const MapContent = () => {
     return 'manual';
   });
   
+  // Get refresh interval in ms, or false for manual mode
+  const mapRefetchInterval = autoRefreshInterval === 'manual' ? false : getRefreshIntervalMs(autoRefreshInterval);
+  
   const {
     sensorMarkers,
     clientMarkers,
@@ -87,7 +90,10 @@ const MapContent = () => {
     handleRefresh,
     adsbIsHistorical,
     adsbSource,
-  } = useMapData({ adsbHistoryMinutes: timeframeToMinutes(timeframe) });
+  } = useMapData({ 
+    adsbHistoryMinutes: timeframeToMinutes(timeframe),
+    refetchInterval: mapRefetchInterval,
+  });
 
   // GPS history tracking
   const { trails, clearHistory } = useGpsHistory(

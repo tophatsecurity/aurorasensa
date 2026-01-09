@@ -27,6 +27,8 @@ import type { MapStats, SensorMarker, ClientMarker, AdsbMarker } from "@/types/m
 
 export interface UseMapDataOptions {
   adsbHistoryMinutes?: number;
+  /** Set to false to disable auto-refetch, or a number in ms for custom interval */
+  refetchInterval?: number | false;
 }
 
 // Trail type for aircraft history
@@ -164,9 +166,32 @@ function mergeGpsData(
 }
 
 export function useMapData(options: UseMapDataOptions = {}) {
-  const { adsbHistoryMinutes = 60 } = options;
+  const { adsbHistoryMinutes = 60, refetchInterval } = options;
   const [lastUpdate, setLastUpdate] = useState<Date>(new Date());
   const queryClient = useQueryClient();
+  
+  // When refetchInterval is false (manual mode), we disable all query auto-refetching
+  // by setting refetchInterval to false on QueryClient for these specific queries
+  useEffect(() => {
+    if (refetchInterval === false) {
+      // Set default options to disable refetching for map-related queries
+      queryClient.setDefaultOptions({
+        queries: {
+          refetchInterval: false,
+          refetchOnWindowFocus: false,
+        }
+      });
+    }
+    return () => {
+      // Reset to default behavior when component unmounts or mode changes
+      queryClient.setDefaultOptions({
+        queries: {
+          refetchInterval: undefined,
+          refetchOnWindowFocus: true,
+        }
+      });
+    };
+  }, [refetchInterval, queryClient]);
   
   const { 
     data: sensors, 
