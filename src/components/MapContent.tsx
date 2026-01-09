@@ -1,5 +1,5 @@
 import { useState, useCallback, useEffect, useRef } from "react";
-import { ZoomIn, ZoomOut, Maximize2, Play, Pause, Route, X } from "lucide-react";
+import { ZoomIn, ZoomOut, Maximize2, Route, X } from "lucide-react";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
 
@@ -21,7 +21,10 @@ import { MapHeader } from "@/components/map/MapHeader";
 import { MapFilters } from "@/components/map/MapFilters";
 import { GpsHistorySettings } from "@/components/map/GpsHistorySettings";
 import { TimeframeSelector, TimeframeOption, timeframeToMinutes } from "@/components/map/TimeframeSelector";
+import { AutoRefreshSelector, AutoRefreshInterval, getRefreshIntervalMs } from "@/components/map/AutoRefreshSelector";
 import { Button } from "@/components/ui/button";
+
+const STORAGE_KEY_AUTO_REFRESH = 'map-auto-refresh-interval';
 
 // Animate marker to new position
 const animateMarker = (marker: L.Marker, targetLat: number, targetLng: number, duration: number = 1000) => {
@@ -55,13 +58,22 @@ const MapContent = () => {
   const trailsRef = useRef<Map<string, L.Polyline>>(new Map());
   const adsbTrailsRef = useRef<Map<string, L.Polyline>>(new Map());
   const [activeFilters, setActiveFilters] = useState<ActiveFilters>(new Set(['gps', 'starlink', 'clients', 'lora', 'adsb']));
-  const [isLiveTracking, setIsLiveTracking] = useState(true);
   const [hasInitialFit, setHasInitialFit] = useState(false);
   const [showTrails, setShowTrails] = useState(true);
   const [showAdsbTrails, setShowAdsbTrails] = useState(true);
   const [timeframe, setTimeframe] = useState<TimeframeOption>("1h");
   const [sensorRetentionMinutes, setSensorRetentionMinutes] = useState(60);
   const [clientRetentionMinutes, setClientRetentionMinutes] = useState(60);
+  const [hasInitialRefresh, setHasInitialRefresh] = useState(false);
+  
+  // Load auto-refresh interval from localStorage, default to manual
+  const [autoRefreshInterval, setAutoRefreshInterval] = useState<AutoRefreshInterval>(() => {
+    const stored = localStorage.getItem(STORAGE_KEY_AUTO_REFRESH);
+    if (stored && ['manual', '1m', '5m', '10m', '30m', '1h', '6h', '24h'].includes(stored)) {
+      return stored as AutoRefreshInterval;
+    }
+    return 'manual';
+  });
   
   const {
     sensorMarkers,
@@ -664,16 +676,31 @@ const MapContent = () => {
     });
   }, [adsbTrails, adsbActiveTrails, showAdsbTrails, activeFilters]);
 
-  // Auto-refresh for live tracking
+  // Refresh on initial load
   useEffect(() => {
-    if (!isLiveTracking) return;
+    if (!hasInitialRefresh) {
+      handleRefresh();
+      setHasInitialRefresh(true);
+    }
+  }, [hasInitialRefresh, handleRefresh]);
+
+  // Auto-refresh based on selected interval
+  useEffect(() => {
+    const intervalMs = getRefreshIntervalMs(autoRefreshInterval);
+    if (!intervalMs) return; // Manual mode - no auto refresh
     
     const interval = setInterval(() => {
       handleRefresh();
-    }, MAP_CONFIG.autoRefreshInterval);
+    }, intervalMs);
     
     return () => clearInterval(interval);
-  }, [isLiveTracking, handleRefresh]);
+  }, [autoRefreshInterval, handleRefresh]);
+
+  // Persist auto-refresh interval to localStorage
+  const handleAutoRefreshChange = useCallback((value: AutoRefreshInterval) => {
+    setAutoRefreshInterval(value);
+    localStorage.setItem(STORAGE_KEY_AUTO_REFRESH, value);
+  }, []);
 
   const handleToggleFilter = useCallback((filterType: Exclude<FilterType, 'all'>) => {
     setActiveFilters(prev => {
@@ -703,10 +730,6 @@ const MapContent = () => {
       mapRef.current?.setView(MAP_CONFIG.defaultCenter, MAP_CONFIG.defaultZoom);
     }
   }, [allPositions]);
-
-  const toggleLiveTracking = useCallback(() => {
-    setIsLiveTracking(prev => !prev);
-  }, []);
 
   return (
     <div className="flex flex-col h-full w-full">
@@ -786,25 +809,19 @@ const MapContent = () => {
           >
             <Maximize2 className="w-4 h-4" />
           </Button>
-          <Button 
-            variant={isLiveTracking ? "default" : "outline"}
-            size="icon"
-            className={isLiveTracking 
-              ? "bg-primary hover:bg-primary/90" 
-              : "bg-card/90 backdrop-blur border-border/50 hover:bg-card"
-            }
-            onClick={toggleLiveTracking}
-            title={isLiveTracking ? "Pause live tracking" : "Resume live tracking"}
-          >
-            {isLiveTracking ? <Pause className="w-4 h-4" /> : <Play className="w-4 h-4" />}
-          </Button>
+          <AutoRefreshSelector
+            value={autoRefreshInterval}
+            onChange={handleAutoRefreshChange}
+            isRefreshing={isLoading}
+            onManualRefresh={handleRefresh}
+          />
         </div>
 
-        {/* Live indicator */}
-        {isLiveTracking && (
+        {/* Auto refresh indicator */}
+        {autoRefreshInterval !== 'manual' && (
           <div className="absolute top-4 left-1/2 -translate-x-1/2 z-[1000] flex items-center gap-2 px-3 py-1.5 rounded-full bg-card/90 backdrop-blur border border-border/50">
             <div className="w-2 h-2 rounded-full bg-green-500 animate-pulse" />
-            <span className="text-xs font-medium">LIVE</span>
+            <span className="text-xs font-medium">AUTO</span>
           </div>
         )}
 
