@@ -2,8 +2,8 @@ import { useMemo } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 
-// All API requests go through the edge function proxy to include the API key
-// The AURORA_API_KEY secret is only accessible server-side in the edge function
+// All API requests go through the edge function proxy using session-based auth
+// User must log in via /api/auth/login to get a session cookie that's sent with each request
 
 interface AuroraProxyResponse {
   error?: string;
@@ -984,7 +984,9 @@ export function useSensors() {
       const response = await callAuroraApi<SensorsListResponse>("/api/sensors/list");
       return response.sensors || [];
     },
-    refetchInterval: 10000,
+    enabled: hasAuroraSession(),
+    staleTime: 30000, // Data stays fresh for 30s
+    refetchInterval: 60000, // Refetch every 60s (reduced from 10s)
     retry: 2,
   });
 }
@@ -996,7 +998,9 @@ export function useRecentSensors() {
       const response = await callAuroraApi<SensorsListResponse>("/api/sensors/recent");
       return response.sensors || [];
     },
-    refetchInterval: 10000,
+    enabled: hasAuroraSession(),
+    staleTime: 30000,
+    refetchInterval: 60000,
     retry: 2,
   });
 }
@@ -1012,7 +1016,9 @@ export function useClients() {
       const response = await callAuroraApi<ClientsListResponse>("/api/clients/list");
       return response.clients || [];
     },
-    refetchInterval: 15000,
+    enabled: hasAuroraSession(),
+    staleTime: 30000,
+    refetchInterval: 60000, // Reduced from 15s
     retry: 2,
   });
 }
@@ -1242,7 +1248,9 @@ export function useAdsbAircraft() {
   return useQuery({
     queryKey: ["aurora", "adsb", "aircraft"],
     queryFn: () => callAuroraApi<AdsbAircraft[]>("/api/adsb/aircraft"),
-    refetchInterval: 5000,
+    enabled: hasAuroraSession(),
+    staleTime: 30000,
+    refetchInterval: 60000, // Reduced from 5s - use manual refresh for real-time
     retry: 2,
   });
 }
@@ -1283,7 +1291,9 @@ export function useAdsbHistorical(minutes: number = 60) {
       );
       return response;
     },
-    refetchInterval: 30000,
+    enabled: hasAuroraSession(),
+    staleTime: 30000,
+    refetchInterval: 60000, // Reduced from 30s
     retry: 2,
   });
 }
@@ -1827,7 +1837,9 @@ export function useLatestReadings() {
         return [];
       }
     },
-    refetchInterval: 10000,
+    enabled: hasAuroraSession(),
+    staleTime: 30000,
+    refetchInterval: 60000, // Reduced from 10s
     retry: 1,
   });
 }
@@ -1848,7 +1860,9 @@ export function useGeoLocations() {
         return [];
       }
     },
-    refetchInterval: 30000,
+    enabled: hasAuroraSession(),
+    staleTime: 30000,
+    refetchInterval: 60000, // Reduced from 30s
     retry: 1,
   });
 }
@@ -4335,7 +4349,9 @@ export function useGpsdStatus() {
         return null;
       }
     },
-    refetchInterval: 5000,
+    enabled: hasAuroraSession(),
+    staleTime: 30000,
+    refetchInterval: 60000, // Reduced from 5s
     retry: 1,
   });
 }
