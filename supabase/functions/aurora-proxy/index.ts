@@ -4,40 +4,26 @@ const corsHeaders = {
 };
 
 const AURORA_ENDPOINT = "http://aurora.tophatsecurity.com:9151";
-const MAX_RETRIES = 2;
-const TIMEOUT_MS = 15000; // 15 seconds per attempt to fit within edge function limits
+const TIMEOUT_MS = 25000; // 25 seconds - single attempt to avoid wasting time on retries
 
-async function fetchWithRetry(url: string, options: RequestInit, retries = MAX_RETRIES): Promise<Response> {
-  let lastError: Error | null = null;
+async function fetchWithTimeout(url: string, options: RequestInit): Promise<Response> {
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), TIMEOUT_MS);
   
-  for (let attempt = 1; attempt <= retries; attempt++) {
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), TIMEOUT_MS);
+  try {
+    const response = await fetch(url, { ...options, signal: controller.signal });
+    clearTimeout(timeoutId);
+    return response;
+  } catch (error) {
+    clearTimeout(timeoutId);
+    const errorMessage = error instanceof Error ? error.message : String(error);
     
-    try {
-      const response = await fetch(url, { ...options, signal: controller.signal });
-      clearTimeout(timeoutId);
-      return response;
-    } catch (error) {
-      clearTimeout(timeoutId);
-      const errorMessage = error instanceof Error ? error.message : String(error);
-      lastError = new Error(errorMessage);
-      
-      // Don't retry on abort - it means edge function is shutting down
-      if (errorMessage.includes('aborted')) {
-        console.log(`Request aborted on attempt ${attempt}/${retries}`);
-        throw lastError;
-      }
-      
-      console.log(`Attempt ${attempt}/${retries} failed: ${errorMessage}`);
-      
-      if (attempt < retries) {
-        // Short backoff between retries
-        await new Promise(resolve => setTimeout(resolve, 500 * attempt));
-      }
+    if (errorMessage.includes('aborted')) {
+      throw new Error('Aurora server took too long to respond. Please try again.');
     }
+    
+    throw new Error(errorMessage);
   }
-  throw lastError || new Error('Max retries exceeded');
 }
 
 Deno.serve(async (req) => {
@@ -70,7 +56,7 @@ Deno.serve(async (req) => {
       options.body = JSON.stringify(body);
     }
 
-    const response = await fetchWithRetry(url, options);
+    const response = await fetchWithTimeout(url, options);
     
     // Capture session cookie from login responses
     const isLoginEndpoint = path === '/api/auth/login';
