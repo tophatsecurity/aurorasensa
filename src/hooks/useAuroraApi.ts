@@ -10,8 +10,11 @@ interface AuroraProxyResponse {
 }
 
 async function callAuroraApi<T>(path: string, method: string = "GET", body?: unknown): Promise<T> {
+  // Get the session cookie from storage for authenticated requests
+  const sessionCookie = sessionStorage.getItem('aurora_cookie');
+  
   const { data, error } = await supabase.functions.invoke("aurora-proxy", {
-    body: { path, method, body },
+    body: { path, method, body, sessionCookie },
   });
 
   if (error) {
