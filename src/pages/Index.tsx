@@ -25,6 +25,7 @@ import WebhooksContent from "@/components/WebhooksContent";
 import UserManagementContent from "@/components/UserManagementContent";
 import SystemLogsContent from "@/components/SystemLogsContent";
 import RemoteCommandsContent from "@/components/RemoteCommandsContent";
+import UpdateManagementContent from "@/components/UpdateManagementContent";
 import StatsHistoryCharts from "@/components/StatsHistoryCharts";
 import { AuroraAuthPage } from "@/components/auth/AuroraAuthPage";
 import { useAuroraAuthContext } from "@/hooks/useAuroraAuth";
@@ -108,6 +109,8 @@ const Index = () => {
         return <SystemLogsContent />;
       case "remote-commands":
         return <RemoteCommandsContent />;
+      case "update-management":
+        return <UpdateManagementContent />;
       case "stats-history":
         return (
           <div className="flex-1 overflow-y-auto p-8">
