@@ -4260,11 +4260,18 @@ export function useCheckSetupRequired() {
     queryKey: ["aurora", "setup", "required"],
     queryFn: async () => {
       try {
-        // Try to get users list - if it fails with auth error or returns empty, setup is required
-        const result = await callAuroraApi<{ users: User[] }>("/api/users");
-        return { setupRequired: !result.users || result.users.length === 0 };
-      } catch {
-        // If we can't access users, assume setup might be required
+        // Try to get users list - if authenticated and returns empty, setup is required
+        const result = await callAuroraApi<{ users: User[] } | User[]>("/api/users");
+        // Handle both array response and object with users property
+        const users = Array.isArray(result) ? result : result?.users;
+        return { setupRequired: !users || users.length === 0 };
+      } catch (error) {
+        // If we get auth error (401/403), setup is NOT required - user just needs to login
+        const errorMsg = error instanceof Error ? error.message : String(error);
+        if (errorMsg.includes('401') || errorMsg.includes('403') || errorMsg.includes('Unauthorized') || errorMsg.includes('Forbidden') || errorMsg.includes('Not authenticated')) {
+          return { setupRequired: false };
+        }
+        // Other errors (network, etc.) - assume setup might be required
         return { setupRequired: true };
       }
     },

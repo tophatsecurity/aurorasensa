@@ -10,12 +10,6 @@ const TIMEOUT_MS = 45000;
 // Store user sessions by token (in-memory per isolate)
 const userSessions: Map<string, string> = new Map();
 
-// Server session cookie for API key auth
-let serverSessionCookie: string | null = null;
-
-// Get API key from environment (format: username:password)
-const AURORA_API_KEY = Deno.env.get('AURORA_API_KEY');
-
 async function fetchWithRetry(url: string, options: RequestInit, retries = MAX_RETRIES): Promise<Response> {
   for (let attempt = 1; attempt <= retries; attempt++) {
     const controller = new AbortController();
@@ -38,40 +32,6 @@ async function fetchWithRetry(url: string, options: RequestInit, retries = MAX_R
   throw new Error('Max retries exceeded');
 }
 
-// Authenticate using API key credentials and get server session
-async function ensureServerSession(): Promise<string | null> {
-  if (serverSessionCookie) return serverSessionCookie;
-  
-  if (!AURORA_API_KEY || !AURORA_API_KEY.includes(':')) {
-    console.log('No valid AURORA_API_KEY (format: username:password)');
-    return null;
-  }
-  
-  const [username, password] = AURORA_API_KEY.split(':');
-  console.log(`Authenticating server session as: ${username}`);
-  
-  try {
-    const response = await fetchWithRetry(`${AURORA_ENDPOINT}/api/auth/login`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ username, password }),
-    });
-    
-    if (response.ok) {
-      const setCookie = response.headers.get('set-cookie');
-      if (setCookie) {
-        serverSessionCookie = setCookie.split(';')[0];
-        console.log('Server session established');
-        return serverSessionCookie;
-      }
-    }
-    console.error('Failed to establish server session:', await response.text());
-  } catch (error) {
-    console.error('Server auth error:', error);
-  }
-  return null;
-}
-
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
@@ -92,15 +52,9 @@ Deno.serve(async (req) => {
 
     const headers: Record<string, string> = { 'Content-Type': 'application/json' };
     
-    // Use user session if available, otherwise use server session
+    // Add session cookie if user has one
     if (sessionToken && userSessions.has(sessionToken)) {
       headers['Cookie'] = userSessions.get(sessionToken)!;
-    } else {
-      // Get server session for unauthenticated requests
-      const serverCookie = await ensureServerSession();
-      if (serverCookie) {
-        headers['Cookie'] = serverCookie;
-      }
     }
 
     const options: RequestInit = { method, headers };
@@ -108,17 +62,7 @@ Deno.serve(async (req) => {
       options.body = JSON.stringify(body);
     }
 
-    let response = await fetchWithRetry(url, options);
-    
-    // If we get 401, clear server session and retry once
-    if (response.status === 401 && !sessionToken) {
-      serverSessionCookie = null;
-      const newCookie = await ensureServerSession();
-      if (newCookie) {
-        headers['Cookie'] = newCookie;
-        response = await fetchWithRetry(url, { method, headers, body: options.body });
-      }
-    }
+    const response = await fetchWithRetry(url, options);
     
     // Capture session cookie from login responses
     const isLoginEndpoint = path === '/api/auth/login';
