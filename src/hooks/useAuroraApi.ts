@@ -2273,22 +2273,9 @@ export function useStarlinkReadings(hours: number = 24) {
   });
 }
 
-export function useStarlinkTimeseries(hours: number = 24, clientId?: string) {
-  // Get device-to-client mapping for client-side filtering
-  const { data: starlinkDevices } = useStarlinkDevices();
-  
-  // Build device_id -> client_id mapping
-  const deviceToClientMap = new Map<string, string>();
-  if (starlinkDevices) {
-    starlinkDevices.forEach(device => {
-      if (device.device_id && device.client_id) {
-        deviceToClientMap.set(device.device_id, device.client_id);
-      }
-    });
-  }
-  
+export function useStarlinkTimeseries(hours: number = 24, clientId?: string, deviceId?: string) {
   return useQuery({
-    queryKey: ["aurora", "starlink", "timeseries", hours, clientId, starlinkDevices?.length ?? 0],
+    queryKey: ["aurora", "starlink", "timeseries", hours, clientId, deviceId],
     queryFn: async () => {
       try {
         // The API returns data in a nested structure: readings[].data.starlink.{field}
@@ -2337,27 +2324,27 @@ export function useStarlinkTimeseries(hours: number = 24, clientId?: string) {
           sensor_type?: string;
         }
         
-        // Build query params - include client_id filter if provided (server may or may not support it)
+        // Build query params - the API now supports client_id and device_id filtering
         const params = new URLSearchParams();
         params.append('hours', hours.toString());
         if (clientId && clientId !== 'all') {
           params.append('client_id', clientId);
+        }
+        if (deviceId) {
+          params.append('device_id', deviceId);
         }
         
         const response = await callAuroraApi<RawResponse>(`/api/readings/sensor/starlink?${params.toString()}`);
         
         // Transform nested data structure to flat structure
         // Starlink data is nested under data.starlink.{field}
-        let transformedReadings: StarlinkTimeseriesPoint[] = (response.readings || []).map(r => {
+        const transformedReadings: StarlinkTimeseriesPoint[] = (response.readings || []).map(r => {
           const starlinkData = r.data?.starlink;
           const pingLatency = starlinkData?.ping_latency;
           
-          // Get client_id from reading or look up from device mapping
-          const readingClientId = r.client_id || (r.device_id ? deviceToClientMap.get(r.device_id) : undefined);
-          
           return {
             timestamp: r.timestamp,
-            client_id: readingClientId,
+            client_id: r.client_id,
             device_id: r.device_id,
             // Power from nested starlink object (power_watts is the correct field)
             power_w: starlinkData?.power_watts ?? r.data?.power_watts ?? r.data?.power_w ?? r.power_w,
@@ -2377,15 +2364,6 @@ export function useStarlinkTimeseries(hours: number = 24, clientId?: string) {
             obstruction_percent: starlinkData?.obstruction_percent ?? r.data?.obstruction_percent,
           };
         });
-        
-        // Client-side filtering if API didn't filter and we have a client filter
-        if (clientId && clientId !== 'all' && transformedReadings.length > 0) {
-          const filteredReadings = transformedReadings.filter(r => r.client_id === clientId);
-          // Only use filtered results if we actually filtered something
-          if (filteredReadings.length < transformedReadings.length) {
-            transformedReadings = filteredReadings;
-          }
-        }
         
         return { 
           count: transformedReadings.length, 
@@ -4821,4 +4799,416 @@ export function useHealthCheck() {
     retry: 2,
   });
 }
+
+// =============================================
+// HOOKS - STATS OVERVIEW (NEW)
+// =============================================
+
+export interface StatsOverview {
+  total_readings?: number;
+  total_batches?: number;
+  total_clients?: number;
+  total_devices?: number;
+  active_alerts?: number;
+  readings_last_hour?: number;
+  readings_last_24h?: number;
+  uptime_seconds?: number;
+}
+
+export function useStatsOverview() {
+  return useQuery({
+    queryKey: ["aurora", "stats", "overview"],
+    queryFn: () => callAuroraApi<StatsOverview>("/api/stats/overview"),
+    refetchInterval: 15000,
+    retry: 2,
+  });
+}
+
+// =============================================
+// HOOKS - ACTIVITY LOG (NEW)
+// =============================================
+
+export interface ActivityLogEntry {
+  id?: string;
+  timestamp: string;
+  user?: string;
+  action: string;
+  resource?: string;
+  details?: Record<string, unknown>;
+  ip_address?: string;
+}
+
+export interface ActivityLogResponse {
+  count: number;
+  entries: ActivityLogEntry[];
+}
+
+export function useActivityLog(limit: number = 100) {
+  return useQuery({
+    queryKey: ["aurora", "activity", limit],
+    queryFn: () => callAuroraApi<ActivityLogResponse>(`/api/activity?limit=${limit}`),
+    refetchInterval: 30000,
+    retry: 2,
+  });
+}
+
+export function useUserActivityLog(userId: string, limit: number = 50) {
+  return useQuery({
+    queryKey: ["aurora", "users", userId, "activity", limit],
+    queryFn: () => callAuroraApi<ActivityLogResponse>(`/api/users/${userId}/activity?limit=${limit}`),
+    enabled: !!userId,
+    refetchInterval: 30000,
+    retry: 2,
+  });
+}
+
+// =============================================
+// HOOKS - REMOTE COMMANDS (ADMIN)
+// =============================================
+
+export interface RemoteCommand {
+  id: string;
+  command: string;
+  target_clients?: string[];
+  created_at: string;
+  created_by?: string;
+  status?: string;
+  timeout_seconds?: number;
+}
+
+export interface CommandResult {
+  command_id: string;
+  client_id: string;
+  status: string;
+  output?: string;
+  error?: string;
+  executed_at?: string;
+  duration_ms?: number;
+}
+
+export function useAdminCommands(limit: number = 50) {
+  return useQuery({
+    queryKey: ["aurora", "admin", "commands", limit],
+    queryFn: () => callAuroraApi<{ commands: RemoteCommand[] }>(`/api/admin/commands/list?limit=${limit}`),
+    refetchInterval: 15000,
+    retry: 2,
+  });
+}
+
+export function useCommandResults(commandId: string) {
+  return useQuery({
+    queryKey: ["aurora", "admin", "commands", commandId, "results"],
+    queryFn: () => callAuroraApi<{ results: CommandResult[] }>(`/api/admin/commands/${commandId}/results`),
+    enabled: !!commandId,
+    refetchInterval: 10000,
+    retry: 2,
+  });
+}
+
+export function useSendCommand() {
+  const queryClient = useQueryClient();
+  
+  return useMutation({
+    mutationFn: async (data: { command: string; target_clients?: string[]; timeout_seconds?: number }) => {
+      return callAuroraApi<{ success: boolean; command_id?: string; message?: string }>("/api/admin/commands/send", "POST", data);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["aurora", "admin", "commands"] });
+    },
+  });
+}
+
+// =============================================
+// HOOKS - UPDATE MANAGEMENT (ADMIN)
+// =============================================
+
+export interface UpdatePackage {
+  id: string;
+  version: string;
+  filename?: string;
+  size_bytes?: number;
+  created_at: string;
+  published?: boolean;
+  description?: string;
+}
+
+export interface UpdateAssignment {
+  id: string;
+  package_id: string;
+  target_clients?: string[];
+  created_at: string;
+  status?: string;
+}
+
+export interface UpdateStatus {
+  packages: UpdatePackage[];
+  assignments: UpdateAssignment[];
+  client_statuses?: Record<string, {
+    current_version?: string;
+    target_version?: string;
+    status?: string;
+    last_update?: string;
+  }>;
+}
+
+export function useUpdatePackages() {
+  return useQuery({
+    queryKey: ["aurora", "admin", "updates", "packages"],
+    queryFn: () => callAuroraApi<{ packages: UpdatePackage[] }>("/api/admin/updates/packages"),
+    refetchInterval: 60000,
+    retry: 2,
+  });
+}
+
+export function useUpdateStatus() {
+  return useQuery({
+    queryKey: ["aurora", "admin", "updates", "status"],
+    queryFn: () => callAuroraApi<UpdateStatus>("/api/admin/updates/status"),
+    refetchInterval: 30000,
+    retry: 2,
+  });
+}
+
+export function useClientUpdateHistory(clientId: string) {
+  return useQuery({
+    queryKey: ["aurora", "admin", "updates", "clients", clientId, "history"],
+    queryFn: () => callAuroraApi<{ history: Array<{ version: string; status: string; timestamp: string }> }>(`/api/admin/updates/clients/${clientId}/history`),
+    enabled: !!clientId,
+    retry: 2,
+  });
+}
+
+export function usePublishPackage() {
+  const queryClient = useQueryClient();
+  
+  return useMutation({
+    mutationFn: async (packageId: string) => {
+      return callAuroraApi<{ success: boolean; message?: string }>(`/api/admin/updates/packages/${packageId}/publish`, "POST");
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["aurora", "admin", "updates"] });
+    },
+  });
+}
+
+export function useCreateUpdateAssignment() {
+  const queryClient = useQueryClient();
+  
+  return useMutation({
+    mutationFn: async (data: { package_id: string; target_clients?: string[] }) => {
+      return callAuroraApi<{ success: boolean; assignment_id?: string }>("/api/admin/updates/assignments", "POST", data);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["aurora", "admin", "updates"] });
+    },
+  });
+}
+
+// =============================================
+// HOOKS - USER API KEYS (NEW)
+// =============================================
+
+export interface UserApiKey {
+  id: string;
+  name?: string;
+  created_at: string;
+  last_used?: string;
+  prefix?: string;
+}
+
+export function useUserApiKeys(userId: string) {
+  return useQuery({
+    queryKey: ["aurora", "users", userId, "api-keys"],
+    queryFn: () => callAuroraApi<{ api_keys: UserApiKey[] }>(`/api/users/${userId}/api-keys`),
+    enabled: !!userId,
+    retry: 2,
+  });
+}
+
+export function useCreateUserApiKey() {
+  const queryClient = useQueryClient();
+  
+  return useMutation({
+    mutationFn: async ({ userId, name }: { userId: string; name?: string }) => {
+      return callAuroraApi<{ success: boolean; api_key?: string; key_id?: string }>(`/api/users/${userId}/api-keys`, "POST", { name });
+    },
+    onSuccess: (_, variables) => {
+      queryClient.invalidateQueries({ queryKey: ["aurora", "users", variables.userId, "api-keys"] });
+    },
+  });
+}
+
+export function useDeleteUserApiKey() {
+  const queryClient = useQueryClient();
+  
+  return useMutation({
+    mutationFn: async ({ userId, keyId }: { userId: string; keyId: string }) => {
+      return callAuroraApi<{ success: boolean }>(`/api/users/${userId}/api-keys/${keyId}`, "DELETE");
+    },
+    onSuccess: (_, variables) => {
+      queryClient.invalidateQueries({ queryKey: ["aurora", "users", variables.userId, "api-keys"] });
+    },
+  });
+}
+
+// =============================================
+// HOOKS - USER SESSIONS (NEW)
+// =============================================
+
+export interface UserSession {
+  id: string;
+  created_at: string;
+  last_active?: string;
+  ip_address?: string;
+  user_agent?: string;
+  current?: boolean;
+}
+
+export function useUserSessions(userId: string) {
+  return useQuery({
+    queryKey: ["aurora", "users", userId, "sessions"],
+    queryFn: () => callAuroraApi<{ sessions: UserSession[] }>(`/api/users/${userId}/sessions`),
+    enabled: !!userId,
+    refetchInterval: 30000,
+    retry: 2,
+  });
+}
+
+// =============================================
+// HOOKS - ROLES & PERMISSIONS (NEW)
+// =============================================
+
+export interface Role {
+  id: string;
+  name: string;
+  description?: string;
+  permissions?: string[];
+}
+
+export interface Permission {
+  id: string;
+  name: string;
+  description?: string;
+}
+
+export function useRoles() {
+  return useQuery({
+    queryKey: ["aurora", "roles"],
+    queryFn: () => callAuroraApi<{ roles: Role[] }>("/api/roles"),
+    staleTime: 60000,
+    retry: 2,
+  });
+}
+
+export function usePermissions() {
+  return useQuery({
+    queryKey: ["aurora", "permissions"],
+    queryFn: () => callAuroraApi<{ permissions: Permission[] }>("/api/permissions"),
+    staleTime: 60000,
+    retry: 2,
+  });
+}
+
+export function useUserRoles(userId: string) {
+  return useQuery({
+    queryKey: ["aurora", "users", userId, "roles"],
+    queryFn: () => callAuroraApi<{ roles: Role[] }>(`/api/users/${userId}/roles`),
+    enabled: !!userId,
+    retry: 2,
+  });
+}
+
+export function useUserPermissions(userId: string) {
+  return useQuery({
+    queryKey: ["aurora", "users", userId, "permissions"],
+    queryFn: () => callAuroraApi<{ permissions: Permission[] }>(`/api/users/${userId}/permissions`),
+    enabled: !!userId,
+    retry: 2,
+  });
+}
+
+export function useAssignRole() {
+  const queryClient = useQueryClient();
+  
+  return useMutation({
+    mutationFn: async ({ userId, roleId }: { userId: string; roleId: string }) => {
+      return callAuroraApi<{ success: boolean }>(`/api/users/${userId}/roles`, "POST", { role_id: roleId });
+    },
+    onSuccess: (_, variables) => {
+      queryClient.invalidateQueries({ queryKey: ["aurora", "users", variables.userId, "roles"] });
+      queryClient.invalidateQueries({ queryKey: ["aurora", "users", variables.userId, "permissions"] });
+    },
+  });
+}
+
+// =============================================
+// HOOKS - CLIENT PENDING COMMANDS (NEW)
+// =============================================
+
+export interface PendingCommand {
+  id: string;
+  command: string;
+  created_at: string;
+  timeout_seconds?: number;
+}
+
+export function useClientPendingCommands(clientId: string) {
+  return useQuery({
+    queryKey: ["aurora", "clients", clientId, "commands", "pending"],
+    queryFn: () => callAuroraApi<{ commands: PendingCommand[] }>(`/api/clients/${clientId}/commands/pending`),
+    enabled: !!clientId,
+    refetchInterval: 10000,
+    retry: 2,
+  });
+}
+
+export function useSubmitCommandResult() {
+  const queryClient = useQueryClient();
+  
+  return useMutation({
+    mutationFn: async ({ clientId, commandId, result }: { clientId: string; commandId: string; result: { status: string; output?: string; error?: string } }) => {
+      return callAuroraApi<{ success: boolean }>(`/api/clients/${clientId}/commands/results`, "POST", { command_id: commandId, ...result });
+    },
+    onSuccess: (_, variables) => {
+      queryClient.invalidateQueries({ queryKey: ["aurora", "clients", variables.clientId, "commands"] });
+      queryClient.invalidateQueries({ queryKey: ["aurora", "admin", "commands"] });
+    },
+  });
+}
+
+// =============================================
+// HOOKS - CLIENT AVAILABLE UPDATES (NEW)
+// =============================================
+
+export interface AvailableUpdate {
+  package_id: string;
+  version: string;
+  description?: string;
+  size_bytes?: number;
+}
+
+export function useClientAvailableUpdates(clientId: string) {
+  return useQuery({
+    queryKey: ["aurora", "clients", clientId, "updates", "available"],
+    queryFn: () => callAuroraApi<{ updates: AvailableUpdate[] }>(`/api/clients/${clientId}/updates/available`),
+    enabled: !!clientId,
+    refetchInterval: 60000,
+    retry: 2,
+  });
+}
+
+export function useReportUpdateStatus() {
+  const queryClient = useQueryClient();
+  
+  return useMutation({
+    mutationFn: async ({ clientId, packageId, status, error }: { clientId: string; packageId: string; status: string; error?: string }) => {
+      return callAuroraApi<{ success: boolean }>(`/api/clients/${clientId}/updates/status`, "POST", { package_id: packageId, status, error });
+    },
+    onSuccess: (_, variables) => {
+      queryClient.invalidateQueries({ queryKey: ["aurora", "clients", variables.clientId, "updates"] });
+      queryClient.invalidateQueries({ queryKey: ["aurora", "admin", "updates"] });
+    },
+  });
+}
+
 
