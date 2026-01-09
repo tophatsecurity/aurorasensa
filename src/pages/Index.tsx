@@ -26,12 +26,12 @@ import UserManagementContent from "@/components/UserManagementContent";
 import SystemLogsContent from "@/components/SystemLogsContent";
 import StatsHistoryCharts from "@/components/StatsHistoryCharts";
 import { AuroraAuthPage } from "@/components/auth/AuroraAuthPage";
-import { useAuroraAuth } from "@/hooks/useAuroraAuth";
+import { useAuroraAuthContext } from "@/hooks/useAuroraAuth";
 import { Loader2 } from "lucide-react";
 
 const Index = () => {
   const [activeItem, setActiveItem] = useState("dashboard");
-  const { user, loading, signIn } = useAuroraAuth();
+  const { user, loading, signIn } = useAuroraAuthContext();
 
   // Show loading spinner while checking auth
   if (loading) {

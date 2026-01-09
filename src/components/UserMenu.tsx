@@ -8,7 +8,7 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { Button } from '@/components/ui/button';
-import { useAuroraAuth } from '@/hooks/useAuroraAuth';
+import { useAuroraAuthContext } from '@/hooks/useAuroraAuth';
 import { useToast } from '@/hooks/use-toast';
 
 interface UserMenuProps {
@@ -16,7 +16,7 @@ interface UserMenuProps {
 }
 
 export function UserMenu({ onNavigateToSettings }: UserMenuProps) {
-  const { user, signOut, isAdmin } = useAuroraAuth();
+  const { user, signOut, isAdmin } = useAuroraAuthContext();
   const { toast } = useToast();
 
   const handleSignOut = async () => {
