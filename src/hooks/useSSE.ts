@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, useCallback } from "react";
+import { useEffect, useRef, useState, useCallback, useMemo } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 
@@ -244,6 +244,93 @@ export function useCommandsStreamSSE(enabled = true) {
         toast.success(`Command completed: ${update.command_id?.slice(0, 8) || ""}...`);
       }
     },
+  });
+}
+
+// Specialized hook for sensor readings stream
+export interface SensorReadingEvent {
+  device_id?: string;
+  device_type?: string;
+  client_id?: string;
+  timestamp?: string;
+  data?: Record<string, unknown>;
+}
+
+export function useSensorReadingsSSE(options?: {
+  enabled?: boolean;
+  clientId?: string;
+  deviceType?: string;
+}) {
+  const { enabled = true, clientId, deviceType } = options || {};
+  
+  const endpoint = useMemo(() => {
+    const params = new URLSearchParams();
+    if (clientId && clientId !== "all") params.set("client_id", clientId);
+    if (deviceType) params.set("device_type", deviceType);
+    const queryString = params.toString();
+    return `/api/stream/readings${queryString ? `?${queryString}` : ""}`;
+  }, [clientId, deviceType]);
+
+  return useSSE({
+    endpoint,
+    queryKeys: [
+      ["aurora", "dashboard"],
+      ["aurora", "readings"],
+      ["aurora", "comprehensive-stats"],
+      ["aurora", "sensor-type-stats"],
+    ],
+    enabled,
+  });
+}
+
+// Specialized hook for dashboard stats stream (aggregated data)
+export function useDashboardStatsSSE(enabled = true) {
+  return useSSE({
+    endpoint: "/api/stream/dashboard/stats",
+    queryKeys: [
+      ["aurora", "dashboard", "stats"],
+      ["aurora", "dashboard", "sensor-stats"],
+      ["aurora", "comprehensive-stats"],
+    ],
+    enabled,
+  });
+}
+
+// Specialized hook for Starlink data stream
+export function useStarlinkSSE(enabled = true, clientId?: string) {
+  const endpoint = useMemo(() => {
+    const params = new URLSearchParams();
+    if (clientId && clientId !== "all") params.set("client_id", clientId);
+    const queryString = params.toString();
+    return `/api/stream/readings/starlink${queryString ? `?${queryString}` : ""}`;
+  }, [clientId]);
+
+  return useSSE({
+    endpoint,
+    queryKeys: [
+      ["aurora", "starlink"],
+      ["aurora", "sensor-type-stats", "starlink"],
+    ],
+    enabled,
+  });
+}
+
+// Specialized hook for thermal probe data stream
+export function useThermalProbeSSE(enabled = true, clientId?: string) {
+  const endpoint = useMemo(() => {
+    const params = new URLSearchParams();
+    if (clientId && clientId !== "all") params.set("client_id", clientId);
+    const queryString = params.toString();
+    return `/api/stream/readings/thermal_probe${queryString ? `?${queryString}` : ""}`;
+  }, [clientId]);
+
+  return useSSE({
+    endpoint,
+    queryKeys: [
+      ["aurora", "thermal"],
+      ["aurora", "sensor-type-stats", "thermal_probe"],
+    ],
+    enabled,
   });
 }
 
