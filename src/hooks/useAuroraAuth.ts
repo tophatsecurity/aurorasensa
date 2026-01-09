@@ -113,6 +113,28 @@ export function useAuroraAuth(): AuroraAuthContextValue {
     refreshUser();
   }, [refreshUser]);
 
+  // Listen for session being cleared by other parts of the app (e.g., 401 errors in useAuroraApi)
+  useEffect(() => {
+    const checkSession = () => {
+      const hasSession = sessionStorage.getItem(SESSION_COOKIE_KEY);
+      if (!hasSession && authState.user) {
+        // Session was cleared externally, update auth state
+        setAuthState({ user: null, loading: false, error: null });
+      }
+    };
+
+    // Check periodically since sessionStorage doesn't have native events
+    const intervalId = setInterval(checkSession, 1000);
+    
+    // Also check on window focus (user might have logged out in another tab)
+    window.addEventListener('focus', checkSession);
+    
+    return () => {
+      clearInterval(intervalId);
+      window.removeEventListener('focus', checkSession);
+    };
+  }, [authState.user]);
+
   const signIn = useCallback(async (username: string, password: string) => {
     setAuthState(prev => ({ ...prev, loading: true, error: null }));
     
