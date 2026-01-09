@@ -67,15 +67,13 @@ async function callAuroraApi<T>(path: string, method: string = "GET", body?: unk
       if (data && typeof data === 'object' && 'detail' in data) {
         const detailStr = String(data.detail);
         
-        // Handle 401 authentication errors - clear session and reload to show login
+        // Handle 401 authentication errors - clear session (let auth context handle redirect)
         const isAuthError = detailStr.toLowerCase().includes('not authenticated') || 
                            detailStr.toLowerCase().includes('invalid session') ||
                            detailStr.toLowerCase().includes('provide x-api-key');
         if (isAuthError) {
-          // Clear invalid session
+          // Clear invalid session - the auth context will detect this and show login
           clearAuroraSession();
-          // Force page reload to trigger re-authentication
-          window.location.reload();
           const error = new Error('Session expired. Please log in again.');
           (error as any).status = 401;
           throw error;
