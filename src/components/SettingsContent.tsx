@@ -1,5 +1,5 @@
-import { useState } from "react";
-import { Settings, Bell, Wifi, Database, Shield, Palette, Globe, Save, CheckCircle, XCircle, Loader2, Activity, Server, RefreshCw } from "lucide-react";
+import { useState, useEffect } from "react";
+import { Settings, Bell, Wifi, Database, Shield, Palette, Globe, Save, CheckCircle, XCircle, Loader2, Activity, Server, RefreshCw, Ruler } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -14,6 +14,18 @@ import { useComprehensiveStats, useClients, useServiceStatus, useHealth, useSyst
 import { useQueryClient } from "@tanstack/react-query";
 
 const AURORA_API_URL = "http://aurora.tophatsecurity.com:9151";
+
+export type UnitSystem = "metric" | "imperial";
+
+export const getUnitSystem = (): UnitSystem => {
+  const stored = localStorage.getItem("unitSystem");
+  return (stored === "imperial" || stored === "metric") ? stored : "imperial";
+};
+
+export const setUnitSystem = (system: UnitSystem) => {
+  localStorage.setItem("unitSystem", system);
+  window.dispatchEvent(new CustomEvent("unitSystemChange", { detail: system }));
+};
 
 const MONITORED_SERVICES = [
   { name: "datacollector", label: "Data Collector" },
@@ -62,6 +74,14 @@ const SettingsContent = () => {
   const { data: memory } = useSystemMemory();
   const { data: disk } = useSystemDisk();
   const { data: cpuLoad } = useSystemCpuLoad();
+  
+  const [unitSystem, setUnitSystemState] = useState<UnitSystem>(getUnitSystem);
+
+  const handleUnitSystemChange = (value: string) => {
+    const newSystem = value as UnitSystem;
+    setUnitSystemState(newSystem);
+    setUnitSystem(newSystem);
+  };
 
   const isConnected = !statsError && stats;
   const totalClients = stats?.global?.database?.total_clients ?? 0;
@@ -308,6 +328,38 @@ const SettingsContent = () => {
                   <p className="text-sm text-muted-foreground">Send alerts to your email</p>
                 </div>
                 <Switch />
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Unit System */}
+          <Card className="bg-card/50 backdrop-blur-sm border-border/50">
+            <CardHeader>
+              <CardTitle className="text-lg flex items-center gap-2">
+                <Ruler className="w-5 h-5" />
+                Unit System
+              </CardTitle>
+              <CardDescription>Choose between Metric and Imperial units</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="font-medium">Measurement Units</p>
+                  <p className="text-sm text-muted-foreground">
+                    {unitSystem === "metric" 
+                      ? "Celsius, meters, km/h" 
+                      : "Fahrenheit, feet, mph"}
+                  </p>
+                </div>
+                <Select value={unitSystem} onValueChange={handleUnitSystemChange}>
+                  <SelectTrigger className="w-32">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="imperial">Imperial</SelectItem>
+                    <SelectItem value="metric">Metric</SelectItem>
+                  </SelectContent>
+                </Select>
               </div>
             </CardContent>
           </Card>
