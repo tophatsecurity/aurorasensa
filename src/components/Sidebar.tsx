@@ -70,6 +70,7 @@ const menuSections = [
     title: "SYSTEM",
     items: [
       { id: "performance", label: "Performance", icon: Activity },
+      { id: "remote-commands", label: "Remote Commands", icon: Terminal },
       { id: "webhooks", label: "Webhooks", icon: Webhook },
       { id: "configuration", label: "Configuration", icon: Cog },
       { id: "system-logs", label: "System Logs", icon: Terminal },
