@@ -26,18 +26,19 @@ Deno.serve(async (req) => {
     }
     
     const url = `${AURORA_ENDPOINT}${path}`;
-    console.log(`Proxy ${method}: ${url}`);
+    const isLoginEndpoint = path === '/api/auth/login';
+    console.log(`Proxy ${method}: ${url}${sessionCookie ? ' (with session)' : ''}`);
 
     const headers: Record<string, string> = { 'Content-Type': 'application/json' };
     
-    // Add API key for authentication
-    if (AURORA_API_KEY) {
-      headers['X-API-Key'] = AURORA_API_KEY;
-    }
-    
-    // Also include session cookie if provided
+    // Use session cookie for authentication (primary method)
     if (sessionCookie) {
       headers['Cookie'] = sessionCookie;
+    }
+    
+    // Only use API key as fallback for non-login endpoints if no session cookie
+    if (!sessionCookie && !isLoginEndpoint && AURORA_API_KEY) {
+      headers['X-API-Key'] = AURORA_API_KEY;
     }
 
     const controller = new AbortController();
@@ -79,7 +80,6 @@ Deno.serve(async (req) => {
     clearTimeout(timeoutId);
     
     // Handle login response with cookie capture
-    const isLoginEndpoint = path === '/api/auth/login';
     let responseText = await response.text();
     
     if (isLoginEndpoint && response.ok) {
