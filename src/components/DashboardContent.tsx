@@ -111,14 +111,21 @@ const formatTempCompact = (celsius: number | null | undefined): string => {
 };
 
 const DashboardContent = () => {
-  const { data: stats, isLoading: statsLoading } = useComprehensiveStats();
-  const { data: dashboardStats, isLoading: dashboardStatsLoading } = useDashboardStats();
-  const { data: timeseries, isLoading: timeseriesLoading } = useDashboardTimeseries(24);
-  const { data: alerts } = useAlerts();
-  const { data: clients, isLoading: clientsLoading } = useClients();
+  // Time period state and client filter (must be defined first to use in data hooks)
+  const [timePeriod, setTimePeriod] = useState<TimePeriodOption>('1h');
+  const [selectedClient, setSelectedClient] = useState<string>('all');
   
   // SSE state for real-time updates
   const [sseEnabled, setSSEEnabled] = useState(true);
+  
+  // Convert time period to hours for API calls
+  const periodHours = timePeriodToHours(timePeriod);
+  
+  const { data: stats, isLoading: statsLoading } = useComprehensiveStats();
+  const { data: dashboardStats, isLoading: dashboardStatsLoading } = useDashboardStats();
+  const { data: timeseries, isLoading: timeseriesLoading } = useDashboardTimeseries(periodHours, selectedClient);
+  const { data: alerts } = useAlerts();
+  const { data: clients, isLoading: clientsLoading } = useClients();
   
   // Sensor type specific stats - these contain numeric_field_stats_24h with real data
   const { data: thermalProbeStats, isLoading: thermalLoading } = useSensorTypeStats("thermal_probe");
@@ -135,18 +142,14 @@ const DashboardContent = () => {
   const { data: health, isLoading: healthLoading } = useHealth();
 
   
-  // Real timeseries data for sparklines
-  const { data: starlinkTimeseries, isLoading: starlinkTimeseriesLoading } = useStarlinkTimeseries(24);
-  const { data: thermalTimeseries, isLoading: thermalTimeseriesLoading } = useThermalProbeTimeseries(24);
-  const { data: ahtTimeseries, isLoading: ahtTimeseriesLoading } = useAhtSensorTimeseries(24);
-  const { data: arduinoTimeseries, isLoading: arduinoTimeseriesLoading } = useArduinoSensorTimeseries(24);
+  // Real timeseries data for sparklines - now using context filters
+  const { data: starlinkTimeseries, isLoading: starlinkTimeseriesLoading } = useStarlinkTimeseries(periodHours, selectedClient);
+  const { data: thermalTimeseries, isLoading: thermalTimeseriesLoading } = useThermalProbeTimeseries(periodHours, selectedClient);
+  const { data: ahtTimeseries, isLoading: ahtTimeseriesLoading } = useAhtSensorTimeseries(periodHours, selectedClient);
+  const { data: arduinoTimeseries, isLoading: arduinoTimeseriesLoading } = useArduinoSensorTimeseries(periodHours, selectedClient);
   
   // Dedicated Starlink power endpoint for accurate power data
   const { data: starlinkPowerData, isLoading: starlinkPowerLoading } = useStarlinkPower();
-
-  // Time period state and client filter (moved up for SSE usage)
-  const [timePeriod, setTimePeriod] = useState<TimePeriodOption>('1h');
-  const [selectedClient, setSelectedClient] = useState<string>('all');
   
   // SSE for real-time sensor readings
   const sensorSSE = useSensorReadingsSSE({
@@ -305,8 +308,7 @@ const DashboardContent = () => {
   const pendingDevices = clients?.filter((c: Client) => c.auto_registered && !c.adopted_at) || [];
   const adoptedDevices = clients?.filter((c: Client) => c.adopted_at) || [];
   
-  // Convert time period to hours for API calls
-  const periodHours = timePeriodToHours(timePeriod);
+  // Get period label for display
   const periodLabel = timePeriodLabel(timePeriod);
   
   return (
