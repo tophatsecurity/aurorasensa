@@ -29,6 +29,8 @@ import {
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Switch } from "@/components/ui/switch";
+import { Label } from "@/components/ui/label";
 import SensorCard from "./SensorCard";
 import StatCardWithChart from "./StatCardWithChart";
 import SensorCharts from "./SensorCharts";
@@ -38,6 +40,7 @@ import ThermalProbeDeviceChart from "./ThermalProbeDeviceChart";
 import HumidityCharts from "./HumidityCharts";
 import PowerConsumptionCharts from "./PowerConsumptionCharts";
 import SystemMonitorCharts from "./SystemMonitorCharts";
+import { SSEConnectionStatus } from "./SSEConnectionStatus";
 import { 
   ContextFilters, 
   TimePeriodOption, 
@@ -61,6 +64,7 @@ import {
   useHealth,
   Client 
 } from "@/hooks/useAuroraApi";
+import { useSensorReadingsSSE } from "@/hooks/useSSE";
 import { MemoryStick, HardDrive } from "lucide-react";
 import { formatLastSeen, formatDate, formatDateTime, getDeviceStatusFromLastSeen } from "@/utils/dateUtils";
 
@@ -113,6 +117,9 @@ const DashboardContent = () => {
   const { data: alerts } = useAlerts();
   const { data: clients, isLoading: clientsLoading } = useClients();
   
+  // SSE state for real-time updates
+  const [sseEnabled, setSSEEnabled] = useState(true);
+  
   // Sensor type specific stats - these contain numeric_field_stats_24h with real data
   const { data: thermalProbeStats, isLoading: thermalLoading } = useSensorTypeStats("thermal_probe");
   const { data: starlinkStats, isLoading: starlinkLoading } = useSensorTypeStats("starlink");
@@ -136,6 +143,16 @@ const DashboardContent = () => {
   
   // Dedicated Starlink power endpoint for accurate power data
   const { data: starlinkPowerData, isLoading: starlinkPowerLoading } = useStarlinkPower();
+
+  // Time period state and client filter (moved up for SSE usage)
+  const [timePeriod, setTimePeriod] = useState<TimePeriodOption>('1h');
+  const [selectedClient, setSelectedClient] = useState<string>('all');
+  
+  // SSE for real-time sensor readings
+  const sensorSSE = useSensorReadingsSSE({
+    enabled: sseEnabled,
+    clientId: selectedClient,
+  });
 
   // Check if thermal timeseries has actual temperature values (not just timestamps)
   const thermalHasValidData = useMemo(() => {
@@ -288,10 +305,6 @@ const DashboardContent = () => {
   const pendingDevices = clients?.filter((c: Client) => c.auto_registered && !c.adopted_at) || [];
   const adoptedDevices = clients?.filter((c: Client) => c.adopted_at) || [];
   
-  // Time period state and client filter
-  const [timePeriod, setTimePeriod] = useState<TimePeriodOption>('1h');
-  const [selectedClient, setSelectedClient] = useState<string>('all');
-  
   // Convert time period to hours for API calls
   const periodHours = timePeriodToHours(timePeriod);
   const periodLabel = timePeriodLabel(timePeriod);
@@ -302,17 +315,34 @@ const DashboardContent = () => {
       <div className="flex items-center justify-between mb-8">
         <div className="flex items-center gap-4">
           <h1 className="text-3xl font-bold text-foreground">AURORASENSE Server</h1>
-          <Badge className="bg-success/20 text-success border-success/30 px-3 py-1">
-            LIVE
-          </Badge>
+          <SSEConnectionStatus
+            isConnected={sensorSSE.isConnected}
+            isConnecting={sensorSSE.isConnecting}
+            error={sensorSSE.error}
+            reconnectCount={sensorSSE.reconnectCount}
+            onReconnect={sensorSSE.reconnect}
+            label="Live Data"
+          />
         </div>
-        <ContextFilters
-          timePeriod={timePeriod}
-          onTimePeriodChange={setTimePeriod}
-          clientId={selectedClient}
-          onClientChange={setSelectedClient}
-          showClientFilter={true}
-        />
+        <div className="flex items-center gap-4">
+          <div className="flex items-center gap-2">
+            <Switch
+              id="sse-toggle-dashboard"
+              checked={sseEnabled}
+              onCheckedChange={setSSEEnabled}
+            />
+            <Label htmlFor="sse-toggle-dashboard" className="text-sm text-muted-foreground">
+              Real-time
+            </Label>
+          </div>
+          <ContextFilters
+            timePeriod={timePeriod}
+            onTimePeriodChange={setTimePeriod}
+            clientId={selectedClient}
+            onClientChange={setSelectedClient}
+            showClientFilter={true}
+          />
+        </div>
       </div>
 
       {/* Top Stats with Charts */}
