@@ -25,6 +25,15 @@ interface AuroraAuthContextValue extends AuroraAuthState {
 const SESSION_KEY = 'aurora_session';
 const SESSION_COOKIE_KEY = 'aurora_cookie';
 
+const isConnectionError = (error: unknown): boolean => {
+  const message = error instanceof Error ? error.message : String(error);
+  return message.includes('aborted') || 
+         message.includes('timeout') || 
+         message.includes('503') ||
+         message.includes('500') ||
+         message.includes('network');
+};
+
 async function callAuroraApi<T>(path: string, method: string = "GET", body?: unknown): Promise<T> {
   const sessionCookie = sessionStorage.getItem(SESSION_COOKIE_KEY);
   
@@ -33,7 +42,17 @@ async function callAuroraApi<T>(path: string, method: string = "GET", body?: unk
   });
 
   if (error) {
+    if (isConnectionError(error)) {
+      throw new Error('Unable to connect to Aurora server. Please check your network connection and try again.');
+    }
     throw new Error(`Aurora API error: ${error.message}`);
+  }
+
+  if (data && typeof data === 'object' && 'error' in data) {
+    const errorData = data as { error: string; details?: string };
+    if (errorData.details && isConnectionError(errorData.details)) {
+      throw new Error('Aurora server is not responding. Please try again in a few moments.');
+    }
   }
 
   if (data && typeof data === 'object' && 'detail' in data) {
