@@ -370,12 +370,12 @@ const DashboardContent = () => {
           <Zap className="w-5 h-5 text-orange-500" />
           Power Consumption ({periodLabel})
         </h2>
-        <PowerConsumptionCharts hours={periodHours} />
+        <PowerConsumptionCharts hours={periodHours} clientId={selectedClient} />
       </div>
 
       {/* All Temperatures Over Time - moved below Power Consumption */}
       <div className="mb-8">
-        <ThermalProbeDeviceChart hours={periodHours} />
+        <ThermalProbeDeviceChart hours={periodHours} clientId={selectedClient} />
       </div>
 
       {/* Thermal - All Temperature Sources */}

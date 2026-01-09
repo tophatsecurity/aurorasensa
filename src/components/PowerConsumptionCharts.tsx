@@ -39,14 +39,19 @@ interface ThresholdConfig {
 
 interface PowerConsumptionChartsProps {
   hours?: number;
+  clientId?: string; // Filter by client_id, 'all' means no filter
 }
 
-const PowerConsumptionCharts = ({ hours = 24 }: PowerConsumptionChartsProps) => {
+const PowerConsumptionCharts = ({ hours = 24, clientId = 'all' }: PowerConsumptionChartsProps) => {
   // Use dedicated power endpoint for current reading, timeseries for history
   const { data: starlinkPower, isLoading: isPowerLoading } = useStarlinkPower();
   const { data: starlinkTimeseries, isLoading: isTimeseriesLoading } = useStarlinkTimeseries(hours);
   
   const isLoading = isPowerLoading || isTimeseriesLoading;
+  
+  // Note: Starlink power data is typically from a single device, so client filtering
+  // would filter everything or nothing. We keep the prop for API consistency.
+  const _ = clientId; // Acknowledge the prop to avoid unused warning
   
   const [thresholdConfig, setThresholdConfig] = useState<ThresholdConfig>({
     warningThreshold: 100,
