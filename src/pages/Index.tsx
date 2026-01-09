@@ -33,14 +33,20 @@ const Index = () => {
   const [activeItem, setActiveItem] = useState("dashboard");
   const { user, loading, signIn } = useAuroraAuthContext();
 
-  // Show loading spinner while checking auth
+  // Show loading spinner while checking auth/session validity
   if (loading) {
     return (
-      <div className="h-screen flex items-center justify-center relative">
+      <div className="h-screen flex items-center justify-center relative bg-slate-950">
         <AuroraBackground />
-        <div className="relative z-10 flex flex-col items-center gap-4">
-          <Loader2 className="w-10 h-10 text-cyan-400 animate-spin" />
-          <p className="text-slate-400">Loading Aurora Sense...</p>
+        <div className="relative z-10 flex flex-col items-center gap-6">
+          <div className="relative">
+            <div className="w-16 h-16 rounded-full border-4 border-cyan-500/20 border-t-cyan-400 animate-spin" />
+            <div className="absolute inset-0 w-16 h-16 rounded-full border-4 border-transparent border-b-purple-400/50 animate-spin" style={{ animationDirection: 'reverse', animationDuration: '1.5s' }} />
+          </div>
+          <div className="text-center">
+            <h2 className="text-xl font-semibold text-slate-100 mb-2">Aurora Sense</h2>
+            <p className="text-slate-400 text-sm">Validating session...</p>
+          </div>
         </div>
       </div>
     );
