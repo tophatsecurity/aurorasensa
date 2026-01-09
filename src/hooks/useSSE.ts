@@ -334,6 +334,135 @@ export function useThermalProbeSSE(enabled = true, clientId?: string) {
   });
 }
 
+// Specialized hook for Arduino sensor data stream (AHT, BME280, etc.)
+export function useArduinoSSE(enabled = true, clientId?: string) {
+  const endpoint = useMemo(() => {
+    const params = new URLSearchParams();
+    if (clientId && clientId !== "all") params.set("client_id", clientId);
+    const queryString = params.toString();
+    return `/api/stream/readings/arduino${queryString ? `?${queryString}` : ""}`;
+  }, [clientId]);
+
+  return useSSE({
+    endpoint,
+    queryKeys: [
+      ["aurora", "arduino"],
+      ["aurora", "aht-sensor"],
+      ["aurora", "sensor-type-stats", "aht_sensor"],
+      ["aurora", "sensor-type-stats", "bmt_sensor"],
+    ],
+    enabled,
+    onMessage: (data) => {
+      const reading = data as { device_type?: string; temp_c?: number; humidity?: number };
+      // Log high-volume readings for debugging
+      console.debug(`Arduino SSE: ${reading.device_type} - Temp: ${reading.temp_c}°C, Humidity: ${reading.humidity}%`);
+    },
+  });
+}
+
+// Specialized hook for GPS/Location data stream
+export function useGpsSSE(enabled = true, clientId?: string) {
+  const endpoint = useMemo(() => {
+    const params = new URLSearchParams();
+    if (clientId && clientId !== "all") params.set("client_id", clientId);
+    const queryString = params.toString();
+    return `/api/stream/readings/gps${queryString ? `?${queryString}` : ""}`;
+  }, [clientId]);
+
+  return useSSE({
+    endpoint,
+    queryKeys: [
+      ["aurora", "gps"],
+      ["aurora", "gps-history"],
+      ["aurora", "sensor-type-stats", "gps"],
+    ],
+    enabled,
+  });
+}
+
+// Specialized hook for Power/Energy data stream
+export function usePowerSSE(enabled = true, clientId?: string) {
+  const endpoint = useMemo(() => {
+    const params = new URLSearchParams();
+    if (clientId && clientId !== "all") params.set("client_id", clientId);
+    const queryString = params.toString();
+    return `/api/stream/readings/power${queryString ? `?${queryString}` : ""}`;
+  }, [clientId]);
+
+  return useSSE({
+    endpoint,
+    queryKeys: [
+      ["aurora", "power"],
+      ["aurora", "starlink-power"],
+      ["aurora", "sensor-type-stats", "power"],
+    ],
+    enabled,
+  });
+}
+
+// Specialized hook for ADS-B aircraft data stream
+export function useAdsbSSE(enabled = true, clientId?: string) {
+  const endpoint = useMemo(() => {
+    const params = new URLSearchParams();
+    if (clientId && clientId !== "all") params.set("client_id", clientId);
+    const queryString = params.toString();
+    return `/api/stream/readings/adsb${queryString ? `?${queryString}` : ""}`;
+  }, [clientId]);
+
+  return useSSE({
+    endpoint,
+    queryKeys: [
+      ["aurora", "adsb"],
+      ["aurora", "adsb-history"],
+      ["aurora", "sensor-type-stats", "adsb"],
+    ],
+    enabled,
+  });
+}
+
+// Specialized hook for System Monitor data stream
+export function useSystemMonitorSSE(enabled = true, clientId?: string) {
+  const endpoint = useMemo(() => {
+    const params = new URLSearchParams();
+    if (clientId && clientId !== "all") params.set("client_id", clientId);
+    const queryString = params.toString();
+    return `/api/stream/readings/system_monitor${queryString ? `?${queryString}` : ""}`;
+  }, [clientId]);
+
+  return useSSE({
+    endpoint,
+    queryKeys: [
+      ["aurora", "system-monitor"],
+      ["aurora", "system-info"],
+      ["aurora", "sensor-type-stats", "system_monitor"],
+    ],
+    enabled,
+  });
+}
+
+// Specialized hook for WiFi/Bluetooth radio data stream
+export function useRadioSSE(enabled = true, clientId?: string, radioType?: "wifi" | "bluetooth" | "lora") {
+  const endpoint = useMemo(() => {
+    const params = new URLSearchParams();
+    if (clientId && clientId !== "all") params.set("client_id", clientId);
+    if (radioType) params.set("type", radioType);
+    const queryString = params.toString();
+    return `/api/stream/readings/radio${queryString ? `?${queryString}` : ""}`;
+  }, [clientId, radioType]);
+
+  return useSSE({
+    endpoint,
+    queryKeys: [
+      ["aurora", "radio"],
+      ["aurora", "wifi-networks"],
+      ["aurora", "bluetooth-devices"],
+      ["aurora", "sensor-type-stats", "wifi_scanner"],
+      ["aurora", "sensor-type-stats", "bluetooth_scanner"],
+    ],
+    enabled,
+  });
+}
+
 // Hook to check if SSE is supported by the backend
 export function useSSEAvailability() {
   const [isAvailable, setIsAvailable] = useState<boolean | null>(null);
