@@ -1482,6 +1482,67 @@ export function useEndpointStats() {
 }
 
 // =============================================
+// HOOKS - TIME-PERIOD STATS
+// =============================================
+
+export interface TimePeriodStats {
+  period: string;
+  timestamp: string;
+  total_readings?: number;
+  total_batches?: number;
+  active_devices?: number;
+  active_clients?: number;
+  sensor_types?: Record<string, {
+    count: number;
+    avg_value?: number;
+    min_value?: number;
+    max_value?: number;
+  }>;
+  averages?: {
+    temperature_c?: number;
+    humidity?: number;
+    power_w?: number;
+    signal_dbm?: number;
+  };
+}
+
+export function use1hrStats() {
+  return useQuery({
+    queryKey: ["aurora", "stats", "1hr"],
+    queryFn: () => callAuroraApi<TimePeriodStats>("/api/stats/1hr"),
+    refetchInterval: 60000,
+    retry: 2,
+  });
+}
+
+export function use6hrStats() {
+  return useQuery({
+    queryKey: ["aurora", "stats", "6hr"],
+    queryFn: () => callAuroraApi<TimePeriodStats>("/api/stats/6hr"),
+    refetchInterval: 120000,
+    retry: 2,
+  });
+}
+
+export function use24hrStats() {
+  return useQuery({
+    queryKey: ["aurora", "stats", "24hr"],
+    queryFn: () => callAuroraApi<TimePeriodStats>("/api/stats/24hr"),
+    refetchInterval: 300000,
+    retry: 2,
+  });
+}
+
+export function useWeeklyStats() {
+  return useQuery({
+    queryKey: ["aurora", "stats", "weekly"],
+    queryFn: () => callAuroraApi<TimePeriodStats>("/api/stats/weekly"),
+    refetchInterval: 600000,
+    retry: 2,
+  });
+}
+
+// =============================================
 // HOOKS - POWER & PERFORMANCE
 // =============================================
 
