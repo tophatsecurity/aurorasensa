@@ -4,10 +4,12 @@ const corsHeaders = {
 };
 
 const AURORA_ENDPOINT = "http://aurora.tophatsecurity.com:9151";
-const MAX_RETRIES = 3;
-const TIMEOUT_MS = 45000;
+const MAX_RETRIES = 2;
+const TIMEOUT_MS = 15000; // 15 seconds per attempt to fit within edge function limits
 
 async function fetchWithRetry(url: string, options: RequestInit, retries = MAX_RETRIES): Promise<Response> {
+  let lastError: Error | null = null;
+  
   for (let attempt = 1; attempt <= retries; attempt++) {
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), TIMEOUT_MS);
@@ -18,15 +20,24 @@ async function fetchWithRetry(url: string, options: RequestInit, retries = MAX_R
       return response;
     } catch (error) {
       clearTimeout(timeoutId);
-      const isLastAttempt = attempt === retries;
       const errorMessage = error instanceof Error ? error.message : String(error);
+      lastError = new Error(errorMessage);
+      
+      // Don't retry on abort - it means edge function is shutting down
+      if (errorMessage.includes('aborted')) {
+        console.log(`Request aborted on attempt ${attempt}/${retries}`);
+        throw lastError;
+      }
+      
       console.log(`Attempt ${attempt}/${retries} failed: ${errorMessage}`);
       
-      if (isLastAttempt) throw new Error(errorMessage);
-      await new Promise(resolve => setTimeout(resolve, 1000 * attempt));
+      if (attempt < retries) {
+        // Short backoff between retries
+        await new Promise(resolve => setTimeout(resolve, 500 * attempt));
+      }
     }
   }
-  throw new Error('Max retries exceeded');
+  throw lastError || new Error('Max retries exceeded');
 }
 
 Deno.serve(async (req) => {
