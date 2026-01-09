@@ -60,7 +60,7 @@ const ThermalDeviceChart = ({ hours = 24, clientId = 'all' }: ThermalDeviceChart
   const { data: ahtData, isLoading: ahtLoading } = useAhtSensorTimeseries(hours);
   const { data: bmtData, isLoading: bmtLoading } = useBmtSensorTimeseries(hours);
   const { data: systemData, isLoading: systemLoading } = useSystemMonitorTimeseries(hours);
-  const { data: starlinkData, isLoading: starlinkLoading } = useStarlinkTimeseries(hours);
+  const { data: starlinkData, isLoading: starlinkLoading } = useStarlinkTimeseries(hours, clientId !== 'all' ? clientId : undefined);
   const { data: dashboardData, isLoading: dashboardLoading } = useDashboardTimeseries(hours);
 
   const isLoading = thermalLoading || arduinoLoading || ahtLoading || bmtLoading || systemLoading || starlinkLoading || dashboardLoading;

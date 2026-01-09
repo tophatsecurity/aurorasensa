@@ -890,6 +890,8 @@ export interface StarlinkReadingsResponse {
 
 export interface StarlinkTimeseriesPoint {
   timestamp: string;
+  client_id?: string;
+  device_id?: string;
   signal_dbm?: number;
   power_w?: number;
   snr?: number;
@@ -2271,9 +2273,9 @@ export function useStarlinkReadings(hours: number = 24) {
   });
 }
 
-export function useStarlinkTimeseries(hours: number = 24) {
+export function useStarlinkTimeseries(hours: number = 24, clientId?: string) {
   return useQuery({
-    queryKey: ["aurora", "starlink", "timeseries", hours],
+    queryKey: ["aurora", "starlink", "timeseries", hours, clientId],
     queryFn: async () => {
       try {
         // The API returns data in a nested structure: readings[].data.starlink.{field}
@@ -2322,7 +2324,14 @@ export function useStarlinkTimeseries(hours: number = 24) {
           sensor_type?: string;
         }
         
-        const response = await callAuroraApi<RawResponse>(`/api/readings/sensor/starlink?hours=${hours}`);
+        // Build query params - include client_id filter if provided
+        const params = new URLSearchParams();
+        params.append('hours', hours.toString());
+        if (clientId && clientId !== 'all') {
+          params.append('client_id', clientId);
+        }
+        
+        const response = await callAuroraApi<RawResponse>(`/api/readings/sensor/starlink?${params.toString()}`);
         
         // Transform nested data structure to flat structure
         // Starlink data is nested under data.starlink.{field}
@@ -2332,6 +2341,8 @@ export function useStarlinkTimeseries(hours: number = 24) {
           
           return {
             timestamp: r.timestamp,
+            client_id: r.client_id,
+            device_id: r.device_id,
             // Power from nested starlink object (power_watts is the correct field)
             power_w: starlinkData?.power_watts ?? r.data?.power_watts ?? r.data?.power_w ?? r.power_w,
             // Signal from starlink object
