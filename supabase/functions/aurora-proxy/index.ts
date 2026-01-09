@@ -7,9 +7,6 @@ const AURORA_ENDPOINT = "http://aurora.tophatsecurity.com:9151";
 const MAX_RETRIES = 3;
 const TIMEOUT_MS = 45000;
 
-// Store user sessions by token (in-memory per isolate)
-const userSessions: Map<string, string> = new Map();
-
 async function fetchWithRetry(url: string, options: RequestInit, retries = MAX_RETRIES): Promise<Response> {
   for (let attempt = 1; attempt <= retries; attempt++) {
     const controller = new AbortController();
@@ -38,7 +35,7 @@ Deno.serve(async (req) => {
   }
 
   try {
-    const { path = "", method = "GET", body, sessionToken } = await req.json().catch(() => ({}));
+    const { path = "", method = "GET", body, sessionCookie } = await req.json().catch(() => ({}));
     
     if (!path) {
       return new Response(JSON.stringify({ error: 'Missing path' }), {
@@ -52,9 +49,9 @@ Deno.serve(async (req) => {
 
     const headers: Record<string, string> = { 'Content-Type': 'application/json' };
     
-    // Add session cookie if user has one
-    if (sessionToken && userSessions.has(sessionToken)) {
-      headers['Cookie'] = userSessions.get(sessionToken)!;
+    // Use the session cookie passed from the client
+    if (sessionCookie) {
+      headers['Cookie'] = sessionCookie;
     }
 
     const options: RequestInit = { method, headers };
@@ -66,31 +63,25 @@ Deno.serve(async (req) => {
     
     // Capture session cookie from login responses
     const isLoginEndpoint = path === '/api/auth/login';
-    let newSessionToken: string | undefined;
+    let auroraCookie: string | undefined;
     
     if (isLoginEndpoint && response.ok) {
       const setCookie = response.headers.get('set-cookie');
       if (setCookie) {
-        const cookie = setCookie.split(';')[0];
-        newSessionToken = crypto.randomUUID();
-        userSessions.set(newSessionToken, cookie);
-        console.log('User session stored for token:', newSessionToken);
+        // Extract just the cookie value (before the first semicolon)
+        auroraCookie = setCookie.split(';')[0];
+        console.log('Aurora session cookie captured');
       }
-    }
-    
-    // Handle logout - clear user session
-    if (path === '/api/auth/logout' && sessionToken) {
-      userSessions.delete(sessionToken);
     }
     
     const data = await response.text();
     let responseBody = data;
     
-    // Include session token in login response
-    if (isLoginEndpoint && response.ok && newSessionToken) {
+    // Include the actual Aurora cookie in login response for client to store
+    if (isLoginEndpoint && response.ok && auroraCookie) {
       try {
         const parsed = JSON.parse(data);
-        responseBody = JSON.stringify({ ...parsed, sessionToken: newSessionToken });
+        responseBody = JSON.stringify({ ...parsed, auroraCookie });
       } catch {
         // Keep as-is if not JSON
       }

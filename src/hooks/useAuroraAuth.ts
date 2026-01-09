@@ -23,13 +23,13 @@ interface AuroraAuthContextValue extends AuroraAuthState {
 
 // Session storage keys
 const SESSION_KEY = 'aurora_session';
-const SESSION_TOKEN_KEY = 'aurora_session_token';
+const SESSION_COOKIE_KEY = 'aurora_cookie';
 
 async function callAuroraApi<T>(path: string, method: string = "GET", body?: unknown): Promise<T> {
-  const sessionToken = sessionStorage.getItem(SESSION_TOKEN_KEY);
+  const sessionCookie = sessionStorage.getItem(SESSION_COOKIE_KEY);
   
   const { data, error } = await supabase.functions.invoke("aurora-proxy", {
-    body: { path, method, body, sessionToken },
+    body: { path, method, body, sessionCookie },
   });
 
   if (error) {
@@ -88,19 +88,19 @@ export function useAuroraAuth(): AuroraAuthContextValue {
     setAuthState(prev => ({ ...prev, loading: true, error: null }));
     
     try {
-      const response = await callAuroraApi<{ success?: boolean; user?: AuroraUser; message?: string; sessionToken?: string; username?: string; role?: string }>(
+      const response = await callAuroraApi<{ success?: boolean; user?: AuroraUser; message?: string; auroraCookie?: string; username?: string; role?: string }>(
         "/api/auth/login",
         "POST",
         { username, password }
       );
 
       // Aurora API returns user data directly on success (username, role, etc.)
-      const isSuccess = response.sessionToken || response.username || response.success;
+      const isSuccess = response.auroraCookie || response.username || response.success;
       
       if (isSuccess) {
-        // Store session token for future API calls
-        if (response.sessionToken) {
-          sessionStorage.setItem(SESSION_TOKEN_KEY, response.sessionToken);
+        // Store the actual Aurora cookie for future API calls
+        if (response.auroraCookie) {
+          sessionStorage.setItem(SESSION_COOKIE_KEY, response.auroraCookie);
         }
         
         // Build user object from response
@@ -150,7 +150,7 @@ export function useAuroraAuth(): AuroraAuthContextValue {
     }
     
     sessionStorage.removeItem(SESSION_KEY);
-    sessionStorage.removeItem(SESSION_TOKEN_KEY);
+    sessionStorage.removeItem(SESSION_COOKIE_KEY);
     setAuthState({
       user: null,
       loading: false,
