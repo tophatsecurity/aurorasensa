@@ -4554,3 +4554,163 @@ export function useGpsReadings(hours: number = 24) {
   });
 }
 
+// =============================================
+// HOOKS - DASHBOARD SENSOR STATS & TIMESERIES (NEW)
+// =============================================
+
+export interface DashboardSensorStats {
+  avg_humidity?: number | null;
+  avg_power_w?: number | null;
+  avg_signal_dbm?: number | null;
+  avg_temp_aht?: number | null;
+  avg_temp_bmt?: number | null;
+  avg_temp_c?: number | null;
+  avg_temp_f?: number | null;
+  total_clients?: number;
+  total_sensors?: number;
+  total_devices?: number;
+  active_devices?: number;
+  readings_last_hour?: number;
+  readings_last_24h?: number;
+}
+
+export interface DashboardSensorTimeseries {
+  humidity?: TimeseriesPoint[];
+  power?: TimeseriesPoint[];
+  signal?: TimeseriesPoint[];
+  temperature?: TimeseriesPoint[];
+  [key: string]: TimeseriesPoint[] | undefined;
+}
+
+export function useDashboardSensorStats() {
+  return useQuery({
+    queryKey: ["aurora", "dashboard", "sensor-stats"],
+    queryFn: () => callAuroraApi<DashboardSensorStats>("/api/dashboard/sensor-stats"),
+    refetchInterval: 15000,
+    retry: 2,
+  });
+}
+
+export function useDashboardSensorTimeseries(hours: number = 24) {
+  return useQuery({
+    queryKey: ["aurora", "dashboard", "sensor-timeseries", hours],
+    queryFn: () => callAuroraApi<DashboardSensorTimeseries>(`/api/dashboard/sensor-timeseries?hours=${hours}`),
+    refetchInterval: 30000,
+    retry: 2,
+  });
+}
+
+// =============================================
+// HOOKS - SYSTEM IP ADDRESS (NEW)
+// =============================================
+
+export function useSystemIpAddress() {
+  return useQuery({
+    queryKey: ["aurora", "system", "ip"],
+    queryFn: () => callAuroraApi<{ ip: string; ip_address?: string }>("/api/system/ip"),
+    refetchInterval: 60000,
+    retry: 2,
+  });
+}
+
+// =============================================
+// HOOKS - V1 DATA API (NEW)
+// =============================================
+
+export interface V1Reading {
+  device_id: string;
+  device_type: string;
+  timestamp: string;
+  client_id?: string;
+  data: Record<string, unknown>;
+}
+
+export interface V1ReadingsResponse {
+  count: number;
+  readings: V1Reading[];
+}
+
+export interface V1LatestResponse {
+  count: number;
+  latest: Record<string, V1Reading>;
+}
+
+export interface MovingAverageResponseV2 {
+  sensor_type?: string;
+  device_id?: string;
+  window_minutes?: number;
+  averages: Record<string, number>;
+  sample_count?: number;
+  timestamp?: string;
+}
+
+export function useV1Readings(sensorType?: string, deviceId?: string, limit: number = 100) {
+  const params = new URLSearchParams({ limit: limit.toString() });
+  if (sensorType) params.append("sensor_type", sensorType);
+  if (deviceId) params.append("device_id", deviceId);
+  
+  return useQuery({
+    queryKey: ["aurora", "v1", "data", "readings", sensorType, deviceId, limit],
+    queryFn: () => callAuroraApi<V1ReadingsResponse>(`/api/v1/data/readings?${params}`),
+    refetchInterval: 15000,
+    retry: 2,
+  });
+}
+
+export function useV1Latest() {
+  return useQuery({
+    queryKey: ["aurora", "v1", "data", "latest"],
+    queryFn: () => callAuroraApi<V1LatestResponse>("/api/v1/data/latest"),
+    refetchInterval: 10000,
+    retry: 2,
+  });
+}
+
+export function useV1MovingAverage(sensorType?: string, windowMinutes: number = 60) {
+  const params = new URLSearchParams({ window_minutes: windowMinutes.toString() });
+  if (sensorType) params.append("sensor_type", sensorType);
+  
+  return useQuery({
+    queryKey: ["aurora", "v1", "data", "moving_average", sensorType, windowMinutes],
+    queryFn: () => callAuroraApi<MovingAverageResponseV2>(`/api/v1/data/moving_average?${params}`),
+    refetchInterval: 60000,
+    retry: 2,
+  });
+}
+
+// =============================================
+// HOOKS - V1 DEVICES (NEW)
+// =============================================
+
+export interface V1Device {
+  device_id: string;
+  device_type: string;
+  client_id?: string;
+  status?: string;
+  last_seen?: string;
+  first_seen?: string;
+  reading_count?: number;
+}
+
+export function useV1Devices() {
+  return useQuery({
+    queryKey: ["aurora", "v1", "devices"],
+    queryFn: () => callAuroraApi<{ devices: V1Device[] }>("/api/v1/devices"),
+    refetchInterval: 30000,
+    retry: 2,
+  });
+}
+
+// =============================================
+// HOOKS - HEALTH CHECK (NEW)
+// =============================================
+
+export function useHealthCheck() {
+  return useQuery({
+    queryKey: ["aurora", "api", "health"],
+    queryFn: () => callAuroraApi<{ status: string; timestamp?: string; version?: string }>("/api/health"),
+    refetchInterval: 30000,
+    retry: 2,
+  });
+}
+
