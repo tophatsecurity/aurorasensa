@@ -51,6 +51,20 @@ async function callAuroraApi<T>(path: string, method: string = "GET", body?: unk
 
       if (data && typeof data === 'object' && 'detail' in data) {
         const detailStr = String(data.detail);
+        
+        // Handle 401 authentication errors - clear session and don't retry
+        const isAuthError = detailStr.toLowerCase().includes('not authenticated') || 
+                           detailStr.toLowerCase().includes('invalid session') ||
+                           detailStr.toLowerCase().includes('provide x-api-key');
+        if (isAuthError) {
+          // Clear invalid session
+          sessionStorage.removeItem('aurora_session');
+          sessionStorage.removeItem('aurora_cookie');
+          const error = new Error('Session expired. Please log in again.');
+          (error as any).status = 401;
+          throw error;
+        }
+        
         // Don't log 404-style "not found" responses as errors - they're expected
         const isNotFoundError = detailStr.toLowerCase().includes('not found') || 
                                 detailStr.toLowerCase().includes('no ') && detailStr.toLowerCase().includes('found');
