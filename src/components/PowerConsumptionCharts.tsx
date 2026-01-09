@@ -13,6 +13,8 @@ import {
 } from "recharts";
 import { Zap, Loader2, TrendingUp, TrendingDown, Settings2, AlertTriangle, Bell, BellOff } from "lucide-react";
 import { useStarlinkPower, useStarlinkTimeseries } from "@/hooks/useAuroraApi";
+import { usePowerSSE } from "@/hooks/useSSE";
+import { SSEConnectionStatus } from "./SSEConnectionStatus";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
@@ -43,10 +45,15 @@ interface PowerConsumptionChartsProps {
 }
 
 const PowerConsumptionCharts = ({ hours = 24, clientId = 'all' }: PowerConsumptionChartsProps) => {
+  const [sseEnabled, setSSEEnabled] = useState(true);
+  
   // Use dedicated power endpoint for current reading, timeseries for history
   const { data: starlinkPower, isLoading: isPowerLoading } = useStarlinkPower();
   // Pass clientId to filter Starlink timeseries data by client
   const { data: starlinkTimeseries, isLoading: isTimeseriesLoading } = useStarlinkTimeseries(hours, clientId !== 'all' ? clientId : undefined);
+  
+  // SSE for real-time power updates
+  const powerSSE = usePowerSSE(sseEnabled, clientId !== 'all' ? clientId : undefined);
   
   const isLoading = isPowerLoading || isTimeseriesLoading;
   
@@ -222,8 +229,15 @@ const PowerConsumptionCharts = ({ hours = 24, clientId = 'all' }: PowerConsumpti
             }`} />
           </div>
           <div>
-            <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+            <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider flex items-center gap-2">
               Power Consumption
+              <SSEConnectionStatus
+                isConnected={powerSSE.isConnected}
+                isConnecting={powerSSE.isConnecting}
+                error={powerSSE.error}
+                reconnectCount={powerSSE.reconnectCount}
+                onReconnect={powerSSE.reconnect}
+              />
             </h4>
             <div className="flex items-center gap-2">
               <p className={`text-2xl font-bold ${
@@ -260,6 +274,16 @@ const PowerConsumptionCharts = ({ hours = 24, clientId = 'all' }: PowerConsumpti
               </div>
             </div>
           )}
+          <div className="flex items-center gap-2 mr-2">
+            <Switch
+              id="sse-toggle-power"
+              checked={sseEnabled}
+              onCheckedChange={setSSEEnabled}
+            />
+            <Label htmlFor="sse-toggle-power" className="text-xs text-muted-foreground">
+              Live
+            </Label>
+          </div>
           <Popover>
             <PopoverTrigger asChild>
               <Button variant="ghost" size="icon" className="h-8 w-8">

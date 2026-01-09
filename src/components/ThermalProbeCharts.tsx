@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { 
   XAxis, 
   YAxis, 
@@ -13,6 +13,10 @@ import {
 } from "recharts";
 import { Thermometer, Loader2 } from "lucide-react";
 import { useThermalProbeTimeseries, useDashboardTimeseries, ThermalProbeTimeseriesPoint } from "@/hooks/useAuroraApi";
+import { useThermalProbeSSE } from "@/hooks/useSSE";
+import { SSEConnectionStatus } from "./SSEConnectionStatus";
+import { Switch } from "@/components/ui/switch";
+import { Label } from "@/components/ui/label";
 
 interface ChartData {
   time: string;
@@ -22,9 +26,19 @@ interface ChartData {
   [key: string]: string | number | undefined;
 }
 
-const ThermalProbeCharts = () => {
-  const { data: thermalData, isLoading: thermalLoading } = useThermalProbeTimeseries(24);
-  const { data: dashboardTimeseries, isLoading: dashboardLoading } = useDashboardTimeseries(24);
+interface ThermalProbeChartsProps {
+  hours?: number;
+  clientId?: string;
+}
+
+const ThermalProbeCharts = ({ hours = 24, clientId }: ThermalProbeChartsProps) => {
+  const [sseEnabled, setSSEEnabled] = useState(true);
+  
+  const { data: thermalData, isLoading: thermalLoading } = useThermalProbeTimeseries(hours);
+  const { data: dashboardTimeseries, isLoading: dashboardLoading } = useDashboardTimeseries(hours);
+  
+  // SSE for real-time thermal probe updates
+  const thermalSSE = useThermalProbeSSE(sseEnabled, clientId);
 
   const isLoading = thermalLoading || dashboardLoading;
 
@@ -117,27 +131,46 @@ const ThermalProbeCharts = () => {
             <Thermometer className="w-5 h-5 text-red-400" />
           </div>
           <div>
-            <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+            <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider flex items-center gap-2">
               Thermal Probe Temperature
+              <SSEConnectionStatus
+                isConnected={thermalSSE.isConnected}
+                isConnecting={thermalSSE.isConnecting}
+                error={thermalSSE.error}
+                reconnectCount={thermalSSE.reconnectCount}
+                onReconnect={thermalSSE.reconnect}
+              />
             </h4>
             <p className="text-2xl font-bold text-red-400">
               {isLoading ? '...' : formatDualTemp(stats.current)}
             </p>
           </div>
         </div>
-        {!isLoading && chartData.length > 0 && (
-          <div className="text-right text-xs space-y-0.5">
-            <div className="text-muted-foreground">
-              Avg: <span className="font-medium text-red-400">{formatDualTemp(stats.avg)}</span>
+        <div className="flex items-center gap-4">
+          {!isLoading && chartData.length > 0 && (
+            <div className="text-right text-xs space-y-0.5">
+              <div className="text-muted-foreground">
+                Avg: <span className="font-medium text-red-400">{formatDualTemp(stats.avg)}</span>
+              </div>
+              <div className="text-muted-foreground">
+                Min: {formatDualTemp(stats.min)}
+              </div>
+              <div className="text-muted-foreground">
+                Max: {formatDualTemp(stats.max)}
+              </div>
             </div>
-            <div className="text-muted-foreground">
-              Min: {formatDualTemp(stats.min)}
-            </div>
-            <div className="text-muted-foreground">
-              Max: {formatDualTemp(stats.max)}
-            </div>
+          )}
+          <div className="flex items-center gap-2">
+            <Switch
+              id="sse-toggle-thermal"
+              checked={sseEnabled}
+              onCheckedChange={setSSEEnabled}
+            />
+            <Label htmlFor="sse-toggle-thermal" className="text-xs text-muted-foreground">
+              Live
+            </Label>
           </div>
-        )}
+        </div>
       </div>
 
       <div className="h-[200px] mt-2">
