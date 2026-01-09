@@ -12,8 +12,6 @@ Deno.serve(async (req) => {
     return new Response(null, { headers: corsHeaders });
   }
 
-  const AURORA_API_KEY = Deno.env.get("AURORA_API_KEY");
-
   try {
     const body = await req.json().catch(() => ({}));
     const { path = "", method = "GET", body: requestBody, sessionCookie } = body;
@@ -27,18 +25,25 @@ Deno.serve(async (req) => {
     
     const url = `${AURORA_ENDPOINT}${path}`;
     const isLoginEndpoint = path === '/api/auth/login';
-    console.log(`Proxy ${method}: ${url}${sessionCookie ? ' (with session)' : ''}`);
+    console.log(`Proxy ${method}: ${url}${sessionCookie ? ' (with session)' : ' (no session)'}`);
 
     const headers: Record<string, string> = { 'Content-Type': 'application/json' };
     
-    // Use session cookie for authentication (primary method)
+    // Use session cookie for authentication - this is the ONLY auth method
+    // User must log in via /api/auth/login to get a session cookie
     if (sessionCookie) {
       headers['Cookie'] = sessionCookie;
     }
     
-    // Only use API key as fallback for non-login endpoints if no session cookie
-    if (!sessionCookie && !isLoginEndpoint && AURORA_API_KEY) {
-      headers['X-API-Key'] = AURORA_API_KEY;
+    // For non-login endpoints without a session, return 401 immediately
+    if (!sessionCookie && !isLoginEndpoint) {
+      console.log('No session cookie for protected endpoint, returning 401');
+      return new Response(JSON.stringify({ 
+        detail: 'Not authenticated. Please log in first.' 
+      }), {
+        status: 401,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
     }
 
     const controller = new AbortController();
