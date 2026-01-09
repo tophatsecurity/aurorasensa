@@ -9,30 +9,71 @@ interface AuroraProxyResponse {
   error?: string;
 }
 
+const MAX_RETRIES = 3;
+const INITIAL_BACKOFF_MS = 1000;
+
+async function sleep(ms: number): Promise<void> {
+  return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+function isRetryableError(error: Error): boolean {
+  const message = error.message.toLowerCase();
+  return message.includes('503') || 
+         message.includes('boot_error') || 
+         message.includes('function failed to start') ||
+         message.includes('network') ||
+         message.includes('timeout');
+}
+
 async function callAuroraApi<T>(path: string, method: string = "GET", body?: unknown): Promise<T> {
-  // Get the session cookie from storage for authenticated requests
   const sessionCookie = sessionStorage.getItem('aurora_cookie');
   
-  const { data, error } = await supabase.functions.invoke("aurora-proxy", {
-    body: { path, method, body, sessionCookie },
-  });
+  let lastError: Error | null = null;
+  
+  for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
+    try {
+      const { data, error } = await supabase.functions.invoke("aurora-proxy", {
+        body: { path, method, body, sessionCookie },
+      });
 
-  if (error) {
-    console.error(`Aurora API error for ${path}:`, error.message);
-    throw new Error(`Aurora API error: ${error.message}`);
+      if (error) {
+        const apiError = new Error(`Aurora API error: ${error.message}`);
+        if (isRetryableError(apiError) && attempt < MAX_RETRIES - 1) {
+          const backoffMs = INITIAL_BACKOFF_MS * Math.pow(2, attempt);
+          console.warn(`Retrying ${path} in ${backoffMs}ms (attempt ${attempt + 1}/${MAX_RETRIES})`);
+          await sleep(backoffMs);
+          lastError = apiError;
+          continue;
+        }
+        console.error(`Aurora API error for ${path}:`, error.message);
+        throw apiError;
+      }
+
+      if (data && typeof data === 'object' && 'detail' in data) {
+        console.error(`Aurora backend error for ${path}:`, data.detail);
+        throw new Error(String(data.detail));
+      }
+
+      if ((data as AuroraProxyResponse)?.error) {
+        console.error(`Aurora API response error for ${path}:`, (data as AuroraProxyResponse).error);
+        throw new Error((data as AuroraProxyResponse).error);
+      }
+
+      return data as T;
+    } catch (err) {
+      const error = err instanceof Error ? err : new Error(String(err));
+      if (isRetryableError(error) && attempt < MAX_RETRIES - 1) {
+        const backoffMs = INITIAL_BACKOFF_MS * Math.pow(2, attempt);
+        console.warn(`Retrying ${path} in ${backoffMs}ms (attempt ${attempt + 1}/${MAX_RETRIES})`);
+        await sleep(backoffMs);
+        lastError = error;
+        continue;
+      }
+      throw error;
+    }
   }
-
-  if (data && typeof data === 'object' && 'detail' in data) {
-    console.error(`Aurora backend error for ${path}:`, data.detail);
-    throw new Error(String(data.detail));
-  }
-
-  if ((data as AuroraProxyResponse)?.error) {
-    console.error(`Aurora API response error for ${path}:`, (data as AuroraProxyResponse).error);
-    throw new Error((data as AuroraProxyResponse).error);
-  }
-
-  return data as T;
+  
+  throw lastError || new Error(`Failed after ${MAX_RETRIES} retries`);
 }
 
 // =============================================
