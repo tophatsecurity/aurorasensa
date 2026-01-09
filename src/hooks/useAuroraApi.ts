@@ -2274,8 +2274,21 @@ export function useStarlinkReadings(hours: number = 24) {
 }
 
 export function useStarlinkTimeseries(hours: number = 24, clientId?: string) {
+  // Get device-to-client mapping for client-side filtering
+  const { data: starlinkDevices } = useStarlinkDevices();
+  
+  // Build device_id -> client_id mapping
+  const deviceToClientMap = new Map<string, string>();
+  if (starlinkDevices) {
+    starlinkDevices.forEach(device => {
+      if (device.device_id && device.client_id) {
+        deviceToClientMap.set(device.device_id, device.client_id);
+      }
+    });
+  }
+  
   return useQuery({
-    queryKey: ["aurora", "starlink", "timeseries", hours, clientId],
+    queryKey: ["aurora", "starlink", "timeseries", hours, clientId, starlinkDevices?.length ?? 0],
     queryFn: async () => {
       try {
         // The API returns data in a nested structure: readings[].data.starlink.{field}
@@ -2324,7 +2337,7 @@ export function useStarlinkTimeseries(hours: number = 24, clientId?: string) {
           sensor_type?: string;
         }
         
-        // Build query params - include client_id filter if provided
+        // Build query params - include client_id filter if provided (server may or may not support it)
         const params = new URLSearchParams();
         params.append('hours', hours.toString());
         if (clientId && clientId !== 'all') {
@@ -2335,13 +2348,16 @@ export function useStarlinkTimeseries(hours: number = 24, clientId?: string) {
         
         // Transform nested data structure to flat structure
         // Starlink data is nested under data.starlink.{field}
-        const transformedReadings: StarlinkTimeseriesPoint[] = (response.readings || []).map(r => {
+        let transformedReadings: StarlinkTimeseriesPoint[] = (response.readings || []).map(r => {
           const starlinkData = r.data?.starlink;
           const pingLatency = starlinkData?.ping_latency;
           
+          // Get client_id from reading or look up from device mapping
+          const readingClientId = r.client_id || (r.device_id ? deviceToClientMap.get(r.device_id) : undefined);
+          
           return {
             timestamp: r.timestamp,
-            client_id: r.client_id,
+            client_id: readingClientId,
             device_id: r.device_id,
             // Power from nested starlink object (power_watts is the correct field)
             power_w: starlinkData?.power_watts ?? r.data?.power_watts ?? r.data?.power_w ?? r.power_w,
@@ -2362,8 +2378,17 @@ export function useStarlinkTimeseries(hours: number = 24, clientId?: string) {
           };
         });
         
+        // Client-side filtering if API didn't filter and we have a client filter
+        if (clientId && clientId !== 'all' && transformedReadings.length > 0) {
+          const filteredReadings = transformedReadings.filter(r => r.client_id === clientId);
+          // Only use filtered results if we actually filtered something
+          if (filteredReadings.length < transformedReadings.length) {
+            transformedReadings = filteredReadings;
+          }
+        }
+        
         return { 
-          count: response.count ?? transformedReadings.length, 
+          count: transformedReadings.length, 
           readings: transformedReadings 
         };
       } catch {
