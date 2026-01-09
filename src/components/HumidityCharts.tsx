@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { 
   XAxis, 
   YAxis, 
@@ -12,6 +12,10 @@ import {
 } from "recharts";
 import { Droplets, Loader2 } from "lucide-react";
 import { useDashboardTimeseries } from "@/hooks/useAuroraApi";
+import { useArduinoSSE } from "@/hooks/useSSE";
+import { SSEConnectionStatus } from "./SSEConnectionStatus";
+import { Switch } from "@/components/ui/switch";
+import { Label } from "@/components/ui/label";
 
 interface ChartData {
   time: string;
@@ -27,10 +31,16 @@ const COMFORT_ZONES = {
 
 interface HumidityChartsProps {
   hours?: number;
+  clientId?: string;
 }
 
-const HumidityCharts = ({ hours = 24 }: HumidityChartsProps) => {
+const HumidityCharts = ({ hours = 24, clientId }: HumidityChartsProps) => {
+  const [sseEnabled, setSSEEnabled] = useState(true);
+  
   const { data: timeseries, isLoading } = useDashboardTimeseries(hours);
+  
+  // SSE for real-time Arduino sensor updates (humidity comes from AHT/BME sensors)
+  const arduinoSSE = useArduinoSSE(sseEnabled, clientId);
 
   const formatData = (points: { timestamp: string; value: number }[] | undefined): ChartData[] => {
     if (!points || points.length === 0) return [];
@@ -82,27 +92,46 @@ const HumidityCharts = ({ hours = 24 }: HumidityChartsProps) => {
             <Droplets className="w-5 h-5 text-blue-400" />
           </div>
           <div>
-            <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+            <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider flex items-center gap-2">
               Humidity Level
+              <SSEConnectionStatus
+                isConnected={arduinoSSE.isConnected}
+                isConnecting={arduinoSSE.isConnecting}
+                error={arduinoSSE.error}
+                reconnectCount={arduinoSSE.reconnectCount}
+                onReconnect={arduinoSSE.reconnect}
+              />
             </h4>
             <p className="text-2xl font-bold text-blue-400">
               {isLoading ? '...' : `${formatValue(stats.current)}%`}
             </p>
           </div>
         </div>
-        {!isLoading && chartData.length > 0 && (
-          <div className="text-right text-xs space-y-0.5">
-            <div className="text-muted-foreground">
-              Avg: <span className="font-medium text-blue-400">{formatValue(stats.avg)}%</span>
+        <div className="flex items-center gap-4">
+          {!isLoading && chartData.length > 0 && (
+            <div className="text-right text-xs space-y-0.5">
+              <div className="text-muted-foreground">
+                Avg: <span className="font-medium text-blue-400">{formatValue(stats.avg)}%</span>
+              </div>
+              <div className="text-muted-foreground">
+                Min/Max: {formatValue(stats.min)}% / {formatValue(stats.max)}%
+              </div>
+              <div className="text-muted-foreground">
+                Comfort: <span className="text-success">{stats.timeInComfort}%</span> of time
+              </div>
             </div>
-            <div className="text-muted-foreground">
-              Min/Max: {formatValue(stats.min)}% / {formatValue(stats.max)}%
-            </div>
-            <div className="text-muted-foreground">
-              Comfort: <span className="text-success">{stats.timeInComfort}%</span> of time
-            </div>
+          )}
+          <div className="flex items-center gap-2">
+            <Switch
+              id="sse-toggle-humidity"
+              checked={sseEnabled}
+              onCheckedChange={setSSEEnabled}
+            />
+            <Label htmlFor="sse-toggle-humidity" className="text-xs text-muted-foreground">
+              Live
+            </Label>
           </div>
-        )}
+        </div>
       </div>
 
       {/* Comfort Zone Legend */}

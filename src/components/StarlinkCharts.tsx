@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { 
   XAxis, 
   YAxis, 
@@ -12,6 +12,10 @@ import {
 } from "recharts";
 import { Satellite, Zap, Signal, Wifi, Loader2 } from "lucide-react";
 import { useStarlinkTimeseries, useDashboardTimeseries, StarlinkTimeseriesPoint } from "@/hooks/useAuroraApi";
+import { useStarlinkSSE } from "@/hooks/useSSE";
+import { SSEConnectionStatus } from "./SSEConnectionStatus";
+import { Switch } from "@/components/ui/switch";
+import { Label } from "@/components/ui/label";
 
 interface ChartData {
   time: string;
@@ -26,9 +30,16 @@ interface StarlinkChartProps {
   data: ChartData[];
   isLoading?: boolean;
   chartType?: 'area' | 'line';
+  sseStatus?: {
+    isConnected: boolean;
+    isConnecting: boolean;
+    error: string | null;
+    reconnectCount: number;
+    onReconnect: () => void;
+  };
 }
 
-const StarlinkChart = ({ title, icon, color, unit, data, isLoading, chartType = 'area' }: StarlinkChartProps) => {
+const StarlinkChart = ({ title, icon, color, unit, data, isLoading, chartType = 'area', sseStatus }: StarlinkChartProps) => {
   const currentValue = data.length > 0 ? data[data.length - 1]?.value : null;
   const avgValue = data.length > 0 ? data.reduce((a, b) => a + b.value, 0) / data.length : null;
   const minValue = data.length > 0 ? Math.min(...data.map(d => d.value)) : null;
@@ -49,8 +60,17 @@ const StarlinkChart = ({ title, icon, color, unit, data, isLoading, chartType = 
             {icon}
           </div>
           <div>
-            <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+            <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider flex items-center gap-2">
               {title}
+              {sseStatus && (
+                <SSEConnectionStatus
+                  isConnected={sseStatus.isConnected}
+                  isConnecting={sseStatus.isConnecting}
+                  error={sseStatus.error}
+                  reconnectCount={sseStatus.reconnectCount}
+                  onReconnect={sseStatus.onReconnect}
+                />
+              )}
             </h4>
             <p className="text-2xl font-bold" style={{ color }}>
               {isLoading ? '...' : `${formatValue(currentValue)}${unit}`}
@@ -169,11 +189,17 @@ const StarlinkChart = ({ title, icon, color, unit, data, isLoading, chartType = 
 
 interface StarlinkChartsProps {
   hours?: number;
+  clientId?: string;
 }
 
-const StarlinkCharts = ({ hours = 24 }: StarlinkChartsProps) => {
+const StarlinkCharts = ({ hours = 24, clientId }: StarlinkChartsProps) => {
+  const [sseEnabled, setSSEEnabled] = useState(true);
+  
   const { data: starlinkData, isLoading: starlinkLoading } = useStarlinkTimeseries(hours);
   const { data: dashboardTimeseries, isLoading: dashboardLoading } = useDashboardTimeseries(hours);
+  
+  // SSE for real-time Starlink updates
+  const starlinkSSE = useStarlinkSSE(sseEnabled, clientId);
 
   const isLoading = starlinkLoading || dashboardLoading;
 
@@ -229,8 +255,26 @@ const StarlinkCharts = ({ hours = 24 }: StarlinkChartsProps) => {
     return formatStarlinkData(starlinkData?.readings, 'pop_ping_latency_ms');
   }, [starlinkData?.readings]);
 
+  const sseStatus = {
+    isConnected: starlinkSSE.isConnected,
+    isConnecting: starlinkSSE.isConnecting,
+    error: starlinkSSE.error,
+    reconnectCount: starlinkSSE.reconnectCount,
+    onReconnect: starlinkSSE.reconnect,
+  };
+
   return (
     <div className="space-y-4">
+      <div className="flex items-center justify-end gap-2 mb-2">
+        <Switch
+          id="sse-toggle-starlink"
+          checked={sseEnabled}
+          onCheckedChange={setSSEEnabled}
+        />
+        <Label htmlFor="sse-toggle-starlink" className="text-xs text-muted-foreground">
+          Real-time
+        </Label>
+      </div>
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <StarlinkChart
           title="Signal Strength"
@@ -239,6 +283,7 @@ const StarlinkCharts = ({ hours = 24 }: StarlinkChartsProps) => {
           unit=" dBm"
           data={signalData}
           isLoading={isLoading}
+          sseStatus={sseStatus}
         />
         <StarlinkChart
           title="Power Draw"

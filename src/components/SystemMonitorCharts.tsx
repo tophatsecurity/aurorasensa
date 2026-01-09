@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { 
   XAxis, 
   YAxis, 
@@ -12,6 +12,10 @@ import {
 } from "recharts";
 import { Cpu, MemoryStick, HardDrive, Thermometer, Loader2 } from "lucide-react";
 import { useSystemMonitorTimeseries } from "@/hooks/useAuroraApi";
+import { useSystemMonitorSSE } from "@/hooks/useSSE";
+import { SSEConnectionStatus } from "./SSEConnectionStatus";
+import { Switch } from "@/components/ui/switch";
+import { Label } from "@/components/ui/label";
 
 interface ChartData {
   time: string;
@@ -203,10 +207,16 @@ const SystemChart = ({ title, icon, color, unit, data, isLoading, chartType = 'a
 
 interface SystemMonitorChartsProps {
   hours?: number;
+  clientId?: string;
 }
 
-const SystemMonitorCharts = ({ hours = 24 }: SystemMonitorChartsProps) => {
+const SystemMonitorCharts = ({ hours = 24, clientId }: SystemMonitorChartsProps) => {
+  const [sseEnabled, setSSEEnabled] = useState(true);
+  
   const { data: systemData, isLoading } = useSystemMonitorTimeseries(hours);
+  
+  // SSE for real-time system monitor updates
+  const systemSSE = useSystemMonitorSSE(sseEnabled, clientId);
 
   // Extract nested data from system_monitor readings
   const extractData = (
@@ -258,40 +268,64 @@ const SystemMonitorCharts = ({ hours = 24 }: SystemMonitorChartsProps) => {
   );
 
   return (
-    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
-      <SystemChart
-        title="CPU Usage"
-        icon={<Cpu className="w-5 h-5" style={{ color: '#06b6d4' }} />}
-        color="#06b6d4"
-        unit="%"
-        data={cpuData}
-        isLoading={isLoading}
-      />
-      <SystemChart
-        title="Memory Usage"
-        icon={<MemoryStick className="w-5 h-5" style={{ color: '#8b5cf6' }} />}
-        color="#8b5cf6"
-        unit="%"
-        data={memoryData}
-        isLoading={isLoading}
-      />
-      <SystemChart
-        title="Disk Usage"
-        icon={<HardDrive className="w-5 h-5" style={{ color: '#f59e0b' }} />}
-        color="#f59e0b"
-        unit="%"
-        data={diskData}
-        isLoading={isLoading}
-      />
-      <SystemChart
-        title="CPU Temperature"
-        icon={<Thermometer className="w-5 h-5" style={{ color: '#ef4444' }} />}
-        color="#ef4444"
-        unit="°C"
-        data={tempData}
-        isLoading={isLoading}
-        chartType="line"
-      />
+    <div className="space-y-4">
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <SSEConnectionStatus
+            isConnected={systemSSE.isConnected}
+            isConnecting={systemSSE.isConnecting}
+            error={systemSSE.error}
+            reconnectCount={systemSSE.reconnectCount}
+            onReconnect={systemSSE.reconnect}
+            label="System Monitor"
+          />
+        </div>
+        <div className="flex items-center gap-2">
+          <Switch
+            id="sse-toggle-system"
+            checked={sseEnabled}
+            onCheckedChange={setSSEEnabled}
+          />
+          <Label htmlFor="sse-toggle-system" className="text-xs text-muted-foreground">
+            Real-time
+          </Label>
+        </div>
+      </div>
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <SystemChart
+          title="CPU Usage"
+          icon={<Cpu className="w-5 h-5" style={{ color: '#06b6d4' }} />}
+          color="#06b6d4"
+          unit="%"
+          data={cpuData}
+          isLoading={isLoading}
+        />
+        <SystemChart
+          title="Memory Usage"
+          icon={<MemoryStick className="w-5 h-5" style={{ color: '#8b5cf6' }} />}
+          color="#8b5cf6"
+          unit="%"
+          data={memoryData}
+          isLoading={isLoading}
+        />
+        <SystemChart
+          title="Disk Usage"
+          icon={<HardDrive className="w-5 h-5" style={{ color: '#f59e0b' }} />}
+          color="#f59e0b"
+          unit="%"
+          data={diskData}
+          isLoading={isLoading}
+        />
+        <SystemChart
+          title="CPU Temperature"
+          icon={<Thermometer className="w-5 h-5" style={{ color: '#ef4444' }} />}
+          color="#ef4444"
+          unit="°C"
+          data={tempData}
+          isLoading={isLoading}
+          chartType="line"
+        />
+      </div>
     </div>
   );
 };
