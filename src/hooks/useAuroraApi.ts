@@ -67,14 +67,24 @@ async function callAuroraApi<T>(path: string, method: string = "GET", body?: unk
       if (data && typeof data === 'object' && 'detail' in data) {
         const detailStr = String(data.detail);
         
-        // Handle 401 authentication errors - clear session (let auth context handle redirect)
+        // Check if this is an auth-related error message
         const isAuthError = detailStr.toLowerCase().includes('not authenticated') || 
                            detailStr.toLowerCase().includes('invalid session') ||
                            detailStr.toLowerCase().includes('provide x-api-key');
+        
         if (isAuthError) {
-          // Clear invalid session - the auth context will detect this and show login
-          clearAuroraSession();
-          const error = new Error('Session expired. Please log in again.');
+          // Only clear session for auth-specific endpoints (like /api/auth/me)
+          // Individual data endpoints may return 401 for permission issues, not session expiry
+          const isAuthEndpoint = path.startsWith('/api/auth/');
+          if (isAuthEndpoint) {
+            console.log('Auth endpoint returned 401, clearing session');
+            clearAuroraSession();
+          } else {
+            // For non-auth endpoints, log but don't clear session - it might be endpoint-specific
+            console.warn(`Endpoint ${path} returned auth error, but session may still be valid`);
+          }
+          
+          const error = new Error(isAuthEndpoint ? 'Session expired. Please log in again.' : detailStr);
           (error as any).status = 401;
           throw error;
         }
