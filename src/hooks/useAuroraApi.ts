@@ -3073,6 +3073,12 @@ export function useSystemDisk() {
   });
 }
 
+export interface ServiceStatus {
+  active: boolean;
+  status: string;
+  name: string;
+}
+
 export function useServiceStatus(serviceName: string) {
   return useQuery({
     queryKey: ["aurora", "systemctl", serviceName],
@@ -3080,6 +3086,36 @@ export function useServiceStatus(serviceName: string) {
     refetchInterval: 30000,
     retry: 2,
     enabled: !!serviceName,
+  });
+}
+
+// Aurora core services to monitor
+const AURORA_SERVICES = [
+  'aurorasense-dataserver',
+  'aurorasense-datacollector', 
+  'aurorasense-adsb',
+  'aurorasense-starlink',
+  'aurorasense-gps',
+  'aurorasense-lora'
+];
+
+export function useAuroraServices() {
+  return useQuery({
+    queryKey: ["aurora", "services", "all"],
+    queryFn: async () => {
+      const results: ServiceStatus[] = [];
+      for (const service of AURORA_SERVICES) {
+        try {
+          const status = await callAuroraApi<{ active: boolean; status: string }>(`/api/systemctl/${service}`);
+          results.push({ ...status, name: service });
+        } catch {
+          results.push({ active: false, status: 'unknown', name: service });
+        }
+      }
+      return results;
+    },
+    refetchInterval: 30000,
+    retry: 2,
   });
 }
 

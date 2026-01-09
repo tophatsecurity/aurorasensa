@@ -57,6 +57,8 @@ import {
   useAhtSensorTimeseries,
   useArduinoSensorTimeseries,
   useSystemInfo,
+  useAuroraServices,
+  useHealth,
   Client 
 } from "@/hooks/useAuroraApi";
 import { MemoryStick, HardDrive } from "lucide-react";
@@ -120,6 +122,11 @@ const DashboardContent = () => {
   
   // System info from API
   const { data: systemInfo, isLoading: systemInfoLoading } = useSystemInfo();
+  
+  // Aurora services status
+  const { data: auroraServices, isLoading: servicesLoading } = useAuroraServices();
+  const { data: health, isLoading: healthLoading } = useHealth();
+
   
   // Real timeseries data for sparklines
   const { data: starlinkTimeseries, isLoading: starlinkTimeseriesLoading } = useStarlinkTimeseries(24);
@@ -743,86 +750,99 @@ const DashboardContent = () => {
         <StarlinkCharts hours={periodHours} />
       </div>
 
-      {/* System Monitor - Local System Stats */}
+      {/* Aurora Services Status */}
       <div className="mb-8">
         <h2 className="text-lg font-semibold mb-4 flex items-center gap-2">
-          <Cpu className="w-5 h-5 text-cyan-500" />
-          System Monitor
+          <Server className="w-5 h-5 text-cyan-500" />
+          Aurora Services Status
         </h2>
-        {(systemMonitorLoading || systemInfoLoading) ? (
+        {(servicesLoading || healthLoading) ? (
           <div className="flex items-center justify-center py-8">
             <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
           </div>
         ) : (
-          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
-            {/* CPU Usage */}
+          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
+            {/* API Health */}
             <div className="glass-card rounded-lg p-4 border border-border/50">
               <div className="flex items-center gap-2 mb-2">
-                <div className="w-8 h-8 rounded-lg bg-cyan-500/20 flex items-center justify-center">
-                  <Cpu className="w-4 h-4 text-cyan-400" />
+                <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${
+                  health?.status === 'ok' ? 'bg-success/20' : 'bg-destructive/20'
+                }`}>
+                  <Activity className={`w-4 h-4 ${
+                    health?.status === 'ok' ? 'text-success' : 'text-destructive'
+                  }`} />
                 </div>
-                <span className="text-xs text-muted-foreground">CPU</span>
+                <span className="text-xs text-muted-foreground">API Health</span>
               </div>
-              <div className="text-2xl font-bold text-foreground">
-                {systemMonitorStats?.numeric_field_stats_24h?.cpu_percent?.avg?.toFixed(1) ?? 
-                 systemInfo?.cpu_load?.[0]?.toFixed(1) ?? "—"}%
+              <div className={`text-lg font-bold ${
+                health?.status === 'ok' ? 'text-success' : 'text-destructive'
+              }`}>
+                {health?.status === 'ok' ? 'Healthy' : 'Unhealthy'}
               </div>
               <div className="text-xs text-muted-foreground mt-1">
-                {systemMonitorStats?.numeric_field_stats_24h?.cpu_percent?.max !== undefined 
-                  ? `Max: ${systemMonitorStats.numeric_field_stats_24h.cpu_percent.max.toFixed(1)}%`
-                  : "24h avg"}
+                {systemInfo?.hostname ?? 'Aurora Server'}
               </div>
             </div>
-
-            {/* Memory Usage */}
+            
+            {/* Aurora Services */}
+            {auroraServices?.map((service) => {
+              const serviceName = service.name
+                .replace('aurorasense-', '')
+                .replace(/-/g, ' ')
+                .replace(/\b\w/g, l => l.toUpperCase());
+              
+              const getServiceIcon = (name: string) => {
+                if (name.includes('dataserver')) return Database;
+                if (name.includes('datacollector')) return Activity;
+                if (name.includes('adsb')) return Plane;
+                if (name.includes('starlink')) return Satellite;
+                if (name.includes('gps')) return Navigation;
+                if (name.includes('lora')) return Radio;
+                return Server;
+              };
+              
+              const ServiceIcon = getServiceIcon(service.name);
+              
+              return (
+                <div key={service.name} className="glass-card rounded-lg p-4 border border-border/50">
+                  <div className="flex items-center gap-2 mb-2">
+                    <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${
+                      service.active ? 'bg-success/20' : 'bg-destructive/20'
+                    }`}>
+                      <ServiceIcon className={`w-4 h-4 ${
+                        service.active ? 'text-success' : 'text-destructive'
+                      }`} />
+                    </div>
+                    <span className="text-xs text-muted-foreground truncate">{serviceName}</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <div className={`w-2 h-2 rounded-full ${
+                      service.active ? 'bg-success' : 'bg-destructive'
+                    }`} />
+                    <span className={`text-sm font-medium ${
+                      service.active ? 'text-success' : 'text-destructive'
+                    }`}>
+                      {service.active ? 'Running' : 'Stopped'}
+                    </span>
+                  </div>
+                  <div className="text-xs text-muted-foreground mt-1 capitalize">
+                    {service.status || 'unknown'}
+                  </div>
+                </div>
+              );
+            })}
+            
+            {/* Server Uptime */}
             <div className="glass-card rounded-lg p-4 border border-border/50">
               <div className="flex items-center gap-2 mb-2">
-                <div className="w-8 h-8 rounded-lg bg-purple-500/20 flex items-center justify-center">
-                  <MemoryStick className="w-4 h-4 text-purple-400" />
+                <div className="w-8 h-8 rounded-lg bg-primary/20 flex items-center justify-center">
+                  <Clock className="w-4 h-4 text-primary" />
                 </div>
-                <span className="text-xs text-muted-foreground">Memory</span>
+                <span className="text-xs text-muted-foreground">Server Uptime</span>
               </div>
-              <div className="text-2xl font-bold text-foreground">
-                {systemMonitorStats?.numeric_field_stats_24h?.memory_percent?.avg?.toFixed(1) ?? 
-                 systemInfo?.memory?.percent?.toFixed(1) ?? "—"}%
-              </div>
-              <div className="text-xs text-muted-foreground mt-1">
-                {systemInfo?.memory?.total 
-                  ? `${(systemInfo.memory.used / 1024 / 1024 / 1024).toFixed(1)}/${(systemInfo.memory.total / 1024 / 1024 / 1024).toFixed(1)} GB`
-                  : "24h avg"}
-              </div>
-            </div>
-
-            {/* Disk Usage */}
-            <div className="glass-card rounded-lg p-4 border border-border/50">
-              <div className="flex items-center gap-2 mb-2">
-                <div className="w-8 h-8 rounded-lg bg-orange-500/20 flex items-center justify-center">
-                  <HardDrive className="w-4 h-4 text-orange-400" />
-                </div>
-                <span className="text-xs text-muted-foreground">Disk</span>
-              </div>
-              <div className="text-2xl font-bold text-foreground">
-                {systemMonitorStats?.numeric_field_stats_24h?.disk_percent?.avg?.toFixed(1) ?? 
-                 systemInfo?.disk?.percent?.toFixed(1) ?? "—"}%
-              </div>
-              <div className="text-xs text-muted-foreground mt-1">
-                {systemInfo?.disk?.total 
-                  ? `${(systemInfo.disk.used / 1024 / 1024 / 1024).toFixed(1)}/${(systemInfo.disk.total / 1024 / 1024 / 1024).toFixed(1)} GB`
-                  : "24h avg"}
-              </div>
-            </div>
-
-            {/* Uptime */}
-            <div className="glass-card rounded-lg p-4 border border-border/50">
-              <div className="flex items-center gap-2 mb-2">
-                <div className="w-8 h-8 rounded-lg bg-green-500/20 flex items-center justify-center">
-                  <Clock className="w-4 h-4 text-green-400" />
-                </div>
-                <span className="text-xs text-muted-foreground">Uptime</span>
-              </div>
-              <div className="text-2xl font-bold text-foreground">
+              <div className="text-lg font-bold text-foreground">
                 {systemInfo?.uptime_seconds 
-                  ? `${Math.floor(systemInfo.uptime_seconds / 86400)}d`
+                  ? `${Math.floor(systemInfo.uptime_seconds / 86400)}d ${Math.floor((systemInfo.uptime_seconds % 86400) / 3600)}h`
                   : typeof systemInfo?.uptime === 'object' && systemInfo?.uptime !== null
                     ? (systemInfo.uptime as { formatted?: string })?.formatted ?? "—"
                     : typeof systemInfo?.uptime === 'string' 
@@ -830,7 +850,7 @@ const DashboardContent = () => {
                       : "—"}
               </div>
               <div className="text-xs text-muted-foreground mt-1">
-                {systemInfo?.hostname ?? "Server"}
+                {systemInfo?.ip_address ?? ""}
               </div>
             </div>
           </div>
