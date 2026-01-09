@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { Settings, Bell, Wifi, Database, Shield, Palette, Globe, Save, CheckCircle, XCircle, Loader2, Activity, Server, RefreshCw, Ruler } from "lucide-react";
+import { Settings, Bell, Wifi, Database, Shield, Palette, Globe, Save, CheckCircle, XCircle, Loader2, Activity, Server, RefreshCw, Ruler, Clock, User } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -15,17 +15,73 @@ import { useQueryClient } from "@tanstack/react-query";
 
 const AURORA_API_URL = "http://aurora.tophatsecurity.com:9151";
 
+// User Settings Types & Helpers
 export type UnitSystem = "metric" | "imperial";
+export type DateFormat = "MM/DD/YYYY" | "DD/MM/YYYY" | "YYYY-MM-DD";
+export type TimeFormat = "12h" | "24h";
 
-export const getUnitSystem = (): UnitSystem => {
-  const stored = localStorage.getItem("unitSystem");
-  return (stored === "imperial" || stored === "metric") ? stored : "imperial";
+export interface UserSettings {
+  unitSystem: UnitSystem;
+  timezone: string;
+  dateFormat: DateFormat;
+  timeFormat: TimeFormat;
+  autoRefresh: boolean;
+  refreshInterval: number;
+}
+
+const DEFAULT_SETTINGS: UserSettings = {
+  unitSystem: "imperial",
+  timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+  dateFormat: "MM/DD/YYYY",
+  timeFormat: "12h",
+  autoRefresh: true,
+  refreshInterval: 10,
 };
 
-export const setUnitSystem = (system: UnitSystem) => {
-  localStorage.setItem("unitSystem", system);
-  window.dispatchEvent(new CustomEvent("unitSystemChange", { detail: system }));
+export const getUserSettings = (): UserSettings => {
+  try {
+    const stored = localStorage.getItem("userSettings");
+    if (stored) {
+      return { ...DEFAULT_SETTINGS, ...JSON.parse(stored) };
+    }
+  } catch (e) {
+    console.error("Failed to parse user settings", e);
+  }
+  return DEFAULT_SETTINGS;
 };
+
+export const saveUserSettings = (settings: Partial<UserSettings>) => {
+  const current = getUserSettings();
+  const updated = { ...current, ...settings };
+  localStorage.setItem("userSettings", JSON.stringify(updated));
+  window.dispatchEvent(new CustomEvent("userSettingsChange", { detail: updated }));
+  return updated;
+};
+
+// Legacy exports for backward compatibility
+export const getUnitSystem = (): UnitSystem => getUserSettings().unitSystem;
+export const setUnitSystem = (system: UnitSystem) => saveUserSettings({ unitSystem: system });
+
+// Common timezones
+const COMMON_TIMEZONES = [
+  "America/New_York",
+  "America/Chicago",
+  "America/Denver",
+  "America/Los_Angeles",
+  "America/Anchorage",
+  "Pacific/Honolulu",
+  "Europe/London",
+  "Europe/Paris",
+  "Europe/Berlin",
+  "Europe/Moscow",
+  "Asia/Tokyo",
+  "Asia/Shanghai",
+  "Asia/Singapore",
+  "Asia/Dubai",
+  "Australia/Sydney",
+  "Pacific/Auckland",
+  "UTC",
+];
 
 const MONITORED_SERVICES = [
   { name: "datacollector", label: "Data Collector" },
@@ -75,12 +131,11 @@ const SettingsContent = () => {
   const { data: disk } = useSystemDisk();
   const { data: cpuLoad } = useSystemCpuLoad();
   
-  const [unitSystem, setUnitSystemState] = useState<UnitSystem>(getUnitSystem);
+  const [settings, setSettings] = useState<UserSettings>(getUserSettings);
 
-  const handleUnitSystemChange = (value: string) => {
-    const newSystem = value as UnitSystem;
-    setUnitSystemState(newSystem);
-    setUnitSystem(newSystem);
+  const updateSetting = <K extends keyof UserSettings>(key: K, value: UserSettings[K]) => {
+    const updated = saveUserSettings({ [key]: value });
+    setSettings(updated);
   };
 
   const isConnected = !statsError && stats;
@@ -332,26 +387,27 @@ const SettingsContent = () => {
             </CardContent>
           </Card>
 
-          {/* Unit System */}
+          {/* User Preferences */}
           <Card className="bg-card/50 backdrop-blur-sm border-border/50">
             <CardHeader>
               <CardTitle className="text-lg flex items-center gap-2">
-                <Ruler className="w-5 h-5" />
-                Unit System
+                <User className="w-5 h-5" />
+                User Preferences
               </CardTitle>
-              <CardDescription>Choose between Metric and Imperial units</CardDescription>
+              <CardDescription>Configure your personal display preferences</CardDescription>
             </CardHeader>
-            <CardContent>
+            <CardContent className="space-y-4">
+              {/* Unit System */}
               <div className="flex items-center justify-between">
                 <div>
                   <p className="font-medium">Measurement Units</p>
                   <p className="text-sm text-muted-foreground">
-                    {unitSystem === "metric" 
+                    {settings.unitSystem === "metric" 
                       ? "Celsius, meters, km/h" 
                       : "Fahrenheit, feet, mph"}
                   </p>
                 </div>
-                <Select value={unitSystem} onValueChange={handleUnitSystemChange}>
+                <Select value={settings.unitSystem} onValueChange={(v) => updateSetting("unitSystem", v as UnitSystem)}>
                   <SelectTrigger className="w-32">
                     <SelectValue />
                   </SelectTrigger>
@@ -360,6 +416,99 @@ const SettingsContent = () => {
                     <SelectItem value="metric">Metric</SelectItem>
                   </SelectContent>
                 </Select>
+              </div>
+              
+              <Separator />
+              
+              {/* Timezone */}
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="font-medium">Timezone</p>
+                  <p className="text-sm text-muted-foreground">Display times in your local zone</p>
+                </div>
+                <Select value={settings.timezone} onValueChange={(v) => updateSetting("timezone", v)}>
+                  <SelectTrigger className="w-48">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {COMMON_TIMEZONES.map((tz) => (
+                      <SelectItem key={tz} value={tz}>
+                        {tz.replace(/_/g, " ")}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              
+              <Separator />
+              
+              {/* Date Format */}
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="font-medium">Date Format</p>
+                  <p className="text-sm text-muted-foreground">How dates are displayed</p>
+                </div>
+                <Select value={settings.dateFormat} onValueChange={(v) => updateSetting("dateFormat", v as DateFormat)}>
+                  <SelectTrigger className="w-36">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="MM/DD/YYYY">MM/DD/YYYY</SelectItem>
+                    <SelectItem value="DD/MM/YYYY">DD/MM/YYYY</SelectItem>
+                    <SelectItem value="YYYY-MM-DD">YYYY-MM-DD</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              
+              <Separator />
+              
+              {/* Time Format */}
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="font-medium">Time Format</p>
+                  <p className="text-sm text-muted-foreground">12-hour or 24-hour clock</p>
+                </div>
+                <Select value={settings.timeFormat} onValueChange={(v) => updateSetting("timeFormat", v as TimeFormat)}>
+                  <SelectTrigger className="w-28">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="12h">12-hour</SelectItem>
+                    <SelectItem value="24h">24-hour</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              
+              <Separator />
+              
+              {/* Auto Refresh */}
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="font-medium">Auto Refresh</p>
+                  <p className="text-sm text-muted-foreground">Automatically refresh dashboard data</p>
+                </div>
+                <div className="flex items-center gap-3">
+                  {settings.autoRefresh && (
+                    <Select 
+                      value={settings.refreshInterval.toString()} 
+                      onValueChange={(v) => updateSetting("refreshInterval", parseInt(v))}
+                    >
+                      <SelectTrigger className="w-24">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="5">5 sec</SelectItem>
+                        <SelectItem value="10">10 sec</SelectItem>
+                        <SelectItem value="30">30 sec</SelectItem>
+                        <SelectItem value="60">1 min</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  )}
+                  <Switch 
+                    checked={settings.autoRefresh} 
+                    onCheckedChange={(v) => updateSetting("autoRefresh", v)} 
+                  />
+                </div>
               </div>
             </CardContent>
           </Card>
