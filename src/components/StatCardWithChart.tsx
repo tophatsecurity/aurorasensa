@@ -43,11 +43,6 @@ const CHART_COLORS = [
   "#84cc16", // lime
 ];
 
-// Seeded random number generator for stable synthetic data
-const seededRandom = (seed: number) => {
-  const x = Math.sin(seed) * 10000;
-  return x - Math.floor(x);
-};
 
 const StatCardWithChart = ({ 
   title, 
@@ -64,43 +59,27 @@ const StatCardWithChart = ({
   // Transform timeseries data for chart - group by timestamp and device if needed
   type ChartPoint = Record<string, string | number>;
   
-  // Memoize chart data to prevent recalculation on every render
+  // Memoize chart data - ONLY use real timeseries data, no synthetic data
   const chartData = useMemo((): ChartPoint[] => {
-    if (timeseries.length > 0) {
-      const grouped: ChartPoint[] = [];
-      timeseries.forEach((point) => {
-        const timeKey = format(new Date(point.timestamp), "HH:mm");
-        const deviceId = point.device_id || "value";
-        
-        // Find or create entry for this timestamp
-        let entry = grouped.find(e => e.time === timeKey);
-        if (!entry) {
-          entry = { time: timeKey, timestamp: point.timestamp };
-          grouped.push(entry);
-        }
-        entry[deviceId] = point.value;
-      });
-      return grouped.slice(-24);
+    if (timeseries.length === 0) {
+      return []; // No chart when no real data
     }
     
-    if (devices.length > 0) {
-      // Use seeded random for stable synthetic data based on device IDs
-      const deviceSeed = devices.reduce((acc, d) => acc + d.device_id.charCodeAt(0), 0);
-      return Array.from({ length: 12 }, (_, i) => {
-        const point: ChartPoint = { time: `${i}` };
-        devices.forEach((device, idx) => {
-          const baseValue = device.reading_count / 1000;
-          const variance = Math.sin((i + idx) * 0.5) * baseValue * 0.3;
-          // Use seeded random instead of Math.random() for stable values
-          const noise = seededRandom(deviceSeed + i * 100 + idx * 10) * baseValue * 0.2;
-          point[device.device_id] = Math.max(0, baseValue + variance + noise);
-        });
-        return point;
-      });
-    }
-    
-    return [];
-  }, [timeseries, devices]);
+    const grouped: ChartPoint[] = [];
+    timeseries.forEach((point) => {
+      const timeKey = format(new Date(point.timestamp), "HH:mm");
+      const deviceId = point.device_id || "value";
+      
+      // Find or create entry for this timestamp
+      let entry = grouped.find(e => e.time === timeKey);
+      if (!entry) {
+        entry = { time: timeKey, timestamp: point.timestamp };
+        grouped.push(entry);
+      }
+      entry[deviceId] = point.value;
+    });
+    return grouped.slice(-24);
+  }, [timeseries]);
 
   // Get unique device IDs from timeseries for multi-line charts
   const uniqueDevices = timeseries.length > 0 
