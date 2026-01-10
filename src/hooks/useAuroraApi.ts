@@ -1657,6 +1657,39 @@ export function useWeeklyStats() {
   });
 }
 
+// Dynamic period stats hook that selects the right endpoint based on hours
+export function usePeriodStats(hours: number) {
+  const periodKey = hours <= 1 ? '1hr' : hours <= 6 ? '6hr' : hours <= 24 ? '24hr' : 'weekly';
+  
+  return useQuery({
+    queryKey: ["aurora", "stats", "period", periodKey],
+    queryFn: () => callAuroraApi<TimePeriodStats>(`/api/stats/${periodKey}`),
+    refetchInterval: hours <= 1 ? 30000 : hours <= 6 ? 60000 : 120000,
+    retry: 2,
+  });
+}
+
+// Sensor type stats with hours parameter
+export function useSensorTypeStatsWithPeriod(sensorType: string, hours: number = 24) {
+  return useQuery({
+    queryKey: ["aurora", "stats", "sensors", sensorType, hours],
+    queryFn: async () => {
+      try {
+        // The API may support hours parameter, try it first
+        const response = await callAuroraApi<SensorTypeStats>(`/api/stats/sensors/${sensorType}?hours=${hours}`);
+        return response;
+      } catch (error) {
+        // Fall back to default endpoint without hours
+        console.warn(`Period stats for ${sensorType} not available, using 24h default`);
+        return callAuroraApi<SensorTypeStats>(`/api/stats/sensors/${sensorType}`);
+      }
+    },
+    refetchInterval: 15000,
+    retry: 1,
+    enabled: !!sensorType,
+  });
+}
+
 // =============================================
 // HOOKS - POWER & PERFORMANCE
 // =============================================
