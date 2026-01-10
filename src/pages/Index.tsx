@@ -27,6 +27,8 @@ import SystemLogsContent from "@/components/SystemLogsContent";
 import RemoteCommandsContent from "@/components/RemoteCommandsContent";
 import UpdateManagementContent from "@/components/UpdateManagementContent";
 import StatsHistoryCharts from "@/components/StatsHistoryCharts";
+import AdsbAnalyticsContent from "@/components/AdsbAnalyticsContent";
+import BaselinesContent from "@/components/BaselinesContent";
 import { AuroraAuthPage } from "@/components/auth/AuroraAuthPage";
 import { useAuroraAuthContext } from "@/hooks/useAuroraAuth";
 import { Loader2 } from "lucide-react";
@@ -91,6 +93,10 @@ const Index = () => {
         return <StarlinkContent />;
       case "radio":
         return <RadioAnalyticsContent />;
+      case "adsb":
+        return <AdsbAnalyticsContent />;
+      case "baselines":
+        return <BaselinesContent />;
       case "audit-logs":
         return <AuditLogsContent />;
       case "configuration":
