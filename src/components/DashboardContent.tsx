@@ -54,7 +54,6 @@ import {
   useClients, 
   useDashboardStats, 
   useDashboardTimeseries, 
-  useSensorTypeStats,
   useSensorTypeStatsWithPeriod,
   usePeriodStats,
   useStarlinkTimeseries,
@@ -63,7 +62,6 @@ import {
   useAhtSensorTimeseries,
   useArduinoSensorTimeseries,
   useSystemInfo,
-  useAuroraServices,
   useHealth,
   Client 
 } from "@/hooks/useAuroraApi";
@@ -140,11 +138,10 @@ const DashboardContent = () => {
   const { data: bmtStats } = useSensorTypeStatsWithPeriod("bmt_sensor", periodHours);
   const { data: systemMonitorStats, isLoading: systemMonitorLoading } = useSensorTypeStatsWithPeriod("system_monitor", periodHours);
   
-  // System info from API
+  // System info from API - only fetch when needed
   const { data: systemInfo, isLoading: systemInfoLoading } = useSystemInfo();
   
-  // Aurora services status
-  const { data: auroraServices, isLoading: servicesLoading } = useAuroraServices();
+  // Aurora services status - removed to reduce API calls, health check is sufficient
   const { data: health, isLoading: healthLoading } = useHealth();
 
   
@@ -788,13 +785,13 @@ const DashboardContent = () => {
         <StarlinkCharts hours={periodHours} />
       </div>
 
-      {/* Aurora Services Status */}
+      {/* Server Status */}
       <div className="mb-8">
         <h2 className="text-lg font-semibold mb-4 flex items-center gap-2">
           <Server className="w-5 h-5 text-cyan-500" />
-          Aurora Services Status
+          Server Status
         </h2>
-        {(servicesLoading || healthLoading) ? (
+        {healthLoading ? (
           <div className="flex items-center justify-center py-8">
             <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
           </div>
@@ -821,54 +818,6 @@ const DashboardContent = () => {
                 {systemInfo?.hostname ?? 'Aurora Server'}
               </div>
             </div>
-            
-            {/* Aurora Services */}
-            {auroraServices?.map((service) => {
-              const serviceName = service.name
-                .replace('aurorasense-', '')
-                .replace(/-/g, ' ')
-                .replace(/\b\w/g, l => l.toUpperCase());
-              
-              const getServiceIcon = (name: string) => {
-                if (name.includes('dataserver')) return Database;
-                if (name.includes('datacollector')) return Activity;
-                if (name.includes('adsb')) return Plane;
-                if (name.includes('starlink')) return Satellite;
-                if (name.includes('gps')) return Navigation;
-                if (name.includes('lora')) return Radio;
-                return Server;
-              };
-              
-              const ServiceIcon = getServiceIcon(service.name);
-              
-              return (
-                <div key={service.name} className="glass-card rounded-lg p-4 border border-border/50">
-                  <div className="flex items-center gap-2 mb-2">
-                    <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${
-                      service.active ? 'bg-success/20' : 'bg-destructive/20'
-                    }`}>
-                      <ServiceIcon className={`w-4 h-4 ${
-                        service.active ? 'text-success' : 'text-destructive'
-                      }`} />
-                    </div>
-                    <span className="text-xs text-muted-foreground truncate">{serviceName}</span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <div className={`w-2 h-2 rounded-full ${
-                      service.active ? 'bg-success' : 'bg-destructive'
-                    }`} />
-                    <span className={`text-sm font-medium ${
-                      service.active ? 'text-success' : 'text-destructive'
-                    }`}>
-                      {service.active ? 'Running' : 'Stopped'}
-                    </span>
-                  </div>
-                  <div className="text-xs text-muted-foreground mt-1 capitalize">
-                    {service.status || 'unknown'}
-                  </div>
-                </div>
-              );
-            })}
             
             {/* Server Uptime */}
             <div className="glass-card rounded-lg p-4 border border-border/50">
