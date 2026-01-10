@@ -4,7 +4,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
 import { Button } from "@/components/ui/button";
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, AreaChart, Area, BarChart, Bar, Legend, PieChart, Pie, Cell } from "recharts";
-import { useDashboardTimeseries, useComprehensiveStats, useStarlinkPower, useSensorTypeStats, useAllSensorStats, StarlinkPowerDeviceSummary } from "@/hooks/useAuroraApi";
+import { useDashboardTimeseries, useComprehensiveStats, useStarlinkPower, useAllSensorStats, useSensorStatsHistory, useDeviceStatsHistory, StarlinkPowerDeviceSummary } from "@/hooks/useAuroraApi";
 import { useQueryClient } from "@tanstack/react-query";
 import { format } from "date-fns";
 import { 
@@ -61,13 +61,16 @@ const PowerContent = () => {
   const { data: timeseries, isLoading: timeseriesLoading } = useDashboardTimeseries(periodHours);
   const { data: starlinkPower, isLoading: starlinkPowerLoading } = useStarlinkPower();
   const { data: allSensorStats, isLoading: sensorStatsLoading } = useAllSensorStats();
+  const { data: sensorHistory, isLoading: sensorHistoryLoading } = useSensorStatsHistory(periodHours);
+  const { data: deviceHistory, isLoading: deviceHistoryLoading } = useDeviceStatsHistory(periodHours);
 
-  const isLoading = statsLoading || timeseriesLoading || starlinkPowerLoading || sensorStatsLoading;
+  const isLoading = statsLoading || timeseriesLoading || starlinkPowerLoading || sensorStatsLoading || sensorHistoryLoading || deviceHistoryLoading;
 
   const handleRefresh = () => {
     queryClient.invalidateQueries({ queryKey: ["aurora", "dashboard"] });
     queryClient.invalidateQueries({ queryKey: ["aurora", "starlink", "power"] });
     queryClient.invalidateQueries({ queryKey: ["aurora", "stats", "sensors"] });
+    queryClient.invalidateQueries({ queryKey: ["aurora", "stats", "history"] });
   };
 
   // Transform power timeseries data for charts
@@ -168,11 +171,89 @@ const PowerContent = () => {
     return devicePowerBreakdown.reduce((sum, d) => sum + d.estimated_power, 0);
   }, [devicePowerBreakdown]);
 
+  // Process sensor history for power trends by device type
+  const sensorPowerHistory = useMemo(() => {
+    if (!sensorHistory?.length) return [];
+    
+    // Group by timestamp
+    const timeMap = new Map<string, Record<string, string | number>>();
+    
+    sensorHistory.forEach(point => {
+      const time = format(new Date(point.timestamp), "MMM dd HH:mm");
+      if (!timeMap.has(time)) {
+        timeMap.set(time, { time });
+      }
+      const entry = timeMap.get(time)!;
+      
+      // Get power estimate for this device type
+      const powerEstimate = DEVICE_POWER_ESTIMATES[point.sensor_type] || { idle: 1, active: 2 };
+      const isActive = point.reading_count > 0;
+      const estimatedPower = (isActive ? powerEstimate.active : powerEstimate.idle) * (point.device_count || 1);
+      
+      entry[point.sensor_type] = estimatedPower;
+    });
+    
+    return Array.from(timeMap.values()).sort((a, b) => 
+      String(a.time).localeCompare(String(b.time))
+    );
+  }, [sensorHistory]);
+
+  // Get unique device types from history for chart lines
+  const historyDeviceTypes = useMemo(() => {
+    if (!sensorHistory?.length) return [];
+    const types = new Set(sensorHistory.map(p => p.sensor_type));
+    return Array.from(types);
+  }, [sensorHistory]);
+
+  // Process device history for individual device power trends
+  const devicePowerHistory = useMemo(() => {
+    if (!deviceHistory?.length) return [];
+    
+    // Group by timestamp
+    const timeMap = new Map<string, Record<string, string | number>>();
+    
+    deviceHistory.forEach(point => {
+      const time = format(new Date(point.timestamp), "MMM dd HH:mm");
+      if (!timeMap.has(time)) {
+        timeMap.set(time, { time });
+      }
+      const entry = timeMap.get(time)!;
+      
+      // Get power estimate for this device type
+      const powerEstimate = DEVICE_POWER_ESTIMATES[point.device_type] || { idle: 1, active: 2 };
+      const isActive = point.reading_count > 0;
+      const estimatedPower = isActive ? powerEstimate.active : powerEstimate.idle;
+      
+      // Use device_id as key, truncate for display
+      const deviceKey = point.device_id.length > 12 ? point.device_id.slice(0, 12) + '...' : point.device_id;
+      entry[deviceKey] = estimatedPower;
+    });
+    
+    return Array.from(timeMap.values()).sort((a, b) => 
+      String(a.time).localeCompare(String(b.time))
+    );
+  }, [deviceHistory]);
+
+  // Get unique devices from history for chart lines
+  const historyDevices = useMemo(() => {
+    if (!deviceHistory?.length) return [];
+    const devices = new Map<string, { id: string, type: string, displayId: string }>();
+    deviceHistory.forEach(p => {
+      if (!devices.has(p.device_id)) {
+        const displayId = p.device_id.length > 12 ? p.device_id.slice(0, 12) + '...' : p.device_id;
+        devices.set(p.device_id, { id: p.device_id, type: p.device_type, displayId });
+      }
+    });
+    return Array.from(devices.values());
+  }, [deviceHistory]);
+
   // Calculate current values from latest data
   const currentPower = powerChartData.length > 0 ? powerChartData[powerChartData.length - 1]?.power : null;
   const hasPowerData = powerChartData.length > 0 || currentPower !== null;
   const hasStarlinkData = starlinkDevicePower.length > 0;
   const hasDeviceData = devicePowerBreakdown.length > 0;
+  const hasSensorHistory = sensorPowerHistory.length > 0;
+  const hasDeviceHistory = devicePowerHistory.length > 0;
 
   // Mock voltage/current derived from power (P = V * I, assuming ~12V system)
   const estimatedVoltage = 12.3;
@@ -363,6 +444,147 @@ const PowerContent = () => {
             <div className="h-32 flex flex-col items-center justify-center text-muted-foreground">
               <Server className="w-12 h-12 mb-3 opacity-50" />
               <p>No device data available</p>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Power History by Device Type */}
+      <Card className="bg-card/50 backdrop-blur-sm border-border/50 mb-6">
+        <CardHeader>
+          <div className="flex items-center gap-2">
+            <Activity className="w-5 h-5 text-primary" />
+            <CardTitle className="text-lg">Power Trends by Device Type</CardTitle>
+          </div>
+        </CardHeader>
+        <CardContent>
+          {isLoading ? (
+            <div className="h-80 flex items-center justify-center">
+              <Loader2 className="w-8 h-8 animate-spin text-muted-foreground" />
+            </div>
+          ) : hasSensorHistory ? (
+            <div className="h-80">
+              <ResponsiveContainer width="100%" height="100%">
+                <AreaChart data={sensorPowerHistory}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
+                  <XAxis 
+                    dataKey="time" 
+                    stroke="hsl(var(--muted-foreground))" 
+                    fontSize={11}
+                    angle={-45}
+                    textAnchor="end"
+                    height={60}
+                  />
+                  <YAxis 
+                    stroke="hsl(var(--muted-foreground))" 
+                    fontSize={12}
+                    label={{ value: 'Power (W)', angle: -90, position: 'insideLeft', style: { fill: 'hsl(var(--muted-foreground))' } }}
+                  />
+                  <Tooltip 
+                    contentStyle={{ 
+                      background: 'hsl(var(--card))', 
+                      border: '1px solid hsl(var(--border))',
+                      borderRadius: '8px'
+                    }}
+                    formatter={(value: number, name: string) => [
+                      `${Number(value).toFixed(2)}W`, 
+                      DEVICE_TYPE_CONFIG[name]?.label || name.replace(/_/g, ' ')
+                    ]}
+                  />
+                  <Legend 
+                    formatter={(value: string) => DEVICE_TYPE_CONFIG[value]?.label || value.replace(/_/g, ' ')}
+                    wrapperStyle={{ paddingTop: '10px' }}
+                  />
+                  {historyDeviceTypes.map((type, index) => {
+                    const config = DEVICE_TYPE_CONFIG[type];
+                    const color = config?.color || DEVICE_COLORS[index % DEVICE_COLORS.length];
+                    return (
+                      <Area
+                        key={type}
+                        type="monotone"
+                        dataKey={type}
+                        stackId="1"
+                        stroke={color}
+                        fill={color}
+                        fillOpacity={0.6}
+                        name={type}
+                      />
+                    );
+                  })}
+                </AreaChart>
+              </ResponsiveContainer>
+            </div>
+          ) : (
+            <div className="h-32 flex flex-col items-center justify-center text-muted-foreground">
+              <Activity className="w-12 h-12 mb-3 opacity-50" />
+              <p>No sensor history data available</p>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Power History by Individual Device */}
+      <Card className="bg-card/50 backdrop-blur-sm border-border/50 mb-6">
+        <CardHeader>
+          <div className="flex items-center gap-2">
+            <Server className="w-5 h-5 text-primary" />
+            <CardTitle className="text-lg">Power Trends by Device</CardTitle>
+          </div>
+        </CardHeader>
+        <CardContent>
+          {isLoading ? (
+            <div className="h-80 flex items-center justify-center">
+              <Loader2 className="w-8 h-8 animate-spin text-muted-foreground" />
+            </div>
+          ) : hasDeviceHistory ? (
+            <div className="h-80">
+              <ResponsiveContainer width="100%" height="100%">
+                <LineChart data={devicePowerHistory}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
+                  <XAxis 
+                    dataKey="time" 
+                    stroke="hsl(var(--muted-foreground))" 
+                    fontSize={11}
+                    angle={-45}
+                    textAnchor="end"
+                    height={60}
+                  />
+                  <YAxis 
+                    stroke="hsl(var(--muted-foreground))" 
+                    fontSize={12}
+                    label={{ value: 'Power (W)', angle: -90, position: 'insideLeft', style: { fill: 'hsl(var(--muted-foreground))' } }}
+                  />
+                  <Tooltip 
+                    contentStyle={{ 
+                      background: 'hsl(var(--card))', 
+                      border: '1px solid hsl(var(--border))',
+                      borderRadius: '8px'
+                    }}
+                    formatter={(value: number, name: string) => [`${Number(value).toFixed(2)}W`, name]}
+                  />
+                  <Legend wrapperStyle={{ paddingTop: '10px' }} />
+                  {historyDevices.slice(0, 10).map((device, index) => {
+                    const config = DEVICE_TYPE_CONFIG[device.type];
+                    const baseColor = config?.color || DEVICE_COLORS[index % DEVICE_COLORS.length];
+                    return (
+                      <Line
+                        key={device.id}
+                        type="monotone"
+                        dataKey={device.displayId}
+                        stroke={baseColor}
+                        strokeWidth={2}
+                        dot={false}
+                        name={device.displayId}
+                      />
+                    );
+                  })}
+                </LineChart>
+              </ResponsiveContainer>
+            </div>
+          ) : (
+            <div className="h-32 flex flex-col items-center justify-center text-muted-foreground">
+              <Server className="w-12 h-12 mb-3 opacity-50" />
+              <p>No device history data available</p>
             </div>
           )}
         </CardContent>
