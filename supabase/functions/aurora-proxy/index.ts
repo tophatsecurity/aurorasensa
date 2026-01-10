@@ -4,52 +4,23 @@ const corsHeaders = {
 };
 
 const AURORA_ENDPOINT = "http://aurora.tophatsecurity.com:9151";
-const TIMEOUT_MS = 30000;
-const MAX_RETRIES = 3;
-const RETRY_DELAY_MS = 1000;
+const TIMEOUT_MS = 55000; // Edge functions have ~60s limit
 
-async function fetchWithRetry(
-  url: string, 
-  options: RequestInit, 
-  retries = MAX_RETRIES
-): Promise<Response> {
-  let lastError: Error | null = null;
+async function fetchWithTimeout(url: string, options: RequestInit): Promise<Response> {
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), TIMEOUT_MS);
   
-  for (let attempt = 1; attempt <= retries; attempt++) {
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), TIMEOUT_MS);
-    
-    try {
-      const response = await fetch(url, {
-        ...options,
-        signal: controller.signal,
-      });
-      clearTimeout(timeoutId);
-      return response;
-    } catch (error) {
-      clearTimeout(timeoutId);
-      lastError = error instanceof Error ? error : new Error(String(error));
-      
-      const isAborted = lastError.message.includes('aborted');
-      const isConnectionReset = lastError.message.includes('reset') || 
-                                lastError.message.includes('connection') ||
-                                lastError.message.includes('ECONNRESET');
-      
-      console.log(`Attempt ${attempt}/${retries} failed: ${lastError.message}`);
-      
-      // Only retry on connection issues, not timeouts
-      if (isAborted || (!isConnectionReset && attempt < retries)) {
-        throw lastError;
-      }
-      
-      if (attempt < retries) {
-        console.log(`Retrying in ${RETRY_DELAY_MS}ms...`);
-        await new Promise(resolve => setTimeout(resolve, RETRY_DELAY_MS * attempt));
-      }
-    }
+  try {
+    const response = await fetch(url, {
+      ...options,
+      signal: controller.signal,
+    });
+    clearTimeout(timeoutId);
+    return response;
+  } catch (error) {
+    clearTimeout(timeoutId);
+    throw error;
   }
-  
-  throw lastError || new Error('All retries failed');
 }
 
 Deno.serve(async (req) => {
@@ -93,7 +64,7 @@ Deno.serve(async (req) => {
 
     let response: Response;
     try {
-      response = await fetchWithRetry(url, {
+      response = await fetchWithTimeout(url, {
         method,
         headers,
         body: requestBody && method !== 'GET' ? JSON.stringify(requestBody) : undefined,
