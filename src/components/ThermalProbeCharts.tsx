@@ -137,7 +137,7 @@ const ThermalProbeCharts = ({ hours = 24, clientId }: ThermalProbeChartsProps) =
               <SSEConnectionStatus
                 isConnected={realTimeData.isConnected}
                 isConnecting={realTimeData.isConnecting}
-                error={realTimeData.error?.message || null}
+                error={realTimeData.error || null}
                 reconnectCount={realTimeData.reconnectCount}
                 onReconnect={realTimeData.reconnect}
               />

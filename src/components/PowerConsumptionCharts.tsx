@@ -234,7 +234,7 @@ const PowerConsumptionCharts = ({ hours = 24, clientId = 'all' }: PowerConsumpti
               <SSEConnectionStatus
                 isConnected={realTimeData.isConnected}
                 isConnecting={realTimeData.isConnecting}
-                error={realTimeData.error?.message || null}
+                error={realTimeData.error || null}
                 reconnectCount={realTimeData.reconnectCount}
                 onReconnect={realTimeData.reconnect}
               />
