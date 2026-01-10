@@ -35,10 +35,12 @@ const isConnectionError = (error: unknown): boolean => {
   return message.includes('aborted') || 
          message.includes('timeout') || 
          message.includes('503') ||
+         message.includes('504') ||
          message.includes('500') ||
          message.includes('network') ||
          message.includes('unavailable') ||
-         message.includes('offline');
+         message.includes('offline') ||
+         message.includes('NetworkError');
 };
 
 async function callAuroraApi<T>(path: string, method: string = "GET", body?: unknown): Promise<T> {
@@ -57,7 +59,10 @@ async function callAuroraApi<T>(path: string, method: string = "GET", body?: unk
 
   if (data && typeof data === 'object' && 'error' in data) {
     const errorData = data as { error: string; details?: string; retryable?: boolean };
-    if (errorData.error === 'Aurora server unavailable' || isConnectionError(errorData.details || '')) {
+    if (errorData.error === 'Aurora server unavailable' || 
+        errorData.error === 'Aurora server timeout' ||
+        isConnectionError(errorData.details || '') ||
+        isConnectionError(errorData.error || '')) {
       throw new Error('AURORA_OFFLINE');
     }
   }
