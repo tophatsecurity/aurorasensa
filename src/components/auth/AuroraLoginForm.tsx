@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Eye, EyeOff, Loader2, AlertCircle, Zap } from "lucide-react";
+import { Eye, EyeOff, Loader2, AlertCircle, Zap, WifiOff, Play } from "lucide-react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -8,10 +8,12 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 
 interface AuroraLoginFormProps {
   onLogin: (username: string, password: string) => Promise<{ success: boolean; error?: string }>;
+  onDemoMode?: () => void;
   isLoading?: boolean;
+  serverStatus?: 'online' | 'offline' | 'checking';
 }
 
-export function AuroraLoginForm({ onLogin, isLoading }: AuroraLoginFormProps) {
+export function AuroraLoginForm({ onLogin, onDemoMode, isLoading, serverStatus }: AuroraLoginFormProps) {
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
@@ -37,6 +39,7 @@ export function AuroraLoginForm({ onLogin, isLoading }: AuroraLoginFormProps) {
   };
 
   const isPending = loading || isLoading;
+  const isServerOffline = serverStatus === 'offline';
 
   return (
     <Card className="w-full max-w-md bg-background/95 backdrop-blur-sm border-border">
@@ -48,10 +51,19 @@ export function AuroraLoginForm({ onLogin, isLoading }: AuroraLoginFormProps) {
         <CardDescription>
           Sign in to access the monitoring dashboard
         </CardDescription>
+        
+        {isServerOffline && (
+          <Alert className="bg-amber-500/10 border-amber-500/50 text-left">
+            <WifiOff className="h-4 w-4 text-amber-500" />
+            <AlertDescription className="text-amber-200">
+              Aurora server is currently offline. You can use Demo Mode to explore the interface.
+            </AlertDescription>
+          </Alert>
+        )}
       </CardHeader>
-      <CardContent>
+      <CardContent className="space-y-4">
         <form onSubmit={handleSubmit} className="space-y-4">
-          {error && (
+          {error && !isServerOffline && (
             <Alert variant="destructive">
               <AlertCircle className="h-4 w-4" />
               <AlertDescription>{error}</AlertDescription>
@@ -111,6 +123,32 @@ export function AuroraLoginForm({ onLogin, isLoading }: AuroraLoginFormProps) {
             )}
           </Button>
         </form>
+
+        {onDemoMode && (
+          <>
+            <div className="relative">
+              <div className="absolute inset-0 flex items-center">
+                <span className="w-full border-t border-border" />
+              </div>
+              <div className="relative flex justify-center text-xs uppercase">
+                <span className="bg-background px-2 text-muted-foreground">Or</span>
+              </div>
+            </div>
+            
+            <Button 
+              type="button" 
+              variant="outline" 
+              className="w-full"
+              onClick={onDemoMode}
+            >
+              <Play className="mr-2 h-4 w-4" />
+              Enter Demo Mode
+            </Button>
+            <p className="text-xs text-muted-foreground text-center">
+              Explore the interface with sample data
+            </p>
+          </>
+        )}
       </CardContent>
     </Card>
   );

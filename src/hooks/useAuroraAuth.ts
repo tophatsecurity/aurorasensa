@@ -6,24 +6,29 @@ export interface AuroraUser {
   role: string;
   created_at?: string;
   last_login?: string;
+  isOfflineMode?: boolean;
 }
 
 interface AuroraAuthState {
   user: AuroraUser | null;
   loading: boolean;
   error: string | null;
+  isOfflineMode: boolean;
+  serverStatus: 'online' | 'offline' | 'checking';
 }
 
 interface AuroraAuthContextValue extends AuroraAuthState {
   signIn: (username: string, password: string) => Promise<{ success: boolean; error?: string }>;
   signOut: () => Promise<void>;
   refreshUser: () => Promise<void>;
+  enterDemoMode: () => void;
   isAdmin: boolean;
 }
 
 // Session storage keys
 const SESSION_KEY = 'aurora_session';
 const SESSION_COOKIE_KEY = 'aurora_cookie';
+const DEMO_MODE_KEY = 'aurora_demo_mode';
 
 const isConnectionError = (error: unknown): boolean => {
   const message = error instanceof Error ? error.message : String(error);
@@ -31,7 +36,9 @@ const isConnectionError = (error: unknown): boolean => {
          message.includes('timeout') || 
          message.includes('503') ||
          message.includes('500') ||
-         message.includes('network');
+         message.includes('network') ||
+         message.includes('unavailable') ||
+         message.includes('offline');
 };
 
 async function callAuroraApi<T>(path: string, method: string = "GET", body?: unknown): Promise<T> {
@@ -43,15 +50,15 @@ async function callAuroraApi<T>(path: string, method: string = "GET", body?: unk
 
   if (error) {
     if (isConnectionError(error)) {
-      throw new Error('Unable to connect to Aurora server. Please check your network connection and try again.');
+      throw new Error('AURORA_OFFLINE');
     }
     throw new Error(`Aurora API error: ${error.message}`);
   }
 
   if (data && typeof data === 'object' && 'error' in data) {
-    const errorData = data as { error: string; details?: string };
-    if (errorData.details && isConnectionError(errorData.details)) {
-      throw new Error('Aurora server is not responding. Please try again in a few moments.');
+    const errorData = data as { error: string; details?: string; retryable?: boolean };
+    if (errorData.error === 'Aurora server unavailable' || isConnectionError(errorData.details || '')) {
+      throw new Error('AURORA_OFFLINE');
     }
   }
 
@@ -77,14 +84,28 @@ export function useAuroraAuth(): AuroraAuthContextValue {
     user: null,
     loading: true,
     error: null,
+    isOfflineMode: sessionStorage.getItem(DEMO_MODE_KEY) === 'true',
+    serverStatus: 'checking',
   });
 
   // Check for existing session on mount
   const refreshUser = useCallback(async () => {
+    // Check if in demo mode
+    if (sessionStorage.getItem(DEMO_MODE_KEY) === 'true') {
+      setAuthState({
+        user: { username: 'demo', role: 'admin', isOfflineMode: true },
+        loading: false,
+        error: null,
+        isOfflineMode: true,
+        serverStatus: 'offline',
+      });
+      return;
+    }
+
     try {
       const sessionData = sessionStorage.getItem(SESSION_KEY);
       if (!sessionData) {
-        setAuthState({ user: null, loading: false, error: null });
+        setAuthState({ user: null, loading: false, error: null, isOfflineMode: false, serverStatus: 'online' });
         return;
       }
 
@@ -97,14 +118,32 @@ export function useAuroraAuth(): AuroraAuthContextValue {
         user: userData,
         loading: false,
         error: null,
+        isOfflineMode: false,
+        serverStatus: 'online',
       });
     } catch (error) {
+      const errorMsg = error instanceof Error ? error.message : String(error);
+      
+      if (errorMsg === 'AURORA_OFFLINE') {
+        // Server is offline - check if we have stored session to show demo mode prompt
+        setAuthState({
+          user: null,
+          loading: false,
+          error: null,
+          isOfflineMode: false,
+          serverStatus: 'offline',
+        });
+        return;
+      }
+      
       // Session invalid, clear it
       sessionStorage.removeItem(SESSION_KEY);
       setAuthState({
         user: null,
         loading: false,
         error: null,
+        isOfflineMode: false,
+        serverStatus: 'online',
       });
     }
   }, []);
@@ -113,20 +152,17 @@ export function useAuroraAuth(): AuroraAuthContextValue {
     refreshUser();
   }, [refreshUser]);
 
-  // Listen for session being cleared by other parts of the app (e.g., 401 errors in useAuroraApi)
+  // Listen for session being cleared by other parts of the app
   useEffect(() => {
     const checkSession = () => {
       const hasSession = sessionStorage.getItem(SESSION_COOKIE_KEY);
-      if (!hasSession && authState.user) {
-        // Session was cleared externally, update auth state
-        setAuthState({ user: null, loading: false, error: null });
+      const isDemoMode = sessionStorage.getItem(DEMO_MODE_KEY) === 'true';
+      if (!hasSession && !isDemoMode && authState.user) {
+        setAuthState(prev => ({ ...prev, user: null }));
       }
     };
 
-    // Check periodically since sessionStorage doesn't have native events
     const intervalId = setInterval(checkSession, 1000);
-    
-    // Also check on window focus (user might have logged out in another tab)
     window.addEventListener('focus', checkSession);
     
     return () => {
@@ -145,31 +181,30 @@ export function useAuroraAuth(): AuroraAuthContextValue {
         { username, password }
       );
 
-      // Aurora API returns user data directly on success (username, role, etc.)
       const isSuccess = response.auroraCookie || response.username || response.success;
       
       if (isSuccess) {
-        // Store the actual Aurora cookie for future API calls
         if (response.auroraCookie) {
           sessionStorage.setItem(SESSION_COOKIE_KEY, response.auroraCookie);
         }
         
-        // Build user object from response
         const user: AuroraUser = response.user || {
           username: response.username || username,
           role: response.role || 'user',
         };
         
-        // Store session info
         sessionStorage.setItem(SESSION_KEY, JSON.stringify({
           username: user.username,
           loggedInAt: new Date().toISOString(),
         }));
+        sessionStorage.removeItem(DEMO_MODE_KEY);
 
         setAuthState({
           user,
           loading: false,
           error: null,
+          isOfflineMode: false,
+          serverStatus: 'online',
         });
 
         return { success: true };
@@ -184,6 +219,17 @@ export function useAuroraAuth(): AuroraAuthContextValue {
       }
     } catch (error) {
       const errorMsg = error instanceof Error ? error.message : 'Login failed';
+      
+      if (errorMsg === 'AURORA_OFFLINE') {
+        setAuthState(prev => ({
+          ...prev,
+          loading: false,
+          error: 'Aurora server is offline. Try Demo Mode to explore the interface.',
+          serverStatus: 'offline',
+        }));
+        return { success: false, error: 'Server offline - use Demo Mode' };
+      }
+      
       setAuthState(prev => ({
         ...prev,
         loading: false,
@@ -193,21 +239,40 @@ export function useAuroraAuth(): AuroraAuthContextValue {
     }
   }, []);
 
+  const enterDemoMode = useCallback(() => {
+    sessionStorage.setItem(DEMO_MODE_KEY, 'true');
+    sessionStorage.removeItem(SESSION_KEY);
+    sessionStorage.removeItem(SESSION_COOKIE_KEY);
+    
+    setAuthState({
+      user: { username: 'demo', role: 'admin', isOfflineMode: true },
+      loading: false,
+      error: null,
+      isOfflineMode: true,
+      serverStatus: 'offline',
+    });
+  }, []);
+
   const signOut = useCallback(async () => {
-    try {
-      await callAuroraApi("/api/auth/logout", "POST");
-    } catch {
-      // Ignore logout errors
+    if (!authState.isOfflineMode) {
+      try {
+        await callAuroraApi("/api/auth/logout", "POST");
+      } catch {
+        // Ignore logout errors
+      }
     }
     
     sessionStorage.removeItem(SESSION_KEY);
     sessionStorage.removeItem(SESSION_COOKIE_KEY);
+    sessionStorage.removeItem(DEMO_MODE_KEY);
     setAuthState({
       user: null,
       loading: false,
       error: null,
+      isOfflineMode: false,
+      serverStatus: 'checking',
     });
-  }, []);
+  }, [authState.isOfflineMode]);
 
   const isAdmin = authState.user?.role === 'admin';
 
@@ -216,6 +281,7 @@ export function useAuroraAuth(): AuroraAuthContextValue {
     signIn,
     signOut,
     refreshUser,
+    enterDemoMode,
     isAdmin,
   };
 }
