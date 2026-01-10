@@ -2028,8 +2028,10 @@ export function useSystemInfo() {
   return useQuery({
     queryKey: ["aurora", "system", "all"],
     queryFn: () => callAuroraApi<SystemInfo>("/api/system/all"),
-    refetchInterval: 30000,
-    retry: 2,
+    enabled: hasAuroraSession(),
+    staleTime: 60000,
+    refetchInterval: 120000,
+    retry: 1,
   });
 }
 
@@ -3128,8 +3130,10 @@ export function useLoraDetections() {
   return useQuery({
     queryKey: ["aurora", "lora", "detections"],
     queryFn: () => callAuroraApi<LoraDetection[]>("/api/lora/detections"),
-    refetchInterval: 15000,
-    retry: 2,
+    enabled: hasAuroraSession(),
+    staleTime: 60000,
+    refetchInterval: 120000,
+    retry: 1,
   });
 }
 
@@ -3137,8 +3141,10 @@ export function useRecentLoraDetections() {
   return useQuery({
     queryKey: ["aurora", "lora", "detections", "recent"],
     queryFn: () => callAuroraApi<LoraDetection[]>("/api/lora/detections/recent"),
-    refetchInterval: 10000,
-    retry: 2,
+    enabled: hasAuroraSession(),
+    staleTime: 30000,
+    refetchInterval: 60000,
+    retry: 1,
   });
 }
 
@@ -3174,8 +3180,10 @@ export function useLoraSpectrum() {
   return useQuery({
     queryKey: ["aurora", "lora", "spectrum"],
     queryFn: () => callAuroraApi<LoraSpectrum>("/api/lora/spectrum"),
-    refetchInterval: 15000,
-    retry: 2,
+    enabled: hasAuroraSession(),
+    staleTime: 30000,
+    refetchInterval: 60000,
+    retry: 1,
   });
 }
 
@@ -3289,6 +3297,8 @@ export interface SystemMonitorTimeseriesResponse {
 export function useSystemMonitorTimeseries(hours: number = 24) {
   return useQuery({
     queryKey: ["aurora", "system_monitor", "timeseries", hours],
+    enabled: hasAuroraSession(),
+    staleTime: 60000,
     queryFn: async () => {
       try {
         const response = await callAuroraApi<SystemMonitorTimeseriesResponse>(`/api/readings/sensor/system_monitor?hours=${hours}`);
@@ -3303,7 +3313,7 @@ export function useSystemMonitorTimeseries(hours: number = 24) {
         }
       }
     },
-    refetchInterval: 30000,
+    refetchInterval: 120000,
     retry: 1,
   });
 }
@@ -3347,8 +3357,10 @@ export function useHealth() {
   return useQuery({
     queryKey: ["aurora", "health"],
     queryFn: () => callAuroraApi<{ status: string; timestamp: string }>("/api/health"),
-    refetchInterval: 30000,
-    retry: 2,
+    enabled: hasAuroraSession(),
+    staleTime: 60000,
+    refetchInterval: 120000,
+    retry: 1,
   });
 }
 
@@ -3525,8 +3537,10 @@ export function useSystemCpuLoad() {
   return useQuery({
     queryKey: ["aurora", "system", "load"],
     queryFn: () => callAuroraApi<{ load: number[] }>("/api/system/load"),
-    refetchInterval: 15000,
-    retry: 2,
+    enabled: hasAuroraSession(),
+    staleTime: 60000,
+    refetchInterval: 120000,
+    retry: 1,
   });
 }
 
@@ -3534,8 +3548,10 @@ export function useSystemMemory() {
   return useQuery({
     queryKey: ["aurora", "system", "memory"],
     queryFn: () => callAuroraApi<{ total: number; used: number; percent: number }>("/api/system/memory"),
-    refetchInterval: 15000,
-    retry: 2,
+    enabled: hasAuroraSession(),
+    staleTime: 60000,
+    refetchInterval: 120000,
+    retry: 1,
   });
 }
 
@@ -3578,8 +3594,10 @@ export function useAuroraServices() {
   return useQuery({
     queryKey: ["aurora", "services", "all"],
     queryFn: async () => {
+      // Only fetch 2 core services to reduce load, others can be checked on-demand
+      const coreServices = ['aurorasense-dataserver', 'aurorasense-datacollector'];
       const results: ServiceStatus[] = [];
-      for (const service of AURORA_SERVICES) {
+      for (const service of coreServices) {
         try {
           const status = await callAuroraApi<{ active: boolean; status: string }>(`/api/systemctl/${service}`);
           results.push({ ...status, name: service });
@@ -3589,8 +3607,10 @@ export function useAuroraServices() {
       }
       return results;
     },
-    refetchInterval: 30000,
-    retry: 2,
+    enabled: hasAuroraSession(),
+    staleTime: 120000,
+    refetchInterval: 300000, // 5 minutes - services don't change often
+    retry: 1,
   });
 }
 
@@ -3602,8 +3622,10 @@ export function useGeneralStats() {
   return useQuery({
     queryKey: ["aurora", "stats"],
     queryFn: () => callAuroraApi<Record<string, unknown>>("/api/stats"),
-    refetchInterval: 15000,
-    retry: 2,
+    enabled: hasAuroraSession(),
+    staleTime: 60000,
+    refetchInterval: 180000,
+    retry: 1,
   });
 }
 
@@ -4708,6 +4730,8 @@ export interface GpsReadingsResponse {
 export function useGpsReadings(hours: number = 24) {
   return useQuery({
     queryKey: ["aurora", "gps", "readings", hours],
+    enabled: hasAuroraSession(),
+    staleTime: 60000,
     queryFn: async () => {
       try {
         interface RawReading {
@@ -4762,7 +4786,7 @@ export function useGpsReadings(hours: number = 24) {
         return { count: 0, readings: [] };
       }
     },
-    refetchInterval: 10000,
+    refetchInterval: 120000,
     retry: 1,
   });
 }
@@ -4799,8 +4823,10 @@ export function useDashboardSensorStats() {
   return useQuery({
     queryKey: ["aurora", "dashboard", "sensor-stats"],
     queryFn: () => callAuroraApi<DashboardSensorStats>("/api/dashboard/sensor-stats"),
-    refetchInterval: 15000,
-    retry: 2,
+    enabled: hasAuroraSession(),
+    staleTime: 60000,
+    refetchInterval: 120000,
+    retry: 1,
   });
 }
 
@@ -4808,8 +4834,10 @@ export function useDashboardSensorTimeseries(hours: number = 24) {
   return useQuery({
     queryKey: ["aurora", "dashboard", "sensor-timeseries", hours],
     queryFn: () => callAuroraApi<DashboardSensorTimeseries>(`/api/dashboard/sensor-timeseries?hours=${hours}`),
-    refetchInterval: 30000,
-    retry: 2,
+    enabled: hasAuroraSession(),
+    staleTime: 60000,
+    refetchInterval: 120000,
+    retry: 1,
   });
 }
 
@@ -4874,8 +4902,10 @@ export function useV1Latest() {
   return useQuery({
     queryKey: ["aurora", "v1", "data", "latest"],
     queryFn: () => callAuroraApi<V1LatestResponse>("/api/v1/data/latest"),
-    refetchInterval: 10000,
-    retry: 2,
+    enabled: hasAuroraSession(),
+    staleTime: 60000,
+    refetchInterval: 120000,
+    retry: 1,
   });
 }
 
@@ -4946,8 +4976,10 @@ export function useStatsOverview() {
   return useQuery({
     queryKey: ["aurora", "stats", "overview"],
     queryFn: () => callAuroraApi<StatsOverview>("/api/stats/overview"),
-    refetchInterval: 15000,
-    retry: 2,
+    enabled: hasAuroraSession(),
+    staleTime: 60000,
+    refetchInterval: 180000,
+    retry: 1,
   });
 }
 
