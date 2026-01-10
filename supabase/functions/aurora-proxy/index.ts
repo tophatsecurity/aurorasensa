@@ -4,7 +4,53 @@ const corsHeaders = {
 };
 
 const AURORA_ENDPOINT = "http://aurora.tophatsecurity.com:9151";
-const TIMEOUT_MS = 55000; // Increased timeout for slow Aurora server
+const TIMEOUT_MS = 30000;
+const MAX_RETRIES = 3;
+const RETRY_DELAY_MS = 1000;
+
+async function fetchWithRetry(
+  url: string, 
+  options: RequestInit, 
+  retries = MAX_RETRIES
+): Promise<Response> {
+  let lastError: Error | null = null;
+  
+  for (let attempt = 1; attempt <= retries; attempt++) {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), TIMEOUT_MS);
+    
+    try {
+      const response = await fetch(url, {
+        ...options,
+        signal: controller.signal,
+      });
+      clearTimeout(timeoutId);
+      return response;
+    } catch (error) {
+      clearTimeout(timeoutId);
+      lastError = error instanceof Error ? error : new Error(String(error));
+      
+      const isAborted = lastError.message.includes('aborted');
+      const isConnectionReset = lastError.message.includes('reset') || 
+                                lastError.message.includes('connection') ||
+                                lastError.message.includes('ECONNRESET');
+      
+      console.log(`Attempt ${attempt}/${retries} failed: ${lastError.message}`);
+      
+      // Only retry on connection issues, not timeouts
+      if (isAborted || (!isConnectionReset && attempt < retries)) {
+        throw lastError;
+      }
+      
+      if (attempt < retries) {
+        console.log(`Retrying in ${RETRY_DELAY_MS}ms...`);
+        await new Promise(resolve => setTimeout(resolve, RETRY_DELAY_MS * attempt));
+      }
+    }
+  }
+  
+  throw lastError || new Error('All retries failed');
+}
 
 Deno.serve(async (req) => {
   // Handle CORS preflight
@@ -29,8 +75,7 @@ Deno.serve(async (req) => {
 
     const headers: Record<string, string> = { 'Content-Type': 'application/json' };
     
-    // Use session cookie for authentication - this is the ONLY auth method
-    // User must log in via /api/auth/login to get a session cookie
+    // Use session cookie for authentication
     if (sessionCookie) {
       headers['Cookie'] = sessionCookie;
     }
@@ -46,19 +91,14 @@ Deno.serve(async (req) => {
       });
     }
 
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), TIMEOUT_MS);
-
     let response: Response;
     try {
-      response = await fetch(url, {
+      response = await fetchWithRetry(url, {
         method,
         headers,
         body: requestBody && method !== 'GET' ? JSON.stringify(requestBody) : undefined,
-        signal: controller.signal,
       });
     } catch (fetchError) {
-      clearTimeout(timeoutId);
       const msg = fetchError instanceof Error ? fetchError.message : String(fetchError);
       if (msg.includes('aborted')) {
         console.error(`Timeout after ${TIMEOUT_MS}ms for ${url}`);
@@ -71,18 +111,17 @@ Deno.serve(async (req) => {
           headers: { ...corsHeaders, 'Content-Type': 'application/json' },
         });
       }
-      // Connection refused or network error
+      // Connection refused or network error after all retries
       console.error(`Connection error for ${url}: ${msg}`);
       return new Response(JSON.stringify({ 
         error: 'Aurora server unavailable', 
-        details: 'Cannot connect to Aurora server. It may be offline.',
+        details: 'Cannot connect to Aurora server after multiple attempts. It may be offline.',
         retryable: true
       }), {
         status: 503,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
     }
-    clearTimeout(timeoutId);
     
     // Handle login response with cookie capture
     let responseText = await response.text();
