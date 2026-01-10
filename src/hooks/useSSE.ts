@@ -512,71 +512,250 @@ export function useSSEAvailability() {
 }
 
 // =============================================
-// POLLING-BASED REAL-TIME HOOKS (SSE FALLBACK)
-// These use REST polling when SSE is not available
+// UNIFIED REAL-TIME HOOKS (SSE PRIMARY, POLLING FALLBACK)
+// These prefer SSE when available, fall back to polling otherwise
 // =============================================
 
+interface RealTimeHookResult {
+  isConnected: boolean;
+  isConnecting: boolean;
+  error: string | null;
+  reconnectCount: number;
+  lastMessage: unknown | null;
+  data: unknown | null;
+  isPolling: boolean;
+  isSSE: boolean;
+  reconnect: () => void;
+}
+
 /**
- * Starlink real-time data with polling fallback
+ * Creates a unified real-time hook that tries SSE first, then falls back to polling
+ */
+function useUnifiedRealTime(
+  sseHook: (enabled: boolean, clientId?: string) => ReturnType<typeof useSSE>,
+  pollingType: Parameters<typeof useRealTimeData>[0],
+  enabled: boolean,
+  clientId?: string,
+  pollingInterval?: number
+): RealTimeHookResult {
+  const { isAvailable: sseAvailable } = useSSEAvailability();
+  
+  // Use SSE when available
+  const useSSEData = sseAvailable === true && enabled;
+  const sseResult = sseHook(useSSEData, clientId);
+  
+  // Fallback to polling when SSE not available
+  const usePollingData = sseAvailable === false && enabled;
+  const pollingResult = useRealTimeData(pollingType, { 
+    enabled: usePollingData, 
+    clientId,
+    interval: pollingInterval 
+  });
+
+  // Return unified interface
+  if (sseAvailable === true) {
+    return {
+      isConnected: sseResult.isConnected,
+      isConnecting: sseResult.isConnecting,
+      error: sseResult.error,
+      reconnectCount: sseResult.reconnectCount,
+      lastMessage: sseResult.lastMessage,
+      data: sseResult.lastMessage,
+      isPolling: false,
+      isSSE: true,
+      reconnect: sseResult.reconnect,
+    };
+  }
+
+  // Get error message as string
+  const errorMessage = pollingResult.error 
+    ? (typeof pollingResult.error === 'string' ? pollingResult.error : pollingResult.error.message)
+    : null;
+
+  return {
+    isConnected: pollingResult.isPolling && !pollingResult.error,
+    isConnecting: pollingResult.isPolling && pollingResult.pollCount === 0,
+    error: errorMessage,
+    reconnectCount: pollingResult.errorCount,
+    lastMessage: pollingResult.data,
+    data: pollingResult.data,
+    isPolling: true,
+    isSSE: false,
+    reconnect: () => pollingResult.refetch?.(),
+  };
+}
+
+/**
+ * Starlink real-time data - SSE primary with polling fallback
  */
 export function useStarlinkRealTime(enabled = true, clientId?: string) {
-  return useRealTimeData('starlink', { enabled, clientId });
+  return useUnifiedRealTime(useStarlinkSSE, 'starlink', enabled, clientId);
 }
 
 /**
- * Thermal probe real-time data with polling fallback
+ * Thermal probe real-time data - SSE primary with polling fallback
  */
 export function useThermalProbeRealTime(enabled = true, clientId?: string) {
-  return useRealTimeData('thermal', { enabled, clientId });
+  return useUnifiedRealTime(useThermalProbeSSE, 'thermal', enabled, clientId);
 }
 
 /**
- * Arduino sensor real-time data with polling fallback
+ * Arduino sensor real-time data - SSE primary with polling fallback
  */
 export function useArduinoRealTime(enabled = true, clientId?: string) {
-  return useRealTimeData('arduino', { enabled, clientId });
+  return useUnifiedRealTime(useArduinoSSE, 'arduino', enabled, clientId);
 }
 
 /**
- * GPS real-time data with polling fallback
+ * GPS real-time data - SSE primary with polling fallback
  */
 export function useGpsRealTime(enabled = true, clientId?: string) {
-  return useRealTimeData('gps', { enabled, clientId, interval: POLLING_INTERVALS.FAST });
+  return useUnifiedRealTime(useGpsSSE, 'gps', enabled, clientId, POLLING_INTERVALS.FAST);
 }
 
 /**
- * ADS-B real-time data with polling fallback
+ * ADS-B real-time data - SSE primary with polling fallback
  */
 export function useAdsbRealTime(enabled = true, clientId?: string) {
-  return useRealTimeData('adsb', { enabled, clientId, interval: POLLING_INTERVALS.FAST });
+  return useUnifiedRealTime(useAdsbSSE, 'adsb', enabled, clientId, POLLING_INTERVALS.FAST);
 }
 
 /**
- * System monitor real-time data with polling fallback
+ * System monitor real-time data - SSE primary with polling fallback
  */
 export function useSystemMonitorRealTime(enabled = true, clientId?: string) {
-  return useRealTimeData('system', { enabled, clientId });
+  return useUnifiedRealTime(useSystemMonitorSSE, 'system', enabled, clientId);
 }
 
 /**
- * Power real-time data with polling fallback
+ * Power real-time data - SSE primary with polling fallback
  */
 export function usePowerRealTime(enabled = true, clientId?: string) {
-  return useRealTimeData('power', { enabled, clientId });
+  return useUnifiedRealTime(usePowerSSE, 'power', enabled, clientId);
 }
 
 /**
- * Alerts real-time data with polling fallback
+ * Radio real-time data - SSE primary with polling fallback
+ */
+export function useRadioRealTime(enabled = true, clientId?: string, radioType?: "wifi" | "bluetooth" | "lora") {
+  const { isAvailable: sseAvailable } = useSSEAvailability();
+  const sseResult = useRadioSSE(sseAvailable === true && enabled, clientId, radioType);
+  const pollingResult = useRealTimeData('starlink', { 
+    enabled: sseAvailable === false && enabled, 
+    clientId 
+  });
+
+  if (sseAvailable === true) {
+    return {
+      isConnected: sseResult.isConnected,
+      isConnecting: sseResult.isConnecting,
+      error: sseResult.error,
+      reconnectCount: sseResult.reconnectCount,
+      lastMessage: sseResult.lastMessage,
+      data: sseResult.lastMessage,
+      isPolling: false,
+      isSSE: true,
+      reconnect: sseResult.reconnect,
+    };
+  }
+
+  const errorMessage = pollingResult.error 
+    ? (typeof pollingResult.error === 'string' ? pollingResult.error : pollingResult.error.message)
+    : null;
+
+  return {
+    isConnected: pollingResult.isPolling && !pollingResult.error,
+    isConnecting: pollingResult.isPolling && pollingResult.pollCount === 0,
+    error: errorMessage,
+    reconnectCount: pollingResult.errorCount,
+    lastMessage: pollingResult.data,
+    data: pollingResult.data,
+    isPolling: true,
+    isSSE: false,
+    reconnect: () => pollingResult.refetch?.(),
+  };
+}
+
+/**
+ * Alerts real-time data - SSE primary with polling fallback
  */
 export function useAlertsRealTime(enabled = true) {
-  return useRealTimeData('alerts', { enabled });
+  const { isAvailable: sseAvailable } = useSSEAvailability();
+  const sseResult = useAlertsSSE(sseAvailable === true && enabled);
+  const pollingResult = useRealTimeData('alerts', { 
+    enabled: sseAvailable === false && enabled 
+  });
+
+  if (sseAvailable === true) {
+    return {
+      isConnected: sseResult.isConnected,
+      isConnecting: sseResult.isConnecting,
+      error: sseResult.error,
+      reconnectCount: sseResult.reconnectCount,
+      lastMessage: sseResult.lastMessage,
+      data: sseResult.lastMessage,
+      isPolling: false,
+      isSSE: true,
+      reconnect: sseResult.reconnect,
+    };
+  }
+
+  const errorMessage = pollingResult.error 
+    ? (typeof pollingResult.error === 'string' ? pollingResult.error : pollingResult.error.message)
+    : null;
+
+  return {
+    isConnected: pollingResult.isPolling && !pollingResult.error,
+    isConnecting: pollingResult.isPolling && pollingResult.pollCount === 0,
+    error: errorMessage,
+    reconnectCount: pollingResult.errorCount,
+    lastMessage: pollingResult.data,
+    data: pollingResult.data,
+    isPolling: true,
+    isSSE: false,
+    reconnect: () => pollingResult.refetch?.(),
+  };
 }
 
 /**
- * Dashboard stats real-time data with polling fallback
+ * Dashboard stats real-time data - SSE primary with polling fallback
  */
 export function useDashboardRealTime(enabled = true) {
-  return useRealTimeData('dashboard', { enabled });
+  const { isAvailable: sseAvailable } = useSSEAvailability();
+  const sseResult = useDashboardStatsSSE(sseAvailable === true && enabled);
+  const pollingResult = useRealTimeData('dashboard', { 
+    enabled: sseAvailable === false && enabled 
+  });
+
+  if (sseAvailable === true) {
+    return {
+      isConnected: sseResult.isConnected,
+      isConnecting: sseResult.isConnecting,
+      error: sseResult.error,
+      reconnectCount: sseResult.reconnectCount,
+      lastMessage: sseResult.lastMessage,
+      data: sseResult.lastMessage,
+      isPolling: false,
+      isSSE: true,
+      reconnect: sseResult.reconnect,
+    };
+  }
+
+  const errorMessage = pollingResult.error 
+    ? (typeof pollingResult.error === 'string' ? pollingResult.error : pollingResult.error.message)
+    : null;
+
+  return {
+    isConnected: pollingResult.isPolling && !pollingResult.error,
+    isConnecting: pollingResult.isPolling && pollingResult.pollCount === 0,
+    error: errorMessage,
+    reconnectCount: pollingResult.errorCount,
+    lastMessage: pollingResult.data,
+    data: pollingResult.data,
+    isPolling: true,
+    isSSE: false,
+    reconnect: () => pollingResult.refetch?.(),
+  };
 }
 
 // Re-export polling utilities for direct use
