@@ -1,6 +1,6 @@
 import { useState, useCallback, useEffect, useRef, useMemo } from "react";
 import { ZoomIn, ZoomOut, Maximize2, Route, X } from "lucide-react";
-import L from "leaflet";
+import L, { LatLngExpression } from "leaflet";
 import "leaflet/dist/leaflet.css";
 
 // Types and utilities
@@ -13,6 +13,7 @@ import { useMapData, AircraftTrailData } from "@/hooks/useMapData";
 import { useGpsHistory } from "@/hooks/useGpsHistory";
 import { useAdsbHistory, AircraftTrail } from "@/hooks/useAdsbHistory";
 import { useGpsSSE, useAdsbSSE } from "@/hooks/useSSE";
+import { useSSEMapUpdates } from "@/hooks/useSSEMapUpdates";
 
 // Map components (non-leaflet)
 import { MapLegend } from "@/components/map/MapLegend";
@@ -108,12 +109,12 @@ const MapContent = () => {
   const mapRefetchInterval = autoRefreshInterval === 'manual' ? false : getRefreshIntervalMs(autoRefreshInterval);
   
   const {
-    sensorMarkers,
+    sensorMarkers: baseSensorMarkers,
     clientMarkers,
-    adsbMarkers,
+    adsbMarkers: baseAdsbMarkers,
     adsbTrails,
-    allPositions,
-    stats,
+    allPositions: baseAllPositions,
+    stats: baseStats,
     isLoading,
     timeAgo,
     handleRefresh,
@@ -124,6 +125,47 @@ const MapContent = () => {
     refetchInterval: mapRefetchInterval,
     clientId: selectedClient,
   });
+  
+  // Merge SSE real-time updates with base map data
+  const {
+    sensorMarkers,
+    adsbMarkers,
+    recentlyUpdatedIds,
+    gpsUpdateCount,
+    adsbUpdateCount,
+    clearUpdates,
+  } = useSSEMapUpdates({
+    gpsSSE,
+    adsbSSE,
+    baseSensorMarkers,
+    baseAdsbMarkers,
+    enabled: sseEnabled,
+  });
+  
+  // Clear SSE updates when client changes
+  useEffect(() => {
+    clearUpdates();
+  }, [selectedClient, clearUpdates]);
+  
+  // Recalculate stats with SSE-merged data
+  const stats = useMemo(() => ({
+    ...baseStats,
+    gps: sensorMarkers.filter(s => s.type === 'gps').length,
+    adsb: adsbMarkers.length,
+    total: sensorMarkers.length + clientMarkers.length + adsbMarkers.length,
+  }), [baseStats, sensorMarkers, adsbMarkers, clientMarkers]);
+  
+  // Recalculate positions with SSE-merged data
+  const allPositions = useMemo((): LatLngExpression[] => {
+    const positions: LatLngExpression[] = [...baseAllPositions];
+    // Add any new SSE-only aircraft positions
+    adsbMarkers.forEach(a => {
+      if (a.id.startsWith('adsb-sse-')) {
+        positions.push([a.location.lat, a.location.lng] as LatLngExpression);
+      }
+    });
+    return positions;
+  }, [baseAllPositions, adsbMarkers]);
   
   // Refresh on page click/focus
   useEffect(() => {
