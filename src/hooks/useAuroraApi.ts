@@ -5459,4 +5459,314 @@ export function useReportUpdateStatus() {
   });
 }
 
+// =============================================
+// HOOKS - USER MANAGEMENT EXTENDED (NEW)
+// =============================================
+
+export function useUser(userId: string) {
+  return useQuery({
+    queryKey: ["aurora", "users", userId],
+    queryFn: () => callAuroraApi<User>(`/api/users/${userId}`),
+    enabled: !!userId,
+    retry: 2,
+  });
+}
+
+export function useUpdateUser() {
+  const queryClient = useQueryClient();
+  
+  return useMutation({
+    mutationFn: async ({ userId, data }: { userId: string; data: Partial<User> }) => {
+      return callAuroraApi<{ success: boolean }>(`/api/users/${userId}`, "PUT", data);
+    },
+    onSuccess: (_, variables) => {
+      queryClient.invalidateQueries({ queryKey: ["aurora", "users", variables.userId] });
+      queryClient.invalidateQueries({ queryKey: ["aurora", "users"] });
+    },
+  });
+}
+
+export function useChangeUserPassword() {
+  return useMutation({
+    mutationFn: async ({ userId, newPassword }: { userId: string; newPassword: string }) => {
+      return callAuroraApi<{ success: boolean }>(`/api/users/${userId}/password`, "POST", { 
+        new_password: newPassword 
+      });
+    },
+  });
+}
+
+export function useDeleteUserById() {
+  const queryClient = useQueryClient();
+  
+  return useMutation({
+    mutationFn: async (userId: string) => {
+      return callAuroraApi<{ success: boolean }>(`/api/users/${userId}`, "DELETE");
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["aurora", "users"] });
+    },
+  });
+}
+
+// =============================================
+// HOOKS - STARLINK EXTENDED (NEW)
+// =============================================
+
+export function useStarlinkDevice(deviceId: string) {
+  return useQuery({
+    queryKey: ["aurora", "starlink", "devices", deviceId],
+    queryFn: () => callAuroraApi<{ device_id: string; status?: string; last_seen?: string }>(`/api/starlink/devices/${deviceId}`),
+    enabled: !!deviceId,
+    retry: 2,
+  });
+}
+
+export function useGlobalStarlinkStats() {
+  return useQuery({
+    queryKey: ["aurora", "starlink", "stats", "global"],
+    queryFn: () => callAuroraApi<Record<string, unknown>>("/api/starlink/stats/global"),
+    staleTime: 60000,
+    refetchInterval: 120000,
+    retry: 2,
+  });
+}
+
+export function useDeviceStarlinkStatsById(deviceId: string) {
+  return useQuery({
+    queryKey: ["aurora", "starlink", "stats", "device", deviceId],
+    queryFn: () => callAuroraApi<Record<string, unknown>>(`/api/starlink/stats/device/${deviceId}`),
+    enabled: !!deviceId,
+    retry: 2,
+  });
+}
+
+// =============================================
+// HOOKS - LORA EXTENDED (NEW)
+// =============================================
+
+export function useLoRaDevice(deviceId: string) {
+  return useQuery({
+    queryKey: ["aurora", "lora", "devices", deviceId],
+    queryFn: () => callAuroraApi<{ device_id: string; status?: string }>(`/api/lora/devices/${deviceId}`),
+    enabled: !!deviceId,
+    retry: 2,
+  });
+}
+
+export function useLoRaDetectionsWithLimit(limit: number = 100) {
+  return useQuery({
+    queryKey: ["aurora", "lora", "detections", limit],
+    queryFn: () => callAuroraApi<{ detections: Array<{ id: string; timestamp: string; rssi?: number }> }>(`/api/lora/detections?limit=${limit}`),
+    refetchInterval: 30000,
+    retry: 2,
+  });
+}
+
+export function useGlobalLoRaStats() {
+  return useQuery({
+    queryKey: ["aurora", "lora", "stats", "global"],
+    queryFn: () => callAuroraApi<Record<string, unknown>>("/api/lora/stats/global"),
+    staleTime: 60000,
+    refetchInterval: 120000,
+    retry: 2,
+  });
+}
+
+export function useDeviceLoRaStats(deviceId: string) {
+  return useQuery({
+    queryKey: ["aurora", "lora", "stats", "device", deviceId],
+    queryFn: () => callAuroraApi<Record<string, unknown>>(`/api/lora/stats/device/${deviceId}`),
+    enabled: !!deviceId,
+    retry: 2,
+  });
+}
+
+// =============================================
+// HOOKS - SENSOR CRUD (NEW)
+// =============================================
+
+export function useSensorById(sensorId: string) {
+  return useQuery({
+    queryKey: ["aurora", "sensors", sensorId],
+    queryFn: () => callAuroraApi<SensorData>(`/api/sensors/${sensorId}`),
+    enabled: !!sensorId,
+    retry: 2,
+  });
+}
+
+export function useAddNewSensor() {
+  const queryClient = useQueryClient();
+  
+  return useMutation({
+    mutationFn: async (sensor: { sensor_id: string; sensor_type: string; name?: string }) => {
+      return callAuroraApi<{ success: boolean; sensor_id: string }>("/api/sensors/add", "POST", sensor);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["aurora", "sensors"] });
+    },
+  });
+}
+
+export function useUpdateSensorData() {
+  const queryClient = useQueryClient();
+  
+  return useMutation({
+    mutationFn: async ({ sensorId, data }: { sensorId: string; data: { name?: string; enabled?: boolean } }) => {
+      return callAuroraApi<{ success: boolean }>(`/api/sensors/${sensorId}`, "PUT", data);
+    },
+    onSuccess: (_, variables) => {
+      queryClient.invalidateQueries({ queryKey: ["aurora", "sensors", variables.sensorId] });
+      queryClient.invalidateQueries({ queryKey: ["aurora", "sensors"] });
+    },
+  });
+}
+
+export function useRemoveSensor() {
+  const queryClient = useQueryClient();
+  
+  return useMutation({
+    mutationFn: async (sensorId: string) => {
+      return callAuroraApi<{ success: boolean }>(`/api/sensors/${sensorId}`, "DELETE");
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["aurora", "sensors"] });
+    },
+  });
+}
+
+// =============================================
+// HOOKS - WIFI MUTATIONS (NEW)
+// =============================================
+
+export function useChangeWifiMode() {
+  const queryClient = useQueryClient();
+  
+  return useMutation({
+    mutationFn: async ({ clientId, mode }: { clientId: string; mode: string }) => {
+      return callAuroraApi<{ success: boolean }>(`/api/clients/${clientId}/wifi/mode`, "POST", { mode });
+    },
+    onSuccess: (_, variables) => {
+      queryClient.invalidateQueries({ queryKey: ["aurora", "clients", variables.clientId, "wifi"] });
+    },
+  });
+}
+
+export function useModifyWifiConfig() {
+  const queryClient = useQueryClient();
+  
+  return useMutation({
+    mutationFn: async ({ clientId, config }: { clientId: string; config: WifiConfig }) => {
+      return callAuroraApi<{ success: boolean }>(`/api/clients/${clientId}/wifi/config`, "POST", config);
+    },
+    onSuccess: (_, variables) => {
+      queryClient.invalidateQueries({ queryKey: ["aurora", "clients", variables.clientId, "wifi"] });
+    },
+  });
+}
+
+export function useKickWifiClient() {
+  const queryClient = useQueryClient();
+  
+  return useMutation({
+    mutationFn: async ({ clientId, mac }: { clientId: string; mac: string }) => {
+      return callAuroraApi<{ success: boolean }>(`/api/clients/${clientId}/wifi/clients/${mac}/disconnect`, "POST");
+    },
+    onSuccess: (_, variables) => {
+      queryClient.invalidateQueries({ queryKey: ["aurora", "clients", variables.clientId, "wifi", "clients"] });
+    },
+  });
+}
+
+export function useWifiApiVersion(clientId: string) {
+  return useQuery({
+    queryKey: ["aurora", "clients", clientId, "wifi", "version"],
+    queryFn: () => callAuroraApi<{ version: string }>(`/api/clients/${clientId}/wifi/version`),
+    enabled: !!clientId,
+    staleTime: 300000,
+    retry: 2,
+  });
+}
+
+// =============================================
+// HOOKS - UPDATE SERVER CONFIG (NEW)
+// =============================================
+
+export function useModifyServerConfig() {
+  const queryClient = useQueryClient();
+  
+  return useMutation({
+    mutationFn: async (config: ServerConfig) => {
+      return callAuroraApi<{ success: boolean }>("/api/config", "POST", config);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["aurora", "config"] });
+    },
+  });
+}
+
+// =============================================
+// HOOKS - GEO UPDATE (NEW)
+// =============================================
+
+export function useModifyGeoLocation() {
+  const queryClient = useQueryClient();
+  
+  return useMutation({
+    mutationFn: async (location: { device_id: string; lat: number; lng: number; altitude?: number }) => {
+      return callAuroraApi<{ success: boolean }>("/api/geo/update", "POST", location);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["aurora", "geo"] });
+    },
+  });
+}
+
+// =============================================
+// HOOKS - V1 CONFIG (NEW)
+// =============================================
+
+export function useV1ClientConfiguration(clientId: string) {
+  return useQuery({
+    queryKey: ["aurora", "v1", "config", clientId],
+    queryFn: () => callAuroraApi<ServerConfig>(`/api/v1/config/${clientId}`),
+    enabled: !!clientId,
+    retry: 2,
+  });
+}
+
+export function useUpdateV1ClientConfiguration() {
+  const queryClient = useQueryClient();
+  
+  return useMutation({
+    mutationFn: async ({ clientId, config }: { clientId: string; config: ServerConfig }) => {
+      return callAuroraApi<{ success: boolean }>(`/api/v1/config/${clientId}`, "POST", config);
+    },
+    onSuccess: (_, variables) => {
+      queryClient.invalidateQueries({ queryKey: ["aurora", "v1", "config", variables.clientId] });
+    },
+  });
+}
+
+export function useV1AllConfigurations() {
+  return useQuery({
+    queryKey: ["aurora", "v1", "config", "all"],
+    queryFn: () => callAuroraApi<{ configs: Record<string, ServerConfig> }>("/api/v1/config"),
+    retry: 2,
+  });
+}
+
+export function useCreateV1ClientConfig() {
+  const queryClient = useQueryClient();
+  
+  return useMutation({
+    mutationFn: async (clientData: { client_id: string; config?: ServerConfig }) => {
+      return callAuroraApi<{ success: boolean; client_id: string }>("/api/v1/config/new", "POST", clientData);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["aurora", "v1", "config"] });
+      queryClient.invalidateQueries({ queryKey: ["aurora", "clients"] });
+    },
+  });
+}
 
