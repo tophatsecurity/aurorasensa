@@ -2498,9 +2498,98 @@ export function useStarlinkTimeseries(hours: number = 24, clientId?: string, dev
   });
 }
 
-// =============================================
-// HOOKS - THERMAL PROBE
-// =============================================
+// Starlink performance history - for real-time signal strength charts
+export interface StarlinkPerformanceHistory {
+  timestamp: string;
+  snr?: number;
+  signal_dbm?: number;
+  latency_ms?: number;
+  download_mbps?: number;
+  upload_mbps?: number;
+  obstruction?: number;
+  connected?: boolean;
+}
+
+export function useStarlinkPerformanceHistory(hours: number = 6, deviceId?: string) {
+  return useQuery({
+    queryKey: ["aurora", "starlink", "performance-history", hours, deviceId],
+    queryFn: async () => {
+      try {
+        // Try dedicated performance history endpoint first
+        const params = new URLSearchParams({ hours: hours.toString() });
+        if (deviceId) params.append('device_id', deviceId);
+        
+        const response = await callAuroraApi<{
+          count: number;
+          data: StarlinkPerformanceHistory[];
+        }>(`/api/starlink/performance/history?${params.toString()}`);
+        return response;
+      } catch {
+        // Fall back to timeseries endpoint
+        try {
+          const params = new URLSearchParams({ hours: hours.toString() });
+          if (deviceId) params.append('device_id', deviceId);
+          
+          const timeseries = await callAuroraApi<StarlinkTimeseriesResponse>(
+            `/api/readings/sensor/starlink?${params.toString()}`
+          );
+          
+          // Transform timeseries to performance history format
+          const data: StarlinkPerformanceHistory[] = (timeseries.readings || []).map(r => ({
+            timestamp: r.timestamp,
+            snr: r.snr,
+            signal_dbm: r.signal_dbm,
+            latency_ms: r.pop_ping_latency_ms,
+            download_mbps: r.downlink_throughput_bps ? r.downlink_throughput_bps / 1e6 : undefined,
+            upload_mbps: r.uplink_throughput_bps ? r.uplink_throughput_bps / 1e6 : undefined,
+            obstruction: r.obstruction_percent,
+            connected: true,
+          }));
+          
+          return { count: data.length, data };
+        } catch (error) {
+          console.warn("Failed to fetch starlink performance history:", error);
+          return { count: 0, data: [] };
+        }
+      }
+    },
+    refetchInterval: 15000, // Fast refresh for real-time charts
+    retry: 1,
+  });
+}
+
+// Starlink connectivity status with uptime tracking
+export function useStarlinkConnectivityStatus() {
+  return useQuery({
+    queryKey: ["aurora", "starlink", "connectivity", "status"],
+    queryFn: async () => {
+      try {
+        const connectivity = await callAuroraApi<StarlinkConnectivity>("/api/starlink/connectivity");
+        const performance = await callAuroraApi<StarlinkPerformance>("/api/starlink/performance");
+        const signal = await callAuroraApi<StarlinkSignalStrength>("/api/starlink/signal-strength");
+        
+        return {
+          connected: connectivity?.connected ?? false,
+          uptime_seconds: connectivity?.uptime_seconds,
+          obstruction_percent: connectivity?.obstruction_percent,
+          latency_ms: performance?.pop_ping_latency_ms,
+          download_bps: performance?.downlink_throughput_bps,
+          upload_bps: performance?.uplink_throughput_bps,
+          snr: signal?.snr,
+          signal_dbm: signal?.signal_strength_dbm,
+          last_updated: new Date().toISOString(),
+        };
+      } catch (error) {
+        console.warn("Failed to fetch starlink connectivity status:", error);
+        return null;
+      }
+    },
+    refetchInterval: 10000, // 10 second refresh for connectivity status
+    retry: 1,
+  });
+}
+
+
 
 export function useThermalProbeStats() {
   return useQuery({

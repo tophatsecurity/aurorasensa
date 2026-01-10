@@ -59,7 +59,7 @@ import {
   useClients,
   StarlinkTimeseriesPoint 
 } from "@/hooks/useAuroraApi";
-import { StarlinkMonitoringPanel, StarlinkPerformanceCharts } from "@/components/starlink";
+import { StarlinkMonitoringPanel, StarlinkPerformanceCharts, StarlinkSignalChart } from "@/components/starlink";
 import { RealTimeStatusBadge } from "@/components/RealTimeStreamingPanel";
 
 // Chart color palette
@@ -418,6 +418,15 @@ const StarlinkContent = () => {
           </Button>
         </div>
       )}
+
+      {/* Real-time Signal Strength Chart */}
+      <div className="mb-8">
+        <StarlinkSignalChart 
+          hours={6} 
+          clientId={activeClientFilter} 
+          deviceId={selectedDevice !== "all" ? selectedDevice : undefined} 
+        />
+      </div>
 
       {/* Real-time Monitoring Panel */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">
