@@ -41,6 +41,7 @@ import HumidityCharts from "./HumidityCharts";
 import PowerConsumptionCharts from "./PowerConsumptionCharts";
 import SystemMonitorCharts from "./SystemMonitorCharts";
 import { SSEConnectionStatus } from "./SSEConnectionStatus";
+import { AdsbSection, LoRaSection, WifiBluetoothSection, GpsSection, AlertsSection, BatchesSection } from "./dashboard";
 
 import { 
   ContextFilters, 
@@ -1026,6 +1027,24 @@ const DashboardContent = () => {
         </h2>
         <SensorCharts />
       </div>
+
+      {/* ADS-B Air Traffic */}
+      <AdsbSection hours={periodHours} />
+
+      {/* LoRa Network */}
+      <LoRaSection hours={periodHours} />
+
+      {/* WiFi & Bluetooth */}
+      <WifiBluetoothSection hours={periodHours} />
+
+      {/* GPS Tracking */}
+      <GpsSection hours={periodHours} />
+
+      {/* Alerts */}
+      <AlertsSection />
+
+      {/* Data Batches */}
+      <BatchesSection />
 
       {/* Devices to Adopt Section */}
       {pendingDevices.length > 0 && (
