@@ -54,6 +54,8 @@ import {
   useDashboardStats, 
   useDashboardTimeseries, 
   useSensorTypeStats,
+  useSensorTypeStatsWithPeriod,
+  usePeriodStats,
   useStarlinkTimeseries,
   useStarlinkPower,
   useThermalProbeTimeseries,
@@ -127,12 +129,15 @@ const DashboardContent = () => {
   const { data: alerts } = useAlerts();
   const { data: clients, isLoading: clientsLoading } = useClients();
   
-  // Sensor type specific stats - these contain numeric_field_stats_24h with real data
-  const { data: thermalProbeStats, isLoading: thermalLoading } = useSensorTypeStats("thermal_probe");
-  const { data: starlinkStats, isLoading: starlinkLoading } = useSensorTypeStats("starlink");
-  const { data: ahtStats } = useSensorTypeStats("aht_sensor");
-  const { data: bmtStats } = useSensorTypeStats("bmt_sensor");
-  const { data: systemMonitorStats, isLoading: systemMonitorLoading } = useSensorTypeStats("system_monitor");
+  // Period-specific stats that update with time period selection
+  const { data: periodStats, isLoading: periodStatsLoading } = usePeriodStats(periodHours);
+  
+  // Sensor type specific stats - use period-aware version for dynamic updates
+  const { data: thermalProbeStats, isLoading: thermalLoading } = useSensorTypeStatsWithPeriod("thermal_probe", periodHours);
+  const { data: starlinkStats, isLoading: starlinkLoading } = useSensorTypeStatsWithPeriod("starlink", periodHours);
+  const { data: ahtStats } = useSensorTypeStatsWithPeriod("aht_sensor", periodHours);
+  const { data: bmtStats } = useSensorTypeStatsWithPeriod("bmt_sensor", periodHours);
+  const { data: systemMonitorStats, isLoading: systemMonitorLoading } = useSensorTypeStatsWithPeriod("system_monitor", periodHours);
   
   // System info from API
   const { data: systemInfo, isLoading: systemInfoLoading } = useSystemInfo();
@@ -227,13 +232,13 @@ const DashboardContent = () => {
   const ahtTemp = ahtFieldStats?.aht_temp_c ?? ahtFieldStats?.temp_c;
   const ahtHumidity = ahtFieldStats?.aht_humidity ?? ahtFieldStats?.humidity;
 
-  // Sensor averages - use sensor-specific stats
-  const avgTemp = dashboardStats?.avg_temp_c ?? thermalAvgTemp ?? bmtTemp?.avg ?? ahtTemp?.avg;
-  const avgHumidity = dashboardStats?.avg_humidity ?? bmtHumidity?.avg ?? ahtHumidity?.avg;
+  // Sensor averages - prefer period-specific stats, then fall back to sensor-specific stats
+  const avgTemp = periodStats?.averages?.temperature_c ?? dashboardStats?.avg_temp_c ?? thermalAvgTemp ?? bmtTemp?.avg ?? ahtTemp?.avg;
+  const avgHumidity = periodStats?.averages?.humidity ?? dashboardStats?.avg_humidity ?? bmtHumidity?.avg ?? ahtHumidity?.avg;
   const avgSignal = dashboardStats?.avg_signal_dbm;
-  const avgPower = dashboardStats?.avg_power_w ?? starlinkPowerAvg;
+  const avgPower = periodStats?.averages?.power_w ?? dashboardStats?.avg_power_w ?? starlinkPowerAvg;
 
-  // 24h sensor statistics - use API stats, then effective timeseries as fallback
+  // Period-specific sensor statistics - use period stats first, then API stats, then timeseries fallback
   const tempStats = useMemo((): SensorStats => {
     // Try thermal probe first, then BMT, then AHT
     const stats = thermalFieldStats?.temp_c ?? thermalFieldStats?.temperature_c ?? bmtTemp ?? ahtTemp;
