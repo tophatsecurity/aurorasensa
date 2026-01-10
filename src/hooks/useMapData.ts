@@ -530,10 +530,39 @@ export function useMapData(options: UseMapDataOptions = {}) {
     return null;
   }, [gpsdStatus]);
 
+  // Helper to extract device_id from sensor reading data without requiring valid GPS
+  const extractStarlinkDeviceId = (data: Record<string, unknown>, fallbackId: string): string => {
+    // Check for nested starlink object first (contains the unique device_id)
+    if (data.starlink && typeof data.starlink === 'object') {
+      const starlink = data.starlink as Record<string, unknown>;
+      if (typeof starlink.device_id === 'string' && starlink.device_id) {
+        return starlink.device_id;
+      }
+      // Check nested status object for id
+      if (starlink.status && typeof starlink.status === 'object') {
+        const status = starlink.status as Record<string, unknown>;
+        if (typeof status.id === 'string' && status.id) {
+          return status.id;
+        }
+      }
+    }
+    // Check top-level device_id
+    if (typeof data.device_id === 'string' && data.device_id) {
+      return data.device_id;
+    }
+    return fallbackId;
+  };
+
   // Extract GPS from all Starlink devices - combine geo locations, API devices, and status data
-  const starlinkDevices = useMemo<Array<{ device_id: string; lat: number; lng: number; altitude?: number; timestamp?: string }>>(() => {
+  // Also track devices without GPS for fallback
+  const { starlinkDevices, starlinkDevicesWithoutGps } = useMemo<{
+    starlinkDevices: Array<{ device_id: string; lat: number; lng: number; altitude?: number; timestamp?: string }>;
+    starlinkDevicesWithoutGps: Array<{ device_id: string; timestamp?: string; metrics?: Record<string, unknown> }>;
+  }>(() => {
     const devices: Array<{ device_id: string; lat: number; lng: number; altitude?: number; timestamp?: string }> = [];
+    const devicesWithoutGps: Array<{ device_id: string; timestamp?: string; metrics?: Record<string, unknown> }> = [];
     const addedIds = new Set<string>();
+    const noGpsIds = new Set<string>();
     
     // First, check geo locations for Starlink devices (most reliable for GPS)
     const geoArray = normalizeGeoLocations(geoLocations);
@@ -596,6 +625,13 @@ export function useMapData(options: UseMapDataOptions = {}) {
           });
           addedIds.add(device.device_id);
           console.log('[MapData] Added Starlink device from API:', device.device_id, { lat, lng });
+        } else if (!noGpsIds.has(device.device_id)) {
+          // Track devices without GPS
+          devicesWithoutGps.push({
+            device_id: device.device_id,
+            timestamp: device.last_seen
+          });
+          noGpsIds.add(device.device_id);
         }
       });
     }
@@ -650,6 +686,12 @@ export function useMapData(options: UseMapDataOptions = {}) {
             });
             addedIds.add(deviceId);
           }
+          // Remove from noGps if we now have GPS
+          noGpsIds.delete(deviceId);
+          const noGpsIdx = devicesWithoutGps.findIndex(d => d.device_id === deviceId);
+          if (noGpsIdx >= 0) {
+            devicesWithoutGps.splice(noGpsIdx, 1);
+          }
         }
       });
     }
@@ -657,50 +699,67 @@ export function useMapData(options: UseMapDataOptions = {}) {
     // Fourth, add from Starlink sensor readings (/api/readings/sensor/starlink)
     if (starlinkSensorReadings && starlinkSensorReadings.length > 0) {
       // Group by unique device_id (extracted from nested starlink object) and get the latest entry for each
-      const sensorMap = new Map<string, { reading: typeof starlinkSensorReadings[0]; uniqueId: string; coords: { lat: number; lng: number; altitude?: number } }>();
+      const sensorMap = new Map<string, { reading: typeof starlinkSensorReadings[0]; uniqueId: string; coords: { lat: number; lng: number; altitude?: number } | null }>();
       
       starlinkSensorReadings.forEach(reading => {
         const data = reading.data as Record<string, unknown>;
         const result = extractStarlinkCoordsWithId(data, reading.device_id);
+        const uniqueId = result?.device_id || extractStarlinkDeviceId(data, reading.device_id);
         
-        if (result) {
-          const uniqueId = result.device_id;
-          const existing = sensorMap.get(uniqueId);
-          
-          // Keep the latest reading for each unique device
-          if (!existing || (reading.timestamp && existing.reading.timestamp && new Date(reading.timestamp) > new Date(existing.reading.timestamp))) {
-            sensorMap.set(uniqueId, { reading, uniqueId, coords: result });
-          }
+        const existing = sensorMap.get(uniqueId);
+        
+        // Keep the latest reading for each unique device
+        if (!existing || (reading.timestamp && existing.reading.timestamp && new Date(reading.timestamp) > new Date(existing.reading.timestamp))) {
+          sensorMap.set(uniqueId, { reading, uniqueId, coords: result });
         }
       });
       
       // Add or update devices with GPS from sensor readings
       sensorMap.forEach(({ reading, uniqueId, coords }) => {
-        if (addedIds.has(uniqueId)) {
-          const existingIdx = devices.findIndex(d => d.device_id === uniqueId);
-          if (existingIdx >= 0 && reading.timestamp) {
-            // Only update if sensor data is newer
-            const existingTimestamp = devices[existingIdx].timestamp;
-            if (!existingTimestamp || new Date(reading.timestamp) > new Date(existingTimestamp)) {
-              devices[existingIdx] = {
-                device_id: uniqueId,
-                lat: coords.lat,
-                lng: coords.lng,
-                altitude: coords.altitude,
-                timestamp: reading.timestamp
-              };
+        if (coords) {
+          // Device has GPS coordinates
+          if (addedIds.has(uniqueId)) {
+            const existingIdx = devices.findIndex(d => d.device_id === uniqueId);
+            if (existingIdx >= 0 && reading.timestamp) {
+              // Only update if sensor data is newer
+              const existingTimestamp = devices[existingIdx].timestamp;
+              if (!existingTimestamp || new Date(reading.timestamp) > new Date(existingTimestamp)) {
+                devices[existingIdx] = {
+                  device_id: uniqueId,
+                  lat: coords.lat,
+                  lng: coords.lng,
+                  altitude: coords.altitude,
+                  timestamp: reading.timestamp
+                };
+              }
             }
+          } else {
+            devices.push({
+              device_id: uniqueId,
+              lat: coords.lat,
+              lng: coords.lng,
+              altitude: coords.altitude,
+              timestamp: reading.timestamp
+            });
+            addedIds.add(uniqueId);
+            console.log('[MapData] Added Starlink device from sensor readings with unique ID:', uniqueId);
           }
-        } else {
-          devices.push({
+          // Remove from noGps if we now have GPS
+          noGpsIds.delete(uniqueId);
+          const noGpsIdx = devicesWithoutGps.findIndex(d => d.device_id === uniqueId);
+          if (noGpsIdx >= 0) {
+            devicesWithoutGps.splice(noGpsIdx, 1);
+          }
+        } else if (!addedIds.has(uniqueId) && !noGpsIds.has(uniqueId)) {
+          // Device exists but has no GPS - track for fallback
+          const data = reading.data as Record<string, unknown>;
+          devicesWithoutGps.push({
             device_id: uniqueId,
-            lat: coords.lat,
-            lng: coords.lng,
-            altitude: coords.altitude,
-            timestamp: reading.timestamp
+            timestamp: reading.timestamp,
+            metrics: data.starlink as Record<string, unknown> | undefined
           });
-          addedIds.add(uniqueId);
-          console.log('[MapData] Added Starlink device from sensor readings with unique ID:', uniqueId);
+          noGpsIds.add(uniqueId);
+          console.log('[MapData] Starlink device without GPS, will use client fallback:', uniqueId);
         }
       });
     }
@@ -745,8 +804,11 @@ export function useMapData(options: UseMapDataOptions = {}) {
     if (devices.length > 0) {
       console.log('[MapData] Total Starlink devices with GPS:', devices.length, devices.map(d => d.device_id));
     }
+    if (devicesWithoutGps.length > 0) {
+      console.log('[MapData] Starlink devices without GPS (will use client fallback):', devicesWithoutGps.length, devicesWithoutGps.map(d => d.device_id));
+    }
     
-    return devices;
+    return { starlinkDevices: devices, starlinkDevicesWithoutGps: devicesWithoutGps };
   }, [geoLocations, starlinkDevicesApi, starlinkStatusData, starlinkSensorReadings, starlinkLatest]);
 
   // Keep backward compatibility - get first device GPS
@@ -912,7 +974,75 @@ export function useMapData(options: UseMapDataOptions = {}) {
           addedIds.add(device.device_id);
         }
       });
-    } else if (starlinkGps && !addedIds.has('starlink_dish_1')) {
+    }
+    
+    // Add Starlink devices without GPS using first available client GPS as fallback
+    if (starlinkDevicesWithoutGps.length > 0) {
+      // Find a client GPS to use as fallback
+      let fallbackGps: { lat: number; lng: number } | null = null;
+      
+      // Try to get GPS from any client via gpsCoordinates
+      if (clients) {
+        for (const client of clients) {
+          // Check gpsCoordinates for this client
+          const clientGpsFromMap = gpsCoordinates[client.client_id];
+          if (clientGpsFromMap) {
+            fallbackGps = { lat: clientGpsFromMap.lat, lng: clientGpsFromMap.lng };
+            break;
+          }
+        }
+      }
+      
+      // If still no GPS, try from existing Starlink devices
+      if (!fallbackGps && starlinkDevices.length > 0) {
+        fallbackGps = { lat: starlinkDevices[0].lat, lng: starlinkDevices[0].lng };
+      }
+      
+      // If still no GPS, try starlinkGps
+      if (!fallbackGps && starlinkGps) {
+        fallbackGps = { lat: starlinkGps.lat, lng: starlinkGps.lng };
+      }
+      
+      if (fallbackGps) {
+        starlinkDevicesWithoutGps.forEach(device => {
+          if (!addedIds.has(device.device_id)) {
+            // Format the unique device_id for display
+            let displayName: string;
+            if (device.device_id.toLowerCase().startsWith('ut')) {
+              const parts = device.device_id.split('-');
+              if (parts.length >= 1) {
+                const firstPart = parts[0].substring(0, 8);
+                const lastPart = parts[parts.length - 1]?.slice(-6) || '';
+                displayName = `Starlink ${firstPart}...${lastPart}`;
+              } else {
+                displayName = `Starlink ${device.device_id.substring(0, 12)}...`;
+              }
+            } else {
+              displayName = `Starlink ${device.device_id.replace(/_/g, ' ').replace(/starlink/i, '').trim() || 'Dish'}`;
+            }
+            
+            markers.push({
+              id: device.device_id,
+              name: displayName,
+              type: 'starlink',
+              value: 0,
+              unit: 'm',
+              status: starlinkMetrics.connected ? 'active' : 'warning',
+              lastUpdate: device.timestamp || new Date().toISOString(),
+              location: fallbackGps,
+              starlinkData: {
+                ...starlinkMetrics,
+                deviceId: device.device_id,
+              }
+            });
+            addedIds.add(device.device_id);
+            console.log('[MapData] Added Starlink device without GPS using fallback:', device.device_id);
+          }
+        });
+      }
+    }
+    
+    if (starlinkDevices.length === 0 && starlinkDevicesWithoutGps.length === 0 && starlinkGps && !addedIds.has('starlink_dish_1')) {
       // Fallback to stats GPS if no devices from status data
       markers.push({
         id: 'starlink_dish_1',
@@ -1083,10 +1213,10 @@ export function useMapData(options: UseMapDataOptions = {}) {
         }
         
         // Add Starlink sensors - but only one marker per client pointing to actual Starlink device
-        // Skip adding starlink markers here as they're handled separately via starlinkDevices or starlinkGps
+        // Skip adding starlink markers here as they're handled separately via starlinkDevices or starlinkDevicesWithoutGps
         // This prevents duplicate markers with identical GPS coordinates
         const starlink = config.starlink;
-        const hasStarlinkDeviceData = starlinkDevices.length > 0 || starlinkGps !== null;
+        const hasStarlinkDeviceData = starlinkDevices.length > 0 || starlinkDevicesWithoutGps.length > 0 || starlinkGps !== null;
         if (starlink?.enabled && !hasStarlinkDeviceData) {
           // Only add client-based Starlink marker if no actual Starlink device data available
           const id = `${client.client_id}-starlink`;
