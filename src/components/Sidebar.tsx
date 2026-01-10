@@ -50,6 +50,7 @@ const menuSections = [
     items: [
       { id: "weather", label: "Weather", icon: Cloud },
       { id: "radio", label: "Radio", icon: Radio },
+      { id: "adsb", label: "ADS-B Aircraft", icon: Activity },
       { id: "starlink", label: "Starlink", icon: Satellite },
       { id: "power", label: "Power", icon: Zap },
       { id: "sound-light", label: "Sound & Light", icon: Sun },
@@ -64,6 +65,12 @@ const menuSections = [
       { id: "stats-history", label: "Stats History", icon: TrendingUp },
       { id: "data-batches", label: "Data Batches", icon: Database },
       { id: "export", label: "Export", icon: Download },
+    ],
+  },
+  {
+    title: "SECURITY",
+    items: [
+      { id: "baselines", label: "Baselines", icon: Activity },
     ],
   },
   {
