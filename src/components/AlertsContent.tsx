@@ -1,11 +1,13 @@
 import { useState, useMemo } from "react";
 import { 
   Bell, Loader2, RefreshCw, Info, Eye, EyeOff, 
-  MoreVertical, Check, CheckCheck, Clock, Cpu, Timer, Trash2 
+  MoreVertical, Check, CheckCheck, Clock, Cpu, Timer, Trash2,
+  AlertTriangle, AlertCircle, Activity, Server, BarChart3
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
+import { Card, CardContent } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
 import {
   Dialog,
@@ -105,6 +107,38 @@ const AlertsContent = () => {
     const list = alerts || [];
     return list.filter(alert => alert.device_id && isExcluded(alert.device_id)).length;
   }, [alerts, exclusions]);
+
+  // Statistics calculations
+  const stats = useMemo(() => {
+    const list = alerts || [];
+    
+    // By severity
+    const bySeverity = {
+      critical: list.filter(a => a.severity.toLowerCase() === 'critical').length,
+      warning: list.filter(a => a.severity.toLowerCase() === 'warning').length,
+      info: list.filter(a => a.severity.toLowerCase() === 'info').length,
+    };
+    
+    // By acknowledgment status
+    const byStatus = {
+      acknowledged: list.filter(a => a.acknowledged).length,
+      pending: list.filter(a => !a.acknowledged).length,
+      resolved: list.filter(a => a.resolved).length,
+      active: list.filter(a => !a.resolved).length,
+    };
+    
+    // By source (top 5)
+    const sourceMap = new Map<string, number>();
+    list.forEach(a => {
+      const source = a.device_id || 'Unknown';
+      sourceMap.set(source, (sourceMap.get(source) || 0) + 1);
+    });
+    const bySource = Array.from(sourceMap.entries())
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 5);
+    
+    return { bySeverity, byStatus, bySource, total: list.length };
+  }, [alerts]);
 
   const {
     currentPage,
@@ -239,6 +273,120 @@ const AlertsContent = () => {
           </Button>
         </div>
       </div>
+
+      {/* Statistics Dashboard */}
+      {!isLoading && !error && stats.total > 0 && (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+          {/* By Severity */}
+          <Card className="glass-card border-border/50">
+            <CardContent className="p-4">
+              <div className="flex items-center gap-2 mb-3">
+                <BarChart3 className="w-4 h-4 text-muted-foreground" />
+                <span className="text-sm font-medium text-muted-foreground">By Severity</span>
+              </div>
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <div className="w-2 h-2 rounded-full bg-destructive" />
+                    <span className="text-sm">Critical</span>
+                  </div>
+                  <span className="font-bold text-destructive">{stats.bySeverity.critical}</span>
+                </div>
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <div className="w-2 h-2 rounded-full bg-warning" />
+                    <span className="text-sm">Warning</span>
+                  </div>
+                  <span className="font-bold text-warning">{stats.bySeverity.warning}</span>
+                </div>
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <div className="w-2 h-2 rounded-full bg-primary" />
+                    <span className="text-sm">Info</span>
+                  </div>
+                  <span className="font-bold text-primary">{stats.bySeverity.info}</span>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Acknowledgment Status */}
+          <Card className="glass-card border-border/50">
+            <CardContent className="p-4">
+              <div className="flex items-center gap-2 mb-3">
+                <Check className="w-4 h-4 text-muted-foreground" />
+                <span className="text-sm font-medium text-muted-foreground">Acknowledgment</span>
+              </div>
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <AlertCircle className="w-3 h-3 text-warning" />
+                    <span className="text-sm">Pending</span>
+                  </div>
+                  <span className="font-bold text-warning">{stats.byStatus.pending}</span>
+                </div>
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <Check className="w-3 h-3 text-success" />
+                    <span className="text-sm">Acknowledged</span>
+                  </div>
+                  <span className="font-bold text-success">{stats.byStatus.acknowledged}</span>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Resolution Status */}
+          <Card className="glass-card border-border/50">
+            <CardContent className="p-4">
+              <div className="flex items-center gap-2 mb-3">
+                <Activity className="w-4 h-4 text-muted-foreground" />
+                <span className="text-sm font-medium text-muted-foreground">Resolution</span>
+              </div>
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <AlertTriangle className="w-3 h-3 text-destructive" />
+                    <span className="text-sm">Active</span>
+                  </div>
+                  <span className="font-bold text-destructive">{stats.byStatus.active}</span>
+                </div>
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <CheckCheck className="w-3 h-3 text-success" />
+                    <span className="text-sm">Resolved</span>
+                  </div>
+                  <span className="font-bold text-success">{stats.byStatus.resolved}</span>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Top Sources */}
+          <Card className="glass-card border-border/50">
+            <CardContent className="p-4">
+              <div className="flex items-center gap-2 mb-3">
+                <Server className="w-4 h-4 text-muted-foreground" />
+                <span className="text-sm font-medium text-muted-foreground">Top Sources</span>
+              </div>
+              <div className="space-y-2">
+                {stats.bySource.length > 0 ? (
+                  stats.bySource.slice(0, 3).map(([source, count]) => (
+                    <div key={source} className="flex items-center justify-between">
+                      <span className="text-sm font-mono truncate max-w-[120px]" title={source}>
+                        {source === 'Unknown' ? 'Unknown' : source.substring(0, 12)}...
+                      </span>
+                      <span className="font-bold">{count}</span>
+                    </div>
+                  ))
+                ) : (
+                  <span className="text-sm text-muted-foreground">No sources</span>
+                )}
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+      )}
 
       {isLoading ? (
         <div className="flex items-center justify-center py-20">
