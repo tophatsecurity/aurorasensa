@@ -61,14 +61,6 @@ const PowerContent = () => {
   const { data: timeseries, isLoading: timeseriesLoading } = useDashboardTimeseries(periodHours);
   const { data: starlinkPower, isLoading: starlinkPowerLoading } = useStarlinkPower();
   const { data: allSensorStats, isLoading: sensorStatsLoading } = useAllSensorStats();
-  
-  // Fetch individual sensor type stats for power estimation
-  const { data: systemMonitorStats } = useSensorTypeStats("system_monitor");
-  const { data: wifiStats } = useSensorTypeStats("wifi_scanner");
-  const { data: bluetoothStats } = useSensorTypeStats("bluetooth_scanner");
-  const { data: loraStats } = useSensorTypeStats("lora_detector");
-  const { data: adsbStats } = useSensorTypeStats("adsb_receiver");
-  const { data: thermalStats } = useSensorTypeStats("thermal_probe");
 
   const isLoading = statsLoading || timeseriesLoading || starlinkPowerLoading || sensorStatsLoading;
 
