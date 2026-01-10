@@ -4,23 +4,168 @@
 // Core utilities
 export { callAuroraApi, hasAuroraSession, clearAuroraSession } from "./core";
 
-// All types
+// All types from central types file
 export * from "./types";
 
-// Domain-specific hooks
-export * from "./sensors";
-export * from "./clients";
-export * from "./adsb";
-export * from "./starlink";
-
-// Re-export from the original file for hooks not yet migrated
-// This ensures backward compatibility during the transition
+// Domain-specific hooks (only export functions, not types to avoid conflicts)
 export {
-  // Dashboard hooks
+  useSensors,
+  useRecentSensors,
+  useSensorById,
+  useLatestReadings,
+  useSensorReadings,
+  useAllSensorStats,
+  useSensorTypeStats,
+  useSensorTypeStatsWithPeriod,
+  useAddSensor,
+  useUpdateSensor,
+  useDeleteSensor,
+} from "./sensors";
+
+export {
+  useClients,
+  useClient,
+  useClientsByState,
+  useClientStatistics,
+  usePendingClients,
+  useAdoptedClients,
+  useRegisteredClients,
+  useDisabledClients,
+  useSuspendedClients,
+  useDeletedClients,
+  useClientStateHistory,
+  useClientSystemInfo,
+  useAllClientsSystemInfo,
+  useClientConfig,
+  useClientConfigVersion,
+  useAllClientConfigs,
+  useWifiMode,
+  useWifiConfig,
+  useWifiStatus,
+  useWifiScan,
+  useWifiClients,
+  useWifiApiVersion,
+  useAdoptClient,
+  useRegisterClient,
+  useDisableClient,
+  useEnableClient,
+  useSuspendClient,
+  useSoftDeleteClient,
+  useRestoreClient,
+  useDeleteClient,
+  useUpdateClientConfig,
+  useSetWifiMode,
+  useUpdateWifiConfig,
+  useDisconnectWifiClient,
+} from "./clients";
+
+export {
+  useAdsbAircraft,
+  useAdsbAircraftByIcao,
+  useAdsbStats,
+  useAdsbEmergencies,
+  useAdsbNearby,
+  useAdsbLowAltitude,
+  useAdsbCoverage,
+  useAdsbAircraftHistory,
+  useAdsbDevices,
+  useAdsbHistorical,
+  useAdsbAircraftWithHistory,
+} from "./adsb";
+
+export {
+  useStarlinkDevices,
+  useStarlinkDevice,
+  useStarlinkStats,
+  useStarlinkGlobalStats,
+  useStarlinkDeviceStatsById,
+  useStarlinkSignalStrength,
+  useStarlinkPerformance,
+  useStarlinkPower,
+  useStarlinkConnectivity,
+  useStarlinkDeviceStats,
+  useStarlinkDeviceTimeseries,
+  useStarlinkReadings,
+  useStarlinkTimeseries,
+  useStarlinkSensorReadings,
+} from "./starlink";
+
+export {
+  useLoraDevices,
+  useLoraDevice,
+  useLoraDetections,
+  useLoraRecentDetections,
+  useLoraGlobalStats,
+  useLoraDeviceStats,
+  useLoraChannelStats,
+  useLoraSpectrumAnalysis,
+} from "./lora";
+
+export {
+  useAlerts,
+  useAlertsList,
+  useAlertRules,
+  useAlertStats,
+  useAlertSettings,
+  useDeviceAlerts,
+  useCreateAlertRule,
+  useUpdateAlertRule,
+  useDeleteAlertRule,
+  useAcknowledgeAlert,
+  useResolveAlert,
+  useUpdateAlertSettings,
+  useTestAlert,
+} from "./alerts";
+
+export {
   useDashboardStats,
   useDashboardTimeseries,
   useDashboardSystemStats,
-  // Statistics hooks
+  useDashboardSensorStats,
+  useDashboardSensorTimeseries,
+} from "./dashboard";
+
+export {
+  useSystemInfo,
+  useSystemArp,
+  useSystemRouting,
+  useSystemInterfaces,
+  useSystemUsb,
+  useExternalIp,
+  useSystemHostname,
+  useSystemIp,
+  useSystemUptime,
+  useSystemCpuLoad,
+  useSystemMemory,
+  useSystemDisk,
+  useServiceStatus,
+  useAuroraServices,
+  useServerConfig,
+  useUpdateServerConfig,
+} from "./system";
+
+export {
+  useUsers,
+  useUser,
+  useUserApiKeys,
+  useUserSessions,
+  useRoles,
+  usePermissions,
+  useUserRoles,
+  useUserPermissions,
+  useActivityLog,
+  useUserActivityLog,
+  useCreateUser,
+  useUpdateUser,
+  useDeleteUser,
+  useChangePassword,
+  useChangeUserPassword,
+  useCreateUserApiKey,
+  useDeleteUserApiKey,
+  useAssignRole,
+} from "./users";
+
+export {
   useComprehensiveStats,
   useDeviceStats,
   useGlobalStats,
@@ -31,9 +176,45 @@ export {
   usePeriodStats,
   useAircraftStats,
   useEndpointStats,
-  // Power & Performance
   usePowerStats,
   usePerformanceStats,
+  useStatsOverview,
+  useGlobalStatsHistory,
+  useSensorStatsHistory,
+  useDeviceStatsHistory,
+  useAlertStatsHistory,
+  useSystemResourceStatsHistory,
+} from "./stats";
+
+// Re-export from the original file for hooks not yet migrated
+// This ensures backward compatibility during the transition
+export {
+  // Baselines
+  useBaselineProfiles,
+  useBaselineEntries,
+  useBaselineViolations,
+  useCreateBaselineProfile,
+  useAddBaselineEntry,
+  useRemoveBaselineEntry,
+  useAcknowledgeViolation,
+  useWhitelistViolation,
+  useAutoLearnBaseline,
+  // Export
+  useExportFormats,
+  // Audit
+  useAuditLogs,
+  useAuditStats,
+  // Logs
+  useLogs,
+  useDatacollectorLogs,
+  useDataserverLogs,
+  // GPS
+  useGpsReadings,
+  useGpsdStatus,
+  useVisibleSatellites,
+  // Thermal Probe
+  useThermalProbeStats,
+  useThermalProbeTimeseries,
   // Devices & Batches
   useDeviceTree,
   useDeviceStatus,
@@ -54,108 +235,47 @@ export {
   useDiskUsageInfo,
   // Geo Data
   useGeoLocations,
-  // System Info
-  useSystemInfo,
-  useSystemArp,
-  useSystemRouting,
-  useSystemInterfaces,
-  useSystemUsb,
-  useExternalIp,
-  // Baselines
-  useBaselineProfiles,
-  useBaselineEntries,
-  useBaselineViolations,
-  // Alerts
-  useAlerts,
-  useAlertsList,
-  useAlertRules,
-  useAlertStats,
-  useAlertSettings,
-  useDeviceAlerts,
-  useCreateAlertRule,
-  useUpdateAlertRule,
-  useDeleteAlertRule,
-  useAcknowledgeAlert,
-  useResolveAlert,
-  useUpdateAlertSettings,
-  useTestAlert,
-  // Export
-  useExportFormats,
-  // User Management
-  useUsers,
-  useCreateUser,
-  useDeleteUser,
-  // Audit
-  useAuditLogs,
-  useAuditStats,
-  // Logs
-  useLogs,
-  useDatacollectorLogs,
-  useDataserverLogs,
-  // Config
-  useServerConfig,
-  useUpdateServerConfig,
-  // GPS
-  useGPSReadings,
-  useGPSTimeseries,
-  // LoRa
-  useLoRaDevices,
-  useLoRaDevice,
-  useLoRaDetections,
-  useLoRaRecentDetections,
-  useLoRaGlobalStats,
-  useLoRaDeviceStats,
-  useLoRaChannelStats,
-  useLoRaSpectrumAnalysis,
-  // Thermal Probe
-  useThermalProbeReadings,
-  useThermalProbeTimeseries,
-  useThermalProbeStats,
-  // Update Management
-  useUpdatePackages,
-  useUpdatePackageDetails,
-  useUploadUpdatePackage,
-  usePublishUpdatePackage,
-  useCreateUpdateAssignment,
-  useUpdateStatusDashboard,
-  useClientUpdateHistory,
+  useUpdateGeoLocation,
+  useModifyGeoLocation,
   // Remote Commands
   useSendCommand,
-  useListCommands,
+  useAdminCommands,
   useCommandResults,
-  useClientCommandResult,
+  useClientPendingCommands,
+  useSubmitCommandResult,
+  // Update Management
+  useUpdatePackages,
+  useUpdateStatus,
+  usePublishPackage,
+  useCreateUpdateAssignment,
+  useClientUpdateHistory,
+  useClientAvailableUpdates,
+  useReportUpdateStatus,
   // Health
   useHealth,
-  useApiHealth,
+  useHealthCheck,
   // V1 API
   useV1Devices,
   useV1Readings,
   useV1Latest,
   useV1MovingAverage,
-  useV1ClientConfig,
-  useUpdateV1ClientConfig,
-  useV1AllConfigs,
-  useCreateV1Client,
-  // Activity & Sessions
-  useActivityFeed,
-  useUserActivity,
-  useUserSessions,
-  // Roles & Permissions
-  useRoles,
-  useUserRoles,
-  useAssignRole,
-  usePermissions,
-  useUserPermissions,
-  // API Keys
-  useUserApiKeys,
-  useCreateApiKey,
-  useDeleteApiKey,
+  useV1ClientConfiguration,
+  useUpdateV1ClientConfiguration,
+  useV1AllConfigurations,
+  useCreateV1ClientConfig,
   // Timeseries
   useTimeseries,
-  // Stats History
-  useGlobalStatsHistory,
-  useSensorStatsHistory,
-  useDeviceStatsHistory,
-  useAlertStatsHistory,
-  useSystemResourceStatsHistory,
+  // Data Files
+  useBandwidthData,
+  useArduinoData,
+  usePingStats,
+  useStarlinkStatusData,
+  useStarlinkStatusFile,
+  useGpsdStatusFile,
+  useBandwidthFile,
+  useArduinoDataFile,
+  useVisibleSatsFile,
+  usePingStatsFile,
+  // Analytics
+  useMovingAverage,
 } from "../useAuroraApi";
