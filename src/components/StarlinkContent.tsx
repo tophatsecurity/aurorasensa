@@ -60,6 +60,7 @@ import {
   StarlinkTimeseriesPoint 
 } from "@/hooks/useAuroraApi";
 import { StarlinkMonitoringPanel, StarlinkPerformanceCharts } from "@/components/starlink";
+import { RealTimeStatusBadge } from "@/components/RealTimeStreamingPanel";
 
 // Chart color palette
 const COLORS = {
@@ -384,9 +385,7 @@ const StarlinkContent = () => {
               )}
             </SelectContent>
           </Select>
-          <Badge className="bg-violet-500/20 text-violet-400 border-violet-500/30">
-            {isLoading ? 'Loading...' : 'Live'}
-          </Badge>
+          <RealTimeStatusBadge enabled={true} clientId={activeClientFilter} />
         </div>
       </div>
 

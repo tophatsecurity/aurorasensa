@@ -41,6 +41,7 @@ import HumidityCharts from "./HumidityCharts";
 import PowerConsumptionCharts from "./PowerConsumptionCharts";
 import SystemMonitorCharts from "./SystemMonitorCharts";
 import { SSEConnectionStatus } from "./SSEConnectionStatus";
+import { RealTimeStreamingPanel } from "./RealTimeStreamingPanel";
 import { 
   ContextFilters, 
   TimePeriodOption, 
@@ -352,9 +353,16 @@ const DashboardContent = () => {
         </div>
       </div>
 
-      {/* Top Stats with Charts */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 mb-8">
-        <StatCardWithChart
+      {/* Real-Time Streaming Panel */}
+      <div className="grid grid-cols-1 lg:grid-cols-4 gap-4 mb-8">
+        <div className="lg:col-span-1">
+          <RealTimeStreamingPanel 
+            enabled={sseEnabled} 
+            clientId={selectedClient}
+          />
+        </div>
+        <div className="lg:col-span-3 grid grid-cols-1 md:grid-cols-3 gap-4">
+          <StatCardWithChart
           title="CONNECTED CLIENTS"
           value={clientsLoading ? "..." : totalClients.toString()}
           subtitle={`${activeDevices1h} devices active in last hour`}
@@ -399,6 +407,7 @@ const DashboardContent = () => {
             status: d.status
           }))}
         />
+        </div>
       </div>
 
       {/* Power Consumption */}

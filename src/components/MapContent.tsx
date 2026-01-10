@@ -28,6 +28,7 @@ import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { ClientSelector } from "@/components/ui/context-selectors";
+import { Badge } from "@/components/ui/badge";
 
 const STORAGE_KEY_AUTO_REFRESH = 'map-auto-refresh-interval';
 const STORAGE_KEY_CLIENT = 'map-selected-client';
@@ -1022,6 +1023,24 @@ const MapContent = () => {
               onClearHistory={clearHistory}
               onClearAdsbTrails={clearAllAdsbTrails}
             />
+            {/* Real-time SSE Status */}
+            <div className="flex items-center gap-2 border-l border-border/50 pl-3">
+              <Switch
+                id="sse-toggle-map"
+                checked={sseEnabled}
+                onCheckedChange={setSSEEnabled}
+              />
+              <Label htmlFor="sse-toggle-map" className="text-xs">SSE</Label>
+              {sseEnabled && (gpsSSE.isConnected || adsbSSE.isConnected) && (
+                <Badge className="gap-1 bg-success/10 text-success border-success/30 text-xs">
+                  <span className="relative flex h-1.5 w-1.5">
+                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-success opacity-75"></span>
+                    <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-success"></span>
+                  </span>
+                  {gpsUpdateCount + adsbUpdateCount > 0 ? `${gpsUpdateCount + adsbUpdateCount} updates` : "Live"}
+                </Badge>
+              )}
+            </div>
           </div>
         </div>
       </div>
