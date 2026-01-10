@@ -79,9 +79,14 @@ const MapContent = () => {
   // SSE state for real-time updates
   const [sseEnabled, setSSEEnabled] = useState(true);
   
-  // SSE for real-time GPS and ADS-B updates
-  const gpsSSE = useGpsSSE(sseEnabled);
-  const adsbSSE = useAdsbSSE(sseEnabled);
+  // Load selected client from localStorage first (moved up so SSE hooks can use it)
+  const [selectedClient, setSelectedClient] = useState<string>(() => {
+    return localStorage.getItem(STORAGE_KEY_CLIENT) || 'all';
+  });
+  
+  // SSE for real-time GPS and ADS-B updates with client filtering
+  const gpsSSE = useGpsSSE(sseEnabled, selectedClient);
+  const adsbSSE = useAdsbSSE(sseEnabled, selectedClient);
   
   // Load auto-refresh interval from localStorage, default to 5 minutes
   const [autoRefreshInterval, setAutoRefreshInterval] = useState<AutoRefreshInterval>(() => {
@@ -90,11 +95,6 @@ const MapContent = () => {
       return stored as AutoRefreshInterval;
     }
     return '5m';
-  });
-  
-  // Load selected client from localStorage
-  const [selectedClient, setSelectedClient] = useState<string>(() => {
-    return localStorage.getItem(STORAGE_KEY_CLIENT) || 'all';
   });
   
   // Save selected client to localStorage
