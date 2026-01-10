@@ -981,22 +981,6 @@ const MapContent = () => {
           timeAgo={timeAgo}
           isLoading={isLoading}
           onRefresh={handleRefresh}
-          sseEnabled={sseEnabled}
-          onSSEToggle={setSSEEnabled}
-          gpsSSE={{
-            isConnected: gpsSSE.isConnected,
-            isConnecting: gpsSSE.isConnecting,
-            error: gpsSSE.error,
-            reconnectCount: gpsSSE.reconnectCount,
-            onReconnect: gpsSSE.reconnect,
-          }}
-          adsbSSE={{
-            isConnected: adsbSSE.isConnected,
-            isConnecting: adsbSSE.isConnecting,
-            error: adsbSSE.error,
-            reconnectCount: adsbSSE.reconnectCount,
-            onReconnect: adsbSSE.reconnect,
-          }}
         />
         <div className="flex items-center justify-between gap-4">
           <MapFilters 
