@@ -17,7 +17,6 @@ import { useSSEMapUpdates } from "@/hooks/useSSEMapUpdates";
 
 // Map components (non-leaflet)
 import { MapLegend } from "@/components/map/MapLegend";
-import { MapStatistics } from "@/components/map/MapStatistics";
 import { MapLoadingOverlay } from "@/components/map/MapLoadingOverlay";
 import { MapHeader } from "@/components/map/MapHeader";
 import { MapFilters } from "@/components/map/MapFilters";
@@ -1123,7 +1122,6 @@ const MapContent = () => {
         )}
 
         <MapLegend />
-        <MapStatistics stats={stats} adsbIsHistorical={adsbIsHistorical} />
         <MapLoadingOverlay isLoading={isLoading} />
       </div>
     </div>
