@@ -8,7 +8,12 @@ import {
   useSensorTypePolling,
 } from "./useRealTimePolling";
 
+// SSE can go directly to Aurora for browsers that support it
+// Falls back through proxy if CORS issues occur
 const AURORA_ENDPOINT = "http://aurora.tophatsecurity.com:9151";
+
+// Supabase SSE proxy endpoint for CORS-protected environments
+const SUPABASE_SSE_PROXY = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/aurora-stream`;
 
 // SSE availability state - starts as unknown, then checked on first use
 let sseAvailabilityChecked = false;
@@ -78,16 +83,55 @@ export function useSSE({
 
     setState(prev => ({ ...prev, isConnecting: true, error: null }));
 
-    // Build URL with session cookie as query param (since EventSource doesn't support headers)
-    const url = new URL(`${AURORA_ENDPOINT}${endpoint}`);
-    url.searchParams.set("session", encodeURIComponent(sessionCookie));
+    // Determine stream type from endpoint
+    const getStreamType = (ep: string): string => {
+      if (ep.includes('/starlink')) return 'starlink';
+      if (ep.includes('/thermal_probe')) return 'thermal';
+      if (ep.includes('/gps')) return 'gps';
+      if (ep.includes('/adsb')) return 'adsb';
+      if (ep.includes('/arduino')) return 'arduino';
+      if (ep.includes('/power')) return 'power';
+      if (ep.includes('/system_monitor')) return 'system';
+      if (ep.includes('/radio')) return 'radio';
+      if (ep.includes('/alerts')) return 'alerts';
+      if (ep.includes('/dashboard')) return 'dashboard';
+      if (ep.includes('/clients')) return 'clients';
+      if (ep.includes('/commands/') && ep.includes('/status')) return 'command';
+      return 'readings';
+    };
+
+    // Extract client_id and command_id from endpoint query params
+    const parseEndpoint = (ep: string) => {
+      const urlParams = new URLSearchParams(ep.split('?')[1] || '');
+      const pathMatch = ep.match(/\/commands\/([^/]+)\/status/);
+      return {
+        clientId: urlParams.get('client_id'),
+        commandId: pathMatch?.[1],
+      };
+    };
+
+    const streamType = getStreamType(endpoint);
+    const { clientId, commandId } = parseEndpoint(endpoint);
+
+    // Build proxy URL
+    const proxyUrl = new URL(SUPABASE_SSE_PROXY);
+    proxyUrl.searchParams.set('type', streamType);
+    proxyUrl.searchParams.set('session', sessionCookie);
+    if (clientId && clientId !== 'all') {
+      proxyUrl.searchParams.set('client_id', clientId);
+    }
+    if (commandId) {
+      proxyUrl.searchParams.set('command_id', commandId);
+    }
+
+    console.log(`SSE connecting via proxy: ${streamType}${clientId ? ` (client: ${clientId})` : ''}`);
 
     try {
-      const eventSource = new EventSource(url.toString());
+      const eventSource = new EventSource(proxyUrl.toString());
       eventSourceRef.current = eventSource;
 
       eventSource.onopen = () => {
-        console.log(`SSE connected: ${endpoint}`);
+        console.log(`SSE connected: ${streamType}`);
         reconnectCountRef.current = 0;
         setState(prev => ({
           ...prev,
@@ -117,7 +161,7 @@ export function useSSE({
       };
 
       eventSource.onerror = (error) => {
-        console.error(`SSE error: ${endpoint}`, error);
+        console.error(`SSE error: ${streamType}`, error);
         eventSource.close();
         eventSourceRef.current = null;
 
@@ -136,7 +180,7 @@ export function useSSE({
           setState(prev => ({ ...prev, reconnectCount: reconnectCountRef.current }));
 
           reconnectTimeoutRef.current = setTimeout(() => {
-            console.log(`SSE reconnecting (${reconnectCountRef.current}/${maxReconnectAttempts}): ${endpoint}`);
+            console.log(`SSE reconnecting (${reconnectCountRef.current}/${maxReconnectAttempts}): ${streamType}`);
             connect();
           }, reconnectInterval);
         } else {
@@ -488,13 +532,34 @@ export function useSSEAvailability() {
     
     setIsChecking(true);
     try {
-      const response = await fetch(`${AURORA_ENDPOINT}/api/stream/health`, {
+      // Check SSE availability via the proxy health endpoint
+      const sessionCookie = sessionStorage.getItem("aurora_cookie");
+      if (!sessionCookie) {
+        // No session, SSE won't work anyway
+        sseIsAvailable = false;
+        sseAvailabilityChecked = true;
+        setIsAvailable(false);
+        return;
+      }
+
+      // Try connecting to a simple stream type to verify SSE works
+      const proxyUrl = new URL(SUPABASE_SSE_PROXY);
+      proxyUrl.searchParams.set('type', 'dashboard');
+      proxyUrl.searchParams.set('session', sessionCookie);
+      
+      const response = await fetch(proxyUrl.toString(), {
         method: "GET",
         signal: AbortSignal.timeout(5000),
+        headers: { 'Accept': 'text/event-stream' },
       });
-      sseIsAvailable = response.ok;
+      
+      // Check if it returned SSE content type
+      const contentType = response.headers.get('content-type');
+      const isSSE = contentType?.includes('text/event-stream') ?? false;
+      
+      sseIsAvailable = isSSE && response.ok;
       sseAvailabilityChecked = true;
-      setIsAvailable(response.ok);
+      setIsAvailable(sseIsAvailable);
     } catch {
       sseIsAvailable = false;
       sseAvailabilityChecked = true;
