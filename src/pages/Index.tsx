@@ -35,7 +35,7 @@ import { Loader2 } from "lucide-react";
 
 const Index = () => {
   const [activeItem, setActiveItem] = useState("dashboard");
-  const { user, loading, signIn } = useAuroraAuthContext();
+  const { user, loading, signIn, enterDemoMode, serverStatus, isOfflineMode } = useAuroraAuthContext();
 
   // Show loading spinner while checking auth/session validity
   if (loading) {
@@ -58,7 +58,14 @@ const Index = () => {
 
   // Show auth page if not logged in
   if (!user) {
-    return <AuroraAuthPage onLogin={signIn} isLoading={loading} />;
+    return (
+      <AuroraAuthPage 
+        onLogin={signIn} 
+        onDemoMode={enterDemoMode}
+        isLoading={loading} 
+        serverStatus={serverStatus}
+      />
+    );
   }
 
   const renderContent = () => {
