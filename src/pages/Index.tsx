@@ -8,7 +8,7 @@ import AlertsContent from "@/components/AlertsContent";
 import MapContent from "@/components/MapContent";
 import ClientsContent from "@/components/ClientsContent";
 import RulesContent from "@/components/RulesContent";
-import PowerAnalyticsContent from "@/components/PowerAnalyticsContent";
+import PowerContent from "@/components/PowerContent";
 import DataBatchesContent from "@/components/DataBatchesContent";
 import ExportContent from "@/components/ExportContent";
 import PerformanceContent from "@/components/PerformanceContent";
@@ -78,7 +78,7 @@ const Index = () => {
       case "rules":
         return <RulesContent />;
       case "power":
-        return <PowerAnalyticsContent />;
+        return <PowerContent />;
       case "data-batches":
         return <DataBatchesContent />;
       case "export":

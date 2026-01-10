@@ -1,10 +1,10 @@
 import { useState, useMemo } from "react";
-import { Zap, Battery, Sun, Plug, RefreshCw, Loader2, Satellite, TrendingUp, TrendingDown, Minus } from "lucide-react";
+import { Zap, Battery, Sun, Plug, RefreshCw, Loader2, Satellite, Cpu, Usb, Server, HardDrive, Wifi, Radio, Monitor, Activity } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
 import { Button } from "@/components/ui/button";
-import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, AreaChart, Area, BarChart, Bar, Legend } from "recharts";
-import { useDashboardTimeseries, useComprehensiveStats, useStarlinkPower, StarlinkPowerDeviceSummary } from "@/hooks/useAuroraApi";
+import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, AreaChart, Area, BarChart, Bar, Legend, PieChart, Pie, Cell } from "recharts";
+import { useDashboardTimeseries, useComprehensiveStats, useStarlinkPower, useSensorTypeStats, useAllSensorStats, StarlinkPowerDeviceSummary } from "@/hooks/useAuroraApi";
 import { useQueryClient } from "@tanstack/react-query";
 import { format } from "date-fns";
 import { 
@@ -13,7 +13,7 @@ import {
   timePeriodToHours 
 } from "@/components/ui/context-selectors";
 
-// Colors for different Starlink devices
+// Colors for different devices
 const DEVICE_COLORS = [
   "hsl(var(--chart-1))",
   "hsl(var(--chart-2))",
@@ -21,6 +21,34 @@ const DEVICE_COLORS = [
   "hsl(var(--chart-4))",
   "hsl(var(--chart-5))",
 ];
+
+// Device type icons and labels
+const DEVICE_TYPE_CONFIG: Record<string, { icon: React.ComponentType<{ className?: string }>, label: string, color: string }> = {
+  starlink: { icon: Satellite, label: "Starlink", color: "hsl(var(--chart-1))" },
+  system_monitor: { icon: Cpu, label: "System/CPU", color: "hsl(var(--chart-2))" },
+  usb_device: { icon: Usb, label: "USB Devices", color: "hsl(var(--chart-3))" },
+  wifi_scanner: { icon: Wifi, label: "WiFi Scanner", color: "hsl(var(--chart-4))" },
+  bluetooth_scanner: { icon: Radio, label: "Bluetooth", color: "hsl(var(--chart-5))" },
+  lora_detector: { icon: Radio, label: "LoRa", color: "hsl(210 100% 60%)" },
+  adsb_receiver: { icon: Monitor, label: "ADS-B", color: "hsl(280 100% 60%)" },
+  thermal_probe: { icon: Activity, label: "Thermal Probe", color: "hsl(0 100% 60%)" },
+  aht_sensor: { icon: Activity, label: "AHT Sensor", color: "hsl(120 100% 40%)" },
+  bmt_sensor: { icon: Activity, label: "BMT Sensor", color: "hsl(45 100% 50%)" },
+};
+
+// Estimated power consumption by device type (in watts)
+const DEVICE_POWER_ESTIMATES: Record<string, { idle: number, active: number }> = {
+  starlink: { idle: 40, active: 100 },
+  system_monitor: { idle: 5, active: 65 },
+  usb_device: { idle: 0.5, active: 2.5 },
+  wifi_scanner: { idle: 1, active: 3 },
+  bluetooth_scanner: { idle: 0.5, active: 1.5 },
+  lora_detector: { idle: 0.1, active: 0.5 },
+  adsb_receiver: { idle: 2, active: 5 },
+  thermal_probe: { idle: 0.05, active: 0.1 },
+  aht_sensor: { idle: 0.01, active: 0.02 },
+  bmt_sensor: { idle: 0.01, active: 0.02 },
+};
 
 const PowerContent = () => {
   const queryClient = useQueryClient();
@@ -32,12 +60,22 @@ const PowerContent = () => {
   const { data: stats, isLoading: statsLoading } = useComprehensiveStats();
   const { data: timeseries, isLoading: timeseriesLoading } = useDashboardTimeseries(periodHours);
   const { data: starlinkPower, isLoading: starlinkPowerLoading } = useStarlinkPower();
+  const { data: allSensorStats, isLoading: sensorStatsLoading } = useAllSensorStats();
+  
+  // Fetch individual sensor type stats for power estimation
+  const { data: systemMonitorStats } = useSensorTypeStats("system_monitor");
+  const { data: wifiStats } = useSensorTypeStats("wifi_scanner");
+  const { data: bluetoothStats } = useSensorTypeStats("bluetooth_scanner");
+  const { data: loraStats } = useSensorTypeStats("lora_detector");
+  const { data: adsbStats } = useSensorTypeStats("adsb_receiver");
+  const { data: thermalStats } = useSensorTypeStats("thermal_probe");
 
-  const isLoading = statsLoading || timeseriesLoading || starlinkPowerLoading;
+  const isLoading = statsLoading || timeseriesLoading || starlinkPowerLoading || sensorStatsLoading;
 
   const handleRefresh = () => {
     queryClient.invalidateQueries({ queryKey: ["aurora", "dashboard"] });
     queryClient.invalidateQueries({ queryKey: ["aurora", "starlink", "power"] });
+    queryClient.invalidateQueries({ queryKey: ["aurora", "stats", "sensors"] });
   };
 
   // Transform power timeseries data for charts
@@ -77,14 +115,77 @@ const PowerContent = () => {
     return starlinkDevicePower.reduce((sum, device) => sum + (device.overall?.avg_watts || 0), 0);
   }, [starlinkDevicePower]);
 
+  // Calculate device type power breakdown
+  const devicePowerBreakdown = useMemo(() => {
+    const sensorTypes = allSensorStats?.sensor_types || [];
+    const breakdown: Array<{
+      device_type: string;
+      label: string;
+      icon: React.ComponentType<{ className?: string }>;
+      color: string;
+      device_count: number;
+      estimated_power: number;
+      real_power?: number;
+      readings: number;
+      active: boolean;
+    }> = [];
+
+    sensorTypes.forEach(sensor => {
+      const config = DEVICE_TYPE_CONFIG[sensor.device_type] || {
+        icon: Server,
+        label: sensor.device_type.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase()),
+        color: "hsl(var(--muted-foreground))"
+      };
+      
+      const powerEstimate = DEVICE_POWER_ESTIMATES[sensor.device_type] || { idle: 1, active: 2 };
+      const isActive = sensor.readings_last_hour ? sensor.readings_last_hour > 0 : false;
+      
+      // Use real power data for Starlink if available
+      let realPower: number | undefined;
+      if (sensor.device_type === 'starlink' && totalStarlinkPower > 0) {
+        realPower = totalStarlinkPower;
+      }
+      
+      // Check for power_w in numeric_field_stats_24h
+      const powerStats = sensor.numeric_field_stats_24h?.power_w || sensor.numeric_field_stats_24h?.power_watts;
+      if (powerStats?.avg) {
+        realPower = powerStats.avg * (sensor.device_count || 1);
+      }
+      
+      const estimatedPower = realPower ?? (isActive ? powerEstimate.active : powerEstimate.idle) * (sensor.device_count || 1);
+      
+      breakdown.push({
+        device_type: sensor.device_type,
+        label: config.label,
+        icon: config.icon,
+        color: config.color,
+        device_count: sensor.device_count || 1,
+        estimated_power: estimatedPower,
+        real_power: realPower,
+        readings: sensor.total_readings || sensor.count || 0,
+        active: isActive,
+      });
+    });
+
+    // Sort by power consumption
+    return breakdown.sort((a, b) => b.estimated_power - a.estimated_power);
+  }, [allSensorStats, totalStarlinkPower]);
+
+  // Total estimated power across all devices
+  const totalEstimatedPower = useMemo(() => {
+    return devicePowerBreakdown.reduce((sum, d) => sum + d.estimated_power, 0);
+  }, [devicePowerBreakdown]);
+
   // Calculate current values from latest data
   const currentPower = powerChartData.length > 0 ? powerChartData[powerChartData.length - 1]?.power : null;
   const hasPowerData = powerChartData.length > 0 || currentPower !== null;
   const hasStarlinkData = starlinkDevicePower.length > 0;
+  const hasDeviceData = devicePowerBreakdown.length > 0;
 
   // Mock voltage/current derived from power (P = V * I, assuming ~12V system)
   const estimatedVoltage = 12.3;
-  const estimatedCurrent = currentPower ? (currentPower / estimatedVoltage).toFixed(1) : "—";
+  const displayPower = totalEstimatedPower > 0 ? totalEstimatedPower : currentPower;
+  const estimatedCurrent = displayPower ? (displayPower / estimatedVoltage).toFixed(1) : "—";
 
   return (
     <div className="flex-1 p-6 overflow-y-auto">
@@ -143,9 +244,9 @@ const PowerContent = () => {
               </div>
               <div>
                 <p className="text-2xl font-bold">
-                  {currentPower !== null ? `${currentPower.toFixed(1)}W` : "—"}
+                  {displayPower !== null ? `${displayPower.toFixed(1)}W` : "—"}
                 </p>
-                <p className="text-sm text-muted-foreground">Power</p>
+                <p className="text-sm text-muted-foreground">Total Power</p>
               </div>
             </div>
           </CardContent>
@@ -154,16 +255,126 @@ const PowerContent = () => {
           <CardContent className="p-4">
             <div className="flex items-center gap-3">
               <div className="w-10 h-10 rounded-lg bg-orange-500/20 flex items-center justify-center">
-                <Sun className="w-5 h-5 text-orange-500" />
+                <Server className="w-5 h-5 text-orange-500" />
               </div>
               <div>
-                <p className="text-2xl font-bold">85%</p>
-                <p className="text-sm text-muted-foreground">Battery</p>
+                <p className="text-2xl font-bold">{devicePowerBreakdown.length}</p>
+                <p className="text-sm text-muted-foreground">Device Types</p>
               </div>
             </div>
           </CardContent>
         </Card>
       </div>
+
+      {/* Device Power Breakdown Section */}
+      <Card className="bg-card/50 backdrop-blur-sm border-border/50 mb-6">
+        <CardHeader>
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <Cpu className="w-5 h-5 text-primary" />
+              <CardTitle className="text-lg">Power by Device Type</CardTitle>
+            </div>
+            {hasDeviceData && (
+              <div className="text-sm text-muted-foreground">
+                Total: <span className="font-semibold text-foreground">{totalEstimatedPower.toFixed(1)}W</span> across {devicePowerBreakdown.length} device types
+              </div>
+            )}
+          </div>
+        </CardHeader>
+        <CardContent>
+          {isLoading ? (
+            <div className="h-64 flex items-center justify-center">
+              <Loader2 className="w-8 h-8 animate-spin text-muted-foreground" />
+            </div>
+          ) : hasDeviceData ? (
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              {/* Device Power Cards Grid */}
+              <div className="space-y-3">
+                {devicePowerBreakdown.map((device, index) => {
+                  const IconComponent = device.icon;
+                  const percentage = totalEstimatedPower > 0 ? (device.estimated_power / totalEstimatedPower) * 100 : 0;
+                  
+                    return (
+                    <div key={device.device_type} className="flex items-center gap-3 p-3 rounded-lg bg-background/50 border border-border/50">
+                      <div 
+                        className="w-10 h-10 rounded-lg flex items-center justify-center"
+                        style={{ backgroundColor: `color-mix(in srgb, ${device.color} 20%, transparent)` }}
+                      >
+                        <IconComponent className="w-5 h-5 text-primary" />
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center justify-between mb-1">
+                          <span className="font-medium text-sm truncate">{device.label}</span>
+                          <div className="flex items-center gap-2">
+                            <span className={`text-xs px-1.5 py-0.5 rounded ${device.active ? 'bg-green-500/20 text-green-500' : 'bg-muted text-muted-foreground'}`}>
+                              {device.active ? 'Active' : 'Idle'}
+                            </span>
+                            <span className="text-sm font-semibold">{device.estimated_power.toFixed(1)}W</span>
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <Progress value={percentage} className="h-1.5 flex-1" />
+                          <span className="text-xs text-muted-foreground w-12 text-right">{percentage.toFixed(1)}%</span>
+                        </div>
+                        <div className="flex items-center gap-3 mt-1 text-xs text-muted-foreground">
+                          <span>{device.device_count} device{device.device_count !== 1 ? 's' : ''}</span>
+                          <span>{device.readings.toLocaleString()} readings</span>
+                          {device.real_power !== undefined && (
+                            <span className="text-green-500">Real data</span>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+              
+              {/* Power Distribution Pie Chart */}
+              <div>
+                <h4 className="text-sm font-medium mb-3">Power Distribution</h4>
+                <div className="h-64">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <PieChart>
+                      <Pie
+                        data={devicePowerBreakdown.map(d => ({
+                          name: d.label,
+                          value: d.estimated_power,
+                          color: d.color,
+                        }))}
+                        cx="50%"
+                        cy="50%"
+                        innerRadius={60}
+                        outerRadius={100}
+                        paddingAngle={2}
+                        dataKey="value"
+                        label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
+                        labelLine={false}
+                      >
+                        {devicePowerBreakdown.map((entry, index) => (
+                          <Cell key={`cell-${index}`} fill={entry.color} />
+                        ))}
+                      </Pie>
+                      <Tooltip 
+                        contentStyle={{ 
+                          background: 'hsl(var(--card))', 
+                          border: '1px solid hsl(var(--border))',
+                          borderRadius: '8px'
+                        }}
+                        formatter={(value: number) => [`${value.toFixed(1)}W`, 'Power']}
+                      />
+                    </PieChart>
+                  </ResponsiveContainer>
+                </div>
+              </div>
+            </div>
+          ) : (
+            <div className="h-32 flex flex-col items-center justify-center text-muted-foreground">
+              <Server className="w-12 h-12 mb-3 opacity-50" />
+              <p>No device data available</p>
+            </div>
+          )}
+        </CardContent>
+      </Card>
 
       <div className="grid grid-cols-2 gap-6 mb-6">
         <Card className="bg-card/50 backdrop-blur-sm border-border/50">
