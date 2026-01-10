@@ -41,7 +41,7 @@ import HumidityCharts from "./HumidityCharts";
 import PowerConsumptionCharts from "./PowerConsumptionCharts";
 import SystemMonitorCharts from "./SystemMonitorCharts";
 import { SSEConnectionStatus } from "./SSEConnectionStatus";
-import { RealTimeStreamingPanel } from "./RealTimeStreamingPanel";
+
 import { 
   ContextFilters, 
   TimePeriodOption, 
@@ -353,16 +353,9 @@ const DashboardContent = () => {
         </div>
       </div>
 
-      {/* Real-Time Streaming Panel */}
-      <div className="grid grid-cols-1 lg:grid-cols-4 gap-4 mb-8">
-        <div className="lg:col-span-1">
-          <RealTimeStreamingPanel 
-            enabled={sseEnabled} 
-            clientId={selectedClient}
-          />
-        </div>
-        <div className="lg:col-span-3 grid grid-cols-1 md:grid-cols-3 gap-4">
-          <StatCardWithChart
+      {/* Key Stats */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
+        <StatCardWithChart
           title="CONNECTED CLIENTS"
           value={clientsLoading ? "..." : totalClients.toString()}
           subtitle={`${activeDevices1h} devices active in last hour`}
@@ -370,7 +363,7 @@ const DashboardContent = () => {
           iconBgColor="bg-green-500/20"
           isLoading={clientsLoading}
           devices={activeClients.map((c, idx) => ({
-            device_id: `${c.client_id}_${idx}`, // Ensure unique key
+            device_id: `${c.client_id}_${idx}`,
             device_type: 'client',
             color: ['#22c55e', '#3b82f6', '#f59e0b', '#ec4899'][idx % 4],
             reading_count: c.batches_received * 50,
@@ -407,7 +400,6 @@ const DashboardContent = () => {
             status: d.status
           }))}
         />
-        </div>
       </div>
 
       {/* Power Consumption */}
