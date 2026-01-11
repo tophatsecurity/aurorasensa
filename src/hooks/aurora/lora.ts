@@ -1,5 +1,5 @@
 // Aurora API - LoRa domain hooks
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { callAuroraApi, hasAuroraSession } from "./core";
 
 // =============================================
@@ -18,6 +18,22 @@ export interface LoRaDevice {
   spreading_factor?: number;
   bandwidth?: number;
   packet_count?: number;
+}
+
+export interface LoRaDeviceConfig {
+  device_id: string;
+  device_name?: string;
+  description?: string;
+  main_channel_mhz?: number;
+  bandwidth_khz?: number;
+  spreading_factor?: number;
+  is_active?: boolean;
+  location?: string;
+  metadata?: Record<string, unknown>;
+  created_at?: string;
+  updated_at?: string;
+  created_by?: string;
+  last_configured_at?: string;
 }
 
 export interface LoRaDetection {
@@ -148,5 +164,142 @@ export function useLoraSpectrumAnalysis() {
     staleTime: 30000,
     refetchInterval: 60000,
     retry: 1,
+  });
+}
+
+// =============================================
+// DEVICE CONFIG QUERY HOOKS
+// =============================================
+
+export function useLoraConfigDevices() {
+  return useQuery({
+    queryKey: ["aurora", "lora", "config", "devices"],
+    queryFn: () => callAuroraApi<{ devices: LoRaDeviceConfig[] }>("/api/lora/config/devices"),
+    enabled: hasAuroraSession(),
+    staleTime: 60000,
+    refetchInterval: 120000,
+    retry: 1,
+  });
+}
+
+export function useLoraConfigDevice(deviceId: string) {
+  return useQuery({
+    queryKey: ["aurora", "lora", "config", "devices", deviceId],
+    queryFn: () => callAuroraApi<LoRaDeviceConfig>(`/api/lora/config/devices/${deviceId}`),
+    enabled: !!deviceId && hasAuroraSession(),
+    retry: 2,
+  });
+}
+
+// =============================================
+// MUTATION HOOKS
+// =============================================
+
+export function useCreateLoraDevice() {
+  const queryClient = useQueryClient();
+  
+  return useMutation({
+    mutationFn: async (device: {
+      device_id: string;
+      device_name?: string;
+      description?: string;
+      main_channel_mhz?: number;
+      bandwidth_khz?: number;
+      spreading_factor?: number;
+      location?: string;
+      metadata?: Record<string, unknown>;
+    }) => {
+      return callAuroraApi<{ success: boolean; device_id: string }>("/api/lora/devices", "POST", device);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["aurora", "lora", "devices"] });
+      queryClient.invalidateQueries({ queryKey: ["aurora", "lora", "config", "devices"] });
+    },
+  });
+}
+
+export function useUpdateLoraDevice() {
+  const queryClient = useQueryClient();
+  
+  return useMutation({
+    mutationFn: async ({ deviceId, data }: { 
+      deviceId: string; 
+      data: Partial<LoRaDeviceConfig>;
+    }) => {
+      return callAuroraApi<{ success: boolean }>(`/api/lora/devices/${deviceId}`, "PUT", data);
+    },
+    onSuccess: (_, variables) => {
+      queryClient.invalidateQueries({ queryKey: ["aurora", "lora", "devices", variables.deviceId] });
+      queryClient.invalidateQueries({ queryKey: ["aurora", "lora", "devices"] });
+      queryClient.invalidateQueries({ queryKey: ["aurora", "lora", "config", "devices", variables.deviceId] });
+      queryClient.invalidateQueries({ queryKey: ["aurora", "lora", "config", "devices"] });
+    },
+  });
+}
+
+export function usePatchLoraDevice() {
+  const queryClient = useQueryClient();
+  
+  return useMutation({
+    mutationFn: async ({ deviceId, data }: { 
+      deviceId: string; 
+      data: Partial<LoRaDeviceConfig>;
+    }) => {
+      return callAuroraApi<{ success: boolean }>(`/api/lora/devices/${deviceId}`, "PATCH", data);
+    },
+    onSuccess: (_, variables) => {
+      queryClient.invalidateQueries({ queryKey: ["aurora", "lora", "devices", variables.deviceId] });
+      queryClient.invalidateQueries({ queryKey: ["aurora", "lora", "devices"] });
+      queryClient.invalidateQueries({ queryKey: ["aurora", "lora", "config", "devices", variables.deviceId] });
+      queryClient.invalidateQueries({ queryKey: ["aurora", "lora", "config", "devices"] });
+    },
+  });
+}
+
+export function useDeleteLoraDevice() {
+  const queryClient = useQueryClient();
+  
+  return useMutation({
+    mutationFn: async (deviceId: string) => {
+      return callAuroraApi<{ success: boolean }>(`/api/lora/devices/${deviceId}`, "DELETE");
+    },
+    onSuccess: (_, deviceId) => {
+      queryClient.invalidateQueries({ queryKey: ["aurora", "lora", "devices", deviceId] });
+      queryClient.invalidateQueries({ queryKey: ["aurora", "lora", "devices"] });
+      queryClient.invalidateQueries({ queryKey: ["aurora", "lora", "config", "devices", deviceId] });
+      queryClient.invalidateQueries({ queryKey: ["aurora", "lora", "config", "devices"] });
+    },
+  });
+}
+
+export function useActivateLoraDevice() {
+  const queryClient = useQueryClient();
+  
+  return useMutation({
+    mutationFn: async (deviceId: string) => {
+      return callAuroraApi<{ success: boolean; message: string }>(`/api/lora/devices/${deviceId}/activate`, "POST");
+    },
+    onSuccess: (_, deviceId) => {
+      queryClient.invalidateQueries({ queryKey: ["aurora", "lora", "devices", deviceId] });
+      queryClient.invalidateQueries({ queryKey: ["aurora", "lora", "devices"] });
+      queryClient.invalidateQueries({ queryKey: ["aurora", "lora", "config", "devices", deviceId] });
+      queryClient.invalidateQueries({ queryKey: ["aurora", "lora", "config", "devices"] });
+    },
+  });
+}
+
+export function useDeactivateLoraDevice() {
+  const queryClient = useQueryClient();
+  
+  return useMutation({
+    mutationFn: async (deviceId: string) => {
+      return callAuroraApi<{ success: boolean; message: string }>(`/api/lora/devices/${deviceId}/deactivate`, "POST");
+    },
+    onSuccess: (_, deviceId) => {
+      queryClient.invalidateQueries({ queryKey: ["aurora", "lora", "devices", deviceId] });
+      queryClient.invalidateQueries({ queryKey: ["aurora", "lora", "devices"] });
+      queryClient.invalidateQueries({ queryKey: ["aurora", "lora", "config", "devices", deviceId] });
+      queryClient.invalidateQueries({ queryKey: ["aurora", "lora", "config", "devices"] });
+    },
   });
 }
