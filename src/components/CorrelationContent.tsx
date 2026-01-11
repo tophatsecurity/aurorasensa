@@ -36,11 +36,10 @@ import {
 } from "@/components/ui/select";
 import { 
   ContextFilters, 
-  TimePeriodOption, 
-  timePeriodToHours, 
   timePeriodLabel,
   ClientSelector
 } from "@/components/ui/context-selectors";
+import { useClientContext } from "@/contexts/ClientContext";
 import { 
   useStarlinkTimeseries,
   useDashboardTimeseries,
@@ -244,12 +243,15 @@ const TEMP_MEASUREMENTS: { value: TempMeasurement; label: string }[] = [
 ];
 
 const CorrelationContent = () => {
-  const [timePeriod, setTimePeriod] = useState<TimePeriodOption>('24h');
-  const [selectedClient, setSelectedClient] = useState<string>('all');
+  const { 
+    selectedClientId: selectedClient, 
+    setSelectedClientId: setSelectedClient,
+    timePeriod,
+    setTimePeriod,
+    periodHours: timeRange 
+  } = useClientContext();
   const [activeTab, setActiveTab] = useState("power-thermal");
   const [tempMeasurement, setTempMeasurement] = useState<TempMeasurement>('thermal-probe');
-  
-  const timeRange = timePeriodToHours(timePeriod);
   
   const { data: starlinkData, isLoading: starlinkLoading } = useStarlinkTimeseries(timeRange, selectedClient);
   const { data: dashboardData, isLoading: dashboardLoading } = useDashboardTimeseries(timeRange, selectedClient);

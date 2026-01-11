@@ -44,11 +44,10 @@ import { SSEConnectionStatus } from "./SSEConnectionStatus";
 import { AdsbSection, LoRaSection, WifiBluetoothSection, GpsSection, AlertsSection, BatchesSection, MaritimeSection } from "./dashboard";
 
 import { 
-  ContextFilters, 
-  TimePeriodOption, 
-  timePeriodToHours, 
+  ContextFilters,  
   timePeriodLabel 
 } from "@/components/ui/context-selectors";
+import { useClientContext } from "@/contexts/ClientContext";
 import { 
   useComprehensiveStats, 
   useAlerts, 
@@ -122,15 +121,17 @@ const formatTempCompact = (celsius: number | null | undefined): string => {
 };
 
 const DashboardContent = () => {
-  // Time period state and client filter (must be defined first to use in data hooks)
-  const [timePeriod, setTimePeriod] = useState<TimePeriodOption>('1h');
-  const [selectedClient, setSelectedClient] = useState<string>('all');
+  // Use shared client context for time period and client selection
+  const { 
+    selectedClientId: selectedClient, 
+    setSelectedClientId: setSelectedClient,
+    timePeriod,
+    setTimePeriod,
+    periodHours 
+  } = useClientContext();
   
   // SSE state for real-time updates
   const [sseEnabled, setSSEEnabled] = useState(true);
-  
-  // Convert time period to hours for API calls
-  const periodHours = timePeriodToHours(timePeriod);
   
   const { data: stats, isLoading: statsLoading } = useComprehensiveStats();
   const { data: dashboardStats, isLoading: dashboardStatsLoading } = useDashboardStats();
