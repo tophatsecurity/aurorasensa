@@ -32,10 +32,14 @@ import BaselinesContent from "@/components/BaselinesContent";
 import MaritimeContent from "@/components/MaritimeContent";
 import { AuroraAuthPage } from "@/components/auth/AuroraAuthPage";
 import { useAuroraAuthContext } from "@/hooks/useAuroraAuth";
+import { useEpirbAlertNotifications } from "@/hooks/useEpirbAlertNotifications";
 import { Loader2 } from "lucide-react";
 
 const Index = () => {
   const [activeItem, setActiveItem] = useState("dashboard");
+  
+  // Monitor EPIRB alerts and show toast notifications for new distress signals
+  useEpirbAlertNotifications();
   const { user, loading, signIn, enterDemoMode, serverStatus, isOfflineMode } = useAuroraAuthContext();
 
   // Show loading spinner while checking auth/session validity
