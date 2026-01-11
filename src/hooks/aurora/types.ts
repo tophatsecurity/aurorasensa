@@ -51,15 +51,26 @@ export interface SensorTypeStats {
 // =============================================
 
 export interface Alert {
-  id: string;
-  type: string;
-  message: string;
+  alert_id: number;
+  rule_id?: number;
+  client_id?: string | null;
+  sensor_id?: string;
+  sensor_type?: string;
   severity: string;
-  timestamp: string;
+  message: string;
+  value?: string;
+  threshold?: string;
+  status: string;
+  triggered_at: string;
+  acknowledged_at?: string | null;
+  resolved_at?: string | null;
+  rule_name?: string;
+  // Legacy compatibility fields
+  type?: string;
+  device_id?: string;
+  timestamp?: string;
   acknowledged?: boolean;
   resolved?: boolean;
-  device_id?: string;
-  rule_id?: number;
 }
 
 export interface AlertRule {

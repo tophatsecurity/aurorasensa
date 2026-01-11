@@ -43,7 +43,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { useAlerts, useAcknowledgeAlert, useResolveAlert, Alert } from "@/hooks/useAuroraApi";
+import { useAlerts, useAcknowledgeAlert, useResolveAlert, type Alert } from "@/hooks/aurora/alerts";
 import { useQueryClient } from "@tanstack/react-query";
 import { usePagination } from "@/hooks/usePagination";
 import { TablePagination } from "@/components/TablePagination";
@@ -113,7 +113,8 @@ function isExcluded(deviceId: string): Exclusion | undefined {
 const severityOrder: Record<string, number> = { critical: 0, warning: 1, info: 2 };
 
 const AlertsContent = () => {
-  const { data: alerts, isLoading, error } = useAlerts();
+  const { data: alertsData, isLoading, error } = useAlerts();
+  const alerts = alertsData?.alerts || [];
   const queryClient = useQueryClient();
   const acknowledgeAlert = useAcknowledgeAlert();
   const resolveAlert = useResolveAlert();
@@ -129,7 +130,7 @@ const AlertsContent = () => {
   const [filters, setFilters] = useState<Filters>({ severity: [], status: [], type: [] });
   
   // Selection state
-  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
 
   const sse = useAlertsSSE(sseEnabled);
 
@@ -140,33 +141,38 @@ const AlertsContent = () => {
 
   // Get unique values for filters
   const filterOptions = useMemo(() => {
-    const list = alerts || [];
+    const list = alerts;
     return {
       severities: [...new Set(list.map(a => a.severity.toLowerCase()))],
-      types: [...new Set(list.map(a => a.type))],
+      types: [...new Set(list.map(a => a.sensor_type || a.rule_name || a.type || 'unknown').filter(Boolean) as string[])],
       statuses: ['pending', 'acknowledged', 'resolved', 'active'],
     };
   }, [alerts]);
 
   // Apply exclusions, search, filters, and sort
   const processedAlerts = useMemo(() => {
-    let list = alerts || [];
+    let list = [...alerts];
     
-    // Apply exclusions
+    // Apply exclusions - use sensor_id as fallback for device_id
     if (!showExcluded) {
-      list = list.filter(alert => !alert.device_id || !isExcluded(alert.device_id));
+      list = list.filter(alert => {
+        const deviceId = alert.sensor_id || alert.device_id;
+        return !deviceId || !isExcluded(deviceId);
+      });
     }
     
     // Apply search
     if (searchQuery.trim()) {
       const query = searchQuery.toLowerCase();
-      list = list.filter(alert => 
-        alert.message.toLowerCase().includes(query) ||
-        alert.type.toLowerCase().includes(query) ||
-        alert.severity.toLowerCase().includes(query) ||
-        (alert.device_id && alert.device_id.toLowerCase().includes(query)) ||
-        alert.id.toLowerCase().includes(query)
-      );
+      list = list.filter(alert => {
+        const alertType = alert.sensor_type || alert.rule_name || alert.type || '';
+        const alertSource = alert.sensor_id || alert.device_id || '';
+        return alert.message.toLowerCase().includes(query) ||
+          alertType.toLowerCase().includes(query) ||
+          alert.severity.toLowerCase().includes(query) ||
+          alertSource.toLowerCase().includes(query) ||
+          String(alert.alert_id).includes(query);
+      });
     }
     
     // Apply filters
@@ -174,15 +180,20 @@ const AlertsContent = () => {
       list = list.filter(a => filters.severity.includes(a.severity.toLowerCase()));
     }
     if (filters.type.length > 0) {
-      list = list.filter(a => filters.type.includes(a.type));
+      list = list.filter(a => {
+        const alertType = a.sensor_type || a.rule_name || a.type || '';
+        return filters.type.includes(alertType);
+      });
     }
     if (filters.status.length > 0) {
       list = list.filter(a => {
         const statuses: string[] = [];
-        if (!a.acknowledged) statuses.push('pending');
-        if (a.acknowledged) statuses.push('acknowledged');
-        if (a.resolved) statuses.push('resolved');
-        if (!a.resolved) statuses.push('active');
+        const isAcknowledged = a.acknowledged || !!a.acknowledged_at;
+        const isResolved = a.resolved || !!a.resolved_at || a.status === 'resolved';
+        if (!isAcknowledged) statuses.push('pending');
+        if (isAcknowledged) statuses.push('acknowledged');
+        if (isResolved) statuses.push('resolved');
+        if (!isResolved) statuses.push('active');
         return filters.status.some(s => statuses.includes(s));
       });
     }
@@ -195,20 +206,30 @@ const AlertsContent = () => {
           comparison = (severityOrder[a.severity.toLowerCase()] ?? 3) - (severityOrder[b.severity.toLowerCase()] ?? 3);
           break;
         case 'type':
-          comparison = a.type.localeCompare(b.type);
+          const typeA = a.sensor_type || a.rule_name || a.type || '';
+          const typeB = b.sensor_type || b.rule_name || b.type || '';
+          comparison = typeA.localeCompare(typeB);
           break;
         case 'message':
           comparison = a.message.localeCompare(b.message);
           break;
         case 'timestamp':
-          comparison = new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime();
+          const tsA = a.triggered_at || a.timestamp || '';
+          const tsB = b.triggered_at || b.timestamp || '';
+          comparison = new Date(tsA).getTime() - new Date(tsB).getTime();
           break;
         case 'device_id':
-          comparison = (a.device_id || '').localeCompare(b.device_id || '');
+          const srcA = a.sensor_id || a.device_id || '';
+          const srcB = b.sensor_id || b.device_id || '';
+          comparison = srcA.localeCompare(srcB);
           break;
         case 'status':
-          const statusA = a.resolved ? 2 : a.acknowledged ? 1 : 0;
-          const statusB = b.resolved ? 2 : b.acknowledged ? 1 : 0;
+          const resolvedA = a.resolved || !!a.resolved_at || a.status === 'resolved';
+          const ackA = a.acknowledged || !!a.acknowledged_at;
+          const resolvedB = b.resolved || !!b.resolved_at || b.status === 'resolved';
+          const ackB = b.acknowledged || !!b.acknowledged_at;
+          const statusA = resolvedA ? 2 : ackA ? 1 : 0;
+          const statusB = resolvedB ? 2 : ackB ? 1 : 0;
           comparison = statusA - statusB;
           break;
       }
@@ -265,22 +286,22 @@ const AlertsContent = () => {
   const paginatedAlerts = paginateData(processedAlerts);
 
   // Selection handlers
-  const isAllSelected = paginatedAlerts.length > 0 && paginatedAlerts.every(a => selectedIds.has(a.id));
-  const isPartiallySelected = paginatedAlerts.some(a => selectedIds.has(a.id)) && !isAllSelected;
+  const isAllSelected = paginatedAlerts.length > 0 && paginatedAlerts.every(a => selectedIds.has(a.alert_id));
+  const isPartiallySelected = paginatedAlerts.some(a => selectedIds.has(a.alert_id)) && !isAllSelected;
 
   const handleSelectAll = () => {
     if (isAllSelected) {
       const newSelected = new Set(selectedIds);
-      paginatedAlerts.forEach(a => newSelected.delete(a.id));
+      paginatedAlerts.forEach(a => newSelected.delete(a.alert_id));
       setSelectedIds(newSelected);
     } else {
       const newSelected = new Set(selectedIds);
-      paginatedAlerts.forEach(a => newSelected.add(a.id));
+      paginatedAlerts.forEach(a => newSelected.add(a.alert_id));
       setSelectedIds(newSelected);
     }
   };
 
-  const handleSelectOne = (id: string) => {
+  const handleSelectOne = (id: number) => {
     const newSelected = new Set(selectedIds);
     if (newSelected.has(id)) {
       newSelected.delete(id);
@@ -349,7 +370,7 @@ const AlertsContent = () => {
     }
   };
 
-  const handleAcknowledge = async (alertId: string) => {
+  const handleAcknowledge = async (alertId: number) => {
     try {
       await acknowledgeAlert.mutateAsync(alertId);
       toast.success("Alert acknowledged");
@@ -358,7 +379,7 @@ const AlertsContent = () => {
     }
   };
 
-  const handleResolve = async (alertId: string) => {
+  const handleResolve = async (alertId: number) => {
     try {
       await resolveAlert.mutateAsync(alertId);
       toast.success("Alert resolved");
@@ -741,16 +762,21 @@ const AlertsContent = () => {
                 </TableHeader>
                 <TableBody>
                   {paginatedAlerts.map((alert) => {
-                    const exclusion = alert.device_id ? isExcluded(alert.device_id) : undefined;
+                    const deviceId = alert.sensor_id || alert.device_id;
+                    const exclusion = deviceId ? isExcluded(deviceId) : undefined;
+                    const alertType = alert.sensor_type || alert.rule_name || alert.type || 'Alert';
+                    const isAcknowledged = alert.acknowledged || !!alert.acknowledged_at;
+                    const isResolved = alert.resolved || !!alert.resolved_at || alert.status === 'resolved';
+                    const alertTimestamp = alert.triggered_at || alert.timestamp || '';
                     return (
                       <TableRow 
-                        key={alert.id} 
-                        className={`${exclusion ? 'opacity-60' : ''} ${selectedIds.has(alert.id) ? 'bg-primary/5' : ''}`}
+                        key={alert.alert_id} 
+                        className={`${exclusion ? 'opacity-60' : ''} ${selectedIds.has(alert.alert_id) ? 'bg-primary/5' : ''}`}
                       >
                         <TableCell>
                           <Checkbox
-                            checked={selectedIds.has(alert.id)}
-                            onCheckedChange={() => handleSelectOne(alert.id)}
+                            checked={selectedIds.has(alert.alert_id)}
+                            onCheckedChange={() => handleSelectOne(alert.alert_id)}
                           />
                         </TableCell>
                         <TableCell>
@@ -758,27 +784,27 @@ const AlertsContent = () => {
                             {alert.severity.toUpperCase()}
                           </Badge>
                         </TableCell>
-                        <TableCell className="text-sm">{alert.type}</TableCell>
+                        <TableCell className="text-sm">{alertType}</TableCell>
                         <TableCell className="max-w-[400px]">
                           <p className="truncate text-sm" title={alert.message}>{alert.message}</p>
                         </TableCell>
                         <TableCell>
-                          {alert.device_id ? (
-                            <span className="font-mono text-xs">{alert.device_id.substring(0, 12)}...</span>
+                          {deviceId ? (
+                            <span className="font-mono text-xs">{deviceId.substring(0, 12)}...</span>
                           ) : (
                             <span className="text-muted-foreground text-xs">—</span>
                           )}
                         </TableCell>
                         <TableCell>
                           <div className="flex items-center gap-1">
-                            {alert.acknowledged ? (
+                            {isAcknowledged ? (
                               <Badge variant="outline" className="text-xs gap-1">
                                 <Check className="w-3 h-3" />Ack
                               </Badge>
                             ) : (
                               <Badge variant="outline" className="text-xs text-warning border-warning/30">Pending</Badge>
                             )}
-                            {alert.resolved && (
+                            {isResolved && (
                               <Badge variant="outline" className="text-xs text-success border-success/30">
                                 <CheckCheck className="w-3 h-3" />
                               </Badge>
@@ -786,7 +812,7 @@ const AlertsContent = () => {
                           </div>
                         </TableCell>
                         <TableCell className="text-xs text-muted-foreground whitespace-nowrap">
-                          {formatTimestamp(alert.timestamp)}
+                          {formatTimestamp(alertTimestamp)}
                         </TableCell>
                         <TableCell>
                           <div className="flex items-center gap-1">
@@ -800,32 +826,32 @@ const AlertsContent = () => {
                                 </Button>
                               </DropdownMenuTrigger>
                               <DropdownMenuContent align="end" className="bg-popover">
-                                {!alert.acknowledged && (
-                                  <DropdownMenuItem onClick={() => handleAcknowledge(alert.id)}>
+                                {!isAcknowledged && (
+                                  <DropdownMenuItem onClick={() => handleAcknowledge(alert.alert_id)}>
                                     <Check className="w-4 h-4 mr-2" />Acknowledge
                                   </DropdownMenuItem>
                                 )}
-                                {!alert.resolved && (
-                                  <DropdownMenuItem onClick={() => handleResolve(alert.id)}>
+                                {!isResolved && (
+                                  <DropdownMenuItem onClick={() => handleResolve(alert.alert_id)}>
                                     <CheckCheck className="w-4 h-4 mr-2" />Resolve
                                   </DropdownMenuItem>
                                 )}
-                                {alert.device_id && (
+                                {deviceId && (
                                   <>
                                     <DropdownMenuSeparator />
                                     {exclusion ? (
-                                      <DropdownMenuItem onClick={() => handleRemoveExclusion(alert.device_id!)}>
+                                      <DropdownMenuItem onClick={() => handleRemoveExclusion(deviceId!)}>
                                         <Eye className="w-4 h-4 mr-2" />Show source
                                       </DropdownMenuItem>
                                     ) : (
                                       <>
-                                        <DropdownMenuItem onClick={() => handleExcludeTemporary(alert.device_id!, 15)}>
+                                        <DropdownMenuItem onClick={() => handleExcludeTemporary(deviceId!, 15)}>
                                           <Timer className="w-4 h-4 mr-2" />Hide 15m
                                         </DropdownMenuItem>
-                                        <DropdownMenuItem onClick={() => handleExcludeTemporary(alert.device_id!, 60)}>
+                                        <DropdownMenuItem onClick={() => handleExcludeTemporary(deviceId!, 60)}>
                                           <Timer className="w-4 h-4 mr-2" />Hide 1h
                                         </DropdownMenuItem>
-                                        <DropdownMenuItem onClick={() => handleExcludePermanent(alert.device_id!)} className="text-destructive">
+                                        <DropdownMenuItem onClick={() => handleExcludePermanent(deviceId!)} className="text-destructive">
                                           <Trash2 className="w-4 h-4 mr-2" />Hide permanently
                                         </DropdownMenuItem>
                                       </>
@@ -845,18 +871,23 @@ const AlertsContent = () => {
           ) : (
             <div className="space-y-3">
               {paginatedAlerts.map((alert) => {
-                const exclusion = alert.device_id ? isExcluded(alert.device_id) : undefined;
+                const deviceId = alert.sensor_id || alert.device_id;
+                const exclusion = deviceId ? isExcluded(deviceId) : undefined;
+                const alertType = alert.sensor_type || alert.rule_name || alert.type || 'Alert';
+                const isAcknowledged = alert.acknowledged || !!alert.acknowledged_at;
+                const isResolved = alert.resolved || !!alert.resolved_at || alert.status === 'resolved';
+                const alertTimestamp = alert.triggered_at || alert.timestamp || '';
                 return (
                   <div 
-                    key={alert.id}
+                    key={alert.alert_id}
                     className={`glass-card rounded-xl p-5 border transition-all ${
                       exclusion ? 'border-muted/30 opacity-60' : 'border-border/50 hover:border-primary/30'
-                    } ${selectedIds.has(alert.id) ? 'ring-2 ring-primary/50' : ''}`}
+                    } ${selectedIds.has(alert.alert_id) ? 'ring-2 ring-primary/50' : ''}`}
                   >
                     <div className="flex items-start gap-4">
                       <Checkbox
-                        checked={selectedIds.has(alert.id)}
-                        onCheckedChange={() => handleSelectOne(alert.id)}
+                        checked={selectedIds.has(alert.alert_id)}
+                        onCheckedChange={() => handleSelectOne(alert.alert_id)}
                         className="mt-1"
                       />
                       <div className="w-10 h-10 rounded-lg bg-warning/20 flex items-center justify-center flex-shrink-0">
@@ -865,18 +896,18 @@ const AlertsContent = () => {
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-2 mb-2 flex-wrap">
                           <Badge className={getSeverityColor(alert.severity)}>{alert.severity.toUpperCase()}</Badge>
-                          <span className="text-xs text-muted-foreground">{alert.type}</span>
-                          {alert.acknowledged && <Badge variant="outline" className="text-xs gap-1"><Check className="w-3 h-3" />Ack</Badge>}
-                          {alert.resolved && <Badge variant="outline" className="text-xs gap-1 text-success border-success/30"><CheckCheck className="w-3 h-3" />Resolved</Badge>}
+                          <span className="text-xs text-muted-foreground">{alertType}</span>
+                          {isAcknowledged && <Badge variant="outline" className="text-xs gap-1"><Check className="w-3 h-3" />Ack</Badge>}
+                          {isResolved && <Badge variant="outline" className="text-xs gap-1 text-success border-success/30"><CheckCheck className="w-3 h-3" />Resolved</Badge>}
                         </div>
                         <p className="text-foreground mb-2">{alert.message}</p>
                         <div className="flex items-center gap-4 text-xs text-muted-foreground">
-                          {alert.device_id && (
+                          {deviceId && (
                             <span className="flex items-center gap-1">
-                              <Cpu className="w-3 h-3" />Source: <span className="font-mono">{alert.device_id}</span>
+                              <Cpu className="w-3 h-3" />Source: <span className="font-mono">{deviceId}</span>
                             </span>
                           )}
-                          <span className="flex items-center gap-1"><Clock className="w-3 h-3" />{formatTimestamp(alert.timestamp)}</span>
+                          <span className="flex items-center gap-1"><Clock className="w-3 h-3" />{formatTimestamp(alertTimestamp)}</span>
                         </div>
                       </div>
                       <div className="flex items-center gap-2">
@@ -886,13 +917,13 @@ const AlertsContent = () => {
                             <Button variant="ghost" size="icon"><MoreVertical className="w-4 h-4" /></Button>
                           </DropdownMenuTrigger>
                           <DropdownMenuContent align="end" className="bg-popover">
-                            {!alert.acknowledged && <DropdownMenuItem onClick={() => handleAcknowledge(alert.id)}><Check className="w-4 h-4 mr-2" />Acknowledge</DropdownMenuItem>}
-                            {!alert.resolved && <DropdownMenuItem onClick={() => handleResolve(alert.id)}><CheckCheck className="w-4 h-4 mr-2" />Resolve</DropdownMenuItem>}
-                            {alert.device_id && !exclusion && (
+                            {!isAcknowledged && <DropdownMenuItem onClick={() => handleAcknowledge(alert.alert_id)}><Check className="w-4 h-4 mr-2" />Acknowledge</DropdownMenuItem>}
+                            {!isResolved && <DropdownMenuItem onClick={() => handleResolve(alert.alert_id)}><CheckCheck className="w-4 h-4 mr-2" />Resolve</DropdownMenuItem>}
+                            {deviceId && !exclusion && (
                               <>
                                 <DropdownMenuSeparator />
-                                <DropdownMenuItem onClick={() => handleExcludeTemporary(alert.device_id!, 60)}><Timer className="w-4 h-4 mr-2" />Hide 1h</DropdownMenuItem>
-                                <DropdownMenuItem onClick={() => handleExcludePermanent(alert.device_id!)} className="text-destructive"><Trash2 className="w-4 h-4 mr-2" />Hide permanently</DropdownMenuItem>
+                                <DropdownMenuItem onClick={() => handleExcludeTemporary(deviceId!, 60)}><Timer className="w-4 h-4 mr-2" />Hide 1h</DropdownMenuItem>
+                                <DropdownMenuItem onClick={() => handleExcludePermanent(deviceId!)} className="text-destructive"><Trash2 className="w-4 h-4 mr-2" />Hide permanently</DropdownMenuItem>
                               </>
                             )}
                           </DropdownMenuContent>
@@ -953,46 +984,62 @@ const AlertsContent = () => {
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <h4 className="text-sm font-medium text-muted-foreground mb-1">Alert ID</h4>
-                  <p className="font-mono text-sm">{selectedAlert.id}</p>
+                  <p className="font-mono text-sm">{selectedAlert.alert_id}</p>
                 </div>
                 <div>
                   <h4 className="text-sm font-medium text-muted-foreground mb-1">Timestamp</h4>
-                  <p className="text-sm">{formatTimestamp(selectedAlert.timestamp)}</p>
+                  <p className="text-sm">{formatTimestamp(selectedAlert.triggered_at || selectedAlert.timestamp || '')}</p>
                 </div>
               </div>
-              {selectedAlert.device_id && (
+              {(selectedAlert.sensor_id || selectedAlert.device_id) && (
                 <div>
                   <h4 className="text-sm font-medium text-muted-foreground mb-1">Source Device</h4>
-                  <p className="font-mono text-sm">{selectedAlert.device_id}</p>
+                  <p className="font-mono text-sm">{selectedAlert.sensor_id || selectedAlert.device_id}</p>
                 </div>
               )}
               {selectedAlert.rule_id && (
                 <div>
                   <h4 className="text-sm font-medium text-muted-foreground mb-1">Triggered by Rule</h4>
-                  <p className="text-sm">Rule #{selectedAlert.rule_id}</p>
+                  <p className="text-sm">{selectedAlert.rule_name || `Rule #${selectedAlert.rule_id}`}</p>
+                </div>
+              )}
+              {(selectedAlert.value || selectedAlert.threshold) && (
+                <div className="grid grid-cols-2 gap-4">
+                  {selectedAlert.value && (
+                    <div>
+                      <h4 className="text-sm font-medium text-muted-foreground mb-1">Value</h4>
+                      <p className="text-sm font-mono">{selectedAlert.value}</p>
+                    </div>
+                  )}
+                  {selectedAlert.threshold && (
+                    <div>
+                      <h4 className="text-sm font-medium text-muted-foreground mb-1">Threshold</h4>
+                      <p className="text-sm font-mono">{selectedAlert.threshold}</p>
+                    </div>
+                  )}
                 </div>
               )}
               <div>
                 <h4 className="text-sm font-medium text-muted-foreground mb-1">Status</h4>
                 <div className="flex items-center gap-2">
-                  {selectedAlert.acknowledged ? (
+                  {(selectedAlert.acknowledged || selectedAlert.acknowledged_at) ? (
                     <Badge variant="outline" className="gap-1"><Check className="w-3 h-3" />Acknowledged</Badge>
                   ) : (
                     <Badge variant="outline" className="gap-1 text-warning border-warning/30">Pending</Badge>
                   )}
-                  {selectedAlert.resolved && (
+                  {(selectedAlert.resolved || selectedAlert.resolved_at || selectedAlert.status === 'resolved') && (
                     <Badge variant="outline" className="gap-1 text-success border-success/30"><CheckCheck className="w-3 h-3" />Resolved</Badge>
                   )}
                 </div>
               </div>
               <div className="flex gap-2 pt-4 border-t">
-                {!selectedAlert.acknowledged && (
-                  <Button variant="outline" size="sm" onClick={() => { handleAcknowledge(selectedAlert.id); setSelectedAlert(null); }} disabled={acknowledgeAlert.isPending}>
+                {!(selectedAlert.acknowledged || selectedAlert.acknowledged_at) && (
+                  <Button variant="outline" size="sm" onClick={() => { handleAcknowledge(selectedAlert.alert_id); setSelectedAlert(null); }} disabled={acknowledgeAlert.isPending}>
                     <Check className="w-4 h-4 mr-2" />Acknowledge
                   </Button>
                 )}
-                {!selectedAlert.resolved && (
-                  <Button variant="default" size="sm" onClick={() => { handleResolve(selectedAlert.id); setSelectedAlert(null); }} disabled={resolveAlert.isPending}>
+                {!(selectedAlert.resolved || selectedAlert.resolved_at || selectedAlert.status === 'resolved') && (
+                  <Button variant="default" size="sm" onClick={() => { handleResolve(selectedAlert.alert_id); setSelectedAlert(null); }} disabled={resolveAlert.isPending}>
                     <CheckCheck className="w-4 h-4 mr-2" />Resolve
                   </Button>
                 )}
