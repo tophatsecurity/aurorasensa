@@ -1660,13 +1660,20 @@ export function useSensorTypeStats(sensorType: string) {
         return response;
       } catch (error) {
         console.warn(`Failed to fetch sensor type stats for ${sensorType}:`, error);
-        return null;
+        // Return empty stats instead of null to prevent UI errors
+        return {
+          device_type: sensorType,
+          count: 0,
+          device_count: 0,
+          total_readings: 0,
+          numeric_field_stats_24h: {},
+        } as SensorTypeStats;
       }
     },
     enabled: hasAuroraSession() && !!sensorType,
     staleTime: 60000,
     refetchInterval: 120000,
-    retry: 1,
+    retry: 0, // Don't retry - the error handling above returns a fallback
   });
 }
 
@@ -1773,15 +1780,28 @@ export function useSensorTypeStatsWithPeriod(sensorType: string, hours: number =
         const response = await callAuroraApi<SensorTypeStats>(`/api/stats/sensors/${sensorType}?hours=${hours}`);
         return response;
       } catch (error) {
-        // Fall back to default endpoint without hours
-        console.warn(`Period stats for ${sensorType} not available, using 24h default`);
-        return callAuroraApi<SensorTypeStats>(`/api/stats/sensors/${sensorType}`);
+        // Try fallback without hours parameter
+        try {
+          console.warn(`Period stats for ${sensorType} not available with hours param, trying default`);
+          const fallback = await callAuroraApi<SensorTypeStats>(`/api/stats/sensors/${sensorType}`);
+          return fallback;
+        } catch {
+          // Return empty stats to prevent UI errors
+          console.warn(`Stats for ${sensorType} unavailable, using empty fallback`);
+          return {
+            device_type: sensorType,
+            count: 0,
+            device_count: 0,
+            total_readings: 0,
+            numeric_field_stats_24h: {},
+          } as SensorTypeStats;
+        }
       }
     },
     enabled: hasAuroraSession() && !!sensorType,
     staleTime: 60000,
     refetchInterval: 120000,
-    retry: 1,
+    retry: 0,
   });
 }
 
@@ -2412,15 +2432,22 @@ export function useStarlinkReadings(hours: number = 24) {
     queryKey: ["aurora", "starlink", "readings", hours],
     queryFn: async () => {
       try {
-        const response = await callAuroraApi<StarlinkReadingsResponse>(`/api/stats/sensors/starlink`);
+        // Try dedicated Starlink stats endpoint first
+        const response = await callAuroraApi<StarlinkReadingsResponse>(`/api/starlink/stats`);
         return response;
-      } catch (error) {
-        console.warn("Failed to fetch starlink readings:", error);
-        return null;
+      } catch {
+        try {
+          // Fall back to sensor type stats
+          const fallback = await callAuroraApi<StarlinkReadingsResponse>(`/api/stats/sensors/starlink`);
+          return fallback;
+        } catch (error) {
+          console.warn("Failed to fetch starlink readings:", error);
+          return { count: 0, readings: [] };
+        }
       }
     },
-    refetchInterval: 15000,
-    retry: 1,
+    refetchInterval: 30000,
+    retry: 0,
   });
 }
 
@@ -2637,11 +2664,18 @@ export function useThermalProbeStats() {
         return response;
       } catch (error) {
         console.warn("Failed to fetch thermal probe stats:", error);
-        return null;
+        // Return empty stats to prevent UI errors
+        return {
+          device_type: 'thermal_probe',
+          count: 0,
+          device_count: 0,
+          total_readings: 0,
+          numeric_field_stats_24h: {},
+        } as ThermalProbeStats;
       }
     },
-    refetchInterval: 15000,
-    retry: 1,
+    refetchInterval: 30000,
+    retry: 0,
   });
 }
 
