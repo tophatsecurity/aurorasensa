@@ -43,7 +43,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { useAlerts, useAcknowledgeAlert, useResolveAlert, type Alert } from "@/hooks/aurora/alerts";
+import { useAlerts, useAcknowledgeAlert, useResolveAlert, useDeleteAlert, type Alert } from "@/hooks/aurora/alerts";
 import { useQueryClient } from "@tanstack/react-query";
 import { usePagination } from "@/hooks/usePagination";
 import { TablePagination } from "@/components/TablePagination";
@@ -60,7 +60,7 @@ interface Exclusion {
   reason?: string;
 }
 
-type SortField = 'severity' | 'type' | 'message' | 'timestamp' | 'device_id' | 'status';
+type SortField = 'severity' | 'type' | 'message' | 'timestamp' | 'device_id' | 'client_id' | 'status';
 type SortDirection = 'asc' | 'desc';
 
 interface SortConfig {
@@ -118,6 +118,7 @@ const AlertsContent = () => {
   const queryClient = useQueryClient();
   const acknowledgeAlert = useAcknowledgeAlert();
   const resolveAlert = useResolveAlert();
+  const deleteAlert = useDeleteAlert();
   const [sseEnabled, setSSEEnabled] = useState(true);
   const [selectedAlert, setSelectedAlert] = useState<Alert | null>(null);
   const [showExcluded, setShowExcluded] = useState(false);
@@ -222,6 +223,11 @@ const AlertsContent = () => {
           const srcA = a.sensor_id || a.device_id || '';
           const srcB = b.sensor_id || b.device_id || '';
           comparison = srcA.localeCompare(srcB);
+          break;
+        case 'client_id':
+          const clientA = a.client_id || '';
+          const clientB = b.client_id || '';
+          comparison = clientA.localeCompare(clientB);
           break;
         case 'status':
           const resolvedA = a.resolved || !!a.resolved_at || a.status === 'resolved';
@@ -330,6 +336,17 @@ const AlertsContent = () => {
       } catch {}
     }
     toast.success(`Resolved ${ids.length} alerts`);
+    setSelectedIds(new Set());
+  };
+
+  const handleBulkDelete = async () => {
+    const ids = Array.from(selectedIds);
+    for (const id of ids) {
+      try {
+        await deleteAlert.mutateAsync(id);
+      } catch {}
+    }
+    toast.success(`Deleted ${ids.length} alerts`);
     setSelectedIds(new Set());
   };
 
@@ -708,6 +725,10 @@ const AlertsContent = () => {
             <CheckCheck className="w-4 h-4 mr-1" />
             Resolve All
           </Button>
+          <Button size="sm" variant="destructive" onClick={handleBulkDelete} disabled={deleteAlert.isPending}>
+            <Trash2 className="w-4 h-4 mr-1" />
+            Delete Selected
+          </Button>
           <Button size="sm" variant="ghost" onClick={() => setSelectedIds(new Set())}>
             Clear selection
           </Button>
@@ -751,6 +772,9 @@ const AlertsContent = () => {
                     <TableHead className="cursor-pointer select-none" onClick={() => handleSort('device_id')}>
                       <div className="flex items-center">Source<SortIcon field="device_id" /></div>
                     </TableHead>
+                    <TableHead className="cursor-pointer select-none" onClick={() => handleSort('client_id')}>
+                      <div className="flex items-center">Client<SortIcon field="client_id" /></div>
+                    </TableHead>
                     <TableHead className="cursor-pointer select-none" onClick={() => handleSort('status')}>
                       <div className="flex items-center">Status<SortIcon field="status" /></div>
                     </TableHead>
@@ -791,6 +815,13 @@ const AlertsContent = () => {
                         <TableCell>
                           {deviceId ? (
                             <span className="font-mono text-xs">{deviceId.substring(0, 12)}...</span>
+                          ) : (
+                            <span className="text-muted-foreground text-xs">—</span>
+                          )}
+                        </TableCell>
+                        <TableCell>
+                          {alert.client_id ? (
+                            <span className="font-mono text-xs">{alert.client_id.substring(0, 12)}{alert.client_id.length > 12 ? '...' : ''}</span>
                           ) : (
                             <span className="text-muted-foreground text-xs">—</span>
                           )}
