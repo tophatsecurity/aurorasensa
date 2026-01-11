@@ -243,11 +243,14 @@ const MapContent = () => {
     mapRef.current = map;
 
     // Force resize after mount
-    setTimeout(() => {
-      map.invalidateSize();
+    const resizeTimeout = setTimeout(() => {
+      if (mapRef.current) {
+        mapRef.current.invalidateSize();
+      }
     }, 100);
 
     return () => {
+      clearTimeout(resizeTimeout);
       map.remove();
       mapRef.current = null;
       markersRef.current.clear();
