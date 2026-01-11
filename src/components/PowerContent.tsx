@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useMemo } from "react";
 import { Zap, Battery, Sun, Plug, RefreshCw, Loader2, Satellite, Cpu, Usb, Server, HardDrive, Wifi, Radio, Monitor, Activity } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
@@ -7,11 +7,8 @@ import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContai
 import { useDashboardTimeseries, useComprehensiveStats, useStarlinkPower, useAllSensorStats, useSensorStatsHistory, useDeviceStatsHistory, useSensorTypeStats, StarlinkPowerDeviceSummary } from "@/hooks/useAuroraApi";
 import { useQueryClient } from "@tanstack/react-query";
 import { format } from "date-fns";
-import { 
-  ContextFilters, 
-  TimePeriodOption, 
-  timePeriodToHours 
-} from "@/components/ui/context-selectors";
+import { ContextFilters } from "@/components/ui/context-selectors";
+import { useClientContext } from "@/contexts/ClientContext";
 
 // Colors for different devices
 const DEVICE_COLORS = [
@@ -52,10 +49,13 @@ const DEVICE_POWER_ESTIMATES: Record<string, { idle: number, active: number }> =
 
 const PowerContent = () => {
   const queryClient = useQueryClient();
-  const [timePeriod, setTimePeriod] = useState<TimePeriodOption>('24h');
-  const [selectedClient, setSelectedClient] = useState<string>('all');
-  
-  const periodHours = timePeriodToHours(timePeriod);
+  const { 
+    selectedClientId: selectedClient,
+    setSelectedClientId: setSelectedClient,
+    timePeriod,
+    setTimePeriod, 
+    periodHours 
+  } = useClientContext();
   
   const { data: stats, isLoading: statsLoading } = useComprehensiveStats();
   const { data: timeseries, isLoading: timeseriesLoading } = useDashboardTimeseries(periodHours);

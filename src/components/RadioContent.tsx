@@ -60,11 +60,8 @@ import {
   Bar,
   Legend
 } from "recharts";
-import { 
-  TimePeriodSelector, 
-  TimePeriodOption, 
-  timePeriodToHours 
-} from "@/components/ui/context-selectors";
+import { TimePeriodSelector } from "@/components/ui/context-selectors";
+import { useClientContext } from "@/contexts/ClientContext";
 import { useClients, useLatestReadings, useSensorTypeStats, useAllSensorStats, useWifiScannerTimeseries, useBluetoothScannerTimeseries, useLoraDetectorTimeseries, useAdsbAircraftWithHistory, useLoraDevices, useLoraGlobalStats, useRecentLoraDetections } from "@/hooks/useAuroraApi";
 import { formatDistanceToNow } from "date-fns";
 
@@ -160,9 +157,9 @@ const StatCard = ({
 };
 
 const RadioContent = () => {
+  const { timePeriod, setTimePeriod, periodHours: hoursForTimeRange } = useClientContext();
   const [mainView, setMainView] = useState<"dashboard" | "tabular">("dashboard");
   const [tabularTab, setTabularTab] = useState<"wifi" | "bluetooth" | "adsb" | "lora">("wifi");
-  const [timePeriod, setTimePeriod] = useState<TimePeriodOption>("24h");
   const [selectedDevice, setSelectedDevice] = useState<string>("all");
   const [expandedSections, setExpandedSections] = useState<string[]>(["wifi", "bluetooth"]);
   const [wifiViewMode, setWifiViewMode] = useState<"cards" | "table">("table");
@@ -173,9 +170,6 @@ const RadioContent = () => {
   const [bluetoothSearch, setBluetoothSearch] = useState("");
   const [adsbSearch, setAdsbSearch] = useState("");
   const [loraSearch, setLoraSearch] = useState("");
-  
-  // Convert timePeriod to hours for API calls
-  const hoursForTimeRange = timePeriodToHours(timePeriod);
   
   // Fetch data - using correct sensor type names from API
   const { data: clients, isLoading: clientsLoading } = useClients();

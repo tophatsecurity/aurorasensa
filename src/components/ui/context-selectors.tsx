@@ -8,6 +8,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { useClients, Client } from "@/hooks/useAuroraApi";
+import { useClientContextOptional } from "@/contexts/ClientContext";
 
 // ============================================
 // TIME PERIOD SELECTOR
@@ -16,8 +17,8 @@ import { useClients, Client } from "@/hooks/useAuroraApi";
 export type TimePeriodOption = "1h" | "6h" | "24h" | "weekly";
 
 interface TimePeriodSelectorProps {
-  value: TimePeriodOption;
-  onChange: (value: TimePeriodOption) => void;
+  value?: TimePeriodOption;
+  onChange?: (value: TimePeriodOption) => void;
   className?: string;
 }
 
@@ -42,10 +43,15 @@ export const TimePeriodSelector = memo(function TimePeriodSelector({
   onChange,
   className = "",
 }: TimePeriodSelectorProps) {
+  // Use context if available, otherwise use props
+  const context = useClientContextOptional();
+  const effectiveValue = value ?? context?.timePeriod ?? "1h";
+  const effectiveOnChange = onChange ?? context?.setTimePeriod;
+
   return (
     <div className={`flex items-center gap-2 ${className}`}>
       <Clock className="w-4 h-4 text-muted-foreground" />
-      <Select value={value} onValueChange={onChange}>
+      <Select value={effectiveValue} onValueChange={effectiveOnChange}>
         <SelectTrigger className="w-[100px] h-8 bg-card/90 backdrop-blur border-border/50 text-xs">
           <SelectValue placeholder="Time" />
         </SelectTrigger>
@@ -70,8 +76,8 @@ export const TimePeriodSelector = memo(function TimePeriodSelector({
 // ============================================
 
 interface ClientSelectorProps {
-  value: string; // client_id or "all"
-  onChange: (value: string) => void;
+  value?: string; // client_id or "all"
+  onChange?: (value: string) => void;
   className?: string;
   showAllOption?: boolean;
 }
@@ -84,6 +90,11 @@ export const ClientSelector = memo(function ClientSelector({
 }: ClientSelectorProps) {
   const { data: clients, isLoading } = useClients();
   
+  // Use context if available, otherwise use props
+  const context = useClientContextOptional();
+  const effectiveValue = value ?? context?.selectedClientId ?? "all";
+  const effectiveOnChange = onChange ?? context?.setSelectedClientId;
+  
   // Filter out deleted/disabled clients
   const activeClients = clients?.filter((c: Client) => 
     !['deleted', 'disabled', 'suspended'].includes(c.state || '')
@@ -92,7 +103,7 @@ export const ClientSelector = memo(function ClientSelector({
   return (
     <div className={`flex items-center gap-2 ${className}`}>
       <Server className="w-4 h-4 text-muted-foreground" />
-      <Select value={value} onValueChange={onChange} disabled={isLoading}>
+      <Select value={effectiveValue} onValueChange={effectiveOnChange} disabled={isLoading}>
         <SelectTrigger className="w-[160px] h-8 bg-card/90 backdrop-blur border-border/50 text-xs">
           <SelectValue placeholder={isLoading ? "Loading..." : "Select Client"} />
         </SelectTrigger>
@@ -122,8 +133,8 @@ export const ClientSelector = memo(function ClientSelector({
 // ============================================
 
 interface ContextFiltersProps {
-  timePeriod: TimePeriodOption;
-  onTimePeriodChange: (value: TimePeriodOption) => void;
+  timePeriod?: TimePeriodOption;
+  onTimePeriodChange?: (value: TimePeriodOption) => void;
   clientId?: string;
   onClientChange?: (value: string) => void;
   showClientFilter?: boolean;
@@ -133,17 +144,24 @@ interface ContextFiltersProps {
 export const ContextFilters = memo(function ContextFilters({
   timePeriod,
   onTimePeriodChange,
-  clientId = "all",
+  clientId,
   onClientChange,
-  showClientFilter = false,
+  showClientFilter = true,
   className = "",
 }: ContextFiltersProps) {
+  // Use context if available, otherwise use props
+  const context = useClientContextOptional();
+  const effectiveTimePeriod = timePeriod ?? context?.timePeriod ?? "1h";
+  const effectiveOnTimePeriodChange = onTimePeriodChange ?? context?.setTimePeriod;
+  const effectiveClientId = clientId ?? context?.selectedClientId ?? "all";
+  const effectiveOnClientChange = onClientChange ?? context?.setSelectedClientId;
+
   return (
     <div className={`flex items-center gap-4 ${className}`}>
-      {showClientFilter && onClientChange && (
-        <ClientSelector value={clientId} onChange={onClientChange} />
+      {showClientFilter && (
+        <ClientSelector value={effectiveClientId} onChange={effectiveOnClientChange} />
       )}
-      <TimePeriodSelector value={timePeriod} onChange={onTimePeriodChange} />
+      <TimePeriodSelector value={effectiveTimePeriod} onChange={effectiveOnTimePeriodChange} />
     </div>
   );
 });
