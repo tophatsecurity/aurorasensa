@@ -4511,12 +4511,28 @@ export interface ClientsByState {
 // HISTORICAL STATS HOOKS
 // =============================================
 
+// Safe wrapper for stats history calls that may return oversized responses
+async function safeStatsHistoryApiCall<T>(endpoint: string, defaultValue: T): Promise<T> {
+  try {
+    return await callAuroraApi<T>(endpoint);
+  } catch (error) {
+    const errorMsg = error instanceof Error ? error.message : String(error);
+    if (errorMsg.includes('jsonb') || errorMsg.includes('exceeds') || errorMsg.includes('500')) {
+      console.warn(`Stats history endpoint ${endpoint} returned too much data, using empty array`);
+    } else {
+      console.warn(`Stats history endpoint ${endpoint} failed:`, errorMsg);
+    }
+    return defaultValue;
+  }
+}
+
 export function useGlobalStatsHistory(hours: number = 24) {
   return useQuery({
     queryKey: ["aurora", "stats", "history", "global", hours],
-    queryFn: () => callAuroraApi<GlobalStatsHistoryPoint[]>(`/api/stats/history/global?hours=${hours}`),
+    queryFn: () => safeStatsHistoryApiCall<GlobalStatsHistoryPoint[]>(`/api/stats/history/global?hours=${hours}`, []),
     refetchInterval: 60000,
     staleTime: 30000,
+    retry: 0,
   });
 }
 
@@ -4526,9 +4542,10 @@ export function useSensorStatsHistory(hours: number = 24, sensorType?: string) {
   
   return useQuery({
     queryKey: ["aurora", "stats", "history", "sensors", hours, sensorType],
-    queryFn: () => callAuroraApi<SensorStatsHistoryPoint[]>(`/api/stats/history/sensors?${params}`),
+    queryFn: () => safeStatsHistoryApiCall<SensorStatsHistoryPoint[]>(`/api/stats/history/sensors?${params}`, []),
     refetchInterval: 60000,
     staleTime: 30000,
+    retry: 0,
   });
 }
 
@@ -4538,27 +4555,30 @@ export function useDeviceStatsHistory(hours: number = 24, deviceId?: string) {
   
   return useQuery({
     queryKey: ["aurora", "stats", "history", "devices", hours, deviceId],
-    queryFn: () => callAuroraApi<DeviceStatsHistoryPoint[]>(`/api/stats/history/devices?${params}`),
+    queryFn: () => safeStatsHistoryApiCall<DeviceStatsHistoryPoint[]>(`/api/stats/history/devices?${params}`, []),
     refetchInterval: 60000,
     staleTime: 30000,
+    retry: 0,
   });
 }
 
 export function useAlertStatsHistory(hours: number = 24) {
   return useQuery({
     queryKey: ["aurora", "stats", "history", "alerts", hours],
-    queryFn: () => callAuroraApi<AlertStatsHistoryPoint[]>(`/api/stats/history/alerts?hours=${hours}`),
+    queryFn: () => safeStatsHistoryApiCall<AlertStatsHistoryPoint[]>(`/api/stats/history/alerts?hours=${hours}`, []),
     refetchInterval: 60000,
     staleTime: 30000,
+    retry: 0,
   });
 }
 
 export function useSystemResourceStatsHistory(hours: number = 24) {
   return useQuery({
     queryKey: ["aurora", "stats", "history", "system", hours],
-    queryFn: () => callAuroraApi<SystemResourceStatsHistoryPoint[]>(`/api/stats/history/system?hours=${hours}`),
+    queryFn: () => safeStatsHistoryApiCall<SystemResourceStatsHistoryPoint[]>(`/api/stats/history/system?hours=${hours}`, []),
     refetchInterval: 60000,
     staleTime: 30000,
+    retry: 0,
   });
 }
 
