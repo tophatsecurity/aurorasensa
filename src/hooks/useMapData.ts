@@ -1407,26 +1407,33 @@ export function useMapData(options: UseMapDataOptions = {}) {
           }
         }
         
-        // Add Starlink sensors - but only one marker per client pointing to actual Starlink device
-        // Skip adding starlink markers here as they're handled separately via starlinkDevices or starlinkDevicesWithoutGps
-        // This prevents duplicate markers with identical GPS coordinates
+        // Add Starlink sensors - check if this specific client already has a Starlink device marker
+        // Only add client-based Starlink marker if no actual Starlink device data available for THIS client
         const starlink = config.starlink;
-        const hasStarlinkDeviceData = starlinkDevices.length > 0 || starlinkDevicesWithoutGps.length > 0 || starlinkGps !== null;
-        if (starlink?.enabled && !hasStarlinkDeviceData) {
-          // Only add client-based Starlink marker if no actual Starlink device data available
-          const id = `${client.client_id}-starlink`;
-          if (!addedIds.has(id)) {
+        if (starlink?.enabled) {
+          const clientStarlinkId = `${client.client_id}-starlink`;
+          // Check if this client already has a Starlink marker from starlinkDevices or starlinkDevicesWithoutGps
+          const clientHasStarlinkMarker = starlinkDevices.some(d => d.client_id === client.client_id) ||
+                                          starlinkDevicesWithoutGps.some(d => d.client_id === client.client_id) ||
+                                          addedIds.has(clientStarlinkId) ||
+                                          addedIds.has(`${client.client_id}:starlink_dish_1`);
+          
+          if (!clientHasStarlinkMarker && !addedIds.has(clientStarlinkId)) {
             markers.push({
-              id,
+              id: clientStarlinkId,
               name: `${client.hostname} Starlink`,
               type: 'starlink',
               value: 0,
               unit: 'Mbps',
               status: baseStatus,
               lastUpdate: client.last_seen,
-              location: clientGps
+              location: clientGps,
+              starlinkData: {
+                deviceId: 'starlink_dish_1',
+              }
             });
-            addedIds.add(id);
+            addedIds.add(clientStarlinkId);
+            console.log('[MapData] Added Starlink marker for client (fallback):', client.client_id);
           }
         }
         
