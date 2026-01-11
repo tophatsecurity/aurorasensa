@@ -303,6 +303,22 @@ export function useResolveAlert() {
   });
 }
 
+export function useDeleteAlert() {
+  const queryClient = useQueryClient();
+  
+  return useMutation({
+    mutationFn: async (alertId: number) => {
+      if (alertId === undefined || alertId === null || isNaN(alertId)) {
+        throw new Error("Invalid alert ID");
+      }
+      return callAuroraApi<{ success: boolean }>(`/api/alerts/${alertId}`, "DELETE");
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["aurora", "alerts"] });
+    },
+  });
+}
+
 export function useUpdateAlertSettings() {
   const queryClient = useQueryClient();
   
