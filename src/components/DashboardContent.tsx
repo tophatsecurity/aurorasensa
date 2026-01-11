@@ -355,6 +355,34 @@ const DashboardContent = () => {
       .filter(sensor => sensor.temperature !== undefined);
   }, [latestReadings]);
   
+  // Filter Starlink devices from latest readings
+  const starlinkDeviceReadings = useMemo(() => {
+    if (!latestReadings || latestReadings.length === 0) return [];
+    
+    const starlinkTypes = ['starlink', 'starlink_dish', 'starlink_dish_comprehensive'];
+    
+    return latestReadings
+      .filter(reading => starlinkTypes.some(t => reading.device_type.toLowerCase().includes(t.toLowerCase())) || 
+                         reading.device_type.toLowerCase().includes('starlink'))
+      .map(reading => {
+        const data = reading.data as Record<string, number | undefined>;
+        
+        return {
+          device_id: reading.device_id,
+          device_type: reading.device_type,
+          client_id: reading.client_id,
+          timestamp: reading.timestamp,
+          power_w: data.power_watts ?? data.power_w ?? data.power,
+          latency_ms: data.pop_ping_latency_ms ?? data.latency_ms ?? data.ping_ms,
+          downlink_bps: data.downlink_throughput_bps ?? data.downlink_bps,
+          uplink_bps: data.uplink_throughput_bps ?? data.uplink_bps,
+          obstruction: data.obstruction_percent ?? data.obstruction_percent_time,
+          snr: data.snr,
+          uptime: data.uptime_seconds ?? data.uptime,
+        };
+      });
+  }, [latestReadings]);
+  
   // Get period label for display
   const periodLabel = timePeriodLabel(timePeriod);
   
@@ -907,6 +935,113 @@ const DashboardContent = () => {
           />
         </div>
         <StarlinkCharts hours={periodHours} />
+        
+        {/* Individual Starlink Devices List */}
+        {starlinkDeviceReadings.length > 0 && (
+          <div className="mt-4">
+            <h3 className="text-sm font-medium text-muted-foreground mb-3 flex items-center gap-2">
+              <Satellite className="w-4 h-4" />
+              Active Starlink Devices ({starlinkDeviceReadings.length})
+            </h3>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
+              {starlinkDeviceReadings.map((device) => {
+                const hasGoodLatency = device.latency_ms !== undefined && device.latency_ms < 50;
+                const hasHighLatency = device.latency_ms !== undefined && device.latency_ms > 100;
+                
+                return (
+                  <div 
+                    key={`${device.device_id}-${device.device_type}`}
+                    className="glass-card rounded-lg p-3 border border-border/50 hover:border-violet-500/30 transition-colors"
+                  >
+                    <div className="flex items-start justify-between mb-2">
+                      <div className="flex items-center gap-2">
+                        <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${
+                          hasGoodLatency ? 'bg-green-500/20' : hasHighLatency ? 'bg-red-500/20' : 'bg-violet-500/20'
+                        }`}>
+                          <Satellite className={`w-4 h-4 ${
+                            hasGoodLatency ? 'text-green-400' : hasHighLatency ? 'text-red-400' : 'text-violet-400'
+                          }`} />
+                        </div>
+                        <div className="min-w-0">
+                          <p className="text-xs font-medium truncate max-w-[120px]" title={device.device_id}>
+                            {device.device_id.length > 16 
+                              ? `${device.device_id.slice(0, 8)}...${device.device_id.slice(-4)}`
+                              : device.device_id}
+                          </p>
+                          <p className="text-xs text-muted-foreground">
+                            {device.device_type.replace(/_/g, ' ')}
+                          </p>
+                        </div>
+                      </div>
+                      <Badge variant="outline" className="text-[10px] px-1.5 py-0.5">
+                        {device.client_id?.slice(0, 8) || 'N/A'}
+                      </Badge>
+                    </div>
+                    
+                    <div className="space-y-1.5">
+                      {/* Latency */}
+                      {device.latency_ms !== undefined && (
+                        <div className="flex items-center justify-between">
+                          <span className="text-xs text-muted-foreground">Latency</span>
+                          <span className={`text-sm font-medium ${
+                            hasGoodLatency ? 'text-green-400' : hasHighLatency ? 'text-red-400' : 'text-violet-400'
+                          }`}>
+                            {device.latency_ms.toFixed(0)} ms
+                          </span>
+                        </div>
+                      )}
+                      
+                      {/* Power */}
+                      {device.power_w !== undefined && (
+                        <div className="flex items-center justify-between">
+                          <span className="text-xs text-muted-foreground flex items-center gap-1">
+                            <Zap className="w-3 h-3" /> Power
+                          </span>
+                          <span className="text-sm font-medium text-orange-400">
+                            {device.power_w.toFixed(0)} W
+                          </span>
+                        </div>
+                      )}
+                      
+                      {/* Throughput */}
+                      {(device.downlink_bps !== undefined || device.uplink_bps !== undefined) && (
+                        <div className="flex items-center justify-between text-xs">
+                          <span className="text-muted-foreground">Throughput</span>
+                          <span className="text-muted-foreground">
+                            {device.downlink_bps !== undefined && `↓${(device.downlink_bps / 1000000).toFixed(1)}`}
+                            {device.downlink_bps !== undefined && device.uplink_bps !== undefined && ' / '}
+                            {device.uplink_bps !== undefined && `↑${(device.uplink_bps / 1000000).toFixed(1)}`} Mbps
+                          </span>
+                        </div>
+                      )}
+                      
+                      {/* Obstruction */}
+                      {device.obstruction !== undefined && (
+                        <div className="flex items-center justify-between text-xs">
+                          <span className="text-muted-foreground">Obstruction</span>
+                          <span className={device.obstruction > 5 ? 'text-amber-400' : 'text-muted-foreground'}>
+                            {device.obstruction.toFixed(1)}%
+                          </span>
+                        </div>
+                      )}
+                      
+                      <div className="text-[10px] text-muted-foreground/60 mt-1 pt-1 border-t border-border/30">
+                        {formatLastSeen(device.timestamp)}
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
+        
+        {latestReadingsLoading && starlinkDeviceReadings.length === 0 && (
+          <div className="mt-4 flex items-center justify-center py-4">
+            <Loader2 className="w-5 h-5 animate-spin text-muted-foreground" />
+            <span className="ml-2 text-sm text-muted-foreground">Loading Starlink devices...</span>
+          </div>
+        )}
       </div>
 
       {/* Server Status */}
