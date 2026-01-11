@@ -88,6 +88,9 @@ export {
   useStarlinkReadings,
   useStarlinkTimeseries,
   useStarlinkSensorReadings,
+  useStarlinkDevicesFromReadings,
+  useStarlinkDeviceMetrics,
+  type StarlinkDeviceWithMetrics,
 } from "./starlink";
 
 export {

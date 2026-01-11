@@ -59,6 +59,10 @@ import {
   useClients,
   StarlinkTimeseriesPoint 
 } from "@/hooks/useAuroraApi";
+import { 
+  useStarlinkDevicesFromReadings,
+  useStarlinkDeviceMetrics,
+} from "@/hooks/aurora/starlink";
 import { StarlinkMonitoringPanel, StarlinkPerformanceCharts, StarlinkSignalChart } from "@/components/starlink";
 import { RealTimeStatusBadge } from "@/components/RealTimeStreamingPanel";
 
@@ -116,9 +120,16 @@ const StarlinkContent = () => {
   const [selectedClients, setSelectedClients] = useState<string[]>([]);
   const [clientFilterOpen, setClientFilterOpen] = useState(false);
   
-  // Fetch list of Starlink devices and clients
-  const { data: starlinkDevices, isLoading: devicesLoading } = useStarlinkDevices();
+  // Fetch actual Starlink devices from latest readings (with metrics per terminal)
+  const { data: starlinkDevicesWithMetrics = [], isLoading: devicesLoading } = useStarlinkDevicesFromReadings();
   const { data: allClients = [] } = useClients();
+  
+  // Parse selected device to get client_id and device_id
+  const selectedDeviceParsed = useMemo(() => {
+    if (selectedDevice === "all") return { clientId: null, deviceId: null };
+    const device = starlinkDevicesWithMetrics.find(d => d.composite_key === selectedDevice);
+    return device ? { clientId: device.client_id, deviceId: device.device_id } : { clientId: null, deviceId: null };
+  }, [selectedDevice, starlinkDevicesWithMetrics]);
   
   // Average stats (for "All" selection) - filter by first selected client if any
   const activeClientFilter = selectedClients.length > 0 ? selectedClients[0] : undefined;
@@ -133,26 +144,23 @@ const StarlinkContent = () => {
   const { data: connectivity } = useStarlinkConnectivity();
   const { data: globalStats } = useStarlinkGlobalStats();
   
-  // Individual device stats (when a specific device is selected)
-  const { data: deviceStats, isLoading: deviceStatsLoading } = useStarlinkDeviceStats(
-    selectedDevice !== "all" ? selectedDevice : null
-  );
-  const { data: deviceTimeseries, isLoading: deviceTimeseriesLoading } = useStarlinkDeviceTimeseries(
-    selectedDevice !== "all" ? selectedDevice : null,
+  // Individual device stats - now using device-specific timeseries hook
+  const { data: deviceTimeseries, isLoading: deviceTimeseriesLoading } = useStarlinkDeviceMetrics(
+    selectedDeviceParsed.clientId,
+    selectedDeviceParsed.deviceId,
     24
   );
 
   // Extract unique clients from starlink devices
   const availableClients = useMemo(() => {
-    if (!starlinkDevices) return [];
     const clientIds = new Set<string>();
-    starlinkDevices.forEach(device => {
+    starlinkDevicesWithMetrics.forEach(device => {
       if (device.client_id) {
         clientIds.add(device.client_id);
       }
     });
     return Array.from(clientIds).sort();
-  }, [starlinkDevices]);
+  }, [starlinkDevicesWithMetrics]);
 
   // Get client name helper
   const getClientName = (clientId: string) => {
@@ -162,12 +170,11 @@ const StarlinkContent = () => {
 
   // Filter devices based on selected clients
   const filteredDevices = useMemo(() => {
-    if (!starlinkDevices) return [];
-    if (selectedClients.length === 0) return starlinkDevices;
-    return starlinkDevices.filter(device => 
+    if (selectedClients.length === 0) return starlinkDevicesWithMetrics;
+    return starlinkDevicesWithMetrics.filter(device => 
       device.client_id && selectedClients.includes(device.client_id)
     );
-  }, [starlinkDevices, selectedClients]);
+  }, [starlinkDevicesWithMetrics, selectedClients]);
 
   // Toggle client selection
   const toggleClient = (clientId: string) => {
@@ -190,7 +197,28 @@ const StarlinkContent = () => {
 
   const isAllSelected = selectedDevice === "all";
   const isLoading = statsLoading || timeseriesLoading || sensorLoading || devicesLoading || 
-    (!isAllSelected && (deviceStatsLoading || deviceTimeseriesLoading));
+    (!isAllSelected && deviceTimeseriesLoading);
+  
+  // Get the selected device's metrics from the devices list
+  const selectedDeviceData = useMemo(() => {
+    if (isAllSelected) return null;
+    return starlinkDevicesWithMetrics.find(d => d.composite_key === selectedDevice) ?? null;
+  }, [isAllSelected, selectedDevice, starlinkDevicesWithMetrics]);
+  
+  // Build device-specific stats from selected device metrics
+  const deviceStats = useMemo(() => {
+    if (!selectedDeviceData) return null;
+    return {
+      uptime_seconds: selectedDeviceData.metrics.uptime_seconds,
+      downlink_throughput_bps: selectedDeviceData.metrics.downlink_throughput_bps,
+      uplink_throughput_bps: selectedDeviceData.metrics.uplink_throughput_bps,
+      pop_ping_latency_ms: selectedDeviceData.metrics.pop_ping_latency_ms,
+      snr: selectedDeviceData.metrics.snr,
+      obstruction_percent_time: selectedDeviceData.metrics.obstruction_percent,
+      signal_dbm: selectedDeviceData.metrics.signal_strength_dbm,
+      power_w: selectedDeviceData.metrics.power_watts,
+    };
+  }, [selectedDeviceData]);
   
   // Use either aggregate stats or device-specific stats
   const activeStats = isAllSelected ? starlinkStats : deviceStats;
@@ -269,7 +297,11 @@ const StarlinkContent = () => {
         <div>
           <h1 className="text-3xl font-bold text-foreground">Starlink Dashboard</h1>
           <p className="text-muted-foreground">
-            {isAllSelected ? 'Average across all devices' : `Device: ${selectedDevice}`}
+            {isAllSelected 
+              ? `${starlinkDevicesWithMetrics.length} terminal${starlinkDevicesWithMetrics.length !== 1 ? 's' : ''} detected` 
+              : selectedDeviceData 
+                ? `${selectedDeviceData.device_id} @ ${getClientName(selectedDeviceData.client_id)}`
+                : `Device: ${selectedDevice}`}
             {selectedClients.length > 0 && ` • ${selectedClients.length} client${selectedClients.length !== 1 ? 's' : ''} filtered`}
           </p>
         </div>
@@ -378,8 +410,11 @@ const StarlinkContent = () => {
               <SelectItem value="all">All Devices (Average)</SelectItem>
               {filteredDevices && filteredDevices.length > 0 && (
                 filteredDevices.map((device) => (
-                  <SelectItem key={device.device_id} value={device.device_id}>
-                    {device.device_id}
+                  <SelectItem key={device.composite_key} value={device.composite_key}>
+                    <div className="flex flex-col">
+                      <span>{device.device_id}</span>
+                      <span className="text-xs text-muted-foreground">{getClientName(device.client_id)}</span>
+                    </div>
                   </SelectItem>
                 ))
               )}
@@ -423,8 +458,8 @@ const StarlinkContent = () => {
       <div className="mb-8">
         <StarlinkSignalChart 
           hours={6} 
-          clientId={activeClientFilter} 
-          deviceId={selectedDevice !== "all" ? selectedDevice : undefined} 
+          clientId={selectedDeviceParsed.clientId ?? activeClientFilter} 
+          deviceId={selectedDeviceParsed.deviceId ?? undefined} 
         />
       </div>
 
@@ -434,7 +469,10 @@ const StarlinkContent = () => {
           <StarlinkMonitoringPanel />
         </div>
         <div className="lg:col-span-2">
-          <StarlinkPerformanceCharts hours={24} deviceId={selectedDevice} />
+          <StarlinkPerformanceCharts 
+            hours={24} 
+            deviceId={selectedDeviceParsed.deviceId ?? (selectedDevice !== "all" ? selectedDevice : undefined)} 
+          />
         </div>
       </div>
 
@@ -487,7 +525,7 @@ const StarlinkContent = () => {
             icon={<Signal className="w-5 h-5 text-cyan-400" />}
             status={(deviceStats.signal_dbm ?? -100) > -70 ? 'good' : (deviceStats.signal_dbm ?? -100) > -85 ? 'warning' : 'critical'}
             subtitle={(deviceStats.signal_dbm ?? -100) > -70 ? 'Strong signal' : (deviceStats.signal_dbm ?? -100) > -85 ? 'Moderate' : 'Weak signal'}
-            isLoading={deviceStatsLoading}
+            isLoading={devicesLoading}
           />
           <MetricCard
             title="Power Consumption"
@@ -496,7 +534,7 @@ const StarlinkContent = () => {
             icon={<Zap className="w-5 h-5 text-amber-400" />}
             status={(deviceStats.power_w ?? 0) < 100 ? 'good' : (deviceStats.power_w ?? 0) < 150 ? 'warning' : 'critical'}
             subtitle={(deviceStats.power_w ?? 0) < 100 ? 'Normal' : (deviceStats.power_w ?? 0) < 150 ? 'Elevated' : 'High usage'}
-            isLoading={deviceStatsLoading}
+            isLoading={devicesLoading}
           />
         </div>
       )}

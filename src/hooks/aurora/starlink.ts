@@ -24,6 +24,190 @@ import type {
 const STARLINK_EXTENDED_API_ENABLED = false;
 
 // =============================================
+// DEVICE EXTRACTION FROM LATEST READINGS
+// =============================================
+
+export interface StarlinkDeviceWithMetrics {
+  device_id: string;
+  client_id: string;
+  composite_key: string; // client_id + device_id for unique identification
+  hostname?: string;
+  last_seen?: string;
+  latitude?: number;
+  longitude?: number;
+  altitude?: number;
+  metrics: {
+    uptime_seconds?: number;
+    downlink_throughput_bps?: number;
+    uplink_throughput_bps?: number;
+    pop_ping_latency_ms?: number;
+    snr?: number;
+    signal_strength_dbm?: number;
+    obstruction_percent?: number;
+    power_watts?: number;
+    connected?: boolean;
+  };
+}
+
+// Hook to extract Starlink devices with metrics from latest readings
+export function useStarlinkDevicesFromReadings() {
+  return useQuery({
+    queryKey: ["aurora", "starlink", "devices-from-readings"],
+    queryFn: async () => {
+      try {
+        const response = await callAuroraApi<{ count: number; readings: LatestReading[] }>("/api/latest/readings");
+        const readings = response?.readings || [];
+        
+        // Filter for starlink readings and extract device info
+        const starlinkReadings = readings.filter(r => 
+          r.device_type === 'starlink' || 
+          r.device_id?.toLowerCase().includes('starlink')
+        );
+        
+        // Create a map using composite key (client_id + device_id)
+        const devicesMap = new Map<string, StarlinkDeviceWithMetrics>();
+        
+        starlinkReadings.forEach(reading => {
+          const clientId = reading.client_id || 'unknown';
+          const deviceId = reading.device_id || 'unknown';
+          const compositeKey = `${clientId}:${deviceId}`;
+          
+          // Extract metrics from the reading data
+          const data = reading.data || {};
+          const starlinkData = (data.starlink as Record<string, unknown>) || {};
+          const pingLatency = (starlinkData.ping_latency as Record<string, number>) || {};
+          
+          // Extract coordinates
+          let lat: number | undefined;
+          let lng: number | undefined;
+          let alt: number | undefined;
+          
+          if (typeof starlinkData.latitude === 'number') {
+            lat = starlinkData.latitude as number;
+            lng = starlinkData.longitude as number;
+            alt = starlinkData.altitude as number | undefined;
+          } else if (starlinkData.location_detail && typeof starlinkData.location_detail === 'object') {
+            const loc = starlinkData.location_detail as Record<string, number>;
+            lat = loc.latitude;
+            lng = loc.longitude;
+            alt = loc.altitude;
+          }
+          
+          const device: StarlinkDeviceWithMetrics = {
+            device_id: deviceId,
+            client_id: clientId,
+            composite_key: compositeKey,
+            last_seen: reading.timestamp,
+            latitude: lat,
+            longitude: lng,
+            altitude: alt,
+            metrics: {
+              uptime_seconds: starlinkData.uptime_seconds as number | undefined,
+              downlink_throughput_bps: starlinkData.downlink_throughput_bps as number | undefined,
+              uplink_throughput_bps: starlinkData.uplink_throughput_bps as number | undefined,
+              pop_ping_latency_ms: (starlinkData.pop_ping_latency_ms as number) || 
+                pingLatency['Mean RTT, drop == 0'] || 
+                pingLatency['Mean RTT, drop < 1'],
+              snr: starlinkData.snr as number | undefined,
+              signal_strength_dbm: starlinkData.signal_strength_dbm as number | undefined,
+              obstruction_percent: starlinkData.obstruction_percent as number | undefined,
+              power_watts: starlinkData.power_watts as number | undefined,
+              connected: starlinkData.state === 'CONNECTED' || starlinkData.connected === true,
+            },
+          };
+          
+          devicesMap.set(compositeKey, device);
+        });
+        
+        return Array.from(devicesMap.values());
+      } catch (error) {
+        console.warn("Failed to extract Starlink devices from readings:", error);
+        return [];
+      }
+    },
+    enabled: hasAuroraSession(),
+    ...fastQueryOptions,
+    retry: 1,
+  });
+}
+
+// Hook to fetch timeseries data for a specific Starlink device (by client_id and device_id)
+export function useStarlinkDeviceMetrics(clientId: string | null, deviceId: string | null, hours: number = 24) {
+  return useQuery({
+    queryKey: ["aurora", "starlink", "device-metrics", clientId, deviceId, hours],
+    queryFn: async () => {
+      if (!clientId || !deviceId) return { count: 0, readings: [] };
+      
+      try {
+        const params = new URLSearchParams();
+        params.append('hours', hours.toString());
+        params.append('client_id', clientId);
+        params.append('device_id', deviceId);
+        
+        interface RawReading {
+          timestamp: string;
+          device_id?: string;
+          client_id?: string;
+          data?: {
+            starlink?: {
+              downlink_throughput_bps?: number;
+              uplink_throughput_bps?: number;
+              obstruction_percent?: number;
+              pop_ping_latency_ms?: number;
+              snr?: number;
+              signal_strength?: number;
+              uptime_seconds?: number;
+              power_watts?: number;
+              ping_latency?: {
+                'Mean RTT, drop == 0'?: number;
+                'Mean RTT, drop < 1'?: number;
+              };
+            };
+          };
+        }
+        
+        interface RawResponse {
+          count?: number;
+          readings?: RawReading[];
+        }
+        
+        const response = await callAuroraApi<RawResponse>(`/api/readings/sensor/starlink?${params.toString()}`);
+        
+        const transformedReadings: StarlinkTimeseriesPoint[] = (response.readings || []).map(r => {
+          const starlinkData = r.data?.starlink;
+          const pingLatency = starlinkData?.ping_latency;
+          
+          return {
+            timestamp: r.timestamp,
+            client_id: r.client_id,
+            device_id: r.device_id,
+            power_w: starlinkData?.power_watts,
+            snr: starlinkData?.snr,
+            downlink_throughput_bps: starlinkData?.downlink_throughput_bps,
+            uplink_throughput_bps: starlinkData?.uplink_throughput_bps,
+            pop_ping_latency_ms: starlinkData?.pop_ping_latency_ms ?? 
+                                  pingLatency?.['Mean RTT, drop == 0'] ?? 
+                                  pingLatency?.['Mean RTT, drop < 1'],
+            obstruction_percent: starlinkData?.obstruction_percent,
+          };
+        });
+        
+        return { 
+          count: transformedReadings.length, 
+          readings: transformedReadings 
+        };
+      } catch (error) {
+        console.warn(`Failed to fetch metrics for device ${clientId}:${deviceId}:`, error);
+        return { count: 0, readings: [] };
+      }
+    },
+    enabled: hasAuroraSession() && !!clientId && !!deviceId,
+    ...fastQueryOptions,
+    retry: 1,
+  });
+}
+
+// =============================================
 // QUERY HOOKS
 // =============================================
 
