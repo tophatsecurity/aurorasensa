@@ -56,8 +56,9 @@ export function useLatestReadings() {
     queryKey: ["aurora", "readings", "latest"],
     queryFn: async () => {
       try {
-        const response = await callAuroraApi<LatestReadingsResponse>("/api/readings/latest");
-        return response.readings || [];
+        // API may return { data: [...] } or { readings: [...] }
+        const response = await callAuroraApi<{ data?: LatestReading[]; readings?: LatestReading[]; count?: number }>("/api/readings/latest");
+        return response.data || response.readings || [];
       } catch (error) {
         console.warn("Failed to fetch latest readings, returning empty array:", error);
         return [];

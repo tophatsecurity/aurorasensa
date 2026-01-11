@@ -272,6 +272,17 @@ export interface ClientStateHistoryEntry {
   metadata?: Record<string, unknown>;
 }
 
+export interface ClientLocation {
+  city?: string;
+  country?: string;
+  country_code?: string;
+  isp?: string;
+  latitude?: number;
+  longitude?: number;
+  region?: string;
+  source?: string;
+}
+
 export interface Client {
   client_id: string;
   hostname: string;
@@ -296,6 +307,8 @@ export interface Client {
   deleted_reason?: string;
   batch_directory?: string;
   sensors?: string[];
+  location?: ClientLocation;
+  location_updated_at?: string;
   metadata?: {
     config?: {
       project?: { name: string; version: string };
