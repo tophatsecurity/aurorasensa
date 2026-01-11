@@ -68,6 +68,7 @@ import {
   useClientStateHistory,
   useRenameClient,
   useLatestReadings,
+  useDeleteSensor,
   Client,
   ClientState
 } from "@/hooks/useAuroraApi";
@@ -156,6 +157,7 @@ const ClientsContent = () => {
   const softDeleteClient = useSoftDeleteClient();
   const restoreClient = useRestoreClient();
   const deleteClient = useDeleteClient();
+  const deleteSensor = useDeleteSensor();
   const renameClient = useRenameClient();
   
   const [searchQuery, setSearchQuery] = useState("");
@@ -233,28 +235,59 @@ const ClientsContent = () => {
     setDeleteConfirmClient(client);
   };
 
-  const confirmPermanentDelete = () => {
+  const confirmPermanentDelete = async () => {
     if (!deleteConfirmClient) return;
     
     const clientName = deleteConfirmClient.hostname || deleteConfirmClient.client_id;
+    const sensors = deleteConfirmClient.sensors || [];
     
-    deleteClient.mutate(deleteConfirmClient.client_id, {
-      onSuccess: () => {
-        toast.success(`Permanently removed ${clientName}`);
-        setDeleteConfirmClient(null);
-        refetch(); // Refresh client list
-      },
-      onError: (error) => {
-        // Handle "not found" as already deleted
-        if (error.message?.includes('not found')) {
-          toast.info(`Client ${clientName} was already removed`);
-          refetch(); // Refresh to sync state
-        } else {
-          toast.error(`Failed to remove client: ${error.message}`);
-        }
-        setDeleteConfirmClient(null); // Close dialog on error too
-      },
-    });
+    try {
+      // First, delete all sensors/devices associated with this client
+      if (sensors.length > 0) {
+        toast.info(`Removing ${sensors.length} sensor(s) from ${clientName}...`);
+        
+        // Delete sensors in parallel
+        const sensorDeletePromises = sensors.map(sensorId => 
+          new Promise<void>((resolve, reject) => {
+            deleteSensor.mutate(sensorId, {
+              onSuccess: () => resolve(),
+              onError: (error) => {
+                // Don't fail if sensor not found - it may already be deleted
+                if (error.message?.includes('not found')) {
+                  resolve();
+                } else {
+                  reject(error);
+                }
+              },
+            });
+          })
+        );
+        
+        await Promise.all(sensorDeletePromises);
+      }
+      
+      // Then delete the client itself
+      deleteClient.mutate(deleteConfirmClient.client_id, {
+        onSuccess: () => {
+          toast.success(`Permanently removed ${clientName} and ${sensors.length} sensor(s)`);
+          setDeleteConfirmClient(null);
+          refetch(); // Refresh client list
+        },
+        onError: (error) => {
+          // Handle "not found" as already deleted
+          if (error.message?.includes('not found')) {
+            toast.info(`Client ${clientName} was already removed`);
+            refetch(); // Refresh to sync state
+          } else {
+            toast.error(`Failed to remove client: ${error.message}`);
+          }
+          setDeleteConfirmClient(null); // Close dialog on error too
+        },
+      });
+    } catch (error: any) {
+      toast.error(`Failed to remove sensors: ${error.message}`);
+      setDeleteConfirmClient(null);
+    }
   };
 
   const handleEditClient = (client: Client) => {
@@ -758,8 +791,16 @@ const ClientsContent = () => {
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>Permanently Remove Client?</AlertDialogTitle>
-            <AlertDialogDescription>
-              This will permanently remove <span className="font-semibold">{deleteConfirmClient?.hostname || deleteConfirmClient?.client_id}</span> and all associated data. This action cannot be undone.
+            <AlertDialogDescription className="space-y-2">
+              <p>
+                This will permanently remove <span className="font-semibold">{deleteConfirmClient?.hostname || deleteConfirmClient?.client_id}</span> and all associated data.
+              </p>
+              {deleteConfirmClient?.sensors && deleteConfirmClient.sensors.length > 0 && (
+                <p className="text-warning">
+                  This will also delete {deleteConfirmClient.sensors.length} sensor(s)/device(s): {deleteConfirmClient.sensors.slice(0, 3).join(", ")}{deleteConfirmClient.sensors.length > 3 ? ` and ${deleteConfirmClient.sensors.length - 3} more` : ""}
+                </p>
+              )}
+              <p className="text-destructive font-medium">This action cannot be undone.</p>
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
@@ -768,7 +809,7 @@ const ClientsContent = () => {
               onClick={confirmPermanentDelete}
               className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
             >
-              {deleteClient.isPending ? "Removing..." : "Remove Permanently"}
+              {deleteClient.isPending || deleteSensor.isPending ? "Removing..." : "Remove Permanently"}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
