@@ -65,7 +65,7 @@ const MapContent = () => {
   const trailsRef = useRef<Map<string, L.Polyline>>(new Map());
   const adsbTrailsRef = useRef<Map<string, L.Polyline>>(new Map());
   const coverageCirclesRef = useRef<Map<string, L.Circle>>(new Map());
-  const [activeFilters, setActiveFilters] = useState<ActiveFilters>(new Set(['gps', 'starlink', 'clients', 'lora', 'adsb', 'wifi', 'bluetooth', 'aprs']));
+  const [activeFilters, setActiveFilters] = useState<ActiveFilters>(new Set(['gps', 'starlink', 'clients', 'lora', 'adsb', 'wifi', 'bluetooth', 'aprs', 'ais', 'epirb']));
   const [showCoverage, setShowCoverage] = useState(true);
   const [hasInitialFit, setHasInitialFit] = useState(false);
   const [showTrails, setShowTrails] = useState(true);
@@ -982,17 +982,8 @@ const MapContent = () => {
           isLoading={isLoading}
           onRefresh={handleRefresh}
         />
-        {/* Filters - Full Width */}
-        <div className="mb-4">
-          <MapFilters 
-            activeFilters={activeFilters}
-            stats={stats}
-            onToggleFilter={handleToggleFilter}
-          />
-        </div>
-        
-        {/* Controls Row */}
-        <div className="flex items-center justify-end gap-3 flex-wrap">
+        {/* Controls Row - On Top */}
+        <div className="flex items-center justify-end gap-3 flex-wrap mb-4">
           <ClientSelector
             value={selectedClient}
             onChange={handleClientChange}
@@ -1046,6 +1037,13 @@ const MapContent = () => {
             )}
           </div>
         </div>
+        
+        {/* Filter Buttons - Full Width Below */}
+        <MapFilters 
+          activeFilters={activeFilters}
+          stats={stats}
+          onToggleFilter={handleToggleFilter}
+        />
       </div>
 
       {/* Map Container */}
