@@ -19,8 +19,15 @@ import {
   useStarlinkPower,
   useStarlinkConnectivity,
   GeoLocation,
-  AdsbAircraft
-} from "@/hooks/useAuroraApi";
+  AdsbAircraft,
+  // Maritime hooks
+  useAisVessels,
+  useAprsStations,
+  useEpirbBeacons,
+  type AisVessel,
+  type AprsStation,
+  type EpirbBeacon,
+} from "@/hooks/aurora";
 import type { StarlinkMetrics } from "@/types/map";
 import { useQueryClient } from "@tanstack/react-query";
 import type { MapStats, SensorMarker, ClientMarker, AdsbMarker } from "@/types/map";
@@ -266,6 +273,15 @@ export function useMapData(options: UseMapDataOptions = {}) {
   // Get raw historical readings for trail extraction
   const { data: adsbHistoricalData } = useAdsbHistorical(adsbHistoryMinutes);
 
+  // Get AIS vessel data
+  const { data: aisVessels, isLoading: aisLoading } = useAisVessels();
+
+  // Get APRS station data
+  const { data: aprsStations, isLoading: aprsLoading } = useAprsStations();
+
+  // Get EPIRB beacon data
+  const { data: epirbBeacons, isLoading: epirbLoading } = useEpirbBeacons();
+
   // Update last refresh time
   useEffect(() => {
     setLastUpdate(new Date());
@@ -279,6 +295,9 @@ export function useMapData(options: UseMapDataOptions = {}) {
       latestReadings: latestReadings?.length || 0,
       geoLocations: geoLocations?.length || 0,
       adsbAircraft: adsbAircraft?.length || 0,
+      aisVessels: aisVessels?.length || 0,
+      aprsStations: aprsStations?.length || 0,
+      epirbBeacons: epirbBeacons?.length || 0,
       starlinkStats: !!starlinkStats,
       starlinkLatest: !!starlinkLatest?.data,
       gpsdStatus: !!gpsdStatus,
@@ -287,7 +306,7 @@ export function useMapData(options: UseMapDataOptions = {}) {
       starlinkSensorReadings: starlinkSensorReadings?.length || 0,
       starlinkDevicesApi: starlinkDevicesApi?.length || 0,
     });
-  }, [sensors, clients, latestReadings, geoLocations, adsbAircraft, starlinkStats, starlinkLatest, gpsdStatus, gpsReadings, starlinkStatusData, starlinkSensorReadings, starlinkDevicesApi]);
+  }, [sensors, clients, latestReadings, geoLocations, adsbAircraft, aisVessels, aprsStations, epirbBeacons, starlinkStats, starlinkLatest, gpsdStatus, gpsReadings, starlinkStatusData, starlinkSensorReadings, starlinkDevicesApi]);
 
 
   const handleRefresh = useCallback(() => {
@@ -1373,9 +1392,81 @@ export function useMapData(options: UseMapDataOptions = {}) {
         }
       });
     }
+
+    // Add AIS vessel markers
+    if (aisVessels && aisVessels.length > 0) {
+      aisVessels.forEach(vessel => {
+        if (vessel.lat !== undefined && vessel.lon !== undefined &&
+            vessel.lat >= -90 && vessel.lat <= 90 &&
+            vessel.lon >= -180 && vessel.lon <= 180) {
+          const id = `ais-${vessel.mmsi}`;
+          if (!addedIds.has(id)) {
+            markers.push({
+              id,
+              name: vessel.name || `Vessel ${vessel.mmsi}`,
+              type: 'ais',
+              value: vessel.speed || 0,
+              unit: 'kts',
+              status: 'active',
+              lastUpdate: vessel.last_seen || vessel.timestamp || new Date().toISOString(),
+              location: { lat: vessel.lat, lng: vessel.lon },
+            });
+            addedIds.add(id);
+          }
+        }
+      });
+    }
+
+    // Add APRS station markers
+    if (aprsStations && aprsStations.length > 0) {
+      aprsStations.forEach(station => {
+        if (station.lat !== undefined && station.lon !== undefined &&
+            station.lat >= -90 && station.lat <= 90 &&
+            station.lon >= -180 && station.lon <= 180) {
+          const id = `aprs-${station.callsign}${station.ssid ? `-${station.ssid}` : ''}`;
+          if (!addedIds.has(id)) {
+            markers.push({
+              id,
+              name: station.callsign + (station.ssid ? `-${station.ssid}` : ''),
+              type: 'aprs',
+              value: station.altitude || 0,
+              unit: 'm',
+              status: 'active',
+              lastUpdate: station.last_seen || station.timestamp || new Date().toISOString(),
+              location: { lat: station.lat, lng: station.lon },
+            });
+            addedIds.add(id);
+          }
+        }
+      });
+    }
+
+    // Add EPIRB beacon markers
+    if (epirbBeacons && epirbBeacons.length > 0) {
+      epirbBeacons.forEach(beacon => {
+        if (beacon.lat !== undefined && beacon.lon !== undefined &&
+            beacon.lat >= -90 && beacon.lat <= 90 &&
+            beacon.lon >= -180 && beacon.lon <= 180) {
+          const id = `epirb-${beacon.beacon_id}`;
+          if (!addedIds.has(id)) {
+            markers.push({
+              id,
+              name: beacon.owner_info?.vessel_name || `Beacon ${beacon.beacon_id}`,
+              type: 'epirb',
+              value: beacon.signal_strength || 0,
+              unit: 'dBm',
+              status: beacon.status,
+              lastUpdate: beacon.last_seen || beacon.activation_time || new Date().toISOString(),
+              location: { lat: beacon.lat, lng: beacon.lon },
+            });
+            addedIds.add(id);
+          }
+        }
+      });
+    }
     
     return markers;
-  }, [sensors, clients, gpsCoordinates, geoLocations, starlinkGps, starlinkDevices, gpsdGps, gpsdStatus, gpsReadings, starlinkSignal, starlinkPerformance, starlinkPower, starlinkConnectivity]);
+  }, [sensors, clients, gpsCoordinates, geoLocations, starlinkGps, starlinkDevices, gpsdGps, gpsdStatus, gpsReadings, starlinkSignal, starlinkPerformance, starlinkPower, starlinkConnectivity, aisVessels, aprsStations, epirbBeacons]);
 
   // Get client markers for the clients filter
   const clientMarkers = useMemo<ClientMarker[]>(() => {
@@ -1603,7 +1694,7 @@ export function useMapData(options: UseMapDataOptions = {}) {
     return result;
   }, [filteredSensorMarkers, filteredClientMarkers, adsbMarkers, clientId]);
 
-  const isLoading = sensorsLoading || clientsLoading || readingsLoading || geoLoading || adsbLoading;
+  const isLoading = sensorsLoading || clientsLoading || readingsLoading || geoLoading || adsbLoading || aisLoading || aprsLoading || epirbLoading;
 
   // Format time ago
   const timeAgo = useMemo(() => {

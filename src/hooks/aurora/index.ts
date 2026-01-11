@@ -112,6 +112,40 @@ export {
 } from "./lora";
 
 export {
+  // AIS hooks
+  useAisVessels,
+  useAisVessel,
+  useAisStats,
+  useAisNearby,
+  useAisVesselHistory,
+  useAisHistorical,
+  // APRS hooks
+  useAprsStations,
+  useAprsStation,
+  useAprsStats,
+  useAprsPackets,
+  useAprsNearby,
+  useAprsStationHistory,
+  useAprsHistorical,
+  useAprsWeatherStations,
+  // EPIRB hooks
+  useEpirbBeacons,
+  useEpirbBeacon,
+  useEpirbStats,
+  useEpirbActiveAlerts,
+  useEpirbHistory,
+  useEpirbHistorical,
+  // Types
+  type AisVessel,
+  type AisStats,
+  type AprsStation,
+  type AprsStats,
+  type AprsPacket,
+  type EpirbBeacon,
+  type EpirbStats,
+} from "./maritime";
+
+export {
   useAlerts,
   useAlertsList,
   useAlertRules,
