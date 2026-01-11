@@ -1536,6 +1536,9 @@ export function useMapData(options: UseMapDataOptions = {}) {
       clients: filteredClientMarkers.length,
       lora: filteredSensorMarkers.filter(s => s.type === 'lora').length,
       adsb: adsbMarkers.length,
+      wifi: filteredSensorMarkers.filter(s => s.type === 'wifi').length,
+      bluetooth: filteredSensorMarkers.filter(s => s.type === 'bluetooth').length,
+      aprs: filteredSensorMarkers.filter(s => s.type === 'aprs').length,
     };
     console.log('[MapData] Final stats (filtered by client:', clientId || 'all', '):', result);
     return result;
