@@ -500,7 +500,14 @@ export function useStarlinkSensorReadings() {
     queryKey: ["aurora", "readings", "sensor", "starlink"],
     queryFn: async () => {
       try {
-        return await callAuroraApi<StarlinkSensorReading[]>("/api/readings/sensor/starlink");
+        // API returns { count: number, readings: [...] } or array directly
+        const response = await callAuroraApi<{ count?: number; readings?: StarlinkSensorReading[] } | StarlinkSensorReading[]>("/api/readings/sensor/starlink?hours=24");
+        
+        // Handle both array and object response formats
+        if (Array.isArray(response)) {
+          return response;
+        }
+        return response?.readings || [];
       } catch (error) {
         console.warn("Failed to fetch Starlink sensor readings:", error);
         return [];

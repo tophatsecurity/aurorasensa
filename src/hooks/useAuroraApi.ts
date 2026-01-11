@@ -4780,9 +4780,41 @@ export function useStarlinkStatusData() {
           latitude?: number;
           longitude?: number;
           altitude?: number;
+          lat?: number;
+          lon?: number;
+          alt?: number;
+          metrics?: Record<string, unknown>;
           [key: string]: unknown;
         }
-        const response = await callAuroraApi<StarlinkStatusPoint | StarlinkStatusPoint[]>("/starlink_status.jsonl");
+        // The response might be JSONL (newline-delimited) or regular JSON
+        const response = await callAuroraApi<string | StarlinkStatusPoint | StarlinkStatusPoint[]>("/starlink_status.jsonl");
+        
+        // If string, parse as JSONL
+        if (typeof response === 'string') {
+          const lines = response.split('\n').filter(line => line.trim());
+          const parsed: StarlinkStatusPoint[] = [];
+          for (const line of lines) {
+            try {
+              const obj = JSON.parse(line);
+              // Normalize lat/lng fields
+              if (obj.lat !== undefined && obj.latitude === undefined) {
+                obj.latitude = obj.lat;
+              }
+              if (obj.lon !== undefined && obj.longitude === undefined) {
+                obj.longitude = obj.lon;
+              }
+              if (obj.alt !== undefined && obj.altitude === undefined) {
+                obj.altitude = obj.alt;
+              }
+              parsed.push(obj);
+            } catch {
+              // Skip invalid lines
+            }
+          }
+          // Return only the latest entries (last 100 to avoid memory issues)
+          return parsed.slice(-100);
+        }
+        
         return Array.isArray(response) ? response : [response];
       } catch (error) {
         console.warn("Failed to fetch Starlink status data:", error);

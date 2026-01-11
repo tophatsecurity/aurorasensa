@@ -956,6 +956,15 @@ export function useMapData(options: UseMapDataOptions = {}) {
         altitude: device.altitude,
         timestamp: device.timestamp,
       };
+      // Also add with client_id prefix for matching
+      if (device.client_id) {
+        merged[`${device.client_id}:${device.device_id}`] = {
+          lat: device.lat,
+          lng: device.lng,
+          altitude: device.altitude,
+          timestamp: device.timestamp,
+        };
+      }
     });
     
     // Fallback: Add legacy single Starlink GPS if no devices found
@@ -997,12 +1006,28 @@ export function useMapData(options: UseMapDataOptions = {}) {
       });
     }
     
+    // Add client IP geolocation as fallback GPS sources
+    if (clients) {
+      clients.forEach(client => {
+        if (client.location?.latitude && client.location?.longitude) {
+          const lat = client.location.latitude;
+          const lng = client.location.longitude;
+          if (lat >= -90 && lat <= 90 && lng >= -180 && lng <= 180 && !(lat === 0 && lng === 0)) {
+            // Add by client_id if not already present
+            if (!merged[client.client_id]) {
+              merged[client.client_id] = { lat, lng };
+            }
+          }
+        }
+      });
+    }
+    
     if (Object.keys(merged).length > 0) {
       console.log('[MapData] GPS coordinates merged:', Object.keys(merged));
     }
     
     return merged;
-  }, [geoLocations, readingsGps, starlinkGps, starlinkStatusGps, gpsdGps, gpsReadings, starlinkDevices]);
+  }, [geoLocations, readingsGps, starlinkGps, starlinkStatusGps, gpsdGps, gpsReadings, starlinkDevices, clients]);
 
   // Build sensor markers from sensors API, geo locations, and clients with GPS
   const sensorMarkers = useMemo<SensorMarker[]>(() => {
@@ -1301,6 +1326,16 @@ export function useMapData(options: UseMapDataOptions = {}) {
           const starlinkId = client.sensors?.find(s => s.toLowerCase().includes('starlink'));
           if (starlinkId && gpsCoordinates[starlinkId]) {
             clientGps = gpsCoordinates[starlinkId];
+          }
+        }
+        
+        // 5. Fallback to client's IP geolocation if available
+        if (!clientGps && client.location?.latitude && client.location?.longitude) {
+          const lat = client.location.latitude;
+          const lng = client.location.longitude;
+          if (lat >= -90 && lat <= 90 && lng >= -180 && lng <= 180 && !(lat === 0 && lng === 0)) {
+            clientGps = { lat, lng };
+            console.log('[MapData] Using client IP geolocation for', client.client_id, clientGps);
           }
         }
         
