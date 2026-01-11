@@ -265,3 +265,176 @@ export function useAssignRole() {
     },
   });
 }
+
+export function useRemoveUserRole() {
+  const queryClient = useQueryClient();
+  
+  return useMutation({
+    mutationFn: async ({ userId, roleId }: { userId: string; roleId: string }) => {
+      return callAuroraApi<{ success: boolean }>(`/api/users/${userId}/roles/${roleId}`, "DELETE");
+    },
+    onSuccess: (_, variables) => {
+      queryClient.invalidateQueries({ queryKey: ["aurora", "users", variables.userId, "roles"] });
+    },
+  });
+}
+
+export function useAssignUserPermission() {
+  const queryClient = useQueryClient();
+  
+  return useMutation({
+    mutationFn: async ({ userId, permissionId }: { userId: string; permissionId: string }) => {
+      return callAuroraApi<{ success: boolean }>(`/api/users/${userId}/permissions`, "POST", { permission_id: permissionId });
+    },
+    onSuccess: (_, variables) => {
+      queryClient.invalidateQueries({ queryKey: ["aurora", "users", variables.userId, "permissions"] });
+    },
+  });
+}
+
+export function useRemoveUserPermission() {
+  const queryClient = useQueryClient();
+  
+  return useMutation({
+    mutationFn: async ({ userId, permissionId }: { userId: string; permissionId: string }) => {
+      return callAuroraApi<{ success: boolean }>(`/api/users/${userId}/permissions/${permissionId}`, "DELETE");
+    },
+    onSuccess: (_, variables) => {
+      queryClient.invalidateQueries({ queryKey: ["aurora", "users", variables.userId, "permissions"] });
+    },
+  });
+}
+
+export function useDeleteUserSession() {
+  const queryClient = useQueryClient();
+  
+  return useMutation({
+    mutationFn: async ({ userId, sessionId }: { userId: string; sessionId: string }) => {
+      return callAuroraApi<{ success: boolean }>(`/api/users/${userId}/sessions/${sessionId}`, "DELETE");
+    },
+    onSuccess: (_, variables) => {
+      queryClient.invalidateQueries({ queryKey: ["aurora", "users", variables.userId, "sessions"] });
+    },
+  });
+}
+
+export function useDeleteAllUserSessions() {
+  const queryClient = useQueryClient();
+  
+  return useMutation({
+    mutationFn: async (userId: string) => {
+      return callAuroraApi<{ success: boolean; deleted_count?: number }>(`/api/users/${userId}/sessions`, "DELETE");
+    },
+    onSuccess: (_, userId) => {
+      queryClient.invalidateQueries({ queryKey: ["aurora", "users", userId, "sessions"] });
+    },
+  });
+}
+
+export function useActivateUser() {
+  const queryClient = useQueryClient();
+  
+  return useMutation({
+    mutationFn: async (userId: string) => {
+      return callAuroraApi<{ success: boolean; message: string }>(`/api/users/${userId}/activate`, "POST");
+    },
+    onSuccess: (_, userId) => {
+      queryClient.invalidateQueries({ queryKey: ["aurora", "users", userId] });
+      queryClient.invalidateQueries({ queryKey: ["aurora", "users"] });
+    },
+  });
+}
+
+export function useDeactivateUser() {
+  const queryClient = useQueryClient();
+  
+  return useMutation({
+    mutationFn: async (userId: string) => {
+      return callAuroraApi<{ success: boolean; message: string }>(`/api/users/${userId}/deactivate`, "POST");
+    },
+    onSuccess: (_, userId) => {
+      queryClient.invalidateQueries({ queryKey: ["aurora", "users", userId] });
+      queryClient.invalidateQueries({ queryKey: ["aurora", "users"] });
+    },
+  });
+}
+
+export function usePatchUser() {
+  const queryClient = useQueryClient();
+  
+  return useMutation({
+    mutationFn: async ({ userId, data }: { userId: string; data: Partial<User> }) => {
+      return callAuroraApi<{ success: boolean }>(`/api/users/${userId}`, "PATCH", data);
+    },
+    onSuccess: (_, variables) => {
+      queryClient.invalidateQueries({ queryKey: ["aurora", "users", variables.userId] });
+      queryClient.invalidateQueries({ queryKey: ["aurora", "users"] });
+    },
+  });
+}
+
+// =============================================
+// ROLE MANAGEMENT MUTATIONS
+// =============================================
+
+export function useCreateRole() {
+  const queryClient = useQueryClient();
+  
+  return useMutation({
+    mutationFn: async (role: { name: string; description?: string; permissions?: string[] }) => {
+      return callAuroraApi<{ success: boolean; role_id?: string }>("/api/roles", "POST", role);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["aurora", "roles"] });
+    },
+  });
+}
+
+export function useUpdateRole() {
+  const queryClient = useQueryClient();
+  
+  return useMutation({
+    mutationFn: async ({ roleId, data }: { roleId: string; data: Partial<Role> }) => {
+      return callAuroraApi<{ success: boolean }>(`/api/roles/${roleId}`, "PUT", data);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["aurora", "roles"] });
+    },
+  });
+}
+
+export function useDeleteRole() {
+  const queryClient = useQueryClient();
+  
+  return useMutation({
+    mutationFn: async (roleId: string) => {
+      return callAuroraApi<{ success: boolean }>(`/api/roles/${roleId}`, "DELETE");
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["aurora", "roles"] });
+    },
+  });
+}
+
+export function useRolePermissions(roleId: string) {
+  return useQuery({
+    queryKey: ["aurora", "roles", roleId, "permissions"],
+    queryFn: () => callAuroraApi<{ permissions: Permission[] }>(`/api/roles/${roleId}/permissions`),
+    enabled: !!roleId && hasAuroraSession(),
+    retry: 2,
+  });
+}
+
+export function useAssignRolePermissions() {
+  const queryClient = useQueryClient();
+  
+  return useMutation({
+    mutationFn: async ({ roleId, permissionIds }: { roleId: string; permissionIds: string[] }) => {
+      return callAuroraApi<{ success: boolean }>(`/api/roles/${roleId}/permissions`, "POST", { permission_ids: permissionIds });
+    },
+    onSuccess: (_, variables) => {
+      queryClient.invalidateQueries({ queryKey: ["aurora", "roles", variables.roleId, "permissions"] });
+      queryClient.invalidateQueries({ queryKey: ["aurora", "roles"] });
+    },
+  });
+}

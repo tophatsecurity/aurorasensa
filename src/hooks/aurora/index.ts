@@ -99,6 +99,16 @@ export {
   useLoraDeviceStats,
   useLoraChannelStats,
   useLoraSpectrumAnalysis,
+  // Config & Registered devices
+  useLoraConfigDevices,
+  useLoraConfigDevice,
+  // Mutations
+  useCreateLoraDevice,
+  useUpdateLoraDevice,
+  usePatchLoraDevice,
+  useDeleteLoraDevice,
+  useActivateLoraDevice,
+  useDeactivateLoraDevice,
 } from "./lora";
 
 export {
@@ -155,6 +165,7 @@ export {
   useUserPermissions,
   useActivityLog,
   useUserActivityLog,
+  useRolePermissions,
   useCreateUser,
   useUpdateUser,
   useDeleteUser,
@@ -163,6 +174,20 @@ export {
   useCreateUserApiKey,
   useDeleteUserApiKey,
   useAssignRole,
+  // New user management hooks
+  useRemoveUserRole,
+  useAssignUserPermission,
+  useRemoveUserPermission,
+  useDeleteUserSession,
+  useDeleteAllUserSessions,
+  useActivateUser,
+  useDeactivateUser,
+  usePatchUser,
+  // Role management hooks
+  useCreateRole,
+  useUpdateRole,
+  useDeleteRole,
+  useAssignRolePermissions,
 } from "./users";
 
 export {
