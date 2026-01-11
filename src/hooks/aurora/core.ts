@@ -48,7 +48,12 @@ export async function callAuroraApi<T>(
   method: string = "GET", 
   body?: unknown
 ): Promise<T> {
-  const sessionCookie = sessionStorage.getItem('aurora_cookie');
+  const sessionCookie = sessionStorage.getItem(SESSION_COOKIE_KEY);
+  
+  // Log if no session for debugging
+  if (!sessionCookie && !path.startsWith('/api/auth/')) {
+    console.warn(`No session cookie for protected endpoint: ${path}`);
+  }
   
   let lastError: Error | null = null;
   
