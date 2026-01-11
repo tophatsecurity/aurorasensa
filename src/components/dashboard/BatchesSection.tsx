@@ -6,6 +6,7 @@ import {
   useLatestBatch,
   useDiskUsageInfo,
 } from "@/hooks/useAuroraApi";
+import { useAuroraAuthContext } from "@/hooks/useAuroraAuth";
 import { formatLastSeen, formatDateTime } from "@/utils/dateUtils";
 import { Progress } from "@/components/ui/progress";
 
@@ -22,9 +23,10 @@ const formatBytes = (bytes: number) => {
 };
 
 export const BatchesSection = memo(function BatchesSection({ limit = 10 }: BatchesSectionProps) {
+  const { isAdmin } = useAuroraAuthContext();
   const { data: batchesData, isLoading: batchesLoading } = useBatchesList(limit);
   const { data: latestBatch } = useLatestBatch();
-  const { data: diskUsage } = useDiskUsageInfo();
+  const { data: diskUsage } = useDiskUsageInfo(isAdmin);
 
   const batches = batchesData?.batches ?? [];
   const totalBatches = batchesData?.count ?? 0;

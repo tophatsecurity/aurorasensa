@@ -1938,10 +1938,11 @@ export function useToggleClientDebugMode() {
   });
 }
 
-export function useDiskUsageInfo() {
+export function useDiskUsageInfo(isAdmin: boolean = false) {
   return useQuery({
     queryKey: ["aurora", "admin", "batch-retention", "disk-usage"],
     queryFn: () => callAuroraApi<DiskUsageInfo>("/api/admin/batch-retention/disk-usage"),
+    enabled: hasAuroraSession() && isAdmin,
     refetchInterval: 60000,
     retry: 2,
   });
