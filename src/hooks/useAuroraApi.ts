@@ -4770,6 +4770,7 @@ export function useStarlinkStatusData() {
         interface StarlinkStatusPoint {
           timestamp?: string;
           device_id?: string;
+          client_id?: string;
           state?: string;
           uptime_s?: number;
           pop_ping_latency_ms?: number;

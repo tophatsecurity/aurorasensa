@@ -519,6 +519,8 @@ export interface LatestReading {
   device_type: string;
   timestamp: string;
   data: Record<string, unknown>;
+  client_id?: string;
+  batch_id?: string;
 }
 
 export interface LatestReadingsResponse {
