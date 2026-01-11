@@ -1243,7 +1243,7 @@ export function useMapData(options: UseMapDataOptions = {}) {
             markers.push({
               id,
               name: `${client.hostname} WiFi`,
-              type: 'client',
+              type: 'wifi',
               value: 0,
               unit: 'devices',
               status: baseStatus,
@@ -1262,9 +1262,66 @@ export function useMapData(options: UseMapDataOptions = {}) {
             markers.push({
               id,
               name: `${client.hostname} Bluetooth`,
-              type: 'client',
+              type: 'bluetooth',
               value: 0,
               unit: 'devices',
+              status: baseStatus,
+              lastUpdate: client.last_seen,
+              location: clientGps
+            });
+            addedIds.add(id);
+          }
+        }
+        
+        // Add APRS sensors
+        const aprs = (config as Record<string, unknown>).aprs as { enabled?: boolean } | undefined;
+        if (aprs?.enabled) {
+          const id = `${client.client_id}-aprs`;
+          if (!addedIds.has(id)) {
+            markers.push({
+              id,
+              name: `${client.hostname} APRS`,
+              type: 'aprs',
+              value: 0,
+              unit: 'packets',
+              status: baseStatus,
+              lastUpdate: client.last_seen,
+              location: clientGps
+            });
+            addedIds.add(id);
+          }
+        }
+        
+        // Add AIS sensors
+        const ais = (config as Record<string, unknown>).ais as { enabled?: boolean } | undefined;
+        if (ais?.enabled) {
+          const id = `${client.client_id}-ais`;
+          if (!addedIds.has(id)) {
+            markers.push({
+              id,
+              name: `${client.hostname} AIS`,
+              type: 'ais',
+              value: 0,
+              unit: 'vessels',
+              status: baseStatus,
+              lastUpdate: client.last_seen,
+              location: clientGps
+            });
+            addedIds.add(id);
+          }
+        }
+        
+        // Add EPIRB sensors
+        const epirb = (config as Record<string, unknown>).epirb as { enabled?: boolean } | undefined;
+        if (epirb?.enabled) {
+          const id = `${client.client_id}-epirb`;
+          if (!addedIds.has(id)) {
+            markers.push({
+              id,
+              name: `${client.hostname} EPIRB`,
+              type: 'epirb',
+              value: 0,
+              unit: 'beacons',
               status: baseStatus,
               lastUpdate: client.last_seen,
               location: clientGps
