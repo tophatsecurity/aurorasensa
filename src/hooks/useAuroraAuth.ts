@@ -21,14 +21,12 @@ interface AuroraAuthContextValue extends AuroraAuthState {
   signIn: (username: string, password: string) => Promise<{ success: boolean; error?: string }>;
   signOut: () => Promise<void>;
   refreshUser: () => Promise<void>;
-  enterDemoMode: () => void;
   isAdmin: boolean;
 }
 
 // Session storage keys
 const SESSION_KEY = 'aurora_session';
 const SESSION_COOKIE_KEY = 'aurora_cookie';
-const DEMO_MODE_KEY = 'aurora_demo_mode';
 
 const isConnectionError = (error: unknown): boolean => {
   const message = error instanceof Error ? error.message : String(error);
@@ -89,24 +87,12 @@ export function useAuroraAuth(): AuroraAuthContextValue {
     user: null,
     loading: true,
     error: null,
-    isOfflineMode: sessionStorage.getItem(DEMO_MODE_KEY) === 'true',
+    isOfflineMode: false,
     serverStatus: 'checking',
   });
 
   // Check for existing session on mount
   const refreshUser = useCallback(async () => {
-    // Check if in demo mode
-    if (sessionStorage.getItem(DEMO_MODE_KEY) === 'true') {
-      setAuthState({
-        user: { username: 'demo', role: 'admin', isOfflineMode: true },
-        loading: false,
-        error: null,
-        isOfflineMode: true,
-        serverStatus: 'offline',
-      });
-      return;
-    }
-
     try {
       const sessionData = sessionStorage.getItem(SESSION_KEY);
       if (!sessionData) {
@@ -130,11 +116,10 @@ export function useAuroraAuth(): AuroraAuthContextValue {
       const errorMsg = error instanceof Error ? error.message : String(error);
       
       if (errorMsg === 'AURORA_OFFLINE') {
-        // Server is offline - check if we have stored session to show demo mode prompt
         setAuthState({
           user: null,
           loading: false,
-          error: null,
+          error: 'Aurora server is currently offline. Please try again later.',
           isOfflineMode: false,
           serverStatus: 'offline',
         });
@@ -161,8 +146,7 @@ export function useAuroraAuth(): AuroraAuthContextValue {
   useEffect(() => {
     const checkSession = () => {
       const hasSession = sessionStorage.getItem(SESSION_COOKIE_KEY);
-      const isDemoMode = sessionStorage.getItem(DEMO_MODE_KEY) === 'true';
-      if (!hasSession && !isDemoMode && authState.user) {
+      if (!hasSession && authState.user) {
         setAuthState(prev => ({ ...prev, user: null }));
       }
     };
@@ -202,7 +186,6 @@ export function useAuroraAuth(): AuroraAuthContextValue {
           username: user.username,
           loggedInAt: new Date().toISOString(),
         }));
-        sessionStorage.removeItem(DEMO_MODE_KEY);
 
         setAuthState({
           user,
@@ -229,10 +212,10 @@ export function useAuroraAuth(): AuroraAuthContextValue {
         setAuthState(prev => ({
           ...prev,
           loading: false,
-          error: 'Aurora server is offline. Try Demo Mode to explore the interface.',
+          error: 'Aurora server is offline. Please try again later.',
           serverStatus: 'offline',
         }));
-        return { success: false, error: 'Server offline - use Demo Mode' };
+        return { success: false, error: 'Server offline' };
       }
       
       setAuthState(prev => ({
@@ -244,32 +227,15 @@ export function useAuroraAuth(): AuroraAuthContextValue {
     }
   }, []);
 
-  const enterDemoMode = useCallback(() => {
-    sessionStorage.setItem(DEMO_MODE_KEY, 'true');
-    sessionStorage.removeItem(SESSION_KEY);
-    sessionStorage.removeItem(SESSION_COOKIE_KEY);
-    
-    setAuthState({
-      user: { username: 'demo', role: 'admin', isOfflineMode: true },
-      loading: false,
-      error: null,
-      isOfflineMode: true,
-      serverStatus: 'offline',
-    });
-  }, []);
-
   const signOut = useCallback(async () => {
-    if (!authState.isOfflineMode) {
-      try {
-        await callAuroraApi("/api/auth/logout", "POST");
-      } catch {
-        // Ignore logout errors
-      }
+    try {
+      await callAuroraApi("/api/auth/logout", "POST");
+    } catch {
+      // Ignore logout errors
     }
     
     sessionStorage.removeItem(SESSION_KEY);
     sessionStorage.removeItem(SESSION_COOKIE_KEY);
-    sessionStorage.removeItem(DEMO_MODE_KEY);
     setAuthState({
       user: null,
       loading: false,
@@ -286,7 +252,6 @@ export function useAuroraAuth(): AuroraAuthContextValue {
     signIn,
     signOut,
     refreshUser,
-    enterDemoMode,
     isAdmin,
   };
 }
