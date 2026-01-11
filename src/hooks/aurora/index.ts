@@ -2,7 +2,7 @@
 // Re-exports all hooks from modular files for backward compatibility
 
 // Core utilities
-export { callAuroraApi, hasAuroraSession, clearAuroraSession } from "./core";
+export { callAuroraApi, hasAuroraSession, clearAuroraSession, invalidateAuroraCache, getAuroraQueueStats } from "./core";
 
 // All types from central types file
 export * from "./types";
