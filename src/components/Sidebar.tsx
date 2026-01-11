@@ -22,7 +22,8 @@ import {
   Webhook,
   UserCog,
   Terminal,
-  TrendingUp
+  TrendingUp,
+  Ship
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { UserMenu } from "@/components/UserMenu";
@@ -51,6 +52,7 @@ const menuSections = [
       { id: "weather", label: "Weather", icon: Cloud },
       { id: "radio", label: "Radio", icon: Radio },
       { id: "adsb", label: "ADS-B Aircraft", icon: Activity },
+      { id: "maritime", label: "Maritime & RF", icon: Ship },
       { id: "starlink", label: "Starlink", icon: Satellite },
       { id: "power", label: "Power", icon: Zap },
       { id: "sound-light", label: "Sound & Light", icon: Sun },

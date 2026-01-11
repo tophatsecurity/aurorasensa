@@ -4,3 +4,4 @@ export { WifiBluetoothSection } from './WifiBluetoothSection';
 export { GpsSection } from './GpsSection';
 export { AlertsSection } from './AlertsSection';
 export { BatchesSection } from './BatchesSection';
+export { MaritimeSection } from './MaritimeSection';

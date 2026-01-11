@@ -41,7 +41,7 @@ import HumidityCharts from "./HumidityCharts";
 import PowerConsumptionCharts from "./PowerConsumptionCharts";
 import SystemMonitorCharts from "./SystemMonitorCharts";
 import { SSEConnectionStatus } from "./SSEConnectionStatus";
-import { AdsbSection, LoRaSection, WifiBluetoothSection, GpsSection, AlertsSection, BatchesSection } from "./dashboard";
+import { AdsbSection, LoRaSection, WifiBluetoothSection, GpsSection, AlertsSection, BatchesSection, MaritimeSection } from "./dashboard";
 
 import { 
   ContextFilters, 
@@ -1258,6 +1258,11 @@ const DashboardContent = () => {
             </div>
           )}
         </SensorCard>
+      </div>
+
+      {/* Maritime & RF Tracking */}
+      <div className="mb-8">
+        <MaritimeSection />
       </div>
 
       {/* Sensor Map Preview */}
