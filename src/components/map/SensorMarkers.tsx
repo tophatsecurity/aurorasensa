@@ -14,8 +14,11 @@ function createSensorPopupContent(sensor: SensorMarker): string {
     ? 'bg-green-500/20 text-green-400' 
     : 'bg-yellow-500/20 text-yellow-400';
   
+  const lat = sensor.location.lat.toFixed(6);
+  const lng = sensor.location.lng.toFixed(6);
+  
   return `
-    <div class="p-2 min-w-[180px]">
+    <div class="p-2 min-w-[200px]">
       <div class="flex items-center gap-2 mb-3 pb-2 border-b border-gray-600">
         <span class="font-bold">${sensor.name}</span>
       </div>
@@ -23,6 +26,14 @@ function createSensorPopupContent(sensor: SensorMarker): string {
         <div class="flex justify-between">
           <span class="text-gray-400">Type</span>
           <span class="px-2 py-0.5 bg-gray-700 rounded capitalize">${sensor.type}</span>
+        </div>
+        <div class="flex justify-between">
+          <span class="text-gray-400">Latitude</span>
+          <span class="font-mono text-xs">${lat}°</span>
+        </div>
+        <div class="flex justify-between">
+          <span class="text-gray-400">Longitude</span>
+          <span class="font-mono text-xs">${lng}°</span>
         </div>
         <div class="flex justify-between">
           <span class="text-gray-400">Value</span>
