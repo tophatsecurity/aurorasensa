@@ -1,7 +1,7 @@
 import { LatLngExpression } from "leaflet";
 import type { LucideIcon } from "lucide-react";
 
-export type FilterType = 'all' | 'gps' | 'starlink' | 'clients' | 'lora' | 'adsb' | 'wifi' | 'bluetooth' | 'aprs';
+export type FilterType = 'all' | 'gps' | 'starlink' | 'clients' | 'lora' | 'adsb' | 'wifi' | 'bluetooth' | 'aprs' | 'ais' | 'epirb';
 
 export type ActiveFilters = Set<Exclude<FilterType, 'all'>>;
 
@@ -15,6 +15,8 @@ export interface MapStats {
   wifi: number;
   bluetooth: number;
   aprs: number;
+  ais: number;
+  epirb: number;
 }
 
 export interface FilterButton {
