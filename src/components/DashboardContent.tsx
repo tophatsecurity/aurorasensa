@@ -64,6 +64,7 @@ import {
   useArduinoSensorTimeseries,
   useSystemInfo,
   useHealth,
+  useLatestReadings,
   Client 
 } from "@/hooks/useAuroraApi";
 import { useSensorReadingsSSE } from "@/hooks/useSSE";
@@ -154,6 +155,9 @@ const DashboardContent = () => {
   
   // Dedicated Starlink power endpoint for accurate power data
   const { data: starlinkPowerData, isLoading: starlinkPowerLoading } = useStarlinkPower();
+  
+  // Latest readings for thermal sensors
+  const { data: latestReadings, isLoading: latestReadingsLoading } = useLatestReadings();
   
   // SSE for real-time sensor readings
   const sensorSSE = useSensorReadingsSSE({
@@ -311,6 +315,45 @@ const DashboardContent = () => {
   // Devices pending adoption (auto-registered but not manually adopted)
   const pendingDevices = clients?.filter((c: Client) => c.auto_registered && !c.adopted_at) || [];
   const adoptedDevices = clients?.filter((c: Client) => c.adopted_at) || [];
+  
+  // Filter thermal sensors from latest readings
+  const thermalSensorReadings = useMemo(() => {
+    if (!latestReadings || latestReadings.length === 0) return [];
+    
+    // Filter for temperature-related sensor types
+    const thermalTypes = ['thermal_probe', 'aht_sensor', 'bmt_sensor', 'arduino_sensor_kit'];
+    
+    return latestReadings
+      .filter(reading => thermalTypes.includes(reading.device_type))
+      .map(reading => {
+        const data = reading.data as Record<string, number | undefined>;
+        // Try to extract temperature from various possible field names
+        const temperature = 
+          data.temperature_c ?? 
+          data.temp_c ?? 
+          data.aht_temp_c ?? 
+          data.bmp_temp_c ?? 
+          data.th_temp_c ??
+          data.probe_c ??
+          data.ambient_c;
+        
+        const humidity = 
+          data.humidity ?? 
+          data.aht_humidity ?? 
+          data.th_humidity ??
+          data.bme280_humidity;
+          
+        return {
+          device_id: reading.device_id,
+          device_type: reading.device_type,
+          client_id: reading.client_id,
+          timestamp: reading.timestamp,
+          temperature,
+          humidity,
+        };
+      })
+      .filter(sensor => sensor.temperature !== undefined);
+  }, [latestReadings]);
   
   // Get period label for display
   const periodLabel = timePeriodLabel(timePeriod);
@@ -727,6 +770,86 @@ const DashboardContent = () => {
         <div className="mt-4">
           <ThermalProbeCharts />
         </div>
+        
+        {/* Individual Thermal Sensors List */}
+        {thermalSensorReadings.length > 0 && (
+          <div className="mt-4">
+            <h3 className="text-sm font-medium text-muted-foreground mb-3 flex items-center gap-2">
+              <Thermometer className="w-4 h-4" />
+              Active Thermal Sensors ({thermalSensorReadings.length})
+            </h3>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
+              {thermalSensorReadings.map((sensor) => {
+                const tempF = sensor.temperature !== undefined ? (sensor.temperature * 9/5) + 32 : null;
+                const isWarm = sensor.temperature !== undefined && sensor.temperature > 30;
+                const isCold = sensor.temperature !== undefined && sensor.temperature < 15;
+                
+                return (
+                  <div 
+                    key={`${sensor.device_id}-${sensor.device_type}`}
+                    className="glass-card rounded-lg p-3 border border-border/50 hover:border-red-500/30 transition-colors"
+                  >
+                    <div className="flex items-start justify-between mb-2">
+                      <div className="flex items-center gap-2">
+                        <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${
+                          isWarm ? 'bg-red-500/20' : isCold ? 'bg-blue-500/20' : 'bg-amber-500/20'
+                        }`}>
+                          <Thermometer className={`w-4 h-4 ${
+                            isWarm ? 'text-red-400' : isCold ? 'text-blue-400' : 'text-amber-400'
+                          }`} />
+                        </div>
+                        <div className="min-w-0">
+                          <p className="text-xs font-medium truncate max-w-[120px]" title={sensor.device_id}>
+                            {sensor.device_id.length > 16 
+                              ? `${sensor.device_id.slice(0, 8)}...${sensor.device_id.slice(-4)}`
+                              : sensor.device_id}
+                          </p>
+                          <p className="text-xs text-muted-foreground">
+                            {sensor.device_type.replace(/_/g, ' ')}
+                          </p>
+                        </div>
+                      </div>
+                      <Badge variant="outline" className="text-[10px] px-1.5 py-0.5">
+                        {sensor.client_id?.slice(0, 8) || 'N/A'}
+                      </Badge>
+                    </div>
+                    
+                    <div className="space-y-1">
+                      <div className="flex items-baseline justify-between">
+                        <span className={`text-xl font-bold ${
+                          isWarm ? 'text-red-400' : isCold ? 'text-blue-400' : 'text-amber-400'
+                        }`}>
+                          {sensor.temperature?.toFixed(1)}°C
+                        </span>
+                        <span className="text-sm text-muted-foreground">
+                          {tempF?.toFixed(1)}°F
+                        </span>
+                      </div>
+                      
+                      {sensor.humidity !== undefined && (
+                        <div className="flex items-center gap-1 text-xs text-muted-foreground">
+                          <Droplets className="w-3 h-3" />
+                          <span>{sensor.humidity.toFixed(1)}%</span>
+                        </div>
+                      )}
+                      
+                      <div className="text-[10px] text-muted-foreground/60 mt-1">
+                        {formatLastSeen(sensor.timestamp)}
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
+        
+        {latestReadingsLoading && thermalSensorReadings.length === 0 && (
+          <div className="mt-4 flex items-center justify-center py-4">
+            <Loader2 className="w-5 h-5 animate-spin text-muted-foreground" />
+            <span className="ml-2 text-sm text-muted-foreground">Loading thermal sensors...</span>
+          </div>
+        )}
       </div>
 
       {/* Starlink - Full Width Section */}
