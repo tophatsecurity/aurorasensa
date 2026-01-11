@@ -17,6 +17,8 @@ export interface MapStats {
   aprs: number;
   ais: number;
   epirb: number;
+  wifiDetections?: number;
+  bluetoothDetections?: number;
 }
 
 export interface FilterButton {
@@ -84,6 +86,28 @@ export interface ClientMarker {
     lat: number;
     lng: number;
   };
+}
+
+// Wireless detection marker (WiFi/Bluetooth devices detected by clients)
+export interface WirelessDetectionMarker {
+  id: string;
+  type: 'wifi' | 'bluetooth';
+  name: string; // SSID for WiFi, device name for Bluetooth
+  client_id: string; // The client that detected this device
+  location: {
+    lat: number;
+    lng: number;
+  };
+  rssi?: number;
+  lastSeen: string;
+  // WiFi specific
+  bssid?: string;
+  channel?: number;
+  security?: string;
+  // Bluetooth specific
+  mac_address?: string;
+  device_class?: string;
+  manufacturer?: string;
 }
 
 export const MAP_CONFIG = {

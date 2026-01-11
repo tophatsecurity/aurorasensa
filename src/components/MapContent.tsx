@@ -5,7 +5,7 @@ import "leaflet/dist/leaflet.css";
 
 // Types and utilities
 import { FilterType, MAP_CONFIG, AdsbMarker, ActiveFilters } from "@/types/map";
-import { mapIcons, IconType, createAircraftIcon, getAircraftType, getAircraftColor } from "@/utils/mapIcons";
+import { mapIcons, IconType, createAircraftIcon, getAircraftType, getAircraftColor, createWifiDetectionIcon, createBluetoothDetectionIcon } from "@/utils/mapIcons";
 import { formatDateTime } from "@/utils/dateUtils";
 import { spreadOverlappingPoints, COVERAGE_RANGES, ONE_MILE_METERS } from "@/utils/geoUtils";
 // Custom hooks
@@ -65,6 +65,8 @@ const MapContent = () => {
   const trailsRef = useRef<Map<string, L.Polyline>>(new Map());
   const adsbTrailsRef = useRef<Map<string, L.Polyline>>(new Map());
   const coverageCirclesRef = useRef<Map<string, L.Circle>>(new Map());
+  const wifiDetectionMarkersRef = useRef<Map<string, L.Marker>>(new Map());
+  const bluetoothDetectionMarkersRef = useRef<Map<string, L.Marker>>(new Map());
   const [activeFilters, setActiveFilters] = useState<ActiveFilters>(new Set(['gps', 'starlink', 'clients', 'lora', 'adsb', 'wifi', 'bluetooth', 'aprs', 'ais', 'epirb']));
   const [showCoverage, setShowCoverage] = useState(true);
   const [hasInitialFit, setHasInitialFit] = useState(false);
@@ -120,6 +122,8 @@ const MapContent = () => {
     handleRefresh,
     adsbIsHistorical,
     adsbSource,
+    wifiDetectionMarkers,
+    bluetoothDetectionMarkers,
   } = useMapData({ 
     adsbHistoryMinutes: timeframeToMinutes(timeframe),
     refetchInterval: mapRefetchInterval,
@@ -732,6 +736,124 @@ const MapContent = () => {
       }
     });
   }, [sensorMarkers, activeFilters, showCoverage, starlinkSpreadPositions]);
+
+  // Render WiFi detection markers (small green dots)
+  useEffect(() => {
+    if (!mapRef.current) return;
+
+    const existingIds = new Set<string>();
+
+    // Clear all if WiFi filter is disabled
+    if (!activeFilters.has('wifi')) {
+      wifiDetectionMarkersRef.current.forEach(marker => marker.remove());
+      wifiDetectionMarkersRef.current.clear();
+      return;
+    }
+
+    const wifiIcon = createWifiDetectionIcon(8);
+
+    wifiDetectionMarkers.forEach((detection) => {
+      const markerId = detection.id;
+      existingIds.add(markerId);
+
+      const popupContent = `
+        <div class="p-2 min-w-[180px]">
+          <div class="font-bold mb-2 text-green-400">📶 ${detection.name}</div>
+          <div class="text-sm space-y-1">
+            <div><span class="text-gray-500">Type:</span> WiFi Network</div>
+            ${detection.bssid ? `<div><span class="text-gray-500">BSSID:</span> <span class="font-mono text-xs">${detection.bssid}</span></div>` : ''}
+            ${detection.channel ? `<div><span class="text-gray-500">Channel:</span> ${detection.channel}</div>` : ''}
+            ${detection.rssi ? `<div><span class="text-gray-500">Signal:</span> ${detection.rssi} dBm</div>` : ''}
+            ${detection.security ? `<div><span class="text-gray-500">Security:</span> ${detection.security}</div>` : ''}
+            <div class="text-xs text-gray-400 mt-1">Detected by client</div>
+          </div>
+        </div>
+      `;
+
+      const existingMarker = wifiDetectionMarkersRef.current.get(markerId);
+
+      if (existingMarker) {
+        existingMarker.setLatLng([detection.location.lat, detection.location.lng]);
+        existingMarker.setPopupContent(popupContent);
+      } else {
+        const marker = L.marker([detection.location.lat, detection.location.lng], {
+          icon: wifiIcon,
+          opacity: 0.8,
+        })
+          .bindPopup(popupContent)
+          .addTo(mapRef.current!);
+
+        wifiDetectionMarkersRef.current.set(markerId, marker);
+      }
+    });
+
+    // Remove markers that no longer exist
+    wifiDetectionMarkersRef.current.forEach((marker, id) => {
+      if (!existingIds.has(id)) {
+        marker.remove();
+        wifiDetectionMarkersRef.current.delete(id);
+      }
+    });
+  }, [wifiDetectionMarkers, activeFilters]);
+
+  // Render Bluetooth detection markers (small blue dots)
+  useEffect(() => {
+    if (!mapRef.current) return;
+
+    const existingIds = new Set<string>();
+
+    // Clear all if Bluetooth filter is disabled
+    if (!activeFilters.has('bluetooth')) {
+      bluetoothDetectionMarkersRef.current.forEach(marker => marker.remove());
+      bluetoothDetectionMarkersRef.current.clear();
+      return;
+    }
+
+    const btIcon = createBluetoothDetectionIcon(8);
+
+    bluetoothDetectionMarkers.forEach((detection) => {
+      const markerId = detection.id;
+      existingIds.add(markerId);
+
+      const popupContent = `
+        <div class="p-2 min-w-[180px]">
+          <div class="font-bold mb-2 text-blue-400">📲 ${detection.name}</div>
+          <div class="text-sm space-y-1">
+            <div><span class="text-gray-500">Type:</span> Bluetooth Device</div>
+            ${detection.mac_address ? `<div><span class="text-gray-500">MAC:</span> <span class="font-mono text-xs">${detection.mac_address}</span></div>` : ''}
+            ${detection.rssi ? `<div><span class="text-gray-500">Signal:</span> ${detection.rssi} dBm</div>` : ''}
+            ${detection.manufacturer ? `<div><span class="text-gray-500">Manufacturer:</span> ${detection.manufacturer}</div>` : ''}
+            ${detection.device_class ? `<div><span class="text-gray-500">Class:</span> ${detection.device_class}</div>` : ''}
+            <div class="text-xs text-gray-400 mt-1">Detected by client</div>
+          </div>
+        </div>
+      `;
+
+      const existingMarker = bluetoothDetectionMarkersRef.current.get(markerId);
+
+      if (existingMarker) {
+        existingMarker.setLatLng([detection.location.lat, detection.location.lng]);
+        existingMarker.setPopupContent(popupContent);
+      } else {
+        const marker = L.marker([detection.location.lat, detection.location.lng], {
+          icon: btIcon,
+          opacity: 0.8,
+        })
+          .bindPopup(popupContent)
+          .addTo(mapRef.current!);
+
+        bluetoothDetectionMarkersRef.current.set(markerId, marker);
+      }
+    });
+
+    // Remove markers that no longer exist
+    bluetoothDetectionMarkersRef.current.forEach((marker, id) => {
+      if (!existingIds.has(id)) {
+        marker.remove();
+        bluetoothDetectionMarkersRef.current.delete(id);
+      }
+    });
+  }, [bluetoothDetectionMarkers, activeFilters]);
 
   // Update trail polylines (sensor/client only)
   useEffect(() => {
