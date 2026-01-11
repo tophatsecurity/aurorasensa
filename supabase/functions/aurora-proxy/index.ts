@@ -102,7 +102,8 @@ Deno.serve(async (req) => {
       let emptyData: unknown = null;
       if (path.includes('/list') || path.includes('/vessels') || path.includes('/stations') || 
           path.includes('/beacons') || path.includes('/aircraft') || path.includes('/devices') ||
-          path.includes('/active') || path.includes('/readings') || path.includes('/rules')) {
+          path.includes('/active') || path.includes('/readings') || path.includes('/rules') ||
+          path.includes('/profiles') || path.includes('/violations') || path.includes('/baselines')) {
         emptyData = [];
       } else if (path.includes('/stats')) {
         emptyData = {};
@@ -127,6 +128,8 @@ Deno.serve(async (req) => {
             emptyData = { rules: [] };
           } else if (path.includes('/settings')) {
             emptyData = {};
+          } else if (path.includes('/profiles') || path.includes('/violations') || path.includes('/baselines')) {
+            emptyData = [];
           } else {
             emptyData = [];
           }

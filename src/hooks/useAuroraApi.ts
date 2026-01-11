@@ -2146,18 +2146,32 @@ export function useExternalIp() {
 export function useBaselineProfiles() {
   return useQuery({
     queryKey: ["aurora", "baselines", "profiles"],
-    queryFn: () => callAuroraApi<BaselineProfile[]>("/api/baselines/profiles"),
+    queryFn: async () => {
+      try {
+        return await callAuroraApi<BaselineProfile[]>("/api/baselines/profiles");
+      } catch (error) {
+        console.warn("Baseline profiles endpoint unavailable, returning empty array");
+        return [];
+      }
+    },
     refetchInterval: 60000,
-    retry: 2,
+    retry: 0,
   });
 }
 
 export function useBaselineEntries(profileId: number) {
   return useQuery({
     queryKey: ["aurora", "baselines", "profiles", profileId, "entries"],
-    queryFn: () => callAuroraApi<BaselineEntry[]>(`/api/baselines/profiles/${profileId}/entries`),
+    queryFn: async () => {
+      try {
+        return await callAuroraApi<BaselineEntry[]>(`/api/baselines/profiles/${profileId}/entries`);
+      } catch (error) {
+        console.warn("Baseline entries endpoint unavailable, returning empty array");
+        return [];
+      }
+    },
     refetchInterval: 60000,
-    retry: 2,
+    retry: 0,
     enabled: !!profileId,
   });
 }
@@ -2165,9 +2179,16 @@ export function useBaselineEntries(profileId: number) {
 export function useBaselineViolations() {
   return useQuery({
     queryKey: ["aurora", "baselines", "violations"],
-    queryFn: () => callAuroraApi<BaselineViolation[]>("/api/baselines/violations"),
+    queryFn: async () => {
+      try {
+        return await callAuroraApi<BaselineViolation[]>("/api/baselines/violations");
+      } catch (error) {
+        console.warn("Baseline violations endpoint unavailable, returning empty array");
+        return [];
+      }
+    },
     refetchInterval: 30000,
-    retry: 2,
+    retry: 0,
   });
 }
 
