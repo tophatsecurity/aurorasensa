@@ -102,7 +102,7 @@ Deno.serve(async (req) => {
       let emptyData: unknown = null;
       if (path.includes('/list') || path.includes('/vessels') || path.includes('/stations') || 
           path.includes('/beacons') || path.includes('/aircraft') || path.includes('/devices') ||
-          path.includes('/active') || path.includes('/readings')) {
+          path.includes('/active') || path.includes('/readings') || path.includes('/rules')) {
         emptyData = [];
       } else if (path.includes('/stats')) {
         emptyData = {};
@@ -110,6 +110,39 @@ Deno.serve(async (req) => {
       return new Response(JSON.stringify(emptyData), {
         status: 200, // Return 200 with empty data
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+    
+    // Handle 422 validation errors for non-existent endpoints gracefully
+    // The Aurora backend interprets "/api/alerts/rules" as "/api/alerts/{alert_id}" where alert_id="rules"
+    if (response.status === 422) {
+      const responseText = await response.text();
+      try {
+        const errorData = JSON.parse(responseText);
+        if (errorData.detail && Array.isArray(errorData.detail) && 
+            errorData.detail.some((d: { type?: string }) => d.type === 'int_parsing')) {
+          console.log(`Endpoint validation error (422): ${path} - returning empty data`);
+          let emptyData: unknown = null;
+          if (path.includes('/rules')) {
+            emptyData = { rules: [] };
+          } else if (path.includes('/settings')) {
+            emptyData = {};
+          } else {
+            emptyData = [];
+          }
+          return new Response(JSON.stringify(emptyData), {
+            status: 200,
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          });
+        }
+      } catch {
+        // If parsing fails, continue with normal response handling
+      }
+      // Re-fetch for normal 422 handling if not a path parsing error
+      response = await fetchWithTimeout(url, {
+        method,
+        headers,
+        body: requestBody && method !== 'GET' ? JSON.stringify(requestBody) : undefined,
       });
     }
     
