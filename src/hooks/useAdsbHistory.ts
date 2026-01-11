@@ -1,6 +1,6 @@
 import { useState, useCallback } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { supabase } from "@/integrations/supabase/client";
+import { callAuroraApi, hasAuroraSession } from "@/hooks/aurora/core";
 
 interface AdsbHistoryPoint {
   lat: number;
@@ -19,19 +19,6 @@ interface AdsbHistoryResponse {
   count: number;
 }
 
-async function fetchAdsbHistory(icao: string): Promise<AdsbHistoryResponse> {
-  const { data, error } = await supabase.functions.invoke("aurora-proxy", {
-    body: { path: `/api/adsb/history/${icao}`, method: "GET" },
-  });
-
-  if (error) {
-    console.error(`ADS-B history error for ${icao}:`, error.message);
-    throw new Error(`ADS-B history error: ${error.message}`);
-  }
-
-  return data as AdsbHistoryResponse;
-}
-
 export interface AircraftTrail {
   icao: string;
   flight?: string;
@@ -46,8 +33,8 @@ export function useAdsbHistory() {
 
   const { data, isLoading, error } = useQuery({
     queryKey: ["adsb-history", selectedIcao],
-    queryFn: () => fetchAdsbHistory(selectedIcao!),
-    enabled: !!selectedIcao,
+    queryFn: () => callAuroraApi<AdsbHistoryResponse>(`/api/adsb/history/${selectedIcao}`),
+    enabled: hasAuroraSession() && !!selectedIcao,
     staleTime: 30000, // 30 seconds
     refetchInterval: 30000, // Refresh every 30 seconds when selected
   });
