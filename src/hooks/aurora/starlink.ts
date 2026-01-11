@@ -1,4 +1,8 @@
 // Aurora API - Starlink Hooks
+// NOTE: Many Starlink-specific endpoints (power, connectivity, performance, devices)
+// are NOT implemented on the Aurora server. Only /api/readings/sensor/starlink exists.
+// Disabled hooks will return empty/null data gracefully.
+
 import { useQuery } from "@tanstack/react-query";
 import { callAuroraApi, hasAuroraSession, fastQueryOptions, defaultQueryOptions } from "./core";
 import type { 
@@ -15,6 +19,10 @@ import type {
   LatestReading,
 } from "./types";
 
+// Flag to enable/disable Starlink-specific endpoints that don't exist on Aurora
+// Only /api/readings/sensor/starlink and /api/stats/sensors/starlink work
+const STARLINK_EXTENDED_API_ENABLED = false;
+
 // =============================================
 // QUERY HOOKS
 // =============================================
@@ -23,24 +31,10 @@ export function useStarlinkDevices() {
   return useQuery({
     queryKey: ["aurora", "starlink", "devices"],
     queryFn: async () => {
-      try {
-        const response = await callAuroraApi<StarlinkDevice[]>("/api/starlink/devices");
-        return response || [];
-      } catch {
-        try {
-          const response = await callAuroraApi<{ devices: StarlinkDevice[] }>("/api/v1/devices");
-          const devices = response.devices || [];
-          return devices.filter(d => 
-            d.device_type?.toLowerCase().includes('starlink') || 
-            d.device_id?.toLowerCase().includes('starlink')
-          );
-        } catch (error) {
-          console.warn("Failed to fetch starlink devices:", error);
-          return [];
-        }
-      }
+      // These endpoints don't exist on Aurora - return empty array
+      return [];
     },
-    enabled: hasAuroraSession(),
+    enabled: STARLINK_EXTENDED_API_ENABLED && hasAuroraSession(),
     ...fastQueryOptions,
   });
 }
@@ -49,7 +43,7 @@ export function useStarlinkDevice(deviceId: string) {
   return useQuery({
     queryKey: ["aurora", "starlink", "devices", deviceId],
     queryFn: () => callAuroraApi<{ device_id: string; status?: string; last_seen?: string }>(`/api/starlink/devices/${deviceId}`),
-    enabled: hasAuroraSession() && !!deviceId,
+    enabled: STARLINK_EXTENDED_API_ENABLED && hasAuroraSession() && !!deviceId,
     retry: 2,
   });
 }
@@ -58,7 +52,7 @@ export function useStarlinkStats() {
   return useQuery({
     queryKey: ["aurora", "starlink", "stats"],
     queryFn: () => callAuroraApi<StarlinkStats>("/api/starlink/stats"),
-    enabled: hasAuroraSession(),
+    enabled: STARLINK_EXTENDED_API_ENABLED && hasAuroraSession(),
     staleTime: 15000,
     refetchInterval: 30000,
     retry: 2,
@@ -69,7 +63,7 @@ export function useStarlinkGlobalStats() {
   return useQuery({
     queryKey: ["aurora", "starlink", "stats", "global"],
     queryFn: () => callAuroraApi<StarlinkStats>("/api/starlink/stats/global"),
-    enabled: hasAuroraSession(),
+    enabled: STARLINK_EXTENDED_API_ENABLED && hasAuroraSession(),
     ...defaultQueryOptions,
   });
 }
@@ -78,7 +72,7 @@ export function useStarlinkDeviceStatsById(deviceId: string) {
   return useQuery({
     queryKey: ["aurora", "starlink", "stats", "device", deviceId],
     queryFn: () => callAuroraApi<Record<string, unknown>>(`/api/starlink/stats/device/${deviceId}`),
-    enabled: hasAuroraSession() && !!deviceId,
+    enabled: STARLINK_EXTENDED_API_ENABLED && hasAuroraSession() && !!deviceId,
     retry: 2,
   });
 }
@@ -87,7 +81,7 @@ export function useStarlinkSignalStrength() {
   return useQuery({
     queryKey: ["aurora", "starlink", "signal-strength"],
     queryFn: () => callAuroraApi<StarlinkSignalStrength>("/api/starlink/signal-strength"),
-    enabled: hasAuroraSession(),
+    enabled: STARLINK_EXTENDED_API_ENABLED && hasAuroraSession(),
     staleTime: 15000,
     refetchInterval: 30000,
     retry: 2,
@@ -98,7 +92,7 @@ export function useStarlinkPerformance() {
   return useQuery({
     queryKey: ["aurora", "starlink", "performance"],
     queryFn: () => callAuroraApi<StarlinkPerformance>("/api/starlink/performance"),
-    enabled: hasAuroraSession(),
+    enabled: STARLINK_EXTENDED_API_ENABLED && hasAuroraSession(),
     staleTime: 15000,
     refetchInterval: 30000,
     retry: 2,
@@ -109,7 +103,7 @@ export function useStarlinkPower() {
   return useQuery({
     queryKey: ["aurora", "starlink", "power"],
     queryFn: () => callAuroraApi<StarlinkPower>("/api/starlink/power"),
-    enabled: hasAuroraSession(),
+    enabled: STARLINK_EXTENDED_API_ENABLED && hasAuroraSession(),
     staleTime: 15000,
     refetchInterval: 30000,
     retry: 2,
@@ -120,7 +114,7 @@ export function useStarlinkConnectivity() {
   return useQuery({
     queryKey: ["aurora", "starlink", "connectivity"],
     queryFn: () => callAuroraApi<StarlinkConnectivity>("/api/starlink/connectivity"),
-    enabled: hasAuroraSession(),
+    enabled: STARLINK_EXTENDED_API_ENABLED && hasAuroraSession(),
     staleTime: 15000,
     refetchInterval: 30000,
     retry: 2,
