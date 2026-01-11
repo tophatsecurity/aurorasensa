@@ -7,7 +7,7 @@ import SensorsContent from "@/components/SensorsContent";
 import AlertsContent from "@/components/AlertsContent";
 import MapContent from "@/components/MapContent";
 import ClientsContent from "@/components/ClientsContent";
-import RulesContent from "@/components/RulesContent";
+import RulesBaselinesContent from "@/components/RulesBaselinesContent";
 import PowerContent from "@/components/PowerContent";
 import DataBatchesContent from "@/components/DataBatchesContent";
 import ExportContent from "@/components/ExportContent";
@@ -90,7 +90,9 @@ const Index = () => {
       case "clients":
         return <ClientsContent />;
       case "rules":
-        return <RulesContent />;
+        return <RulesBaselinesContent />;
+      case "baselines":
+        return <RulesBaselinesContent />;
       case "power":
         return <PowerContent />;
       case "data-batches":
@@ -110,7 +112,7 @@ const Index = () => {
       case "maritime":
         return <MaritimeContent />;
       case "baselines":
-        return <BaselinesContent />;
+        return <RulesBaselinesContent />;
       case "audit-logs":
         return <AuditLogsContent />;
       case "configuration":
