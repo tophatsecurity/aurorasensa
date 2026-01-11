@@ -483,12 +483,42 @@ export function useMapData(options: UseMapDataOptions = {}) {
       return null;
     };
 
-    // Try Starlink stats numeric fields
+    // Try Starlink stats numeric fields - check nested paths like starlink.latitude, starlink.location_detail.latitude
     if (starlinkStats?.numeric_field_stats_24h) {
-      const stats = starlinkStats.numeric_field_stats_24h as Record<string, { avg?: number }>;
-      const lat = stats.latitude?.avg;
-      const lng = stats.longitude?.avg;
-      const alt = stats.altitude?.avg;
+      const stats = starlinkStats.numeric_field_stats_24h as Record<string, { avg?: number; min?: number; max?: number }>;
+      
+      // Try various field paths used in Starlink data
+      const latitudeFields = ['starlink.latitude', 'starlink.location_detail.latitude', 'latitude', 'lat'];
+      const longitudeFields = ['starlink.longitude', 'starlink.location_detail.longitude', 'longitude', 'lon', 'lng'];
+      const altitudeFields = ['starlink.altitude', 'starlink.location_detail.altitude', 'altitude', 'alt'];
+      
+      let lat: number | undefined;
+      let lng: number | undefined;
+      let alt: number | undefined;
+      
+      // Find latitude
+      for (const field of latitudeFields) {
+        if (stats[field]?.avg !== undefined) {
+          lat = stats[field].avg;
+          break;
+        }
+      }
+      
+      // Find longitude
+      for (const field of longitudeFields) {
+        if (stats[field]?.avg !== undefined) {
+          lng = stats[field].avg;
+          break;
+        }
+      }
+      
+      // Find altitude
+      for (const field of altitudeFields) {
+        if (stats[field]?.avg !== undefined) {
+          alt = stats[field].avg;
+          break;
+        }
+      }
       
       if (lat !== undefined && lng !== undefined && 
           lat >= -90 && lat <= 90 && 
