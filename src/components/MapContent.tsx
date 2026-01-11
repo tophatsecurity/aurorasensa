@@ -65,7 +65,7 @@ const MapContent = () => {
   const trailsRef = useRef<Map<string, L.Polyline>>(new Map());
   const adsbTrailsRef = useRef<Map<string, L.Polyline>>(new Map());
   const coverageCirclesRef = useRef<Map<string, L.Circle>>(new Map());
-  const [activeFilters, setActiveFilters] = useState<ActiveFilters>(new Set(['gps', 'starlink', 'clients', 'lora', 'adsb']));
+  const [activeFilters, setActiveFilters] = useState<ActiveFilters>(new Set(['gps', 'starlink', 'clients', 'lora', 'adsb', 'wifi', 'bluetooth', 'aprs']));
   const [showCoverage, setShowCoverage] = useState(true);
   const [hasInitialFit, setHasInitialFit] = useState(false);
   const [showTrails, setShowTrails] = useState(true);

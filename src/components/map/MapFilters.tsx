@@ -1,5 +1,5 @@
 import { memo, useMemo } from "react";
-import { Navigation, Radio, Wifi, Plane } from "lucide-react";
+import { Navigation, Radio, Wifi, Plane, Bluetooth, Antenna } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import type { FilterType, MapStats, FilterButton, ActiveFilters } from "@/types/map";
 
@@ -20,6 +20,9 @@ export const MapFilters = memo(function MapFilters({
     { id: 'adsb', label: 'ADS-B', icon: <Plane className="w-3 h-3" />, color: 'bg-cyan-500', count: stats.adsb },
     { id: 'clients', label: 'Clients', icon: <Radio className="w-3 h-3" />, color: 'bg-orange-500', count: stats.clients },
     { id: 'lora', label: 'LoRa', icon: <Radio className="w-3 h-3" />, color: 'bg-red-500', count: stats.lora },
+    { id: 'wifi', label: 'WiFi', icon: <Wifi className="w-3 h-3" />, color: 'bg-blue-500', count: stats.wifi },
+    { id: 'bluetooth', label: 'Bluetooth', icon: <Bluetooth className="w-3 h-3" />, color: 'bg-indigo-500', count: stats.bluetooth },
+    { id: 'aprs', label: 'APRS', icon: <Antenna className="w-3 h-3" />, color: 'bg-amber-500', count: stats.aprs },
   ], [stats]);
 
   return (
