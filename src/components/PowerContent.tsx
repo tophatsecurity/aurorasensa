@@ -4,7 +4,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
 import { Button } from "@/components/ui/button";
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, AreaChart, Area, BarChart, Bar, Legend, PieChart, Pie, Cell } from "recharts";
-import { useDashboardTimeseries, useComprehensiveStats, useStarlinkPower, useAllSensorStats, useSensorStatsHistory, useDeviceStatsHistory, StarlinkPowerDeviceSummary } from "@/hooks/useAuroraApi";
+import { useDashboardTimeseries, useComprehensiveStats, useStarlinkPower, useAllSensorStats, useSensorStatsHistory, useDeviceStatsHistory, useSensorTypeStats, StarlinkPowerDeviceSummary } from "@/hooks/useAuroraApi";
 import { useQueryClient } from "@tanstack/react-query";
 import { format } from "date-fns";
 import { 
@@ -63,6 +63,7 @@ const PowerContent = () => {
   const { data: allSensorStats, isLoading: sensorStatsLoading } = useAllSensorStats();
   const { data: sensorHistory, isLoading: sensorHistoryLoading } = useSensorStatsHistory(periodHours);
   const { data: deviceHistory, isLoading: deviceHistoryLoading } = useDeviceStatsHistory(periodHours);
+  const { data: systemMonitorStats } = useSensorTypeStats("system_monitor");
 
   const isLoading = statsLoading || timeseriesLoading || starlinkPowerLoading || sensorStatsLoading || sensorHistoryLoading || deviceHistoryLoading;
 
@@ -255,10 +256,19 @@ const PowerContent = () => {
   const hasSensorHistory = sensorPowerHistory.length > 0;
   const hasDeviceHistory = devicePowerHistory.length > 0;
 
-  // Mock voltage/current derived from power (P = V * I, assuming ~12V system)
-  const estimatedVoltage = 12.3;
+  // Try to get real voltage from system_monitor sensors, otherwise estimate
+  const sysVoltageStats = systemMonitorStats?.numeric_field_stats_24h?.voltage;
+  const realVoltage = sysVoltageStats?.avg;
+  const hasRealVoltage = realVoltage !== undefined && realVoltage !== null;
+  const displayVoltage = hasRealVoltage ? realVoltage.toFixed(1) : "12.3";
+  const voltageLabel = hasRealVoltage ? "System Voltage" : "Est. Voltage";
+  
   const displayPower = totalEstimatedPower > 0 ? totalEstimatedPower : currentPower;
-  const estimatedCurrent = displayPower ? (displayPower / estimatedVoltage).toFixed(1) : "—";
+  
+  // Calculate current from power (P = V * I)
+  const voltageForCalc = hasRealVoltage ? realVoltage : 12.3;
+  const calculatedCurrent = displayPower ? (displayPower / voltageForCalc).toFixed(1) : "—";
+  const currentLabel = hasRealVoltage ? "Calculated" : "Est. Current";
 
   return (
     <div className="flex-1 p-6 overflow-y-auto">
@@ -290,8 +300,8 @@ const PowerContent = () => {
                 <Zap className="w-5 h-5 text-yellow-500" />
               </div>
               <div>
-                <p className="text-2xl font-bold">{estimatedVoltage}V</p>
-                <p className="text-sm text-muted-foreground">Voltage</p>
+                <p className="text-2xl font-bold">{displayVoltage}V</p>
+                <p className="text-sm text-muted-foreground">{voltageLabel}</p>
               </div>
             </div>
           </CardContent>
@@ -303,8 +313,8 @@ const PowerContent = () => {
                 <Plug className="w-5 h-5 text-blue-500" />
               </div>
               <div>
-                <p className="text-2xl font-bold">{estimatedCurrent}A</p>
-                <p className="text-sm text-muted-foreground">Current</p>
+                <p className="text-2xl font-bold">{calculatedCurrent}A</p>
+                <p className="text-sm text-muted-foreground">{currentLabel}</p>
               </div>
             </div>
           </CardContent>
