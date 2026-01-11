@@ -1822,14 +1822,14 @@ export function usePowerStats() {
   });
 }
 
+// Note: /api/performance/stats endpoint does not exist in Aurora API
+// Return empty data to prevent API errors
 export function usePerformanceStats() {
   return useQuery({
     queryKey: ["aurora", "performance", "stats"],
-    queryFn: () => callAuroraApi<PerformanceStats>("/api/performance/stats"),
+    queryFn: async (): Promise<PerformanceStats> => ({}),
     enabled: hasAuroraSession(),
-    staleTime: 60000,
-    refetchInterval: 120000,
-    retry: 2,
+    staleTime: Infinity,
   });
 }
 
