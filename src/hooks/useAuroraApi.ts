@@ -1251,11 +1251,47 @@ export function useAlertRules() {
 export function useAlertStats() {
   return useQuery({
     queryKey: ["aurora", "alerts", "stats"],
-    queryFn: () => callAuroraApi<AlertStats>("/api/alerts/stats"),
+    queryFn: async () => {
+      try {
+        return await callAuroraApi<AlertStats>("/api/alerts/stats");
+      } catch (error) {
+        // Fallback: compute stats from alerts list if /api/alerts/stats endpoint fails
+        console.warn("Alert stats endpoint unavailable, computing from alerts list");
+        try {
+          const response = await callAuroraApi<{ alerts: Alert[] }>("/api/alerts/list?limit=1000");
+          const alerts = response.alerts || [];
+          const now = new Date();
+          const last24h = new Date(now.getTime() - 24 * 60 * 60 * 1000);
+          
+          const stats: AlertStats = {
+            total_alerts: alerts.length,
+            active_alerts: alerts.filter(a => !a.resolved).length,
+            acknowledged_alerts: alerts.filter(a => a.acknowledged).length,
+            resolved_alerts: alerts.filter(a => a.resolved).length,
+            alerts_by_severity: alerts.reduce((acc, a) => {
+              acc[a.severity] = (acc[a.severity] || 0) + 1;
+              return acc;
+            }, {} as Record<string, number>),
+            alerts_last_24h: alerts.filter(a => new Date(a.timestamp) >= last24h).length,
+          };
+          return stats;
+        } catch {
+          // Return empty stats if both fail
+          return {
+            total_alerts: 0,
+            active_alerts: 0,
+            acknowledged_alerts: 0,
+            resolved_alerts: 0,
+            alerts_by_severity: {},
+            alerts_last_24h: 0
+          };
+        }
+      }
+    },
     enabled: hasAuroraSession(),
     staleTime: 60000,
     refetchInterval: 120000,
-    retry: 2,
+    retry: 0,
   });
 }
 

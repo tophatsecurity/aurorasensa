@@ -154,16 +154,52 @@ export function useAlertRules() {
 export function useAlertStats() {
   return useQuery({
     queryKey: ["aurora", "alerts", "stats"],
-    queryFn: () => safeAlertApiCall<AlertStats>("/api/alerts/stats", {
-      total: 0,
-      active: 0,
-      acknowledged: 0,
-      resolved: 0,
-      by_severity: {},
-      by_type: {},
-      last_24h: 0,
-      last_hour: 0
-    }),
+    queryFn: async () => {
+      try {
+        return await callAuroraApi<AlertStats>("/api/alerts/stats");
+      } catch (error) {
+        // Fallback: compute stats from alerts list if /api/alerts/stats endpoint fails
+        console.warn("Alert stats endpoint unavailable, computing from alerts list");
+        try {
+          const response = await callAuroraApi<{ alerts: Alert[] }>("/api/alerts/list?limit=1000");
+          const alerts = response.alerts || [];
+          const now = new Date();
+          const last24h = new Date(now.getTime() - 24 * 60 * 60 * 1000);
+          const lastHour = new Date(now.getTime() - 60 * 60 * 1000);
+          
+          const stats: AlertStats = {
+            total: alerts.length,
+            active: alerts.filter(a => a.status === 'active' && !a.resolved_at).length,
+            acknowledged: alerts.filter(a => a.acknowledged_at).length,
+            resolved: alerts.filter(a => a.resolved_at).length,
+            by_severity: alerts.reduce((acc, a) => {
+              acc[a.severity] = (acc[a.severity] || 0) + 1;
+              return acc;
+            }, {} as Record<string, number>),
+            by_type: alerts.reduce((acc, a) => {
+              const type = a.sensor_type || a.type || 'unknown';
+              acc[type] = (acc[type] || 0) + 1;
+              return acc;
+            }, {} as Record<string, number>),
+            last_24h: alerts.filter(a => new Date(a.triggered_at) >= last24h).length,
+            last_hour: alerts.filter(a => new Date(a.triggered_at) >= lastHour).length,
+          };
+          return stats;
+        } catch {
+          // Return empty stats if both fail
+          return {
+            total: 0,
+            active: 0,
+            acknowledged: 0,
+            resolved: 0,
+            by_severity: {},
+            by_type: {},
+            last_24h: 0,
+            last_hour: 0
+          };
+        }
+      }
+    },
     enabled: hasAuroraSession(),
     staleTime: 60000,
     refetchInterval: 120000,
