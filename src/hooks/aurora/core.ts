@@ -29,10 +29,13 @@ async function sleep(ms: number): Promise<void> {
 function isRetryableError(error: Error): boolean {
   const message = error.message.toLowerCase();
   return message.includes('503') || 
+         message.includes('504') ||
          message.includes('boot_error') || 
          message.includes('function failed to start') ||
          message.includes('network') ||
-         message.includes('timeout');
+         message.includes('timeout') ||
+         message.includes('unavailable') ||
+         message.includes('retryable');
 }
 
 interface AuroraProxyResponse {
@@ -121,12 +124,17 @@ export async function callAuroraApi<T>(
   throw lastError || new Error(`Failed after ${MAX_RETRIES} retries`);
 }
 
-// Default query options
+// Retry delay function for react-query
+const retryDelay = (attemptIndex: number) => Math.min(1000 * 2 ** attemptIndex, 30000);
+
+// Default query options with better error handling
 export const defaultQueryOptions = {
   enabled: true,
   staleTime: 60000,
   refetchInterval: 120000,
-  retry: 2,
+  retry: 3,
+  retryDelay,
+  refetchOnWindowFocus: false,
 };
 
 // Fast polling options (for real-time data)
@@ -134,7 +142,9 @@ export const fastQueryOptions = {
   enabled: true,
   staleTime: 30000,
   refetchInterval: 60000,
-  retry: 2,
+  retry: 3,
+  retryDelay,
+  refetchOnWindowFocus: false,
 };
 
 // Slow polling options (for rarely changing data)
@@ -142,5 +152,7 @@ export const slowQueryOptions = {
   enabled: true,
   staleTime: 120000,
   refetchInterval: 300000,
-  retry: 2,
+  retry: 3,
+  retryDelay,
+  refetchOnWindowFocus: false,
 };
