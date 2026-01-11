@@ -65,8 +65,16 @@ import {
   useSystemInfo,
   useHealth,
   useLatestReadings,
+  useAlertStats,
+  useBatchesList,
+  useDeviceStatus,
+  usePerformanceStats,
   Client 
 } from "@/hooks/useAuroraApi";
+import { 
+  useStatsOverview,
+  useGlobalStats,
+} from "@/hooks/aurora/stats";
 import { useSensorReadingsSSE } from "@/hooks/useSSE";
 import { MemoryStick, HardDrive } from "lucide-react";
 import { formatLastSeen, formatDate, formatDateTime, getDeviceStatusFromLastSeen } from "@/utils/dateUtils";
@@ -145,8 +153,14 @@ const DashboardContent = () => {
   
   // Aurora services status - removed to reduce API calls, health check is sufficient
   const { data: health, isLoading: healthLoading } = useHealth();
-
   
+  // Additional stats from API
+  const { data: alertStats, isLoading: alertStatsLoading } = useAlertStats();
+  const { data: batchesData, isLoading: batchesLoading } = useBatchesList(10);
+  const { data: deviceStatus, isLoading: deviceStatusLoading } = useDeviceStatus();
+  const { data: statsOverview, isLoading: statsOverviewLoading } = useStatsOverview();
+  const { data: performanceStats, isLoading: performanceLoading } = usePerformanceStats();
+  const { data: globalStats, isLoading: globalStatsLoading } = useGlobalStats();
   // Real timeseries data for sparklines - now using context filters
   const { data: starlinkTimeseries, isLoading: starlinkTimeseriesLoading } = useStarlinkTimeseries(periodHours, selectedClient);
   const { data: thermalTimeseries, isLoading: thermalTimeseriesLoading } = useThermalProbeTimeseries(periodHours, selectedClient);
@@ -1055,7 +1069,7 @@ const DashboardContent = () => {
             <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
           </div>
         ) : (
-          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
+          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
             {/* API Health */}
             <div className="glass-card rounded-lg p-4 border border-border/50">
               <div className="flex items-center gap-2 mb-2">
@@ -1087,16 +1101,94 @@ const DashboardContent = () => {
                 <span className="text-xs text-muted-foreground">Server Uptime</span>
               </div>
               <div className="text-lg font-bold text-foreground">
-                {systemInfo?.uptime_seconds 
-                  ? `${Math.floor(systemInfo.uptime_seconds / 86400)}d ${Math.floor((systemInfo.uptime_seconds % 86400) / 3600)}h`
-                  : typeof systemInfo?.uptime === 'object' && systemInfo?.uptime !== null
-                    ? (systemInfo.uptime as { formatted?: string })?.formatted ?? "—"
-                    : typeof systemInfo?.uptime === 'string' 
-                      ? systemInfo.uptime 
-                      : "—"}
+                {statsOverview?.uptime_seconds 
+                  ? `${Math.floor(statsOverview.uptime_seconds / 86400)}d ${Math.floor((statsOverview.uptime_seconds % 86400) / 3600)}h`
+                  : systemInfo?.uptime_seconds 
+                    ? `${Math.floor(systemInfo.uptime_seconds / 86400)}d ${Math.floor((systemInfo.uptime_seconds % 86400) / 3600)}h`
+                    : typeof systemInfo?.uptime === 'object' && systemInfo?.uptime !== null
+                      ? (systemInfo.uptime as { formatted?: string })?.formatted ?? "—"
+                      : typeof systemInfo?.uptime === 'string' 
+                        ? systemInfo.uptime 
+                        : "—"}
               </div>
               <div className="text-xs text-muted-foreground mt-1">
                 {systemInfo?.ip_address ?? ""}
+              </div>
+            </div>
+            
+            {/* CPU Usage from Performance Stats */}
+            <div className="glass-card rounded-lg p-4 border border-border/50">
+              <div className="flex items-center gap-2 mb-2">
+                <div className="w-8 h-8 rounded-lg bg-orange-500/20 flex items-center justify-center">
+                  <Cpu className="w-4 h-4 text-orange-400" />
+                </div>
+                <span className="text-xs text-muted-foreground">CPU Usage</span>
+              </div>
+              <div className="text-lg font-bold text-orange-400">
+                {performanceStats?.cpu_percent !== undefined 
+                  ? `${performanceStats.cpu_percent.toFixed(1)}%`
+                  : "—"}
+              </div>
+              <div className="text-xs text-muted-foreground mt-1">
+                Processing load
+              </div>
+            </div>
+            
+            {/* Memory Usage */}
+            <div className="glass-card rounded-lg p-4 border border-border/50">
+              <div className="flex items-center gap-2 mb-2">
+                <div className="w-8 h-8 rounded-lg bg-violet-500/20 flex items-center justify-center">
+                  <MemoryStick className="w-4 h-4 text-violet-400" />
+                </div>
+                <span className="text-xs text-muted-foreground">Memory</span>
+              </div>
+              <div className="text-lg font-bold text-violet-400">
+                {performanceStats?.memory_percent !== undefined 
+                  ? `${performanceStats.memory_percent.toFixed(1)}%`
+                  : systemInfo?.memory?.percent !== undefined
+                    ? `${systemInfo.memory.percent.toFixed(1)}%`
+                    : "—"}
+              </div>
+              <div className="text-xs text-muted-foreground mt-1">
+                RAM utilization
+              </div>
+            </div>
+            
+            {/* Disk Usage */}
+            <div className="glass-card rounded-lg p-4 border border-border/50">
+              <div className="flex items-center gap-2 mb-2">
+                <div className="w-8 h-8 rounded-lg bg-cyan-500/20 flex items-center justify-center">
+                  <HardDrive className="w-4 h-4 text-cyan-400" />
+                </div>
+                <span className="text-xs text-muted-foreground">Disk</span>
+              </div>
+              <div className="text-lg font-bold text-cyan-400">
+                {performanceStats?.disk_percent !== undefined 
+                  ? `${performanceStats.disk_percent.toFixed(1)}%`
+                  : systemInfo?.disk?.percent !== undefined
+                    ? `${systemInfo.disk.percent.toFixed(1)}%`
+                    : "—"}
+              </div>
+              <div className="text-xs text-muted-foreground mt-1">
+                Storage used
+              </div>
+            </div>
+            
+            {/* Requests/sec from Performance */}
+            <div className="glass-card rounded-lg p-4 border border-border/50">
+              <div className="flex items-center gap-2 mb-2">
+                <div className="w-8 h-8 rounded-lg bg-green-500/20 flex items-center justify-center">
+                  <Activity className="w-4 h-4 text-green-400" />
+                </div>
+                <span className="text-xs text-muted-foreground">Requests</span>
+              </div>
+              <div className="text-lg font-bold text-green-400">
+                {performanceStats?.request_count_1h !== undefined 
+                  ? performanceStats.request_count_1h.toLocaleString()
+                  : "—"}
+              </div>
+              <div className="text-xs text-muted-foreground mt-1">
+                Last hour
               </div>
             </div>
           </div>
