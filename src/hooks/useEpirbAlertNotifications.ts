@@ -3,7 +3,15 @@ import { useEpirbActiveAlerts, EpirbBeacon } from "@/hooks/aurora/maritime";
 import { toast } from "@/hooks/use-toast";
 import { formatDistanceToNow } from "date-fns";
 
+// EPIRB alerts are disabled until the maritime API endpoints are available
+const EPIRB_ALERTS_ENABLED = false;
+
 export function useEpirbAlertNotifications() {
+  // Return empty data when EPIRB alerts are disabled
+  if (!EPIRB_ALERTS_ENABLED) {
+    return { activeAlerts: [] as EpirbBeacon[] };
+  }
+
   const { data: activeAlerts } = useEpirbActiveAlerts();
   const previousAlertsRef = useRef<Set<string>>(new Set());
   const initialLoadRef = useRef(true);

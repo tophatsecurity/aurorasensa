@@ -101,14 +101,25 @@ export interface UpdateAlertRulePayload {
 // QUERY HOOKS
 // =============================================
 
+// Safe wrapper that returns default empty data on API errors (404, etc.)
+async function safeAlertApiCall<T>(endpoint: string, defaultValue: T): Promise<T> {
+  try {
+    return await callAuroraApi<T>(endpoint);
+  } catch (error) {
+    // Return default value for 404s or other API errors
+    console.warn(`Alert API endpoint ${endpoint} not available, using defaults`);
+    return defaultValue;
+  }
+}
+
 export function useAlerts(limit: number = 100) {
   return useQuery({
     queryKey: ["aurora", "alerts", limit],
-    queryFn: () => callAuroraApi<{ alerts: Alert[] }>(`/api/alerts?limit=${limit}`),
+    queryFn: () => safeAlertApiCall<{ alerts: Alert[] }>(`/api/alerts?limit=${limit}`, { alerts: [] }),
     enabled: hasAuroraSession(),
     staleTime: 30000,
     refetchInterval: 60000,
-    retry: 1,
+    retry: 0,
   });
 }
 
@@ -121,54 +132,63 @@ export function useAlertsList(params?: { severity?: string; acknowledged?: boole
   
   return useQuery({
     queryKey: ["aurora", "alerts", "list", params],
-    queryFn: () => callAuroraApi<{ alerts: Alert[]; count: number }>(`/api/alerts/list?${queryParams}`),
+    queryFn: () => safeAlertApiCall<{ alerts: Alert[]; count: number }>(`/api/alerts/list?${queryParams}`, { alerts: [], count: 0 }),
     enabled: hasAuroraSession(),
     staleTime: 30000,
     refetchInterval: 60000,
-    retry: 1,
+    retry: 0,
   });
 }
 
 export function useAlertRules() {
   return useQuery({
     queryKey: ["aurora", "alerts", "rules"],
-    queryFn: () => callAuroraApi<{ rules: AlertRule[] }>("/api/alerts/rules"),
+    queryFn: () => safeAlertApiCall<{ rules: AlertRule[] }>("/api/alerts/rules", { rules: [] }),
     enabled: hasAuroraSession(),
     staleTime: 60000,
     refetchInterval: 120000,
-    retry: 1,
+    retry: 0,
   });
 }
 
 export function useAlertStats() {
   return useQuery({
     queryKey: ["aurora", "alerts", "stats"],
-    queryFn: () => callAuroraApi<AlertStats>("/api/alerts/stats"),
+    queryFn: () => safeAlertApiCall<AlertStats>("/api/alerts/stats", {
+      total: 0,
+      active: 0,
+      acknowledged: 0,
+      resolved: 0,
+      by_severity: {},
+      by_type: {},
+      last_24h: 0,
+      last_hour: 0
+    }),
     enabled: hasAuroraSession(),
     staleTime: 60000,
     refetchInterval: 120000,
-    retry: 1,
+    retry: 0,
   });
 }
 
 export function useAlertSettings() {
   return useQuery({
     queryKey: ["aurora", "alerts", "settings"],
-    queryFn: () => callAuroraApi<AlertSettings>("/api/alerts/settings"),
+    queryFn: () => safeAlertApiCall<AlertSettings>("/api/alerts/settings", {}),
     enabled: hasAuroraSession(),
     staleTime: 120000,
-    retry: 2,
+    retry: 0,
   });
 }
 
 export function useDeviceAlerts(deviceId: string) {
   return useQuery({
     queryKey: ["aurora", "alerts", "device", deviceId],
-    queryFn: () => callAuroraApi<{ alerts: Alert[] }>(`/api/alerts/device/${deviceId}`),
+    queryFn: () => safeAlertApiCall<{ alerts: Alert[] }>(`/api/alerts/device/${deviceId}`, { alerts: [] }),
     enabled: !!deviceId && hasAuroraSession(),
     staleTime: 30000,
     refetchInterval: 60000,
-    retry: 1,
+    retry: 0,
   });
 }
 
