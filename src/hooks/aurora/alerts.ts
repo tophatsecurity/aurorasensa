@@ -143,7 +143,16 @@ export function useAlertsList(params?: { severity?: string; acknowledged?: boole
 export function useAlertRules() {
   return useQuery({
     queryKey: ["aurora", "alerts", "rules"],
-    queryFn: () => safeAlertApiCall<{ rules: AlertRule[] }>("/api/alerts/rules", { rules: [] }),
+    queryFn: async () => {
+      try {
+        return await callAuroraApi<{ rules: AlertRule[] }>("/api/alerts/rules");
+      } catch (error) {
+        // The /api/alerts/rules endpoint may not exist on the Aurora backend
+        // Return empty rules to prevent UI errors
+        console.warn("Alert rules endpoint unavailable, returning empty rules");
+        return { rules: [] };
+      }
+    },
     enabled: hasAuroraSession(),
     staleTime: 60000,
     refetchInterval: 120000,
