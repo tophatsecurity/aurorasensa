@@ -19,7 +19,7 @@ import { useSSEMapUpdates } from "@/hooks/useSSEMapUpdates";
 import { MapLegend } from "@/components/map/MapLegend";
 import { MapLoadingOverlay } from "@/components/map/MapLoadingOverlay";
 import { MapHeader } from "@/components/map/MapHeader";
-import { MapFilters } from "@/components/map/MapFilters";
+import { MapFilters, ALL_FILTER_IDS } from "@/components/map/MapFilters";
 import { GpsHistorySettings } from "@/components/map/GpsHistorySettings";
 import { TimeframeSelector, TimeframeOption, timeframeToMinutes } from "@/components/map/TimeframeSelector";
 import { AutoRefreshSelector, AutoRefreshInterval, getRefreshIntervalMs } from "@/components/map/AutoRefreshSelector";
@@ -972,6 +972,14 @@ const MapContent = () => {
     }
   }, [allPositions]);
 
+  const handleSelectAllFilters = useCallback(() => {
+    setActiveFilters(new Set(ALL_FILTER_IDS));
+  }, []);
+
+  const handleDeselectAllFilters = useCallback(() => {
+    setActiveFilters(new Set());
+  }, []);
+
   return (
     <div className="flex flex-col h-full w-full">
       {/* Header */}
@@ -1044,6 +1052,8 @@ const MapContent = () => {
             activeFilters={activeFilters}
             stats={stats}
             onToggleFilter={handleToggleFilter}
+            onSelectAll={handleSelectAllFilters}
+            onDeselectAll={handleDeselectAllFilters}
           />
         </div>
       </div>

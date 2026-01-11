@@ -1,18 +1,25 @@
 import { memo, useMemo } from "react";
-import { Navigation, Radio, Wifi, Plane, Bluetooth, Antenna, Ship, LifeBuoy } from "lucide-react";
+import { Navigation, Radio, Wifi, Plane, Bluetooth, Antenna, Ship, LifeBuoy, CheckSquare, Square } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import type { FilterType, MapStats, FilterButton, ActiveFilters } from "@/types/map";
 
 interface MapFiltersProps {
   activeFilters: ActiveFilters;
   stats: MapStats;
   onToggleFilter: (filter: Exclude<FilterType, 'all'>) => void;
+  onSelectAll?: () => void;
+  onDeselectAll?: () => void;
 }
+
+const ALL_FILTER_IDS: Exclude<FilterType, 'all'>[] = ['gps', 'starlink', 'adsb', 'clients', 'lora', 'wifi', 'bluetooth', 'aprs', 'ais', 'epirb'];
 
 export const MapFilters = memo(function MapFilters({ 
   activeFilters, 
   stats, 
-  onToggleFilter 
+  onToggleFilter,
+  onSelectAll,
+  onDeselectAll,
 }: MapFiltersProps) {
   const filterButtons = useMemo<FilterButton[]>(() => [
     { id: 'gps', label: 'GPS', icon: <Navigation className="w-3 h-3" />, color: 'bg-green-500', count: stats.gps },
@@ -27,8 +34,35 @@ export const MapFilters = memo(function MapFilters({
     { id: 'epirb', label: 'EPIRB', icon: <LifeBuoy className="w-3 h-3" />, color: 'bg-rose-500', count: stats.epirb },
   ], [stats]);
 
+  const allSelected = activeFilters.size === ALL_FILTER_IDS.length;
+  const noneSelected = activeFilters.size === 0;
+
   return (
     <div className="flex items-center gap-2 flex-wrap justify-start w-full">
+      {/* Select All / Deselect All Toggle */}
+      <Button
+        variant="outline"
+        size="sm"
+        className={`gap-1.5 h-7 px-2.5 text-xs border-border/50 ${
+          allSelected ? 'bg-primary/10 text-primary border-primary/30' : ''
+        }`}
+        onClick={allSelected ? onDeselectAll : onSelectAll}
+      >
+        {allSelected ? (
+          <>
+            <Square className="w-3 h-3" />
+            Clear All
+          </>
+        ) : (
+          <>
+            <CheckSquare className="w-3 h-3" />
+            Select All
+          </>
+        )}
+      </Button>
+
+      <div className="w-px h-5 bg-border/50 mx-1" />
+
       {filterButtons.map((btn) => {
         const isActive = activeFilters.has(btn.id);
         return (
@@ -51,3 +85,5 @@ export const MapFilters = memo(function MapFilters({
     </div>
   );
 });
+
+export { ALL_FILTER_IDS };
