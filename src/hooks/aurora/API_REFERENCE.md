@@ -1,0 +1,315 @@
+# Aurora API Reference
+
+Based on the official API documentation at http://aurora.tophatsecurity.com:9151/docs
+
+## Authentication
+- `POST /api/auth/login` - Login
+- `POST /api/auth/logout` - Logout
+- `GET /api/auth/verify` - Verify Session
+- `GET /api/auth/me` - Get Current User Info
+- `POST /api/auth/change-password` - Change Password
+
+## User Management
+- `GET /api/users` - List Users
+- `POST /api/users` - Create User
+- `DELETE /api/users/{target_username}` - Delete User
+- `GET /api/users/{user_id}` - Get User
+- `PUT /api/users/{user_id}` - Update User
+
+## Roles & Permissions
+- `GET /api/roles` - List Roles
+- `POST /api/users/{user_id}/roles` - Assign Role
+- `GET /api/users/{user_id}/roles` - Get User Roles
+- `GET /api/permissions` - List Permissions
+- `GET /api/users/{user_id}/permissions` - Get User Permissions
+
+## API Keys
+- `GET /api/users/{user_id}/api-keys` - List User API Keys
+- `POST /api/users/{user_id}/api-keys` - Create User API Key
+- `DELETE /api/users/{user_id}/api-keys/{key_id}` - Delete API Key
+
+## Activity & Sessions
+- `GET /api/activity` - Get Activity Feed
+- `GET /api/users/{user_id}/activity` - Get User Activity Log
+- `GET /api/users/{user_id}/sessions` - List User Sessions
+
+## Audit Logs
+- `GET /api/audit/logs` - Get Audit Logs
+- `GET /api/audit/stats` - Get Audit Stats
+
+## Alerts
+- `GET /api/alerts` - Get Alerts
+- `GET /api/alerts/list` - List Alerts
+- `POST /api/alerts/add` - Add Alert Rule
+- `DELETE /api/alerts/{rule_id}` - Delete Alert Rule
+- `GET /api/device-alerts` - Get Device Alerts
+- `GET /api/alerts/rules` - Get Alert Rules
+- `POST /api/alerts/rules` - Create Alert Rule
+- `GET /api/alerts/rules/{rule_id}` - Get Alert Rule
+- `PUT /api/alerts/rules/{rule_id}` - Update Alert Rule
+- `DELETE /api/alerts/rules/{rule_id}` - Delete Alert Rule
+- `POST /api/alerts/{alert_id}/acknowledge` - Acknowledge Alert
+- `POST /api/alerts/{alert_id}/resolve` - Resolve Alert
+- `GET /api/alerts/stats` - Get Alert Stats
+- `GET /api/alerts/settings` - Get Alert Settings
+- `PUT /api/alerts/settings` - Update Alert Settings
+- `POST /api/alerts/test` - Test Alert
+
+## Sensors
+- `GET /api/sensors/recent` - Get Recent Sensors
+- `GET /api/sensors/list` - List Sensors
+- `GET /api/sensors/{sensor_id}` - Get Sensor
+- `PUT /api/sensors/{sensor_id}` - Update Sensor
+- `DELETE /api/sensors/{sensor_id}` - Delete Sensor
+- `POST /api/sensors/add` - Add Sensor
+
+## Data Ingestion
+- `POST /api/v1/batch` - Receive Batch
+- `POST /api/v1/client/config` - Receive Client Config
+
+## Data Retrieval
+- `GET /api/devices/tree` - Get Device Tree
+- `GET /api/devices/{device_id}/latest` - Get Device Latest
+- `GET /api/readings/latest` - Get Latest Readings
+- `GET /api/readings/sensor/{sensor_type}` - Get Sensor Readings
+- `GET /api/power/stats` - Get Power Stats
+- `GET /api/v1/data/readings` - Get Readings
+- `GET /api/v1/data/latest` - Get Latest
+
+## Batches
+- `GET /api/batches/list` - List Batches
+- `GET /api/batches/latest` - Get Latest Batch
+- `GET /api/batches/{batch_id}` - Get Batch By ID
+- `GET /api/batches/{batch_id}/sensors` - Get Batch Sensors
+- `GET /api/batches/by-client/{client_id}` - Get Batches By Client
+- `GET /api/batches/{batch_id}/readings` - Get Batch Readings
+
+## Analytics
+- `GET /api/v1/data/moving_average` - Get Moving Average
+- `GET /api/timeseries` - Get Timeseries Data
+
+## Export
+- `GET /api/export/formats` - Get Export Formats
+- `GET /api/v1/export/csv` - Export CSV
+- `GET /api/v1/export/json` - Export JSON
+
+## System Info
+- `GET /api/system/arp` - Get ARP Table
+- `GET /api/system/routing` - Get Routing Table
+- `GET /api/system/interfaces` - Get Network Interfaces
+- `GET /api/system/netstat` - Get Netstat
+- `GET /api/system/external-ip` - Get External IP
+- `GET /api/system/all` - Get All System Info
+- `GET /api/system/hostname` - Get Hostname
+- `GET /api/system/ip` - Get IP Address
+- `GET /api/system/uptime` - Get Uptime
+- `GET /api/system/load` - Get CPU Load
+- `GET /api/system/memory` - Get Memory Usage
+- `GET /api/system/disk` - Get Disk Usage
+- `GET /api/system/usb` - Get USB Devices
+- `GET /api/systemctl/{service_name}` - Get Service Status
+
+## Health
+- `GET /health` - Health Check
+- `GET /api/health` - API Health Check
+
+## ADS-B Aircraft Tracking
+- `GET /api/adsb/aircraft` - Get All Aircraft
+- `GET /api/adsb/aircraft/{icao}` - Get Aircraft by ICAO
+- `GET /api/adsb/stats` - Get ADS-B Stats
+- `GET /api/adsb/emergencies` - Get Emergency Aircraft
+- `GET /api/adsb/nearby` - Get Nearby Aircraft
+- `GET /api/adsb/low-altitude` - Get Low Altitude Aircraft
+- `GET /api/adsb/coverage` - Get Coverage Stats
+- `GET /api/adsb/history/{icao}` - Get Aircraft History
+- `GET /api/adsb/devices` - Get ADS-B Devices
+
+## Starlink
+- `GET /api/starlink/devices` - Get Starlink Devices
+- `GET /api/starlink/devices/{device_id}` - Get Starlink Device
+- `GET /api/starlink/stats` - Get Starlink Stats
+- `GET /api/starlink/stats/global` - Get Global Starlink Stats
+- `GET /api/starlink/stats/device/{device_id}` - Get Device Starlink Stats
+- `GET /api/starlink/signal-strength` - Get Signal Strength
+- `GET /api/starlink/performance` - Get Performance
+- `GET /api/starlink/power` - Get Power
+- `GET /api/starlink/connectivity` - Get Connectivity
+
+## LoRa
+- `GET /api/lora/devices` - Get LoRa Devices
+- `GET /api/lora/devices/{device_id}` - Get LoRa Device
+- `GET /api/lora/detections` - Get LoRa Detections
+- `GET /api/lora/detections/recent` - Get Recent Detections
+- `GET /api/lora/stats/global` - Get Global LoRa Stats
+- `GET /api/lora/stats/device/{device_id}` - Get Device LoRa Stats
+- `GET /api/lora/channels` - Get LoRa Channel Stats
+- `GET /api/lora/spectrum` - Get LoRa Spectrum Analysis
+
+## Clients
+- `GET /api/clients/list` - List Clients
+- `GET /api/clients/{client_id}` - Get Client
+- `DELETE /api/clients/{client_id}` - Delete Client
+- `PUT /api/clients/{client_id}` - Update Client
+- `POST /api/clients/{client_id}/heartbeat` - Client Heartbeat
+- `POST /api/clients/{client_id}/adopt` - Adopt Client
+
+## Client State Management
+- `GET /api/clients/all-states` - Get All Clients by State
+- `GET /api/clients/statistics` - Get Client Statistics
+- `GET /api/clients/pending` - Get Pending Clients
+- `GET /api/clients/registered` - Get Registered Clients
+- `GET /api/clients/adopted` - Get Adopted Clients
+- `GET /api/clients/disabled` - Get Disabled Clients
+- `GET /api/clients/suspended` - Get Suspended Clients
+- `GET /api/clients/deleted` - Get Deleted Clients
+- `POST /api/clients/{client_id}/register` - Register Client
+- `POST /api/clients/{client_id}/adopt-direct` - Adopt Client Direct
+- `POST /api/clients/{client_id}/disable` - Disable Client
+- `POST /api/clients/{client_id}/enable` - Enable Client
+- `POST /api/clients/{client_id}/suspend` - Suspend Client
+- `POST /api/clients/{client_id}/delete-soft` - Soft Delete Client
+- `POST /api/clients/{client_id}/restore` - Restore Client
+- `GET /api/clients/{client_id}/state-history` - Get Client State History
+
+## Client System Info
+- `POST /api/clients/{client_id}/system-info` - Update Client System Info
+- `GET /api/clients/{client_id}/system-info` - Get Client System Info
+- `GET /api/clients/system-info/all` - Get All Clients System Info
+
+## Client Configuration
+- `GET /api/clients/{client_id}/config` - Get Client Config
+- `PUT /api/clients/{client_id}/config` - Update Client Config
+- `GET /api/clients/{client_id}/config/version` - Get Config Version
+- `GET /api/clients/configs/all` - Get All Client Configs
+
+## WiFi Management
+- `GET /api/clients/{client_id}/wifi/mode` - Get WiFi Mode
+- `POST /api/clients/{client_id}/wifi/mode` - Set WiFi Mode
+- `GET /api/clients/{client_id}/wifi/config` - Get WiFi Config
+- `POST /api/clients/{client_id}/wifi/config` - Update WiFi Config
+- `GET /api/clients/{client_id}/wifi/status` - Get WiFi Status
+- `GET /api/clients/{client_id}/wifi/scan` - Scan WiFi Networks
+- `GET /api/clients/{client_id}/wifi/clients` - Get Connected Clients
+- `POST /api/clients/{client_id}/wifi/clients/{mac}/disconnect` - Disconnect Client
+- `GET /api/clients/{client_id}/wifi/version` - Get WiFi API Version
+
+## Update Management (Admin)
+- `POST /api/admin/updates/upload` - Upload Update Package
+- `GET /api/admin/updates/packages` - List Packages
+- `GET /api/admin/updates/packages/{package_id}` - Get Package Details
+- `POST /api/admin/updates/packages/{package_id}/publish` - Publish Package
+- `POST /api/admin/updates/assignments` - Create Assignment
+- `GET /api/admin/updates/status` - Get Update Status Dashboard
+- `GET /api/admin/updates/clients/{client_id}/history` - Get Client Update History
+
+## Client Updates
+- `GET /api/clients/{client_id}/updates/available` - Check Available Updates
+- `GET /api/clients/{client_id}/updates/download/{package_id}` - Download Update Package
+- `POST /api/clients/{client_id}/updates/status` - Report Update Status
+
+## Remote Commands (Admin)
+- `POST /api/admin/commands/send` - Send Command
+- `GET /api/admin/commands/list` - List Commands
+- `GET /api/admin/commands/{command_id}/results` - Get Command Results
+- `GET /api/admin/commands/{command_id}/results/{client_id}` - Get Client Command Result
+
+## Remote Commands (Client)
+- `GET /api/clients/{client_id}/commands/pending` - Get Pending Commands
+- `POST /api/clients/{client_id}/commands/results` - Submit Command Result
+
+## Geo Data
+- `GET /api/geo/locations` - Get Geo Locations
+- `POST /api/geo/update` - Update Geo Location
+
+## Logs
+- `GET /api/logs` - Get Logs
+- `GET /api/logs/datacollector` - Get Datacollector Logs
+- `GET /api/logs/dataserver` - Get Dataserver Logs
+
+## Configuration
+- `GET /api/config` - Get Config
+- `POST /api/config` - Update Config
+
+## Devices
+- `GET /api/devices/status` - Get Device Status
+- `GET /api/v1/devices` - List Devices
+
+## Statistics
+- `GET /api/stats` - Get All Statistics
+- `GET /api/stats/1hr` - Get 1Hr Sensor Stats
+- `GET /api/stats/24hr` - Get 24Hr Sensor Stats
+- `GET /api/stats/weekly` - Get Weekly Sensor Stats
+- `GET /api/stats/6hr` - Get 6Hr Sensor Stats
+- `GET /api/stats/summary` - Get Stats Summary
+- `GET /api/stats/global` - Get Global Stats
+- `GET /api/stats/devices` - Get All Devices Stats
+- `GET /api/stats/devices/{device_id}` - Get Device Stats
+- `GET /api/stats/sensors` - Get All Sensor Stats
+- `GET /api/stats/sensors/{sensor_type}` - Get Sensor Type Stats
+- `GET /api/stats/comprehensive` - Get Comprehensive Stats
+- `GET /api/stats/aircraft` - Get Aircraft Activity
+- `GET /api/stats/endpoints` - Get Endpoint Stats Summary
+- `GET /api/stats/endpoints/history` - Get Endpoint Stats History
+- `GET /api/stats/overview` - Get General Stats
+- `GET /api/performance/stats` - Get Performance Stats
+
+## Historical Stats
+- `GET /api/stats/history/global` - Get Global Stats History
+- `GET /api/stats/history/sensors` - Get Sensor Stats History
+- `GET /api/stats/history/devices` - Get Device Stats History
+- `GET /api/stats/history/alerts` - Get Alert Stats History
+- `GET /api/stats/history/system` - Get System Resource Stats History
+
+## Batch Retention (Admin)
+- `GET /api/admin/batch-retention/config` - Get Batch Retention Config
+- `POST /api/admin/batch-retention/config` - Update Batch Retention Config
+- `GET /api/admin/batch-retention/clients/{client_id}` - Get Client Batch Retention
+- `POST /api/admin/batch-retention/clients/{client_id}` - Update Client Batch Retention
+- `DELETE /api/admin/batch-retention/clients/{client_id}` - Delete Client Batch Retention
+- `POST /api/admin/batch-retention/clients/{client_id}/debug` - Toggle Client Debug Mode
+- `GET /api/admin/batch-retention/disk-usage` - Get Disk Usage Info
+
+## Baselines
+- `GET /api/baselines/profiles` - Get Baseline Profiles
+- `POST /api/baselines/profiles` - Create Baseline Profile
+- `GET /api/baselines/profiles/{profile_id}/entries` - Get Baseline Entries
+- `POST /api/baselines/profiles/{profile_id}/entries` - Add Baseline Entry
+- `DELETE /api/baselines/entries/{entry_id}` - Remove Baseline Entry
+- `GET /api/baselines/violations` - Get Baseline Violations
+- `POST /api/baselines/violations/{violation_id}/acknowledge` - Acknowledge Violation
+- `POST /api/baselines/violations/{violation_id}/whitelist` - Whitelist Violation
+- `POST /api/baselines/profiles/{profile_id}/auto-learn` - Auto Learn Baseline
+
+## Dashboard
+- `GET /api/dashboard/sensor-stats` - Get Dashboard Sensor Stats
+- `GET /api/dashboard/sensor-timeseries` - Get Sensor Timeseries
+- `GET /api/dashboard/system-stats` - Get Dashboard System Stats
+
+## Real-Time Streams (SSE)
+- `GET /api/stream/readings` - Stream Readings
+- `GET /api/stream/commands/{command_id}/status` - Stream Command Status
+- `GET /api/stream/clients` - Stream Clients
+- `GET /api/stream/alerts` - Stream Alerts
+- `GET /api/stream/dashboard/stats` - Stream Dashboard Stats
+- `GET /api/stream/readings/starlink` - Stream Starlink Readings
+- `GET /api/stream/readings/thermal_probe` - Stream Thermal Probe Readings
+- `GET /api/stream/readings/adsb` - Stream ADSB Readings
+- `GET /api/stream/readings/arduino` - Stream Arduino Readings
+- `GET /api/stream/readings/gps` - Stream GPS Readings
+- `GET /api/stream/readings/power` - Stream Power Readings
+- `GET /api/stream/readings/system_monitor` - Stream System Monitor Readings
+- `GET /api/stream/readings/radio` - Stream Radio Readings
+
+## Data Files
+- `GET /starlink_status.jsonl` - Get Starlink Status
+- `GET /gpsd_status.jsonl` - Get GPSD Status
+- `GET /bandwidth.jsonl` - Get Bandwidth
+- `GET /arduino_data.jsonl` - Get Arduino Data
+- `GET /visible_sats.jsonl` - Get Visible Satellites
+- `GET /ping_stats.jsonl` - Get Ping Stats
+
+## V1 Configuration
+- `GET /api/v1/config/{client_id}` - Get Client Config
+- `POST /api/v1/config/{client_id}` - Update Client Config
+- `POST /api/v1/config/new` - Create New Client
+- `GET /api/v1/config` - List All Configs

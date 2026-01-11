@@ -227,6 +227,30 @@ export {
   useAssignRolePermissions,
 } from "./users";
 
+// Activity & Sessions hooks
+export {
+  useActivityFeed,
+  useUserActivity,
+  useUserSessions as useUserSessionsList,
+  useUserApiKeys as useUserApiKeysList,
+  useCreateApiKey,
+  useDeleteApiKey,
+  type ActivityEntry,
+  type UserSession,
+  type ApiKey,
+} from "./activity";
+
+// Real-Time Streams
+export {
+  STREAM_ENDPOINTS,
+  getStreamUrl,
+  type StreamReadingMessage,
+  type StreamClientMessage,
+  type StreamAlertMessage,
+  type StreamDashboardStatsMessage,
+  type StreamCommandStatusMessage,
+} from "./streams";
+
 export {
   useComprehensiveStats,
   useDeviceStats,

@@ -19,9 +19,18 @@ import type {
   LatestReading,
 } from "./types";
 
-// Flag to enable/disable Starlink-specific endpoints that don't exist on Aurora
-// Only /api/readings/sensor/starlink and /api/stats/sensors/starlink work
-const STARLINK_EXTENDED_API_ENABLED = false;
+// Flag to enable/disable Starlink-specific endpoints
+// According to API docs at http://aurora.tophatsecurity.com:9151/docs these endpoints exist:
+// GET /api/starlink/devices - Get Starlink Devices
+// GET /api/starlink/devices/{device_id} - Get Starlink Device
+// GET /api/starlink/stats - Get Starlink Stats
+// GET /api/starlink/stats/global - Get Global Starlink Stats  
+// GET /api/starlink/stats/device/{device_id} - Get Device Starlink Stats
+// GET /api/starlink/signal-strength - Get Starlink Signal Strength
+// GET /api/starlink/performance - Get Starlink Performance
+// GET /api/starlink/power - Get Starlink Power
+// GET /api/starlink/connectivity - Get Starlink Connectivity
+const STARLINK_EXTENDED_API_ENABLED = true;
 
 // =============================================
 // DEVICE EXTRACTION FROM LATEST READINGS
@@ -215,8 +224,12 @@ export function useStarlinkDevices() {
   return useQuery({
     queryKey: ["aurora", "starlink", "devices"],
     queryFn: async () => {
-      // These endpoints don't exist on Aurora - return empty array
-      return [];
+      try {
+        return await callAuroraApi<StarlinkDevice[]>("/api/starlink/devices");
+      } catch (error) {
+        console.warn("Failed to fetch Starlink devices:", error);
+        return [];
+      }
     },
     enabled: STARLINK_EXTENDED_API_ENABLED && hasAuroraSession(),
     ...fastQueryOptions,
