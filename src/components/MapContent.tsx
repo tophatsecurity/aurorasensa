@@ -982,65 +982,68 @@ const MapContent = () => {
           isLoading={isLoading}
           onRefresh={handleRefresh}
         />
-        <div className="flex items-center justify-between gap-4">
+        {/* Filters - Full Width */}
+        <div className="mb-4">
           <MapFilters 
             activeFilters={activeFilters}
             stats={stats}
             onToggleFilter={handleToggleFilter}
           />
-          <div className="flex items-center gap-3">
-            <ClientSelector
-              value={selectedClient}
-              onChange={handleClientChange}
-              showAllOption={true}
+        </div>
+        
+        {/* Controls Row */}
+        <div className="flex items-center justify-end gap-3 flex-wrap">
+          <ClientSelector
+            value={selectedClient}
+            onChange={handleClientChange}
+            showAllOption={true}
+          />
+          <TimeframeSelector 
+            value={timeframe}
+            onChange={(value) => {
+              setTimeframe(value);
+              const minutes = timeframeToMinutes(value);
+              setSensorRetentionMinutes(minutes);
+              setClientRetentionMinutes(minutes);
+            }}
+          />
+          <AutoRefreshSelector
+            value={autoRefreshInterval}
+            onChange={handleAutoRefreshChange}
+            isRefreshing={isLoading}
+            onManualRefresh={handleRefresh}
+          />
+          <GpsHistorySettings
+            sensorRetentionMinutes={sensorRetentionMinutes}
+            clientRetentionMinutes={clientRetentionMinutes}
+            onSensorRetentionChange={setSensorRetentionMinutes}
+            onClientRetentionChange={setClientRetentionMinutes}
+            showTrails={showTrails}
+            onShowTrailsChange={setShowTrails}
+            showAdsbTrails={showAdsbTrails}
+            onShowAdsbTrailsChange={setShowAdsbTrails}
+            trailCount={trails.length}
+            adsbTrailCount={adsbTrails.length + adsbActiveTrails.size}
+            onClearHistory={clearHistory}
+            onClearAdsbTrails={clearAllAdsbTrails}
+          />
+          {/* Real-time SSE Status */}
+          <div className="flex items-center gap-2 border-l border-border/50 pl-3">
+            <Switch
+              id="sse-toggle-map"
+              checked={sseEnabled}
+              onCheckedChange={setSSEEnabled}
             />
-            <TimeframeSelector 
-              value={timeframe}
-              onChange={(value) => {
-                setTimeframe(value);
-                const minutes = timeframeToMinutes(value);
-                setSensorRetentionMinutes(minutes);
-                setClientRetentionMinutes(minutes);
-              }}
-            />
-            <AutoRefreshSelector
-              value={autoRefreshInterval}
-              onChange={handleAutoRefreshChange}
-              isRefreshing={isLoading}
-              onManualRefresh={handleRefresh}
-            />
-            <GpsHistorySettings
-              sensorRetentionMinutes={sensorRetentionMinutes}
-              clientRetentionMinutes={clientRetentionMinutes}
-              onSensorRetentionChange={setSensorRetentionMinutes}
-              onClientRetentionChange={setClientRetentionMinutes}
-              showTrails={showTrails}
-              onShowTrailsChange={setShowTrails}
-              showAdsbTrails={showAdsbTrails}
-              onShowAdsbTrailsChange={setShowAdsbTrails}
-              trailCount={trails.length}
-              adsbTrailCount={adsbTrails.length + adsbActiveTrails.size}
-              onClearHistory={clearHistory}
-              onClearAdsbTrails={clearAllAdsbTrails}
-            />
-            {/* Real-time SSE Status */}
-            <div className="flex items-center gap-2 border-l border-border/50 pl-3">
-              <Switch
-                id="sse-toggle-map"
-                checked={sseEnabled}
-                onCheckedChange={setSSEEnabled}
-              />
-              <Label htmlFor="sse-toggle-map" className="text-xs">SSE</Label>
-              {sseEnabled && (gpsSSE.isConnected || adsbSSE.isConnected) && (
-                <Badge className="gap-1 bg-success/10 text-success border-success/30 text-xs">
-                  <span className="relative flex h-1.5 w-1.5">
-                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-success opacity-75"></span>
-                    <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-success"></span>
-                  </span>
-                  {gpsUpdateCount + adsbUpdateCount > 0 ? `${gpsUpdateCount + adsbUpdateCount} updates` : "Live"}
-                </Badge>
-              )}
-            </div>
+            <Label htmlFor="sse-toggle-map" className="text-xs">SSE</Label>
+            {sseEnabled && (gpsSSE.isConnected || adsbSSE.isConnected) && (
+              <Badge className="gap-1 bg-success/10 text-success border-success/30 text-xs">
+                <span className="relative flex h-1.5 w-1.5">
+                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-success opacity-75"></span>
+                  <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-success"></span>
+                </span>
+                {gpsUpdateCount + adsbUpdateCount > 0 ? `${gpsUpdateCount + adsbUpdateCount} updates` : "Live"}
+              </Badge>
+            )}
           </div>
         </div>
       </div>
