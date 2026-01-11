@@ -299,6 +299,7 @@ export function useStarlinkTimeseries(hours: number = 24, clientId?: string, dev
 export interface StarlinkSensorReading {
   device_id: string;
   timestamp: string;
+  client_id?: string;
   data: {
     latitude?: number;
     longitude?: number;
