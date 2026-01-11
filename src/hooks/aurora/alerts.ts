@@ -7,18 +7,27 @@ import { callAuroraApi, hasAuroraSession } from "./core";
 // =============================================
 
 export interface Alert {
-  id: string;
-  type: string;
-  message: string;
+  alert_id: number;
+  rule_id?: number;
+  client_id?: string | null;
+  sensor_id?: string;
+  sensor_type?: string;
   severity: string;
-  timestamp: string;
+  message: string;
+  value?: string;
+  threshold?: string;
+  status: string;
+  triggered_at: string;
+  acknowledged_at?: string | null;
+  resolved_at?: string | null;
+  rule_name?: string;
+  details?: Record<string, unknown>;
+  // Legacy compatibility fields
+  type?: string;
+  device_id?: string;
+  timestamp?: string;
   acknowledged?: boolean;
   resolved?: boolean;
-  device_id?: string;
-  rule_id?: number;
-  client_id?: string;
-  sensor_type?: string;
-  details?: Record<string, unknown>;
 }
 
 export interface AlertRule {
@@ -210,7 +219,10 @@ export function useAcknowledgeAlert() {
   const queryClient = useQueryClient();
   
   return useMutation({
-    mutationFn: async (alertId: string) => {
+    mutationFn: async (alertId: number) => {
+      if (alertId === undefined || alertId === null || isNaN(alertId)) {
+        throw new Error("Invalid alert ID");
+      }
       return callAuroraApi<{ success: boolean }>(`/api/alerts/${alertId}/acknowledge`, "POST");
     },
     onSuccess: () => {
@@ -223,7 +235,10 @@ export function useResolveAlert() {
   const queryClient = useQueryClient();
   
   return useMutation({
-    mutationFn: async (alertId: string) => {
+    mutationFn: async (alertId: number) => {
+      if (alertId === undefined || alertId === null || isNaN(alertId)) {
+        throw new Error("Invalid alert ID");
+      }
       return callAuroraApi<{ success: boolean }>(`/api/alerts/${alertId}/resolve`, "POST");
     },
     onSuccess: () => {

@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { 
   useAlerts,
   useAlertStats,
-} from "@/hooks/useAuroraApi";
+} from "@/hooks/aurora/alerts";
 import { formatLastSeen } from "@/utils/dateUtils";
 
 interface AlertsSectionProps {
@@ -13,7 +13,8 @@ interface AlertsSectionProps {
 }
 
 export const AlertsSection = memo(function AlertsSection({ limit = 10 }: AlertsSectionProps) {
-  const { data: alerts, isLoading: alertsLoading } = useAlerts();
+  const { data: alertsData, isLoading: alertsLoading } = useAlerts();
+  const alerts = alertsData?.alerts || [];
   const { data: stats } = useAlertStats();
 
   const getSeverityColor = (severity: string) => {
@@ -38,9 +39,9 @@ export const AlertsSection = memo(function AlertsSection({ limit = 10 }: AlertsS
     }
   };
 
-  const activeAlerts = stats?.active_alerts ?? alerts?.filter(a => !a.resolved && !a.acknowledged).length ?? 0;
-  const resolvedAlerts = stats?.resolved_alerts ?? 0;
-  const acknowledgedAlerts = stats?.acknowledged_alerts ?? 0;
+  const activeAlerts = stats?.active ?? alerts.filter(a => a.status === 'active' && !a.acknowledged_at).length ?? 0;
+  const resolvedAlerts = stats?.resolved ?? 0;
+  const acknowledgedAlerts = stats?.acknowledged ?? 0;
 
   return (
     <div className="mb-8">
@@ -109,7 +110,7 @@ export const AlertsSection = memo(function AlertsSection({ limit = 10 }: AlertsS
             <span className="text-xs text-muted-foreground">Last 24h</span>
           </div>
           <div className="text-2xl font-bold text-blue-400">
-            {stats?.alerts_last_24h ?? "—"}
+            {stats?.last_24h ?? "—"}
           </div>
           <div className="text-xs text-muted-foreground mt-1">
             Total alerts
@@ -125,48 +126,51 @@ export const AlertsSection = memo(function AlertsSection({ limit = 10 }: AlertsS
       ) : alerts && alerts.length > 0 ? (
         <div className="glass-card rounded-xl border border-border/50 overflow-hidden">
           <div className="divide-y divide-border/30">
-            {alerts.map((alert) => (
-              <div 
-                key={alert.id} 
-                className={`p-4 flex items-start gap-4 ${
-                  alert.resolved ? 'opacity-60' : ''
-                }`}
-              >
-                <div className={`p-2 rounded-lg ${getSeverityColor(alert.severity)}`}>
-                  {getSeverityIcon(alert.severity)}
-                </div>
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2 mb-1">
-                    <span className="font-medium text-sm">{alert.type}</span>
-                    <Badge variant="outline" className={`text-xs ${getSeverityColor(alert.severity)}`}>
-                      {alert.severity}
-                    </Badge>
-                    {alert.resolved && (
-                      <Badge variant="outline" className="text-xs bg-success/20 text-success">
-                        Resolved
-                      </Badge>
-                    )}
-                    {alert.acknowledged && !alert.resolved && (
-                      <Badge variant="outline" className="text-xs bg-warning/20 text-warning">
-                        Acknowledged
-                      </Badge>
-                    )}
+            {alerts.slice(0, limit).map((alert) => {
+              const isResolved = alert.resolved || !!alert.resolved_at || alert.status === 'resolved';
+              const isAcknowledged = alert.acknowledged || !!alert.acknowledged_at;
+              const alertType = alert.sensor_type || alert.rule_name || alert.type || 'Alert';
+              const deviceId = alert.sensor_id || alert.device_id;
+              const alertTimestamp = alert.triggered_at || alert.timestamp || '';
+              return (
+                <div 
+                  key={alert.alert_id} 
+                  className={`p-4 flex items-start gap-4 ${isResolved ? 'opacity-60' : ''}`}
+                >
+                  <div className={`p-2 rounded-lg ${getSeverityColor(alert.severity)}`}>
+                    {getSeverityIcon(alert.severity)}
                   </div>
-                  <p className="text-sm text-muted-foreground truncate">{alert.message}</p>
-                  <div className="flex items-center gap-4 mt-2 text-xs text-muted-foreground">
-                    <span>{formatLastSeen(alert.timestamp)}</span>
-                    {alert.device_id && (
-                      <span>Device: {alert.device_id}</span>
-                    )}
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 mb-1">
+                      <span className="font-medium text-sm">{alertType}</span>
+                      <Badge variant="outline" className={`text-xs ${getSeverityColor(alert.severity)}`}>
+                        {alert.severity}
+                      </Badge>
+                      {isResolved && (
+                        <Badge variant="outline" className="text-xs bg-success/20 text-success">
+                          Resolved
+                        </Badge>
+                      )}
+                      {isAcknowledged && !isResolved && (
+                        <Badge variant="outline" className="text-xs bg-warning/20 text-warning">
+                          Acknowledged
+                        </Badge>
+                      )}
+                    </div>
+                    <p className="text-sm text-muted-foreground truncate">{alert.message}</p>
+                    <div className="flex items-center gap-4 mt-2 text-xs text-muted-foreground">
+                      <span>{formatLastSeen(alertTimestamp)}</span>
+                      {deviceId && <span>Device: {deviceId}</span>}
+                    </div>
                   </div>
+                  {!isResolved && !isAcknowledged && (
+                    <Button variant="outline" size="sm" className="text-xs">
+                      Acknowledge
+                    </Button>
+                  )}
                 </div>
-                {!alert.resolved && !alert.acknowledged && (
-                  <Button variant="outline" size="sm" className="text-xs">
-                    Acknowledge
-                  </Button>
-                )}
-              </div>
-            ))}
+              );
+            })}
           </div>
         </div>
       ) : (
