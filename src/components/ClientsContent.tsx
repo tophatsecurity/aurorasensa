@@ -1,13 +1,14 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { 
   Users, UserPlus, UserX, Trash2, RefreshCw, Search, CheckCircle, 
   Power, PowerOff, Ban, RotateCcw, Clock, History, ChevronDown, ChevronUp, Pencil,
   Cpu, Wifi, Radio, Plane, Navigation, Thermometer, Bluetooth, Monitor, Satellite,
-  Server, Activity, Eye
+  Server, Activity, Eye, CheckSquare, Square, XSquare
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Label } from "@/components/ui/label";
@@ -170,6 +171,11 @@ const ClientsContent = () => {
   const [detailClient, setDetailClient] = useState<Client | null>(null);
   const [detailsOpen, setDetailsOpen] = useState(false);
   const [deleteConfirmClient, setDeleteConfirmClient] = useState<Client | null>(null);
+  
+  // Bulk selection state
+  const [selectedClients, setSelectedClients] = useState<Set<string>>(new Set());
+  const [bulkDeleteConfirm, setBulkDeleteConfirm] = useState(false);
+  const [isBulkDeleting, setIsBulkDeleting] = useState(false);
 
   const getActivityStatus = (client: Client): "online" | "offline" | "warning" => {
     const status = getDeviceStatusFromLastSeen(client.last_seen);
@@ -316,6 +322,109 @@ const ClientsContent = () => {
   const handleViewDetails = (client: Client) => {
     setDetailClient(client);
     setDetailsOpen(true);
+  };
+
+  // Bulk selection handlers
+  const toggleClientSelection = (clientId: string) => {
+    setSelectedClients(prev => {
+      const next = new Set(prev);
+      if (next.has(clientId)) {
+        next.delete(clientId);
+      } else {
+        next.add(clientId);
+      }
+      return next;
+    });
+  };
+
+  const selectAllVisible = () => {
+    const visibleIds = filteredClients.map(c => c.client_id);
+    setSelectedClients(new Set(visibleIds));
+  };
+
+  const clearSelection = () => {
+    setSelectedClients(new Set());
+  };
+
+  const getSelectedClients = (): Client[] => {
+    return allClientsIncludingDeleted.filter(c => selectedClients.has(c.client_id));
+  };
+
+  const getTotalSensorsInSelection = (): number => {
+    return getSelectedClients().reduce((acc, client) => acc + (client.sensors?.length || 0), 0);
+  };
+
+  const confirmBulkDelete = async () => {
+    const clientsToDelete = getSelectedClients();
+    if (clientsToDelete.length === 0) return;
+    
+    setIsBulkDeleting(true);
+    let deletedCount = 0;
+    let sensorDeletedCount = 0;
+    let errorCount = 0;
+    
+    try {
+      for (const client of clientsToDelete) {
+        const sensors = client.sensors || [];
+        
+        // Delete sensors first
+        for (const sensorId of sensors) {
+          try {
+            await new Promise<void>((resolve, reject) => {
+              deleteSensor.mutate(sensorId, {
+                onSuccess: () => {
+                  sensorDeletedCount++;
+                  resolve();
+                },
+                onError: (error) => {
+                  if (error.message?.includes('not found')) {
+                    resolve();
+                  } else {
+                    reject(error);
+                  }
+                },
+              });
+            });
+          } catch (e) {
+            // Continue even if sensor deletion fails
+          }
+        }
+        
+        // Delete the client
+        try {
+          await new Promise<void>((resolve, reject) => {
+            deleteClient.mutate(client.client_id, {
+              onSuccess: () => {
+                deletedCount++;
+                resolve();
+              },
+              onError: (error) => {
+                if (error.message?.includes('not found')) {
+                  resolve();
+                } else {
+                  errorCount++;
+                  reject(error);
+                }
+              },
+            });
+          });
+        } catch (e) {
+          errorCount++;
+        }
+      }
+      
+      if (deletedCount > 0) {
+        toast.success(`Permanently removed ${deletedCount} client(s) and ${sensorDeletedCount} sensor(s)`);
+      }
+      if (errorCount > 0) {
+        toast.warning(`Failed to remove ${errorCount} client(s)`);
+      }
+    } finally {
+      setIsBulkDeleting(false);
+      setBulkDeleteConfirm(false);
+      setSelectedClients(new Set());
+      refetch();
+    }
   };
 
   // Combine all clients from all states (excluding deleted for main datasets)
@@ -532,12 +641,54 @@ const ClientsContent = () => {
         </CardContent>
       </Card>
 
+      {/* Bulk Actions Bar */}
+      {selectedClients.size > 0 && (
+        <Card className="bg-primary/10 border-primary/30 backdrop-blur-sm">
+          <CardContent className="p-4">
+            <div className="flex items-center justify-between flex-wrap gap-4">
+              <div className="flex items-center gap-4">
+                <CheckSquare className="w-5 h-5 text-primary" />
+                <span className="font-medium">
+                  {selectedClients.size} client(s) selected
+                </span>
+                <span className="text-muted-foreground text-sm">
+                  ({getTotalSensorsInSelection()} sensors)
+                </span>
+              </div>
+              <div className="flex items-center gap-2">
+                <Button variant="outline" size="sm" onClick={clearSelection}>
+                  <XSquare className="w-4 h-4 mr-2" />
+                  Clear Selection
+                </Button>
+                <Button 
+                  variant="destructive" 
+                  size="sm" 
+                  onClick={() => setBulkDeleteConfirm(true)}
+                  disabled={isBulkDeleting}
+                >
+                  <Trash2 className="w-4 h-4 mr-2" />
+                  Delete Selected
+                </Button>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
       {/* Clients List */}
       <Card className="bg-card/50 backdrop-blur-sm border-border/50">
         <CardHeader>
-          <CardTitle className="text-lg">
-            Clients ({filteredClients.length})
-          </CardTitle>
+          <div className="flex items-center justify-between">
+            <CardTitle className="text-lg">
+              Clients ({filteredClients.length})
+            </CardTitle>
+            {filteredClients.length > 0 && (
+              <Button variant="ghost" size="sm" onClick={selectAllVisible} className="text-muted-foreground">
+                <CheckSquare className="w-4 h-4 mr-2" />
+                Select All Visible
+              </Button>
+            )}
+          </div>
         </CardHeader>
         <CardContent>
           {filteredClients.length === 0 ? (
@@ -561,9 +712,19 @@ const ClientsContent = () => {
                     open={isExpanded}
                     onOpenChange={() => toggleClientExpanded(client.client_id)}
                   >
-                    <div className="rounded-lg bg-background/50 border border-border/50 hover:border-border transition-colors">
+                    <div className={`rounded-lg bg-background/50 border transition-colors ${
+                      selectedClients.has(client.client_id) 
+                        ? "border-primary/50 bg-primary/5" 
+                        : "border-border/50 hover:border-border"
+                    }`}>
                       <div className="flex items-center justify-between p-4">
                         <div className="flex items-center gap-4 flex-1 min-w-0">
+                          {/* Selection Checkbox */}
+                          <Checkbox
+                            checked={selectedClients.has(client.client_id)}
+                            onCheckedChange={() => toggleClientSelection(client.client_id)}
+                            className="flex-shrink-0"
+                          />
                           <div className={`w-3 h-3 rounded-full flex-shrink-0 ${
                             activityStatus === "online" ? "bg-success animate-pulse" :
                             activityStatus === "warning" ? "bg-warning" : "bg-muted-foreground"
@@ -810,6 +971,52 @@ const ClientsContent = () => {
               className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
             >
               {deleteClient.isPending || deleteSensor.isPending ? "Removing..." : "Remove Permanently"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Bulk Delete Confirmation Dialog */}
+      <AlertDialog open={bulkDeleteConfirm} onOpenChange={(open) => !open && !isBulkDeleting && setBulkDeleteConfirm(false)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Permanently Remove {selectedClients.size} Client(s)?</AlertDialogTitle>
+            <AlertDialogDescription className="space-y-2">
+              <p>
+                This will permanently remove <span className="font-semibold">{selectedClients.size} client(s)</span> and all associated data.
+              </p>
+              {getTotalSensorsInSelection() > 0 && (
+                <p className="text-warning">
+                  This will also delete <span className="font-semibold">{getTotalSensorsInSelection()}</span> sensor(s)/device(s) across all selected clients.
+                </p>
+              )}
+              <div className="mt-3 max-h-32 overflow-y-auto text-sm text-muted-foreground">
+                <p className="font-medium text-foreground mb-1">Selected clients:</p>
+                <ul className="list-disc list-inside space-y-0.5">
+                  {getSelectedClients().slice(0, 10).map(client => (
+                    <li key={client.client_id}>
+                      {client.hostname || client.client_id}
+                      {client.sensors && client.sensors.length > 0 && (
+                        <span className="text-muted-foreground"> ({client.sensors.length} sensors)</span>
+                      )}
+                    </li>
+                  ))}
+                  {selectedClients.size > 10 && (
+                    <li className="text-muted-foreground">...and {selectedClients.size - 10} more</li>
+                  )}
+                </ul>
+              </div>
+              <p className="text-destructive font-medium pt-2">This action cannot be undone.</p>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={isBulkDeleting}>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={confirmBulkDelete}
+              disabled={isBulkDeleting}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              {isBulkDeleting ? "Removing..." : `Remove ${selectedClients.size} Client(s)`}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
