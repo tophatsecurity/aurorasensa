@@ -983,7 +983,7 @@ const MapContent = () => {
           onRefresh={handleRefresh}
         />
         {/* Controls Row - On Top */}
-        <div className="flex items-center justify-end gap-3 flex-wrap mb-4">
+        <div className="flex items-center gap-3 flex-wrap mb-3">
           <ClientSelector
             value={selectedClient}
             onChange={handleClientChange}
@@ -1039,11 +1039,13 @@ const MapContent = () => {
         </div>
         
         {/* Filter Buttons - Full Width Below */}
-        <MapFilters 
-          activeFilters={activeFilters}
-          stats={stats}
-          onToggleFilter={handleToggleFilter}
-        />
+        <div className="w-full">
+          <MapFilters 
+            activeFilters={activeFilters}
+            stats={stats}
+            onToggleFilter={handleToggleFilter}
+          />
+        </div>
       </div>
 
       {/* Map Container */}

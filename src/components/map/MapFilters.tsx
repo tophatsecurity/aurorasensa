@@ -28,15 +28,15 @@ export const MapFilters = memo(function MapFilters({
   ], [stats]);
 
   return (
-    <div className="flex items-center gap-2 flex-wrap">
+    <div className="flex items-center gap-2 flex-wrap justify-start w-full">
       {filterButtons.map((btn) => {
         const isActive = activeFilters.has(btn.id);
         return (
           <Badge
             key={btn.id}
             variant={isActive ? 'default' : 'outline'}
-            className={`cursor-pointer gap-1.5 px-3 py-1.5 transition-all ${
-              isActive ? btn.color + ' text-white shadow-lg' : 'hover:bg-muted opacity-60'
+            className={`cursor-pointer gap-1.5 px-3 py-1.5 transition-all flex-shrink-0 ${
+              isActive ? btn.color + ' text-white shadow-lg border-transparent' : 'hover:bg-muted opacity-60 border-border/50'
             }`}
             onClick={() => onToggleFilter(btn.id)}
           >
