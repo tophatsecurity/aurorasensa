@@ -195,12 +195,193 @@ export const createPulsingIcon = (color: string) => divIcon({
   iconAnchor: [6, 6],
 });
 
+// Ship icon for AIS vessels
+export const createShipIcon = (color: string = '#14b8a6', size: number = 28, heading: number = 0) => divIcon({
+  className: 'custom-ship-icon',
+  html: `
+    <div style="
+      width: ${size}px;
+      height: ${size}px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transform: rotate(${heading}deg);
+      filter: drop-shadow(0 2px 4px rgba(0,0,0,0.5));
+    ">
+      <svg xmlns="http://www.w3.org/2000/svg" width="${size}" height="${size}" viewBox="0 0 24 24" fill="${color}" stroke="white" stroke-width="1">
+        <path d="M2 21c.6.5 1.2 1 2.5 1 2.5 0 2.5-2 5-2 1.3 0 1.9.5 2.5 1 .6.5 1.2 1 2.5 1 2.5 0 2.5-2 5-2 1.3 0 1.9.5 2.5 1"/>
+        <path d="M19.38 20A11.6 11.6 0 0 0 21 14l-9-4-9 4c0 2.9.94 5.34 2.81 7.76"/>
+        <path d="M19 13V7a2 2 0 0 0-2-2H7a2 2 0 0 0-2 2v6"/>
+        <path d="M12 10v4"/>
+        <path d="M12 2v3"/>
+      </svg>
+    </div>
+  `,
+  iconSize: [size, size],
+  iconAnchor: [size / 2, size / 2],
+});
+
+// EPIRB emergency beacon icon with pulsing effect
+export const createEpirbIcon = (color: string = '#f43f5e', size: number = 28) => divIcon({
+  className: 'custom-epirb-icon',
+  html: `
+    <div style="
+      width: ${size}px;
+      height: ${size}px;
+      position: relative;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    ">
+      <!-- Pulsing rings for emergency effect -->
+      <div style="
+        position: absolute;
+        width: ${size * 1.5}px;
+        height: ${size * 1.5}px;
+        border: 2px solid ${color};
+        border-radius: 50%;
+        opacity: 0.6;
+        animation: epirb-pulse 1.5s ease-out infinite;
+      "></div>
+      <div style="
+        position: absolute;
+        width: ${size * 1.2}px;
+        height: ${size * 1.2}px;
+        border: 2px solid ${color};
+        border-radius: 50%;
+        opacity: 0.4;
+        animation: epirb-pulse 1.5s ease-out infinite 0.3s;
+      "></div>
+      <!-- Icon -->
+      <div style="
+        filter: drop-shadow(0 2px 4px rgba(0,0,0,0.5));
+        z-index: 1;
+      ">
+        <svg xmlns="http://www.w3.org/2000/svg" width="${size}" height="${size}" viewBox="0 0 24 24" fill="${color}" stroke="white" stroke-width="1">
+          <circle cx="12" cy="12" r="10"/>
+          <path d="M12 8v4" stroke="white" stroke-width="2.5" stroke-linecap="round"/>
+          <circle cx="12" cy="16" r="1.5" fill="white"/>
+        </svg>
+      </div>
+    </div>
+    <style>
+      @keyframes epirb-pulse {
+        0% { transform: scale(0.8); opacity: 0.8; }
+        100% { transform: scale(1.8); opacity: 0; }
+      }
+    </style>
+  `,
+  iconSize: [size * 2, size * 2],
+  iconAnchor: [size, size],
+});
+
+// Antenna icon for APRS
+export const createAprsIcon = (color: string = '#f59e0b', size: number = 26) => divIcon({
+  className: 'custom-aprs-icon',
+  html: `
+    <div style="
+      width: ${size}px;
+      height: ${size}px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      filter: drop-shadow(0 2px 4px rgba(0,0,0,0.5));
+    ">
+      <svg xmlns="http://www.w3.org/2000/svg" width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="${color}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M2 12 7 2"/>
+        <path d="m7 12 5-10"/>
+        <path d="m12 12 5-10"/>
+        <path d="m17 12 5-10"/>
+        <path d="M4.5 7h15"/>
+        <path d="M12 16v6"/>
+      </svg>
+    </div>
+  `,
+  iconSize: [size, size],
+  iconAnchor: [size / 2, size / 2],
+});
+
+// WiFi icon
+export const createWifiIcon = (color: string = '#3b82f6', size: number = 26) => divIcon({
+  className: 'custom-wifi-icon',
+  html: `
+    <div style="
+      width: ${size}px;
+      height: ${size}px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      filter: drop-shadow(0 2px 4px rgba(0,0,0,0.5));
+    ">
+      <svg xmlns="http://www.w3.org/2000/svg" width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="${color}" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M12 20h.01"/>
+        <path d="M2 8.82a15 15 0 0 1 20 0"/>
+        <path d="M5 12.859a10 10 0 0 1 14 0"/>
+        <path d="M8.5 16.429a5 5 0 0 1 7 0"/>
+      </svg>
+    </div>
+  `,
+  iconSize: [size, size],
+  iconAnchor: [size / 2, size / 2],
+});
+
+// Bluetooth icon
+export const createBluetoothIcon = (color: string = '#6366f1', size: number = 26) => divIcon({
+  className: 'custom-bluetooth-icon',
+  html: `
+    <div style="
+      width: ${size}px;
+      height: ${size}px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      filter: drop-shadow(0 2px 4px rgba(0,0,0,0.5));
+    ">
+      <svg xmlns="http://www.w3.org/2000/svg" width="${size}" height="${size}" viewBox="0 0 24 24" fill="${color}" stroke="white" stroke-width="0.5">
+        <path d="m7 7 10 10-5 5V2l5 5L7 17"/>
+      </svg>
+    </div>
+  `,
+  iconSize: [size, size],
+  iconAnchor: [size / 2, size / 2],
+});
+
+// LoRa radio icon
+export const createLoraIcon = (color: string = '#ef4444', size: number = 26) => divIcon({
+  className: 'custom-lora-icon',
+  html: `
+    <div style="
+      width: ${size}px;
+      height: ${size}px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      filter: drop-shadow(0 2px 4px rgba(0,0,0,0.5));
+    ">
+      <svg xmlns="http://www.w3.org/2000/svg" width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="${color}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M4.9 19.1C1 15.2 1 8.8 4.9 4.9"/>
+        <path d="M7.8 16.2c-2.3-2.3-2.3-6.1 0-8.5"/>
+        <circle cx="12" cy="12" r="2" fill="${color}"/>
+        <path d="M16.2 7.8c2.3 2.3 2.3 6.1 0 8.5"/>
+        <path d="M19.1 4.9C23 8.8 23 15.1 19.1 19"/>
+      </svg>
+    </div>
+  `,
+  iconSize: [size, size],
+  iconAnchor: [size / 2, size / 2],
+});
+
 // Pre-created icons for performance (singleton pattern) - for non-aircraft markers
 export const mapIcons = {
   gps: createSatelliteIcon('#22c55e', 28),
   starlink: createSatelliteIcon('#8b5cf6', 28),
   client: createIcon('orange'),
-  lora: createIcon('red'),
+  lora: createLoraIcon('#ef4444', 26),
+  wifi: createWifiIcon('#3b82f6', 26),
+  bluetooth: createBluetoothIcon('#6366f1', 26),
+  aprs: createAprsIcon('#f59e0b', 26),
+  ais: createShipIcon('#14b8a6', 28),
+  epirb: createEpirbIcon('#f43f5e', 28),
   // Legacy adsb icon - use createAircraftIcon for dynamic icons
   adsb: createPulsingIcon('#06b6d4'),
 } as const;
