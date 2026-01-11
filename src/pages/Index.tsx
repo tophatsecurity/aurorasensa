@@ -29,6 +29,7 @@ import UpdateManagementContent from "@/components/UpdateManagementContent";
 import StatsHistoryCharts from "@/components/StatsHistoryCharts";
 import AdsbAnalyticsContent from "@/components/AdsbAnalyticsContent";
 import BaselinesContent from "@/components/BaselinesContent";
+import MaritimeContent from "@/components/MaritimeContent";
 import { AuroraAuthPage } from "@/components/auth/AuroraAuthPage";
 import { useAuroraAuthContext } from "@/hooks/useAuroraAuth";
 import { Loader2 } from "lucide-react";
@@ -102,6 +103,8 @@ const Index = () => {
         return <RadioAnalyticsContent />;
       case "adsb":
         return <AdsbAnalyticsContent />;
+      case "maritime":
+        return <MaritimeContent />;
       case "baselines":
         return <BaselinesContent />;
       case "audit-logs":
