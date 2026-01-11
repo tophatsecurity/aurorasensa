@@ -346,6 +346,29 @@ export const createBluetoothIcon = (color: string = '#6366f1', size: number = 26
   iconAnchor: [size / 2, size / 2],
 });
 
+// Small dot icon for WiFi/Bluetooth detections on the map
+export const createSmallDotIcon = (color: string, size: number = 8) => divIcon({
+  className: 'custom-dot-icon',
+  html: `
+    <div style="
+      width: ${size}px;
+      height: ${size}px;
+      background-color: ${color};
+      border-radius: 50%;
+      border: 1.5px solid white;
+      box-shadow: 0 0 6px ${color}80, 0 1px 3px rgba(0,0,0,0.3);
+    "></div>
+  `,
+  iconSize: [size, size],
+  iconAnchor: [size / 2, size / 2],
+});
+
+// WiFi detection dot (small green dot)
+export const createWifiDetectionIcon = (size: number = 8) => createSmallDotIcon('#22c55e', size);
+
+// Bluetooth detection dot (small blue dot)
+export const createBluetoothDetectionIcon = (size: number = 8) => createSmallDotIcon('#3b82f6', size);
+
 // LoRa radio icon
 export const createLoraIcon = (color: string = '#ef4444', size: number = 26) => divIcon({
   className: 'custom-lora-icon',

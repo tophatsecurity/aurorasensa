@@ -28,9 +28,10 @@ import {
   type AprsStation,
   type EpirbBeacon,
 } from "@/hooks/aurora";
-import type { StarlinkMetrics } from "@/types/map";
+import type { StarlinkMetrics, WirelessDetectionMarker } from "@/types/map";
 import { useQueryClient } from "@tanstack/react-query";
 import type { MapStats, SensorMarker, ClientMarker, AdsbMarker } from "@/types/map";
+import { useWifiScannerTimeseries, useBluetoothScannerTimeseries } from "@/hooks/useAuroraApi";
 
 export interface UseMapDataOptions {
   adsbHistoryMinutes?: number;
@@ -282,6 +283,10 @@ export function useMapData(options: UseMapDataOptions = {}) {
   // Get EPIRB beacon data
   const { data: epirbBeacons, isLoading: epirbLoading } = useEpirbBeacons();
 
+  // Get WiFi and Bluetooth scanner data for detection markers
+  const { data: wifiData, isLoading: wifiLoading } = useWifiScannerTimeseries(1); // Last hour
+  const { data: bluetoothData, isLoading: bluetoothLoading } = useBluetoothScannerTimeseries(1); // Last hour
+
   // Update last refresh time
   useEffect(() => {
     setLastUpdate(new Date());
@@ -298,6 +303,8 @@ export function useMapData(options: UseMapDataOptions = {}) {
       aisVessels: aisVessels?.length || 0,
       aprsStations: aprsStations?.length || 0,
       epirbBeacons: epirbBeacons?.length || 0,
+      wifiDetections: wifiData?.readings?.length || 0,
+      bluetoothDetections: bluetoothData?.readings?.length || 0,
       starlinkStats: !!starlinkStats,
       starlinkLatest: !!starlinkLatest?.data,
       gpsdStatus: !!gpsdStatus,
@@ -306,7 +313,7 @@ export function useMapData(options: UseMapDataOptions = {}) {
       starlinkSensorReadings: starlinkSensorReadings?.length || 0,
       starlinkDevicesApi: starlinkDevicesApi?.length || 0,
     });
-  }, [sensors, clients, latestReadings, geoLocations, adsbAircraft, aisVessels, aprsStations, epirbBeacons, starlinkStats, starlinkLatest, gpsdStatus, gpsReadings, starlinkStatusData, starlinkSensorReadings, starlinkDevicesApi]);
+  }, [sensors, clients, latestReadings, geoLocations, adsbAircraft, aisVessels, aprsStations, epirbBeacons, wifiData, bluetoothData, starlinkStats, starlinkLatest, gpsdStatus, gpsReadings, starlinkStatusData, starlinkSensorReadings, starlinkDevicesApi]);
 
 
   const handleRefresh = useCallback(() => {
@@ -1844,9 +1851,97 @@ export function useMapData(options: UseMapDataOptions = {}) {
     return positions;
   }, [filteredSensorMarkers, filteredClientMarkers, adsbMarkers]);
 
+  // Create WiFi detection markers (placed at client locations with offset)
+  const wifiDetectionMarkers = useMemo<WirelessDetectionMarker[]>(() => {
+    if (!wifiData?.readings || filteredClientMarkers.length === 0) return [];
+    
+    const markers: WirelessDetectionMarker[] = [];
+    const seenNetworks = new Set<string>();
+    
+    wifiData.readings.forEach((reading, index) => {
+      // Find the client that detected this network
+      const clientId = reading.client_id;
+      const client = filteredClientMarkers.find(c => c.client_id === clientId);
+      
+      // Use client location if available, otherwise skip (we need a location)
+      if (!client) return;
+      
+      // Use BSSID or SSID as unique identifier
+      const networkId = reading.bssid || reading.ssid || `wifi-${index}`;
+      if (seenNetworks.has(networkId)) return;
+      seenNetworks.add(networkId);
+      
+      // Add small random offset around client location to spread markers
+      const offsetLat = (Math.random() - 0.5) * 0.002;
+      const offsetLng = (Math.random() - 0.5) * 0.002;
+      
+      markers.push({
+        id: `wifi-det-${networkId}`,
+        type: 'wifi',
+        name: reading.ssid || 'Unknown Network',
+        client_id: clientId || '',
+        location: {
+          lat: client.location.lat + offsetLat,
+          lng: client.location.lng + offsetLng,
+        },
+        rssi: reading.rssi || reading.signal_strength,
+        lastSeen: reading.timestamp,
+        bssid: reading.bssid,
+        channel: reading.channel,
+        security: reading.security,
+      });
+    });
+    
+    return markers.slice(0, 100); // Limit to 100 markers for performance
+  }, [wifiData, filteredClientMarkers]);
+
+  // Create Bluetooth detection markers (placed at client locations with offset)
+  const bluetoothDetectionMarkers = useMemo<WirelessDetectionMarker[]>(() => {
+    if (!bluetoothData?.readings || filteredClientMarkers.length === 0) return [];
+    
+    const markers: WirelessDetectionMarker[] = [];
+    const seenDevices = new Set<string>();
+    
+    bluetoothData.readings.forEach((reading, index) => {
+      // Find the client that detected this device
+      const clientId = reading.client_id;
+      const client = filteredClientMarkers.find(c => c.client_id === clientId);
+      
+      // Use client location if available, otherwise skip
+      if (!client) return;
+      
+      // Use MAC address as unique identifier
+      const deviceId = reading.mac_address || `bt-${index}`;
+      if (seenDevices.has(deviceId)) return;
+      seenDevices.add(deviceId);
+      
+      // Add small random offset around client location to spread markers
+      const offsetLat = (Math.random() - 0.5) * 0.002;
+      const offsetLng = (Math.random() - 0.5) * 0.002;
+      
+      markers.push({
+        id: `bt-det-${deviceId}`,
+        type: 'bluetooth',
+        name: reading.name || 'Unknown Device',
+        client_id: clientId || '',
+        location: {
+          lat: client.location.lat + offsetLat,
+          lng: client.location.lng + offsetLng,
+        },
+        rssi: reading.rssi || reading.signal_strength,
+        lastSeen: reading.timestamp,
+        mac_address: reading.mac_address,
+        device_class: reading.device_class,
+        manufacturer: reading.manufacturer,
+      });
+    });
+    
+    return markers.slice(0, 100); // Limit to 100 markers for performance
+  }, [bluetoothData, filteredClientMarkers]);
+
   // Calculate statistics (using filtered markers)
   const stats = useMemo<MapStats>(() => {
-    const result = {
+    const result: MapStats = {
       total: filteredSensorMarkers.length + filteredClientMarkers.length + adsbMarkers.length,
       gps: filteredSensorMarkers.filter(s => s.type === 'gps').length,
       starlink: filteredSensorMarkers.filter(s => s.type === 'starlink').length,
@@ -1858,12 +1953,14 @@ export function useMapData(options: UseMapDataOptions = {}) {
       aprs: filteredSensorMarkers.filter(s => s.type === 'aprs').length,
       ais: filteredSensorMarkers.filter(s => s.type === 'ais').length,
       epirb: filteredSensorMarkers.filter(s => s.type === 'epirb').length,
+      wifiDetections: wifiDetectionMarkers.length,
+      bluetoothDetections: bluetoothDetectionMarkers.length,
     };
     console.log('[MapData] Final stats (filtered by client:', clientId || 'all', '):', result);
     return result;
-  }, [filteredSensorMarkers, filteredClientMarkers, adsbMarkers, clientId]);
+  }, [filteredSensorMarkers, filteredClientMarkers, adsbMarkers, wifiDetectionMarkers, bluetoothDetectionMarkers, clientId]);
 
-  const isLoading = sensorsLoading || clientsLoading || readingsLoading || geoLoading || adsbLoading || aisLoading || aprsLoading || epirbLoading;
+  const isLoading = sensorsLoading || clientsLoading || readingsLoading || geoLoading || adsbLoading || aisLoading || aprsLoading || epirbLoading || wifiLoading || bluetoothLoading;
 
   // Format time ago
   const timeAgo = useMemo(() => {
@@ -1888,5 +1985,8 @@ export function useMapData(options: UseMapDataOptions = {}) {
     adsbSource,
     // Expose unfiltered markers for client list
     allClients: clients,
+    // Wireless detection markers
+    wifiDetectionMarkers,
+    bluetoothDetectionMarkers,
   };
 }
