@@ -94,6 +94,25 @@ Deno.serve(async (req) => {
       });
     }
     
+    // Handle 404 errors gracefully - return empty data instead of error
+    // This prevents UI errors for endpoints not yet implemented on Aurora
+    if (response.status === 404) {
+      console.log(`Endpoint not found (404): ${path} - returning empty data`);
+      // Return appropriate empty data based on the path
+      let emptyData: unknown = null;
+      if (path.includes('/list') || path.includes('/vessels') || path.includes('/stations') || 
+          path.includes('/beacons') || path.includes('/aircraft') || path.includes('/devices') ||
+          path.includes('/active') || path.includes('/readings')) {
+        emptyData = [];
+      } else if (path.includes('/stats')) {
+        emptyData = {};
+      }
+      return new Response(JSON.stringify(emptyData), {
+        status: 200, // Return 200 with empty data
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+    
     // Handle login response with cookie capture
     let responseText = await response.text();
     
