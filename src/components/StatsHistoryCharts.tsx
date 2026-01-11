@@ -3,6 +3,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
+import { Skeleton } from "@/components/ui/skeleton";
 import {
   LineChart,
   Line,
@@ -23,7 +24,6 @@ import {
   Radio,
   AlertTriangle,
   Cpu,
-  Loader2,
   Server,
   Activity,
 } from "lucide-react";
@@ -61,21 +61,54 @@ const formatTooltipTime = (timestamp: string) => {
   }
 };
 
-const ChartLoading = () => (
-  <div className="h-[300px] flex items-center justify-center">
-    <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
+// Enhanced chart loading skeleton with animated bars
+const ChartSkeleton = () => (
+  <div className="h-[300px] flex flex-col items-center justify-center bg-muted/10 rounded-lg">
+    <div className="flex items-end gap-3 mb-6">
+      {[40, 65, 45, 80, 55, 70, 35, 75, 50, 60, 42, 68].map((height, i) => (
+        <Skeleton 
+          key={i} 
+          className="w-5 rounded-t animate-pulse" 
+          style={{ 
+            height: `${height}%`,
+            animationDelay: `${i * 100}ms`,
+            maxHeight: '160px'
+          }} 
+        />
+      ))}
+    </div>
+    <div className="flex gap-8">
+      <Skeleton className="h-3 w-20" />
+      <Skeleton className="h-3 w-24" />
+      <Skeleton className="h-3 w-16" />
+    </div>
   </div>
 );
 
+// Summary card skeleton
+const SummaryCardSkeleton = () => (
+  <Card className="bg-card/50">
+    <CardContent className="p-4">
+      <div className="flex items-center gap-2 mb-2">
+        <Skeleton className="w-4 h-4 rounded" />
+        <Skeleton className="h-3 w-20" />
+      </div>
+      <Skeleton className="h-8 w-16" />
+    </CardContent>
+  </Card>
+);
+
 const NoDataMessage = () => (
-  <div className="h-[300px] flex items-center justify-center text-muted-foreground">
-    No historical data available
+  <div className="h-[300px] flex flex-col items-center justify-center text-muted-foreground bg-muted/5 rounded-lg border border-dashed border-border/50">
+    <Database className="w-8 h-8 mb-2 opacity-40" />
+    <span>No historical data available</span>
+    <span className="text-xs mt-1 opacity-60">Data will appear when stats are collected</span>
   </div>
 );
 
 // Global Stats Chart
 const GlobalStatsChart = ({ data, isLoading }: { data?: GlobalStatsHistoryPoint[]; isLoading: boolean }) => {
-  if (isLoading) return <ChartLoading />;
+  if (isLoading) return <ChartSkeleton />;
   if (!data || data.length === 0) return <NoDataMessage />;
 
   const chartData = data.map((point) => ({
@@ -141,7 +174,7 @@ const GlobalStatsChart = ({ data, isLoading }: { data?: GlobalStatsHistoryPoint[
 
 // Sensor Stats Chart
 const SensorStatsChart = ({ data, isLoading }: { data?: SensorStatsHistoryPoint[]; isLoading: boolean }) => {
-  if (isLoading) return <ChartLoading />;
+  if (isLoading) return <ChartSkeleton />;
   if (!data || data.length === 0) return <NoDataMessage />;
 
   // Group by sensor type
@@ -191,7 +224,7 @@ const SensorStatsChart = ({ data, isLoading }: { data?: SensorStatsHistoryPoint[
 
 // Device Stats Chart
 const DeviceStatsChart = ({ data, isLoading }: { data?: DeviceStatsHistoryPoint[]; isLoading: boolean }) => {
-  if (isLoading) return <ChartLoading />;
+  if (isLoading) return <ChartSkeleton />;
   if (!data || data.length === 0) return <NoDataMessage />;
 
   // Get unique device types
@@ -243,7 +276,7 @@ const DeviceStatsChart = ({ data, isLoading }: { data?: DeviceStatsHistoryPoint[
 
 // Alert Stats Chart
 const AlertStatsChart = ({ data, isLoading }: { data?: AlertStatsHistoryPoint[]; isLoading: boolean }) => {
-  if (isLoading) return <ChartLoading />;
+  if (isLoading) return <ChartSkeleton />;
   if (!data || data.length === 0) return <NoDataMessage />;
 
   const chartData = data.map((point) => ({
@@ -313,7 +346,7 @@ const AlertStatsChart = ({ data, isLoading }: { data?: AlertStatsHistoryPoint[];
 
 // System Resource Stats Chart
 const SystemResourceChart = ({ data, isLoading }: { data?: SystemResourceStatsHistoryPoint[]; isLoading: boolean }) => {
-  if (isLoading) return <ChartLoading />;
+  if (isLoading) return <ChartSkeleton />;
   if (!data || data.length === 0) return <NoDataMessage />;
 
   const chartData = data.map((point) => ({
@@ -409,57 +442,68 @@ export default function StatsHistoryCharts({ hours: initialHours = 24 }: StatsHi
 
       {/* Summary Cards */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        <Card className="bg-card/50">
-          <CardContent className="p-4">
-            <div className="flex items-center gap-2 mb-2">
-              <Database className="w-4 h-4 text-blue-500" />
-              <span className="text-xs text-muted-foreground">Total Readings</span>
-            </div>
-            <div className="text-2xl font-bold">
-              {globalLoading ? "..." : latestGlobal?.total_readings?.toLocaleString() ?? "—"}
-            </div>
-          </CardContent>
-        </Card>
-        <Card className="bg-card/50">
-          <CardContent className="p-4">
-            <div className="flex items-center gap-2 mb-2">
-              <Server className="w-4 h-4 text-green-500" />
-              <span className="text-xs text-muted-foreground">Active Devices</span>
-            </div>
-            <div className="text-2xl font-bold">
-              {globalLoading ? "..." : latestGlobal?.total_devices?.toLocaleString() ?? "—"}
-            </div>
-          </CardContent>
-        </Card>
-        <Card className="bg-card/50">
-          <CardContent className="p-4">
-            <div className="flex items-center gap-2 mb-2">
-              <Radio className="w-4 h-4 text-purple-500" />
-              <span className="text-xs text-muted-foreground">Sensor Types</span>
-            </div>
-            <div className="text-2xl font-bold">
-              {globalLoading ? "..." : latestGlobal?.total_sensors?.toLocaleString() ?? "—"}
-            </div>
-          </CardContent>
-        </Card>
-        <Card className="bg-card/50">
-          <CardContent className="p-4">
-            <div className="flex items-center gap-2 mb-2">
-              <AlertTriangle className="w-4 h-4 text-amber-500" />
-              <span className="text-xs text-muted-foreground">Active Alerts</span>
-            </div>
-            <div className="flex items-center gap-2">
-              <span className="text-2xl font-bold">
-                {alertLoading ? "..." : latestAlerts?.total_alerts?.toLocaleString() ?? "—"}
-              </span>
-              {latestAlerts && latestAlerts.critical_count > 0 && (
-                <Badge variant="destructive" className="text-xs">
-                  {latestAlerts.critical_count} critical
-                </Badge>
-              )}
-            </div>
-          </CardContent>
-        </Card>
+        {globalLoading ? (
+          <>
+            <SummaryCardSkeleton />
+            <SummaryCardSkeleton />
+            <SummaryCardSkeleton />
+            <SummaryCardSkeleton />
+          </>
+        ) : (
+          <>
+            <Card className="bg-card/50">
+              <CardContent className="p-4">
+                <div className="flex items-center gap-2 mb-2">
+                  <Database className="w-4 h-4 text-blue-500" />
+                  <span className="text-xs text-muted-foreground">Total Readings</span>
+                </div>
+                <div className="text-2xl font-bold">
+                  {latestGlobal?.total_readings?.toLocaleString() ?? "—"}
+                </div>
+              </CardContent>
+            </Card>
+            <Card className="bg-card/50">
+              <CardContent className="p-4">
+                <div className="flex items-center gap-2 mb-2">
+                  <Server className="w-4 h-4 text-green-500" />
+                  <span className="text-xs text-muted-foreground">Active Devices</span>
+                </div>
+                <div className="text-2xl font-bold">
+                  {latestGlobal?.total_devices?.toLocaleString() ?? "—"}
+                </div>
+              </CardContent>
+            </Card>
+            <Card className="bg-card/50">
+              <CardContent className="p-4">
+                <div className="flex items-center gap-2 mb-2">
+                  <Radio className="w-4 h-4 text-purple-500" />
+                  <span className="text-xs text-muted-foreground">Sensor Types</span>
+                </div>
+                <div className="text-2xl font-bold">
+                  {latestGlobal?.total_sensors?.toLocaleString() ?? "—"}
+                </div>
+              </CardContent>
+            </Card>
+            <Card className="bg-card/50">
+              <CardContent className="p-4">
+                <div className="flex items-center gap-2 mb-2">
+                  <AlertTriangle className="w-4 h-4 text-amber-500" />
+                  <span className="text-xs text-muted-foreground">Active Alerts</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className="text-2xl font-bold">
+                    {alertLoading ? "..." : latestAlerts?.total_alerts?.toLocaleString() ?? "—"}
+                  </span>
+                  {latestAlerts && latestAlerts.critical_count > 0 && (
+                    <Badge variant="destructive" className="text-xs">
+                      {latestAlerts.critical_count} critical
+                    </Badge>
+                  )}
+                </div>
+              </CardContent>
+            </Card>
+          </>
+        )}
       </div>
 
       {/* Tabs for Different Charts */}
