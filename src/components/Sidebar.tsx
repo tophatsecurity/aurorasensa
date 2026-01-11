@@ -43,7 +43,7 @@ const menuSections = [
       { id: "map", label: "Map", icon: Map },
       { id: "clients", label: "Clients", icon: Users },
       { id: "alerts", label: "Alerts", icon: Bell },
-      { id: "rules", label: "Rules", icon: FileText },
+      { id: "rules", label: "Rules & Baselines", icon: FileText },
     ],
   },
   {
@@ -67,12 +67,6 @@ const menuSections = [
       { id: "stats-history", label: "Stats History", icon: TrendingUp },
       { id: "data-batches", label: "Data Batches", icon: Database },
       { id: "export", label: "Export", icon: Download },
-    ],
-  },
-  {
-    title: "SECURITY",
-    items: [
-      { id: "baselines", label: "Baselines", icon: Activity },
     ],
   },
   {
