@@ -39,6 +39,7 @@ const menuSections = [
     title: "OVERVIEW",
     items: [
       { id: "dashboard", label: "Dashboard", icon: LayoutDashboard },
+      { id: "stats", label: "Stats", icon: BarChart3 },
       { id: "correlation", label: "Correlation", icon: TrendingUp },
       { id: "map", label: "Map", icon: Map },
       { id: "clients", label: "Clients", icon: Users },
@@ -62,7 +63,6 @@ const menuSections = [
   {
     title: "DATA",
     items: [
-      { id: "stats", label: "Stats", icon: BarChart3 },
       { id: "sensors", label: "Sensors", icon: Thermometer },
       { id: "data-analytics", label: "Data Analytics", icon: BarChart3 },
       { id: "stats-history", label: "Stats History", icon: TrendingUp },
