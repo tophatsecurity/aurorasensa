@@ -741,6 +741,11 @@ interface ClientStatsPanelProps {
 }
 
 function ClientStatsPanel({ client, systemInfo, deviceCount, readingsCount }: ClientStatsPanelProps) {
+  // Guard against undefined client
+  if (!client) {
+    return null;
+  }
+
   return (
     <Card className="glass-card border-primary/30">
       <CardHeader className="pb-3">
@@ -750,8 +755,8 @@ function ClientStatsPanel({ client, systemInfo, deviceCount, readingsCount }: Cl
               <Radio className="w-5 h-5 text-primary" />
             </div>
             <div>
-              <span className="text-lg">{client.hostname || client.client_id}</span>
-              <p className="text-xs text-muted-foreground font-normal">{client.ip_address}</p>
+              <span className="text-lg">{client.hostname || client.client_id || 'Unknown'}</span>
+              <p className="text-xs text-muted-foreground font-normal">{client.ip_address || 'N/A'}</p>
             </div>
           </div>
           <Badge variant={client.state === 'adopted' ? 'default' : 'secondary'}>
@@ -852,7 +857,13 @@ function ClientStatsPanel({ client, systemInfo, deviceCount, readingsCount }: Cl
               <span className="text-xs">Last Seen</span>
             </div>
             <p className="text-sm font-medium">
-              {client.last_seen ? format(new Date(client.last_seen), 'HH:mm:ss') : 'N/A'}
+              {client.last_seen ? (() => {
+                try {
+                  return format(new Date(client.last_seen), 'HH:mm:ss');
+                } catch {
+                  return 'N/A';
+                }
+              })() : 'N/A'}
             </p>
           </div>
         </div>
