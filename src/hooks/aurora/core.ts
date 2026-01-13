@@ -2,23 +2,28 @@
 import { supabase } from "@/integrations/supabase/client";
 import { auroraRequestQueue } from "./requestQueue";
 
-// Session keys
-const SESSION_KEY = 'aurora_session';
-const SESSION_COOKIE_KEY = 'aurora_cookie';
-
 // Retry configuration - reduced for slow server
 const MAX_RETRIES = 2;
 const INITIAL_BACKOFF_MS = 2000;
 
-// Helper to check if user has a session
+// Helper to check if user has a valid Supabase session
 export function hasAuroraSession(): boolean {
-  return !!sessionStorage.getItem(SESSION_COOKIE_KEY);
+  // Check for Supabase session in local storage
+  const storageKey = `sb-hewwtgcrupegpcwfujln-auth-token`;
+  const stored = localStorage.getItem(storageKey);
+  return !!stored;
+}
+
+// Helper to get current session token for API calls
+async function getSessionToken(): Promise<string | null> {
+  const { data: { session } } = await supabase.auth.getSession();
+  return session?.access_token || null;
 }
 
 // Helper to clear session on auth failure
 export function clearAuroraSession(): void {
-  sessionStorage.removeItem(SESSION_KEY);
-  sessionStorage.removeItem(SESSION_COOKIE_KEY);
+  // Supabase handles session clearing through signOut
+  supabase.auth.signOut();
 }
 
 // Sleep helper
@@ -55,7 +60,8 @@ export async function callAuroraApi<T>(
   method: string = "GET", 
   body?: unknown
 ): Promise<T> {
-  const sessionCookie = sessionStorage.getItem(SESSION_COOKIE_KEY);
+  // Get the current Supabase session token
+  const sessionToken = await getSessionToken();
   
   // Check cache first for GET requests
   if (method === 'GET') {
@@ -65,9 +71,10 @@ export async function callAuroraApi<T>(
     }
   }
   
-  // Log if no session for debugging
-  if (!sessionCookie && !path.startsWith('/api/auth/')) {
-    console.warn(`No session cookie for protected endpoint: ${path}`);
+  // Log if no session for debugging (but allow public endpoints)
+  const isPublicEndpoint = path === '/api/health' || path === '/health' || path.startsWith('/api/auth/');
+  if (!sessionToken && !isPublicEndpoint) {
+    console.warn(`No session token for protected endpoint: ${path}`);
   }
   
   const executor = async (): Promise<T> => {
@@ -76,7 +83,7 @@ export async function callAuroraApi<T>(
     for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
       try {
         const { data, error } = await supabase.functions.invoke("aurora-proxy", {
-          body: { path, method, body, sessionCookie },
+          body: { path, method, body, sessionToken },
         });
 
         if (error) {
@@ -118,20 +125,14 @@ export async function callAuroraApi<T>(
           
           const isAuthError = detailLower.includes('not authenticated') || 
                              detailLower.includes('invalid session') ||
-                             detailLower.includes('provide x-api-key');
+                             detailLower.includes('provide x-api-key') ||
+                             detailLower.includes('aurora api authentication');
           
           if (isAuthError) {
-            const isAuthEndpoint = path.startsWith('/api/auth/');
-            if (isAuthEndpoint) {
-              console.log('Auth endpoint returned 401, clearing session');
-              clearAuroraSession();
-            } else {
-              console.warn(`Endpoint ${path} returned auth error, but session may still be valid`);
-            }
-            
-            const error = new Error(isAuthEndpoint ? 'Session expired. Please log in again.' : detailStr);
-            (error as any).status = 401;
-            throw error;
+            // Aurora 401 errors mean the Aurora API needs auth, but our Supabase session is still valid
+            // Return empty data instead of clearing the session
+            console.warn(`Aurora API auth error for ${path}: ${detailStr}, returning empty data`);
+            return getEmptyDataForPath(path) as T;
           }
           
           const isNotFoundError = detailLower.includes('not found') || 

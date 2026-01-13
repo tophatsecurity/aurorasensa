@@ -1,3 +1,5 @@
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2.89.0";
+
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
@@ -23,6 +25,21 @@ async function fetchWithTimeout(url: string, options: RequestInit): Promise<Resp
   }
 }
 
+// Helper to get empty data based on path
+function getEmptyDataForPath(apiPath: string): unknown {
+  if (apiPath.includes('/list') || apiPath.includes('/vessels') || apiPath.includes('/stations') || 
+      apiPath.includes('/beacons') || apiPath.includes('/aircraft') || apiPath.includes('/devices') ||
+      apiPath.includes('/active') || apiPath.includes('/readings') || apiPath.includes('/rules') ||
+      apiPath.includes('/profiles') || apiPath.includes('/violations') || apiPath.includes('/baselines') ||
+      apiPath.includes('/clients') || apiPath.includes('/sensors') || apiPath.includes('/alerts')) {
+    return [];
+  }
+  if (apiPath.includes('/stats') || apiPath.includes('/statistics') || apiPath.includes('/overview')) {
+    return {};
+  }
+  return null;
+}
+
 Deno.serve(async (req) => {
   // Handle CORS preflight
   if (req.method === 'OPTIONS') {
@@ -31,7 +48,7 @@ Deno.serve(async (req) => {
 
   try {
     const body = await req.json().catch(() => ({}));
-    const { path = "", method = "GET", body: requestBody, sessionCookie } = body;
+    const { path = "", method = "GET", body: requestBody, sessionToken } = body;
     
     if (!path) {
       return new Response(JSON.stringify({ error: 'Missing path' }), {
@@ -47,20 +64,44 @@ Deno.serve(async (req) => {
     const isHealthEndpoint = path === '/api/health' || path === '/health';
     const isPublicEndpoint = isLoginEndpoint || isLogoutEndpoint || isHealthEndpoint;
     
-    console.log(`Proxy ${method}: ${url}${sessionCookie ? ' (with session)' : ' (no session)'}`);
+    console.log(`Proxy ${method}: ${url}${sessionToken ? ' (with session)' : ' (no session)'}`);
 
-    // For non-public endpoints without a session, return 401 immediately
-    if (!sessionCookie && !isPublicEndpoint) {
-      console.log('No session cookie for protected endpoint, returning 401');
-      return new Response(JSON.stringify({ 
-        detail: 'Not authenticated. Please log in first.' 
-      }), {
-        status: 401,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      });
+    // Verify Supabase JWT for protected endpoints
+    if (!isPublicEndpoint) {
+      const authHeader = req.headers.get('Authorization');
+      if (!authHeader) {
+        console.log('No Authorization header for protected endpoint');
+        return new Response(JSON.stringify({ 
+          detail: 'Not authenticated. Please log in first.' 
+        }), {
+          status: 401,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
+
+      // Verify the Supabase JWT
+      const supabaseUrl = Deno.env.get('SUPABASE_URL') || '';
+      const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') || '';
+      
+      const supabase = createClient(supabaseUrl, supabaseServiceKey);
+      const token = authHeader.replace('Bearer ', '');
+      
+      const { data: { user }, error: authError } = await supabase.auth.getUser(token);
+      
+      if (authError || !user) {
+        console.log('Invalid or expired Supabase token:', authError?.message);
+        return new Response(JSON.stringify({ 
+          detail: 'Invalid or expired session. Please log in again.' 
+        }), {
+          status: 401,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
+
+      console.log(`Authenticated user: ${user.email}`);
     }
 
-    // Prepare headers and body - Aurora API expects JSON for all endpoints
+    // Prepare headers - Aurora API expects JSON for all endpoints
     const headers: Record<string, string> = {
       'Content-Type': 'application/json',
     };
@@ -73,16 +114,10 @@ Deno.serve(async (req) => {
       }
     }
     
-    // Use session cookie/token for authentication
-    if (sessionCookie) {
-      // Check if it's a Bearer token (starts with "Bearer ") or a cookie
-      if (sessionCookie.startsWith('Bearer ')) {
-        headers['Authorization'] = sessionCookie;
-        console.log('Using Bearer token for auth');
-      } else {
-        headers['Cookie'] = sessionCookie;
-        console.log('Using Cookie for auth');
-      }
+    // Use session token for Aurora API authentication if provided
+    if (sessionToken) {
+      headers['Authorization'] = `Bearer ${sessionToken}`;
+      console.log('Using Bearer token for Aurora API auth');
     }
 
     let response: Response;
@@ -115,21 +150,6 @@ Deno.serve(async (req) => {
         status: 503,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
-    }
-    
-    // Helper to get empty data based on path
-    function getEmptyDataForPath(apiPath: string): unknown {
-      if (apiPath.includes('/list') || apiPath.includes('/vessels') || apiPath.includes('/stations') || 
-          apiPath.includes('/beacons') || apiPath.includes('/aircraft') || apiPath.includes('/devices') ||
-          apiPath.includes('/active') || apiPath.includes('/readings') || apiPath.includes('/rules') ||
-          apiPath.includes('/profiles') || apiPath.includes('/violations') || apiPath.includes('/baselines') ||
-          apiPath.includes('/clients') || apiPath.includes('/sensors') || apiPath.includes('/alerts')) {
-        return [];
-      }
-      if (apiPath.includes('/stats') || apiPath.includes('/statistics') || apiPath.includes('/overview')) {
-        return {};
-      }
-      return null;
     }
     
     // Handle 500 errors gracefully - Aurora backend internal errors
@@ -168,6 +188,17 @@ Deno.serve(async (req) => {
       const emptyData = getEmptyDataForPath(path);
       return new Response(JSON.stringify(emptyData), {
         status: 200,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+    
+    // Handle 401 from Aurora - pass through but don't expose internal details
+    if (response.status === 401) {
+      console.log(`Aurora returned 401 for ${path}`);
+      return new Response(JSON.stringify({ 
+        detail: 'Aurora API authentication required' 
+      }), {
+        status: 200, // Return 200 with empty data to avoid breaking UI
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
     }

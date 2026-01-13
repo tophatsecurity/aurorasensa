@@ -63,8 +63,10 @@ export function useSSE({
     reconnectCount: 0,
   });
 
-  const getSessionCookie = useCallback(() => {
-    return sessionStorage.getItem("aurora_cookie");
+  // Helper to check for Supabase session
+  const hasSupabaseSession = useCallback(() => {
+    const storageKey = `sb-hewwtgcrupegpcwfujln-auth-token`;
+    return !!localStorage.getItem(storageKey);
   }, []);
 
   const connect = useCallback(async () => {
@@ -82,8 +84,7 @@ export function useSSE({
       return;
     }
 
-    const sessionCookie = getSessionCookie();
-    if (!sessionCookie) {
+    if (!hasSupabaseSession()) {
       setState(prev => ({
         ...prev,
         error: "No session - please log in",
@@ -129,10 +130,10 @@ export function useSSE({
     const streamType = getStreamType(endpoint);
     const { clientId, commandId } = parseEndpoint(endpoint);
 
-    // Build proxy URL
+    // Build proxy URL - SSE currently disabled, but if enabled would use Supabase token
     const proxyUrl = new URL(SUPABASE_SSE_PROXY);
     proxyUrl.searchParams.set('type', streamType);
-    proxyUrl.searchParams.set('session', sessionCookie);
+    // Note: SSE is currently disabled, session param not used
     if (clientId && clientId !== 'all') {
       proxyUrl.searchParams.set('client_id', clientId);
     }
@@ -207,7 +208,7 @@ export function useSSE({
         error: e instanceof Error ? e.message : "Failed to connect",
       }));
     }
-  }, [enabled, endpoint, getSessionCookie, maxReconnectAttempts, onError, onMessage, queryClient, queryKeys, reconnectInterval]);
+  }, [enabled, endpoint, hasSupabaseSession, maxReconnectAttempts, onError, onMessage, queryClient, queryKeys, reconnectInterval]);
 
   const disconnect = useCallback(() => {
     if (reconnectTimeoutRef.current) {
@@ -550,9 +551,10 @@ export function useSSEAvailability() {
     
     setIsChecking(true);
     try {
-      // Check SSE availability via the proxy health endpoint
-      const sessionCookie = sessionStorage.getItem("aurora_cookie");
-      if (!sessionCookie) {
+      // Check if user has a valid Supabase session
+      const storageKey = `sb-hewwtgcrupegpcwfujln-auth-token`;
+      const hasSession = !!localStorage.getItem(storageKey);
+      if (!hasSession) {
         // No session, SSE won't work anyway
         sseIsAvailable = false;
         sseAvailabilityChecked = true;
@@ -563,7 +565,6 @@ export function useSSEAvailability() {
       // Try connecting to a simple stream type to verify SSE works
       const proxyUrl = new URL(SUPABASE_SSE_PROXY);
       proxyUrl.searchParams.set('type', 'dashboard');
-      proxyUrl.searchParams.set('session', sessionCookie);
       
       const response = await fetch(proxyUrl.toString(), {
         method: "GET",
