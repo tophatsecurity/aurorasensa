@@ -7,7 +7,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { useClients, Client } from "@/hooks/useAuroraApi";
+import { useClientsWithHostnames, Client } from "@/hooks/aurora";
 import { useClientContextOptional } from "@/contexts/ClientContext";
 
 // ============================================
@@ -88,7 +88,7 @@ export const ClientSelector = memo(function ClientSelector({
   className = "",
   showAllOption = true,
 }: ClientSelectorProps) {
-  const { data: clients, isLoading } = useClients();
+  const { data: clients, isLoading } = useClientsWithHostnames();
   
   // Use context if available, otherwise use props
   const context = useClientContextOptional();

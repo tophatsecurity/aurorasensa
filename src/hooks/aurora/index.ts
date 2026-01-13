@@ -24,6 +24,7 @@ export {
 
 export {
   useClients,
+  useClientsWithHostnames,
   useClient,
   useClientsByState,
   useClientStatistics,

@@ -22,6 +22,36 @@ import type {
 // CLIENT QUERY HOOKS
 // =============================================
 
+// Interface for batch with readings containing hostname
+interface BatchWithReadings {
+  batch_id: string;
+  client_id: string;
+  readings?: Array<{
+    sensors?: Record<string, {
+      device_type?: string;
+      system?: {
+        hostname?: string;
+      };
+    }>;
+  }>;
+}
+
+// Helper to extract hostname from batch readings
+function extractHostnameFromBatch(batch: BatchWithReadings | null): string | null {
+  if (!batch?.readings?.[0]?.sensors) return null;
+  
+  const sensors = batch.readings[0].sensors;
+  
+  // Look for system_monitor sensor which contains the system hostname
+  for (const [sensorId, sensorData] of Object.entries(sensors)) {
+    if (sensorData?.device_type === 'system_monitor' && sensorData?.system?.hostname) {
+      return sensorData.system.hostname;
+    }
+  }
+  
+  return null;
+}
+
 export function useClients() {
   return useQuery({
     queryKey: ["aurora", "clients"],
@@ -31,6 +61,68 @@ export function useClients() {
     },
     enabled: hasAuroraSession(),
     ...fastQueryOptions,
+  });
+}
+
+// Fetch clients with enriched hostname from their latest batch
+export function useClientsWithHostnames() {
+  return useQuery({
+    queryKey: ["aurora", "clients", "with-hostnames"],
+    queryFn: async () => {
+      // Fetch clients list
+      const clientsResponse = await callAuroraApi<ClientsListResponse>("/api/clients/list");
+      const clients = clientsResponse.clients || [];
+      
+      // Fetch batches to get hostnames
+      const batchesResponse = await callAuroraApi<{ batches: Array<{ batch_id: string; client_id: string }> }>("/api/batches/list?limit=100");
+      const batches = batchesResponse.batches || [];
+      
+      // Group batches by client_id and get the latest for each
+      const clientBatchMap = new Map<string, string>();
+      for (const batch of batches) {
+        // Extract client_id from batch_id if client_id is "unknown"
+        let clientId = batch.client_id;
+        if (clientId === "unknown" && batch.batch_id.includes("client_")) {
+          const match = batch.batch_id.match(/client_([a-f0-9]+)/);
+          if (match) {
+            clientId = `client_${match[1]}`;
+          }
+        }
+        
+        // Only keep the first (most recent) batch per client
+        if (!clientBatchMap.has(clientId)) {
+          clientBatchMap.set(clientId, batch.batch_id);
+        }
+      }
+      
+      // Fetch batch details to get hostnames
+      const hostnameMap = new Map<string, string>();
+      
+      await Promise.all(
+        Array.from(clientBatchMap.entries()).map(async ([clientId, batchId]) => {
+          try {
+            const batchData = await callAuroraApi<BatchWithReadings>(`/api/batches/${batchId}`);
+            const hostname = extractHostnameFromBatch(batchData);
+            if (hostname) {
+              hostnameMap.set(clientId, hostname);
+            }
+          } catch (e) {
+            // Ignore errors fetching individual batches
+            console.debug(`Failed to fetch batch ${batchId} for hostname:`, e);
+          }
+        })
+      );
+      
+      // Enrich clients with batch hostnames
+      return clients.map(client => ({
+        ...client,
+        hostname: hostnameMap.get(client.client_id) || client.hostname || client.client_id,
+      }));
+    },
+    enabled: hasAuroraSession(),
+    ...fastQueryOptions,
+    staleTime: 60000, // Cache for 1 minute since this is an expensive operation
+    refetchInterval: 120000, // Refetch every 2 minutes
   });
 }
 
@@ -46,9 +138,70 @@ export function useClient(clientId: string) {
 export function useClientsByState() {
   return useQuery({
     queryKey: ["aurora", "clients", "all-states"],
-    queryFn: () => callAuroraApi<ClientsByStateResponse>("/api/clients/all-states"),
+    queryFn: async () => {
+      // Fetch clients by state
+      const response = await callAuroraApi<ClientsByStateResponse>("/api/clients/all-states");
+      
+      // Fetch batches to get hostnames
+      const batchesResponse = await callAuroraApi<{ batches: Array<{ batch_id: string; client_id: string }> }>("/api/batches/list?limit=100");
+      const batches = batchesResponse.batches || [];
+      
+      // Group batches by client_id and get the latest for each
+      const clientBatchMap = new Map<string, string>();
+      for (const batch of batches) {
+        let clientId = batch.client_id;
+        if (clientId === "unknown" && batch.batch_id.includes("client_")) {
+          const match = batch.batch_id.match(/client_([a-f0-9]+)/);
+          if (match) {
+            clientId = `client_${match[1]}`;
+          }
+        }
+        if (!clientBatchMap.has(clientId)) {
+          clientBatchMap.set(clientId, batch.batch_id);
+        }
+      }
+      
+      // Fetch batch details to get hostnames
+      const hostnameMap = new Map<string, string>();
+      
+      await Promise.all(
+        Array.from(clientBatchMap.entries()).map(async ([clientId, batchId]) => {
+          try {
+            const batchData = await callAuroraApi<BatchWithReadings>(`/api/batches/${batchId}`);
+            const hostname = extractHostnameFromBatch(batchData);
+            if (hostname) {
+              hostnameMap.set(clientId, hostname);
+            }
+          } catch (e) {
+            console.debug(`Failed to fetch batch ${batchId} for hostname:`, e);
+          }
+        })
+      );
+      
+      // Helper to enrich client array with hostnames
+      const enrichClients = (clients: Client[]) => 
+        clients.map(client => ({
+          ...client,
+          hostname: hostnameMap.get(client.client_id) || client.hostname || client.client_id,
+        }));
+      
+      // Enrich all client arrays
+      return {
+        ...response,
+        clients_by_state: {
+          pending: enrichClients(response.clients_by_state?.pending || []),
+          registered: enrichClients(response.clients_by_state?.registered || []),
+          adopted: enrichClients(response.clients_by_state?.adopted || []),
+          disabled: enrichClients(response.clients_by_state?.disabled || []),
+          suspended: enrichClients(response.clients_by_state?.suspended || []),
+          deleted: enrichClients(response.clients_by_state?.deleted || []),
+        },
+      };
+    },
     enabled: hasAuroraSession(),
     ...defaultQueryOptions,
+    staleTime: 60000,
+    refetchInterval: 120000,
   });
 }
 
