@@ -553,6 +553,15 @@ export function useSSEAvailability() {
         headers: { 'Accept': 'text/event-stream' },
       });
       
+      // If we get 503 or 404, it means SSE is not available - fall back to polling
+      if (response.status === 503 || response.status === 404) {
+        console.log('SSE not available on Aurora server, using polling fallback');
+        sseIsAvailable = false;
+        sseAvailabilityChecked = true;
+        setIsAvailable(false);
+        return;
+      }
+      
       // Check if it returned SSE content type
       const contentType = response.headers.get('content-type');
       const isSSE = contentType?.includes('text/event-stream') ?? false;
