@@ -74,6 +74,12 @@ export async function callAuroraApi<T>(
         });
 
         if (error) {
+          // Check if error message indicates a 500 from Aurora (transient server issue)
+          if (error.message?.includes('500') || error.message?.includes('Internal Server Error')) {
+            console.warn(`Aurora server error for ${path}, returning empty data`);
+            return getEmptyDataForPath(path) as T;
+          }
+          
           const apiError = new Error(`Aurora API error: ${error.message}`);
           if (isRetryableError(apiError) && attempt < MAX_RETRIES - 1) {
             const backoffMs = INITIAL_BACKOFF_MS * Math.pow(2, attempt);
@@ -118,9 +124,16 @@ export async function callAuroraApi<T>(
         }
 
         if ((data as AuroraProxyResponse)?.error) {
-          // Handle timeout errors gracefully - return empty data instead of throwing
-          if ((data as any).retryable && (data as any).error?.includes('timeout')) {
-            console.warn(`Timeout for ${path}, returning empty data`);
+          // Handle retryable errors gracefully - return empty data instead of throwing
+          if ((data as any).retryable) {
+            console.warn(`Retryable error for ${path}: ${(data as AuroraProxyResponse).error}, returning empty data`);
+            return getEmptyDataForPath(path) as T;
+          }
+          // Handle server errors gracefully - return empty data to prevent blank screens
+          if ((data as any).error?.includes('temporarily unavailable') || 
+              (data as any).error?.includes('timeout') ||
+              (data as any).error?.includes('Internal Server Error')) {
+            console.warn(`Server error for ${path}, returning empty data`);
             return getEmptyDataForPath(path) as T;
           }
           console.error(`Aurora API response error for ${path}:`, (data as AuroraProxyResponse).error);
