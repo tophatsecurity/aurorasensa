@@ -64,7 +64,7 @@ export function useStarlinkDevicesFromReadings() {
     queryKey: ["aurora", "starlink", "devices-from-readings"],
     queryFn: async () => {
       try {
-        const response = await callAuroraApi<{ count: number; readings: LatestReading[] }>("/api/latest/readings");
+        const response = await callAuroraApi<{ count: number; readings: LatestReading[] }>("/api/readings/latest");
         const readings = response?.readings || [];
         
         // Filter for starlink readings and extract device info

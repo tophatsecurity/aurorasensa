@@ -3,7 +3,7 @@
 Based on the official API documentation at http://aurora.tophatsecurity.com:9151/docs
 
 ## Authentication
-- `POST /api/auth/login` - Login
+- `POST /api/auth/login` - Login (OAuth2 password flow)
 - `POST /api/auth/logout` - Logout
 - `GET /api/auth/verify` - Verify Session
 - `GET /api/auth/me` - Get Current User Info
@@ -12,81 +12,93 @@ Based on the official API documentation at http://aurora.tophatsecurity.com:9151
 ## User Management
 - `GET /api/users` - List Users
 - `POST /api/users` - Create User
-- `DELETE /api/users/{target_username}` - Delete User
 - `GET /api/users/{user_id}` - Get User
 - `PUT /api/users/{user_id}` - Update User
+- `PATCH /api/users/{user_id}` - Patch User
+- `DELETE /api/users/{target_username}` - Delete User
+- `POST /api/users/{user_id}/activate` - Activate User
+- `POST /api/users/{user_id}/deactivate` - Deactivate User
 
 ## Roles & Permissions
 - `GET /api/roles` - List Roles
-- `POST /api/users/{user_id}/roles` - Assign Role
+- `POST /api/roles` - Create Role
+- `PUT /api/roles/{role_id}` - Update Role
+- `DELETE /api/roles/{role_id}` - Delete Role
+- `POST /api/roles/{role_id}/permissions` - Assign Role Permissions
+- `POST /api/users/{user_id}/roles` - Assign Role to User
+- `DELETE /api/users/{user_id}/roles/{role_id}` - Remove Role from User
 - `GET /api/users/{user_id}/roles` - Get User Roles
 - `GET /api/permissions` - List Permissions
 - `GET /api/users/{user_id}/permissions` - Get User Permissions
+- `POST /api/users/{user_id}/permissions` - Assign Permission to User
+- `DELETE /api/users/{user_id}/permissions/{permission_id}` - Remove Permission from User
 
 ## API Keys
 - `GET /api/users/{user_id}/api-keys` - List User API Keys
 - `POST /api/users/{user_id}/api-keys` - Create User API Key
 - `DELETE /api/users/{user_id}/api-keys/{key_id}` - Delete API Key
 
-## Activity & Sessions
+## Sessions
+- `GET /api/users/{user_id}/sessions` - List User Sessions
+- `DELETE /api/users/{user_id}/sessions/{session_id}` - Delete Session
+- `DELETE /api/users/{user_id}/sessions` - Delete All User Sessions
+
+## Activity & Audit
 - `GET /api/activity` - Get Activity Feed
 - `GET /api/users/{user_id}/activity` - Get User Activity Log
-- `GET /api/users/{user_id}/sessions` - List User Sessions
-
-## Audit Logs
 - `GET /api/audit/logs` - Get Audit Logs
 - `GET /api/audit/stats` - Get Audit Stats
 
 ## Alerts
 - `GET /api/alerts` - Get Alerts
-- `GET /api/alerts/list` - List Alerts
-- `POST /api/alerts/add` - Add Alert Rule
-- `DELETE /api/alerts/{rule_id}` - Delete Alert Rule
+- `GET /api/alerts/list` - List Alerts (with filters)
+- `GET /api/alerts/stats` - Get Alert Stats
+- `GET /api/alerts/settings` - Get Alert Settings
+- `PUT /api/alerts/settings` - Update Alert Settings
+- `POST /api/alerts/test` - Test Alert
 - `GET /api/device-alerts` - Get Device Alerts
+- `POST /api/alerts/{alert_id}/acknowledge` - Acknowledge Alert
+- `POST /api/alerts/{alert_id}/resolve` - Resolve Alert
+- `DELETE /api/alerts/{alert_id}` - Delete Alert
+
+## Alert Rules
 - `GET /api/alerts/rules` - Get Alert Rules
 - `POST /api/alerts/rules` - Create Alert Rule
 - `GET /api/alerts/rules/{rule_id}` - Get Alert Rule
 - `PUT /api/alerts/rules/{rule_id}` - Update Alert Rule
 - `DELETE /api/alerts/rules/{rule_id}` - Delete Alert Rule
-- `POST /api/alerts/{alert_id}/acknowledge` - Acknowledge Alert
-- `POST /api/alerts/{alert_id}/resolve` - Resolve Alert
-- `GET /api/alerts/stats` - Get Alert Stats
-- `GET /api/alerts/settings` - Get Alert Settings
-- `PUT /api/alerts/settings` - Update Alert Settings
-- `POST /api/alerts/test` - Test Alert
 
 ## Sensors
-- `GET /api/sensors/recent` - Get Recent Sensors
 - `GET /api/sensors/list` - List Sensors
+- `GET /api/sensors/recent` - Get Recent Sensors
 - `GET /api/sensors/{sensor_id}` - Get Sensor
 - `PUT /api/sensors/{sensor_id}` - Update Sensor
 - `DELETE /api/sensors/{sensor_id}` - Delete Sensor
 - `POST /api/sensors/add` - Add Sensor
 
-## Data Ingestion
-- `POST /api/v1/batch` - Receive Batch
-- `POST /api/v1/client/config` - Receive Client Config
-
-## Data Retrieval
+## Data Readings
+- `GET /api/readings/latest` - Get Latest Readings
+- `GET /api/readings/sensor/{sensor_type}` - Get Sensor Readings by Type
 - `GET /api/devices/tree` - Get Device Tree
 - `GET /api/devices/{device_id}/latest` - Get Device Latest
-- `GET /api/readings/latest` - Get Latest Readings
-- `GET /api/readings/sensor/{sensor_type}` - Get Sensor Readings
+- `GET /api/devices/status` - Get Device Status
+
+## Power
 - `GET /api/power/stats` - Get Power Stats
-- `GET /api/v1/data/readings` - Get Readings
-- `GET /api/v1/data/latest` - Get Latest
 
 ## Batches
 - `GET /api/batches/list` - List Batches
 - `GET /api/batches/latest` - Get Latest Batch
 - `GET /api/batches/{batch_id}` - Get Batch By ID
 - `GET /api/batches/{batch_id}/sensors` - Get Batch Sensors
-- `GET /api/batches/by-client/{client_id}` - Get Batches By Client
 - `GET /api/batches/{batch_id}/readings` - Get Batch Readings
+- `GET /api/batches/by-client/{client_id}` - Get Batches By Client
 
-## Analytics
-- `GET /api/v1/data/moving_average` - Get Moving Average
+## Timeseries & Analytics
 - `GET /api/timeseries` - Get Timeseries Data
+- `GET /api/v1/data/readings` - Get V1 Readings
+- `GET /api/v1/data/latest` - Get V1 Latest
+- `GET /api/v1/data/moving_average` - Get Moving Average
 
 ## Export
 - `GET /api/export/formats` - Get Export Formats
@@ -94,12 +106,12 @@ Based on the official API documentation at http://aurora.tophatsecurity.com:9151
 - `GET /api/v1/export/json` - Export JSON
 
 ## System Info
+- `GET /api/system/all` - Get All System Info
 - `GET /api/system/arp` - Get ARP Table
 - `GET /api/system/routing` - Get Routing Table
 - `GET /api/system/interfaces` - Get Network Interfaces
 - `GET /api/system/netstat` - Get Netstat
 - `GET /api/system/external-ip` - Get External IP
-- `GET /api/system/all` - Get All System Info
 - `GET /api/system/hostname` - Get Hostname
 - `GET /api/system/ip` - Get IP Address
 - `GET /api/system/uptime` - Get Uptime
@@ -137,7 +149,13 @@ Based on the official API documentation at http://aurora.tophatsecurity.com:9151
 
 ## LoRa
 - `GET /api/lora/devices` - Get LoRa Devices
+- `POST /api/lora/devices` - Create LoRa Device
 - `GET /api/lora/devices/{device_id}` - Get LoRa Device
+- `PUT /api/lora/devices/{device_id}` - Update LoRa Device
+- `PATCH /api/lora/devices/{device_id}` - Patch LoRa Device
+- `DELETE /api/lora/devices/{device_id}` - Delete LoRa Device
+- `POST /api/lora/devices/{device_id}/activate` - Activate Device
+- `POST /api/lora/devices/{device_id}/deactivate` - Deactivate Device
 - `GET /api/lora/detections` - Get LoRa Detections
 - `GET /api/lora/detections/recent` - Get Recent Detections
 - `GET /api/lora/stats/global` - Get Global LoRa Stats
@@ -148,8 +166,8 @@ Based on the official API documentation at http://aurora.tophatsecurity.com:9151
 ## Clients
 - `GET /api/clients/list` - List Clients
 - `GET /api/clients/{client_id}` - Get Client
-- `DELETE /api/clients/{client_id}` - Delete Client
 - `PUT /api/clients/{client_id}` - Update Client
+- `DELETE /api/clients/{client_id}` - Delete Client
 - `POST /api/clients/{client_id}/heartbeat` - Client Heartbeat
 - `POST /api/clients/{client_id}/adopt` - Adopt Client
 
@@ -172,8 +190,8 @@ Based on the official API documentation at http://aurora.tophatsecurity.com:9151
 - `GET /api/clients/{client_id}/state-history` - Get Client State History
 
 ## Client System Info
-- `POST /api/clients/{client_id}/system-info` - Update Client System Info
 - `GET /api/clients/{client_id}/system-info` - Get Client System Info
+- `POST /api/clients/{client_id}/system-info` - Update Client System Info
 - `GET /api/clients/system-info/all` - Get All Clients System Info
 
 ## Client Configuration
@@ -230,27 +248,23 @@ Based on the official API documentation at http://aurora.tophatsecurity.com:9151
 - `GET /api/config` - Get Config
 - `POST /api/config` - Update Config
 
-## Devices
-- `GET /api/devices/status` - Get Device Status
-- `GET /api/v1/devices` - List Devices
-
 ## Statistics
 - `GET /api/stats` - Get All Statistics
-- `GET /api/stats/1hr` - Get 1Hr Sensor Stats
-- `GET /api/stats/24hr` - Get 24Hr Sensor Stats
-- `GET /api/stats/weekly` - Get Weekly Sensor Stats
-- `GET /api/stats/6hr` - Get 6Hr Sensor Stats
+- `GET /api/stats/comprehensive` - Get Comprehensive Stats
 - `GET /api/stats/summary` - Get Stats Summary
 - `GET /api/stats/global` - Get Global Stats
+- `GET /api/stats/overview` - Get General Stats
+- `GET /api/stats/1hr` - Get 1Hr Sensor Stats
+- `GET /api/stats/6hr` - Get 6Hr Sensor Stats
+- `GET /api/stats/24hr` - Get 24Hr Sensor Stats
+- `GET /api/stats/weekly` - Get Weekly Sensor Stats
 - `GET /api/stats/devices` - Get All Devices Stats
 - `GET /api/stats/devices/{device_id}` - Get Device Stats
 - `GET /api/stats/sensors` - Get All Sensor Stats
 - `GET /api/stats/sensors/{sensor_type}` - Get Sensor Type Stats
-- `GET /api/stats/comprehensive` - Get Comprehensive Stats
 - `GET /api/stats/aircraft` - Get Aircraft Activity
 - `GET /api/stats/endpoints` - Get Endpoint Stats Summary
 - `GET /api/stats/endpoints/history` - Get Endpoint Stats History
-- `GET /api/stats/overview` - Get General Stats
 - `GET /api/performance/stats` - Get Performance Stats
 
 ## Historical Stats
@@ -285,22 +299,7 @@ Based on the official API documentation at http://aurora.tophatsecurity.com:9151
 - `GET /api/dashboard/sensor-timeseries` - Get Sensor Timeseries
 - `GET /api/dashboard/system-stats` - Get Dashboard System Stats
 
-## Real-Time Streams (SSE)
-- `GET /api/stream/readings` - Stream Readings
-- `GET /api/stream/commands/{command_id}/status` - Stream Command Status
-- `GET /api/stream/clients` - Stream Clients
-- `GET /api/stream/alerts` - Stream Alerts
-- `GET /api/stream/dashboard/stats` - Stream Dashboard Stats
-- `GET /api/stream/readings/starlink` - Stream Starlink Readings
-- `GET /api/stream/readings/thermal_probe` - Stream Thermal Probe Readings
-- `GET /api/stream/readings/adsb` - Stream ADSB Readings
-- `GET /api/stream/readings/arduino` - Stream Arduino Readings
-- `GET /api/stream/readings/gps` - Stream GPS Readings
-- `GET /api/stream/readings/power` - Stream Power Readings
-- `GET /api/stream/readings/system_monitor` - Stream System Monitor Readings
-- `GET /api/stream/readings/radio` - Stream Radio Readings
-
-## Data Files
+## Data Files (JSONL)
 - `GET /starlink_status.jsonl` - Get Starlink Status
 - `GET /gpsd_status.jsonl` - Get GPSD Status
 - `GET /bandwidth.jsonl` - Get Bandwidth
@@ -313,3 +312,8 @@ Based on the official API documentation at http://aurora.tophatsecurity.com:9151
 - `POST /api/v1/config/{client_id}` - Update Client Config
 - `POST /api/v1/config/new` - Create New Client
 - `GET /api/v1/config` - List All Configs
+- `GET /api/v1/devices` - List Devices
+
+## Data Ingestion
+- `POST /api/v1/batch` - Receive Batch
+- `POST /api/v1/client/config` - Receive Client Config

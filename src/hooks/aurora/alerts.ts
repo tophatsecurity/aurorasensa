@@ -229,7 +229,7 @@ export function useAlertSettings() {
 export function useDeviceAlerts(deviceId: string) {
   return useQuery({
     queryKey: ["aurora", "alerts", "device", deviceId],
-    queryFn: () => safeAlertApiCall<{ alerts: Alert[] }>(`/api/alerts/device/${deviceId}`, { alerts: [] }),
+    queryFn: () => safeAlertApiCall<{ alerts: Alert[] }>(`/api/device-alerts?device_id=${deviceId}`, { alerts: [] }),
     enabled: !!deviceId && hasAuroraSession(),
     staleTime: 30000,
     refetchInterval: 60000,
