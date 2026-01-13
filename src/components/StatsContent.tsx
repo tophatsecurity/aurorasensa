@@ -32,7 +32,7 @@ import "leaflet/dist/leaflet.css";
 import { format } from "date-fns";
 import { 
   useLatestReadings,
-  useClients,
+  useClientsWithHostnames,
   useClient,
   useClientSystemInfo,
   useStarlinkDevicesFromReadings,
@@ -81,7 +81,7 @@ export default function StatsContent() {
 
   // Fetch data
   const { data: readings, isLoading: readingsLoading, refetch: refetchReadings } = useLatestReadings();
-  const { data: clients, isLoading: clientsLoading } = useClients();
+  const { data: clients, isLoading: clientsLoading } = useClientsWithHostnames();
   const { data: starlinkDevices, isLoading: starlinkLoading } = useStarlinkDevicesFromReadings();
   const { data: starlinkStats } = useStarlinkStats();
   
