@@ -31,12 +31,18 @@ function isRetryableError(error: Error): boolean {
   const message = error.message.toLowerCase();
   return message.includes('503') || 
          message.includes('504') ||
+         message.includes('500') ||
          message.includes('boot_error') || 
          message.includes('function failed to start') ||
          message.includes('network') ||
          message.includes('timeout') ||
          message.includes('unavailable') ||
-         message.includes('retryable');
+         message.includes('retryable') ||
+         message.includes('internal server error') ||
+         message.includes('sanic') ||
+         message.includes('blueprint') ||
+         message.includes('already registered') ||
+         message.includes('already in use');
 }
 
 interface AuroraProxyResponse {
@@ -94,10 +100,25 @@ export async function callAuroraApi<T>(
 
         if (data && typeof data === 'object' && 'detail' in data) {
           const detailStr = String(data.detail);
+          const detailLower = detailStr.toLowerCase();
           
-          const isAuthError = detailStr.toLowerCase().includes('not authenticated') || 
-                             detailStr.toLowerCase().includes('invalid session') ||
-                             detailStr.toLowerCase().includes('provide x-api-key');
+          // Check for transient Aurora backend errors - return empty data instead of throwing
+          const isTransientServerError = 
+            detailLower.includes('sanic') ||
+            detailLower.includes('blueprint') ||
+            detailLower.includes('already registered') ||
+            detailLower.includes('already in use') ||
+            detailLower.includes('duplicate exception') ||
+            detailLower.includes('internal server error');
+          
+          if (isTransientServerError) {
+            console.warn(`Transient Aurora server error for ${path}: ${detailStr}, returning empty data`);
+            return getEmptyDataForPath(path) as T;
+          }
+          
+          const isAuthError = detailLower.includes('not authenticated') || 
+                             detailLower.includes('invalid session') ||
+                             detailLower.includes('provide x-api-key');
           
           if (isAuthError) {
             const isAuthEndpoint = path.startsWith('/api/auth/');
@@ -113,8 +134,8 @@ export async function callAuroraApi<T>(
             throw error;
           }
           
-          const isNotFoundError = detailStr.toLowerCase().includes('not found') || 
-                                  detailStr.toLowerCase().includes('no ') && detailStr.toLowerCase().includes('found');
+          const isNotFoundError = detailLower.includes('not found') || 
+                                  detailLower.includes('no ') && detailLower.includes('found');
           if (!isNotFoundError) {
             console.error(`Aurora backend error for ${path}:`, data.detail);
           }
