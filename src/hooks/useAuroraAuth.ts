@@ -100,13 +100,14 @@ export function useAuroraAuth(): AuroraAuthContextValue {
         return;
       }
 
+      // Parse stored session - we trust it since there's no /api/me endpoint
       const session = JSON.parse(sessionData);
       
-      // Verify session is still valid by calling /api/auth/me
-      const userData = await callAuroraApi<AuroraUser>("/api/auth/me");
-      
       setAuthState({
-        user: userData,
+        user: {
+          username: session.username,
+          role: session.role || 'user',
+        },
         loading: false,
         error: null,
         isOfflineMode: false,
@@ -164,17 +165,24 @@ export function useAuroraAuth(): AuroraAuthContextValue {
     setAuthState(prev => ({ ...prev, loading: true, error: null }));
     
     try {
-      const response = await callAuroraApi<{ success?: boolean; user?: AuroraUser; message?: string; auroraCookie?: string; username?: string; role?: string }>(
-        "/api/auth/login",
+      // Aurora API uses /api/login (not /api/auth/login)
+      const response = await callAuroraApi<{ success?: boolean; user?: AuroraUser; message?: string; auroraCookie?: string; username?: string; role?: string; access_token?: string; token_type?: string }>(
+        "/api/login",
         "POST",
         { username, password }
       );
 
-      const isSuccess = response.auroraCookie || response.username || response.success;
+      // Check for successful login - API may return access_token or auroraCookie
+      const isSuccess = response.access_token || response.auroraCookie || response.username || response.success;
       
       if (isSuccess) {
+        // Store session cookie if provided
         if (response.auroraCookie) {
           sessionStorage.setItem(SESSION_COOKIE_KEY, response.auroraCookie);
+        }
+        // Also handle access_token as session cookie
+        if (response.access_token) {
+          sessionStorage.setItem(SESSION_COOKIE_KEY, response.access_token);
         }
         
         const user: AuroraUser = response.user || {
@@ -184,6 +192,7 @@ export function useAuroraAuth(): AuroraAuthContextValue {
         
         sessionStorage.setItem(SESSION_KEY, JSON.stringify({
           username: user.username,
+          role: user.role,
           loggedInAt: new Date().toISOString(),
         }));
 
@@ -197,7 +206,7 @@ export function useAuroraAuth(): AuroraAuthContextValue {
 
         return { success: true };
       } else {
-        const errorMsg = response.message || 'Login failed';
+        const errorMsg = response.message || 'Invalid username or password';
         setAuthState(prev => ({
           ...prev,
           loading: false,
@@ -229,7 +238,8 @@ export function useAuroraAuth(): AuroraAuthContextValue {
 
   const signOut = useCallback(async () => {
     try {
-      await callAuroraApi("/api/auth/logout", "POST");
+      // Aurora API uses /api/logout (not /api/auth/logout)
+      await callAuroraApi("/api/logout", "POST");
     } catch {
       // Ignore logout errors
     }
@@ -243,7 +253,7 @@ export function useAuroraAuth(): AuroraAuthContextValue {
       isOfflineMode: false,
       serverStatus: 'checking',
     });
-  }, [authState.isOfflineMode]);
+  }, []);
 
   const isAdmin = authState.user?.role === 'admin';
 
