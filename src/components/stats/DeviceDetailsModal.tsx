@@ -8,7 +8,6 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { Separator } from "@/components/ui/separator";
 import {
   Activity,
   Clock,
@@ -22,6 +21,7 @@ import {
   Wifi,
   Navigation,
 } from "lucide-react";
+import DeviceMetricsCharts from "./DeviceMetricsCharts";
 
 interface SensorReading {
   device_id: string;
@@ -253,6 +253,9 @@ export default function DeviceDetailsModal({ device, open, onOpenChange }: Devic
                 </CardContent>
               </Card>
             )}
+
+            {/* Metrics Charts */}
+            <DeviceMetricsCharts readings={device.readings} deviceType={device.device_type} />
 
             {/* Recent Readings History */}
             {device.readings.length > 1 && (
