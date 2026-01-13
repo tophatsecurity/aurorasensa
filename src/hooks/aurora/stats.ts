@@ -349,6 +349,64 @@ export function useStatsOverview() {
   });
 }
 
+// Client-specific stats hooks
+
+export interface ClientStats {
+  client_id: string;
+  hostname?: string;
+  ip_address?: string;
+  status?: string;
+  state?: string;
+  first_seen?: string;
+  last_seen?: string;
+  batches_received?: number;
+  total_readings?: number;
+  total_devices?: number;
+  active_devices?: number;
+  device_types?: string[];
+  sensors?: string[];
+  readings_last_hour?: number;
+  readings_last_24h?: number;
+  avg_readings_per_hour?: number;
+  location?: {
+    latitude?: number;
+    longitude?: number;
+    city?: string;
+    country?: string;
+  };
+  system?: {
+    cpu_percent?: number;
+    memory_percent?: number;
+    disk_percent?: number;
+    uptime_seconds?: number;
+  };
+}
+
+export function useClientStats(clientId: string | null) {
+  return useQuery({
+    queryKey: ["aurora", "stats", "client", clientId],
+    queryFn: async () => {
+      if (!clientId || clientId === "all") return null;
+      try {
+        return await callAuroraApi<ClientStats>(`/api/clients/${clientId}/stats`);
+      } catch (error) {
+        // Fallback to basic client info if stats endpoint doesn't exist
+        console.warn(`Client stats endpoint failed, trying basic info:`, error);
+        try {
+          const client = await callAuroraApi<ClientStats>(`/api/clients/${clientId}`);
+          return client;
+        } catch {
+          return null;
+        }
+      }
+    },
+    enabled: hasAuroraSession() && !!clientId && clientId !== "all",
+    staleTime: 30000,
+    refetchInterval: 60000,
+    retry: 1,
+  });
+}
+
 // Historical Stats Hooks with error handling for large data responses
 
 async function safeStatsHistoryCall<T>(endpoint: string, defaultValue: T): Promise<T> {
