@@ -56,15 +56,12 @@ import {
   useAdsbEmergencies,
   useAdsbDevices,
 } from "@/hooks/useAuroraApi";
-import { useAdsbSSE } from "@/hooks/useSSE";
 import { useQueryClient } from "@tanstack/react-query";
-import { SSEConnectionStatus } from "./SSEConnectionStatus";
 import { formatDistanceToNow } from "date-fns";
 
 const AdsbAnalyticsContent = () => {
   const queryClient = useQueryClient();
   const [timeRange, setTimeRange] = useState("60");
-  const [sseEnabled, setSseEnabled] = useState(true);
   
   const minutes = parseInt(timeRange);
   
@@ -74,9 +71,6 @@ const AdsbAnalyticsContent = () => {
   const { data: adsbCoverage, isLoading: coverageLoading } = useAdsbCoverage();
   const { data: emergencies, isLoading: emergenciesLoading } = useAdsbEmergencies();
   const { data: devices, isLoading: devicesLoading } = useAdsbDevices();
-  
-  // Real-time SSE for ADS-B
-  const adsbSSE = useAdsbSSE(sseEnabled);
   
   const isLoading = aircraftLoading || statsLoading || coverageLoading;
 
@@ -169,24 +163,6 @@ const AdsbAnalyticsContent = () => {
           </p>
         </div>
         <div className="flex items-center gap-3">
-          <SSEConnectionStatus
-            isConnected={adsbSSE.isConnected}
-            isConnecting={adsbSSE.isConnecting}
-            error={adsbSSE.error}
-            reconnectCount={adsbSSE.reconnectCount}
-            onReconnect={adsbSSE.reconnect}
-            label="Live ADS-B"
-          />
-          <div className="flex items-center gap-2">
-            <Switch
-              id="adsb-sse-toggle"
-              checked={sseEnabled}
-              onCheckedChange={setSseEnabled}
-            />
-            <Label htmlFor="adsb-sse-toggle" className="text-sm text-muted-foreground">
-              Real-time
-            </Label>
-          </div>
           <Select value={timeRange} onValueChange={setTimeRange}>
             <SelectTrigger className="w-36">
               <SelectValue />

@@ -12,8 +12,7 @@ import {
 } from "recharts";
 import { Cpu, MemoryStick, HardDrive, Thermometer, Loader2, RefreshCw } from "lucide-react";
 import { useSystemMonitorTimeseries } from "@/hooks/useAuroraApi";
-import { useSystemMonitorRealTime } from "@/hooks/useSSE";
-import { SSEConnectionStatus } from "./SSEConnectionStatus";
+// SSE imports removed - using polling only
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
@@ -212,12 +211,7 @@ interface SystemMonitorChartsProps {
 }
 
 const SystemMonitorCharts = ({ hours = 24, clientId }: SystemMonitorChartsProps) => {
-  const [realTimeEnabled, setRealTimeEnabled] = useState(true);
-  
   const { data: systemData, isLoading, refetch } = useSystemMonitorTimeseries(hours);
-  
-  // Polling-based real-time updates (replaces SSE)
-  const realTimeData = useSystemMonitorRealTime(realTimeEnabled, clientId);
 
   // Extract nested data from system_monitor readings
   const extractData = (
@@ -272,14 +266,7 @@ const SystemMonitorCharts = ({ hours = 24, clientId }: SystemMonitorChartsProps)
     <div className="space-y-4">
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
-          <SSEConnectionStatus
-            isConnected={realTimeData.isConnected}
-            isConnecting={realTimeData.isConnecting}
-            error={realTimeData.error || null}
-            reconnectCount={realTimeData.reconnectCount}
-            onReconnect={realTimeData.reconnect}
-            label="System Monitor"
-          />
+          {/* SSE status removed - using polling only */}
         </div>
         <div className="flex items-center gap-2">
           <Button

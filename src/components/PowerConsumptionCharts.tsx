@@ -13,8 +13,7 @@ import {
 } from "recharts";
 import { Zap, Loader2, TrendingUp, TrendingDown, Settings2, AlertTriangle, Bell, BellOff, RefreshCw } from "lucide-react";
 import { useStarlinkPower, useStarlinkTimeseries } from "@/hooks/useAuroraApi";
-import { usePowerRealTime } from "@/hooks/useSSE";
-import { SSEConnectionStatus } from "./SSEConnectionStatus";
+// SSE imports removed - using polling only
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
@@ -45,15 +44,10 @@ interface PowerConsumptionChartsProps {
 }
 
 const PowerConsumptionCharts = ({ hours = 24, clientId = 'all' }: PowerConsumptionChartsProps) => {
-  const [realTimeEnabled, setRealTimeEnabled] = useState(true);
-  
   // Use dedicated power endpoint for current reading, timeseries for history
   const { data: starlinkPower, isLoading: isPowerLoading, refetch } = useStarlinkPower();
   // Pass clientId to filter Starlink timeseries data by client
   const { data: starlinkTimeseries, isLoading: isTimeseriesLoading } = useStarlinkTimeseries(hours, clientId !== 'all' ? clientId : undefined);
-  
-  // Polling-based real-time updates (replaces SSE)
-  const realTimeData = usePowerRealTime(realTimeEnabled, clientId !== 'all' ? clientId : undefined);
   
   const isLoading = isPowerLoading || isTimeseriesLoading;
   
@@ -229,15 +223,8 @@ const PowerConsumptionCharts = ({ hours = 24, clientId = 'all' }: PowerConsumpti
             }`} />
           </div>
           <div>
-            <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider flex items-center gap-2">
+            <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
               Power Consumption
-              <SSEConnectionStatus
-                isConnected={realTimeData.isConnected}
-                isConnecting={realTimeData.isConnecting}
-                error={realTimeData.error || null}
-                reconnectCount={realTimeData.reconnectCount}
-                onReconnect={realTimeData.reconnect}
-              />
             </h4>
             <div className="flex items-center gap-2">
               <p className={`text-2xl font-bold ${
@@ -283,16 +270,7 @@ const PowerConsumptionCharts = ({ hours = 24, clientId = 'all' }: PowerConsumpti
           >
             <RefreshCw className="h-4 w-4" />
           </Button>
-          <div className="flex items-center gap-2 mr-2">
-            <Switch
-              id="realtime-toggle-power"
-              checked={realTimeEnabled}
-              onCheckedChange={setRealTimeEnabled}
-            />
-            <Label htmlFor="realtime-toggle-power" className="text-xs text-muted-foreground">
-              Live
-            </Label>
-          </div>
+          {/* Real-time toggle removed - using polling only */}
           <Popover>
             <PopoverTrigger asChild>
               <Button variant="ghost" size="icon" className="h-8 w-8">

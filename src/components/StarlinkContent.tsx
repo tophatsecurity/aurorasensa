@@ -64,7 +64,7 @@ import {
   useStarlinkDeviceMetrics,
 } from "@/hooks/aurora/starlink";
 import { StarlinkMonitoringPanel, StarlinkPerformanceCharts, StarlinkSignalChart } from "@/components/starlink";
-import { RealTimeStatusBadge } from "@/components/RealTimeStreamingPanel";
+// RealTimeStatusBadge removed - using polling only
 
 // Chart color palette
 const COLORS = {
@@ -420,7 +420,7 @@ const StarlinkContent = () => {
               )}
             </SelectContent>
           </Select>
-          <RealTimeStatusBadge enabled={true} clientId={activeClientFilter} />
+          {/* RealTimeStatusBadge removed - using polling only */}
         </div>
       </div>
 

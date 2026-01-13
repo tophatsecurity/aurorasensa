@@ -12,8 +12,7 @@ import {
 } from "recharts";
 import { Droplets, Loader2, RefreshCw } from "lucide-react";
 import { useDashboardTimeseries } from "@/hooks/useAuroraApi";
-import { useArduinoRealTime } from "@/hooks/useSSE";
-import { SSEConnectionStatus } from "./SSEConnectionStatus";
+// SSE imports removed - using polling only
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
@@ -36,12 +35,7 @@ interface HumidityChartsProps {
 }
 
 const HumidityCharts = ({ hours = 24, clientId }: HumidityChartsProps) => {
-  const [realTimeEnabled, setRealTimeEnabled] = useState(true);
-  
   const { data: timeseries, isLoading, refetch } = useDashboardTimeseries(hours);
-  
-  // Polling-based real-time updates (replaces SSE)
-  const realTimeData = useArduinoRealTime(realTimeEnabled, clientId);
 
   const formatData = (points: { timestamp: string; value: number }[] | undefined): ChartData[] => {
     if (!points || points.length === 0) return [];
@@ -93,15 +87,8 @@ const HumidityCharts = ({ hours = 24, clientId }: HumidityChartsProps) => {
             <Droplets className="w-5 h-5 text-blue-400" />
           </div>
           <div>
-            <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider flex items-center gap-2">
+            <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
               Humidity Level
-              <SSEConnectionStatus
-                isConnected={realTimeData.isConnected}
-                isConnecting={realTimeData.isConnecting}
-                error={realTimeData.error || null}
-                reconnectCount={realTimeData.reconnectCount}
-                onReconnect={realTimeData.reconnect}
-              />
             </h4>
             <p className="text-2xl font-bold text-blue-400">
               {isLoading ? '...' : `${formatValue(stats.current)}%`}
@@ -131,16 +118,7 @@ const HumidityCharts = ({ hours = 24, clientId }: HumidityChartsProps) => {
           >
             <RefreshCw className="h-4 w-4" />
           </Button>
-          <div className="flex items-center gap-2">
-            <Switch
-              id="realtime-toggle-humidity"
-              checked={realTimeEnabled}
-              onCheckedChange={setRealTimeEnabled}
-            />
-            <Label htmlFor="realtime-toggle-humidity" className="text-xs text-muted-foreground">
-              Live
-            </Label>
-          </div>
+          {/* Real-time toggle removed - using polling only */}
         </div>
       </div>
 
