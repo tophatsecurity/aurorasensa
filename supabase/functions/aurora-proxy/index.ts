@@ -41,18 +41,16 @@ Deno.serve(async (req) => {
     }
     
     const url = `${AURORA_ENDPOINT}${path}`;
-    const isLoginEndpoint = path === '/api/auth/login';
+    // Support both old and new login endpoints
+    const isLoginEndpoint = path === '/api/login' || path === '/api/auth/login';
+    const isLogoutEndpoint = path === '/api/logout' || path === '/api/auth/logout';
+    const isHealthEndpoint = path === '/api/health' || path === '/health';
+    const isPublicEndpoint = isLoginEndpoint || isLogoutEndpoint || isHealthEndpoint;
+    
     console.log(`Proxy ${method}: ${url}${sessionCookie ? ' (with session)' : ' (no session)'}`);
 
-    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
-    
-    // Use session cookie for authentication
-    if (sessionCookie) {
-      headers['Cookie'] = sessionCookie;
-    }
-    
-    // For non-login endpoints without a session, return 401 immediately
-    if (!sessionCookie && !isLoginEndpoint) {
+    // For non-public endpoints without a session, return 401 immediately
+    if (!sessionCookie && !isPublicEndpoint) {
       console.log('No session cookie for protected endpoint, returning 401');
       return new Response(JSON.stringify({ 
         detail: 'Not authenticated. Please log in first.' 
@@ -62,12 +60,41 @@ Deno.serve(async (req) => {
       });
     }
 
+    // Prepare headers and body based on endpoint type
+    const headers: Record<string, string> = {};
+    let bodyContent: string | undefined;
+    
+    if (isLoginEndpoint && requestBody) {
+      // FastAPI OAuth2 expects form-urlencoded data
+      headers['Content-Type'] = 'application/x-www-form-urlencoded';
+      const formData = new URLSearchParams();
+      formData.append('username', requestBody.username || '');
+      formData.append('password', requestBody.password || '');
+      bodyContent = formData.toString();
+      console.log('Login request using form-urlencoded format');
+    } else {
+      headers['Content-Type'] = 'application/json';
+      bodyContent = requestBody && method !== 'GET' ? JSON.stringify(requestBody) : undefined;
+    }
+    
+    // Use session cookie/token for authentication
+    if (sessionCookie) {
+      // Check if it's a Bearer token (starts with "Bearer ") or a cookie
+      if (sessionCookie.startsWith('Bearer ')) {
+        headers['Authorization'] = sessionCookie;
+        console.log('Using Bearer token for auth');
+      } else {
+        headers['Cookie'] = sessionCookie;
+        console.log('Using Cookie for auth');
+      }
+    }
+
     let response: Response;
     try {
       response = await fetchWithTimeout(url, {
         method,
         headers,
-        body: requestBody && method !== 'GET' ? JSON.stringify(requestBody) : undefined,
+        body: bodyContent,
       });
     } catch (fetchError) {
       const msg = fetchError instanceof Error ? fetchError.message : String(fetchError);
@@ -145,24 +172,37 @@ Deno.serve(async (req) => {
       response = await fetchWithTimeout(url, {
         method,
         headers,
-        body: requestBody && method !== 'GET' ? JSON.stringify(requestBody) : undefined,
+        body: bodyContent,
       });
     }
     
-    // Handle login response with cookie capture
+    // Handle login response with token/cookie capture
     let responseText = await response.text();
     
     if (isLoginEndpoint && response.ok) {
-      const setCookie = response.headers.get('set-cookie');
-      if (setCookie) {
-        const auroraCookie = setCookie.split(';')[0];
-        console.log('Aurora session cookie captured');
-        try {
-          const parsed = JSON.parse(responseText);
-          responseText = JSON.stringify({ ...parsed, auroraCookie });
-        } catch {
-          // Keep original if not JSON
+      console.log('Login response received, status:', response.status);
+      try {
+        const parsed = JSON.parse(responseText);
+        
+        // Capture access_token for OAuth2 Bearer auth
+        if (parsed.access_token) {
+          console.log('OAuth2 access_token captured');
+          // The access_token can be used as Bearer token for subsequent requests
+          parsed.auroraCookie = `Bearer ${parsed.access_token}`;
         }
+        
+        // Also capture set-cookie if present (for session-based auth)
+        const setCookie = response.headers.get('set-cookie');
+        if (setCookie) {
+          const sessionCookieValue = setCookie.split(';')[0];
+          console.log('Session cookie captured');
+          parsed.auroraCookie = sessionCookieValue;
+        }
+        
+        responseText = JSON.stringify(parsed);
+      } catch {
+        // Keep original if not JSON
+        console.log('Login response not JSON, keeping original');
       }
     }
     
