@@ -67,7 +67,6 @@ interface DeviceGroup {
 }
 
 export default function StatsContent() {
-  const [selectedDevice, setSelectedDevice] = useState<string>("all");
   const [selectedClient, setSelectedClient] = useState<string>("all");
   const [activeTab, setActiveTab] = useState<string>("overview");
 
@@ -77,17 +76,8 @@ export default function StatsContent() {
   const { data: starlinkDevices, isLoading: starlinkLoading } = useStarlinkDevicesFromReadings();
   const { data: starlinkStats } = useStarlinkStats();
   
-  // Get timeseries for selected starlink device
-  const selectedStarlinkDevice = useMemo(() => {
-    if (selectedDevice === "all" || !starlinkDevices) return null;
-    return starlinkDevices.find(d => d.device_id === selectedDevice);
-  }, [selectedDevice, starlinkDevices]);
-
-  const { data: starlinkTimeseries } = useStarlinkTimeseries(
-    24, 
-    selectedStarlinkDevice?.client_id || undefined,
-    selectedStarlinkDevice?.device_id || undefined
-  );
+  // Get timeseries for starlink
+  const { data: starlinkTimeseries } = useStarlinkTimeseries(24);
 
   // Process readings into device groups
   const deviceGroups = useMemo(() => {
@@ -134,11 +124,6 @@ export default function StatsContent() {
     return deviceGroups.filter(d => d.client_id === selectedClient);
   }, [deviceGroups, selectedClient]);
 
-  // Get selected device data
-  const selectedDeviceData = useMemo(() => {
-    if (selectedDevice === "all") return null;
-    return filteredDevices.find(d => d.device_id === selectedDevice);
-  }, [selectedDevice, filteredDevices]);
 
   // Get unique device types for stats
   const deviceTypeStats = useMemo(() => {
@@ -219,19 +204,6 @@ export default function StatsContent() {
             </SelectContent>
           </Select>
           
-          <Select value={selectedDevice} onValueChange={setSelectedDevice}>
-            <SelectTrigger className="w-56">
-              <SelectValue placeholder="Select Device" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All Devices</SelectItem>
-              {filteredDevices.map(device => (
-                <SelectItem key={device.device_id} value={device.device_id}>
-                  {device.device_id} ({device.device_type})
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
           
           <Button variant="outline" size="icon" onClick={() => refetchReadings()}>
             <RefreshCw className="h-4 w-4" />
@@ -284,12 +256,7 @@ export default function StatsContent() {
                     {filteredDevices.map(device => (
                       <div 
                         key={`${device.client_id}:${device.device_id}`}
-                        className={`p-3 rounded-lg border cursor-pointer transition-colors ${
-                          selectedDevice === device.device_id 
-                            ? 'border-primary bg-primary/10' 
-                            : 'border-border/50 hover:border-primary/50'
-                        }`}
-                        onClick={() => setSelectedDevice(device.device_id)}
+                        className="p-3 rounded-lg border border-border/50 hover:border-primary/50 transition-colors"
                       >
                         <div className="flex items-center justify-between">
                           <div className="flex items-center gap-3">
@@ -372,17 +339,14 @@ export default function StatsContent() {
 
         {/* Measurements Tab */}
         <TabsContent value="measurements" className="space-y-4">
-          {selectedDevice === "all" ? (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-              {filteredDevices.slice(0, 12).map(device => (
-                <DeviceMeasurementsCard key={device.device_id} device={device} />
-              ))}
-            </div>
-          ) : selectedDeviceData ? (
-            <DeviceDetailCard device={selectedDeviceData} />
-          ) : (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {filteredDevices.slice(0, 12).map(device => (
+              <DeviceMeasurementsCard key={device.device_id} device={device} />
+            ))}
+          </div>
+          {filteredDevices.length === 0 && (
             <Card className="glass-card border-border/50 p-8 text-center">
-              <p className="text-muted-foreground">Select a device to view measurements</p>
+              <p className="text-muted-foreground">No devices found for selected client</p>
             </Card>
           )}
         </TabsContent>
@@ -404,12 +368,7 @@ export default function StatsContent() {
                     {starlinkDevices?.map(device => (
                       <div 
                         key={device.composite_key}
-                        className={`p-3 rounded-lg border cursor-pointer transition-colors ${
-                          selectedDevice === device.device_id 
-                            ? 'border-violet-500 bg-violet-500/10' 
-                            : 'border-border/50 hover:border-violet-500/50'
-                        }`}
-                        onClick={() => setSelectedDevice(device.device_id)}
+                        className="p-3 rounded-lg border border-border/50 hover:border-violet-500/50 transition-colors"
                       >
                         <div className="flex items-center justify-between mb-2">
                           <p className="font-medium text-sm">{device.device_id}</p>
@@ -501,70 +460,11 @@ export default function StatsContent() {
                 <Card className="glass-card border-border/50">
                   <CardHeader className="pb-2">
                     <CardTitle className="text-sm">
-                      Performance History 
-                      {selectedStarlinkDevice && (
-                        <span className="text-muted-foreground ml-2">
-                          ({selectedStarlinkDevice.device_id})
-                        </span>
-                      )}
+                      Performance History
                     </CardTitle>
                   </CardHeader>
                   <CardContent>
                     <StarlinkCharts />
-                  </CardContent>
-                </Card>
-              )}
-
-              {/* Selected Device Details */}
-              {selectedStarlinkDevice && (
-                <Card className="glass-card border-border/50">
-                  <CardHeader className="pb-2">
-                    <CardTitle className="text-sm flex items-center gap-2">
-                      <Satellite className="w-4 h-4" />
-                      {selectedStarlinkDevice.device_id} Details
-                    </CardTitle>
-                  </CardHeader>
-                  <CardContent>
-                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                      <MetricItem 
-                        label="Device ID" 
-                        value={selectedStarlinkDevice.device_id} 
-                      />
-                      <MetricItem 
-                        label="Client" 
-                        value={selectedStarlinkDevice.client_id} 
-                      />
-                      <MetricItem 
-                        label="Uplink" 
-                        value={selectedStarlinkDevice.metrics.uplink_throughput_bps 
-                          ? `${(selectedStarlinkDevice.metrics.uplink_throughput_bps / 1e6).toFixed(2)} Mbps`
-                          : 'N/A'} 
-                      />
-                      <MetricItem 
-                        label="SNR" 
-                        value={selectedStarlinkDevice.metrics.snr?.toFixed(1) || 'N/A'} 
-                      />
-                      <MetricItem 
-                        label="Latitude" 
-                        value={selectedStarlinkDevice.latitude?.toFixed(6) || 'N/A'} 
-                      />
-                      <MetricItem 
-                        label="Longitude" 
-                        value={selectedStarlinkDevice.longitude?.toFixed(6) || 'N/A'} 
-                      />
-                      <MetricItem 
-                        label="Altitude" 
-                        value={selectedStarlinkDevice.altitude 
-                          ? `${selectedStarlinkDevice.altitude.toFixed(0)} m`
-                          : 'N/A'} 
-                      />
-                      <MetricItem 
-                        label="Uptime" 
-                        value={selectedStarlinkDevice.metrics.uptime_seconds
-                          ? formatUptime(selectedStarlinkDevice.metrics.uptime_seconds)
-                          : 'N/A'} 
-                      />
-                    </div>
                   </CardContent>
                 </Card>
               )}
