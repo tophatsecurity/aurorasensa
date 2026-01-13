@@ -187,9 +187,9 @@ export default function StatsContent() {
       {/* Header */}
       <div className="flex justify-between items-center">
         <div>
-          <h1 className="text-2xl font-bold">Device Stats</h1>
+          <h1 className="text-2xl font-bold">Client Stats</h1>
           <p className="text-muted-foreground text-sm">
-            Real-time sensor measurements and device statistics
+            Real-time sensor measurements and client statistics
           </p>
         </div>
         <div className="flex items-center gap-3">
