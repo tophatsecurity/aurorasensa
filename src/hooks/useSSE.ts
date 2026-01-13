@@ -15,8 +15,12 @@ const AURORA_ENDPOINT = "http://aurora.tophatsecurity.com:9151";
 // Supabase SSE proxy endpoint for CORS-protected environments
 const SUPABASE_SSE_PROXY = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/aurora-stream`;
 
-// SSE availability state - starts as unknown, then checked on first use
-let sseAvailabilityChecked = false;
+// SSE is disabled - use polling only
+// Set to true to re-enable SSE when Aurora server supports it
+const SSE_DISABLED = true;
+
+// SSE availability state - starts as unavailable since SSE is disabled
+let sseAvailabilityChecked = true;
 let sseIsAvailable = false;
 
 interface SSEConfig {
@@ -530,6 +534,15 @@ export function useSSEAvailability() {
   const [isChecking, setIsChecking] = useState(false);
 
   const checkAvailability = useCallback(async () => {
+    // SSE is globally disabled - always use polling
+    if (SSE_DISABLED) {
+      sseIsAvailable = false;
+      sseAvailabilityChecked = true;
+      setIsAvailable(false);
+      setIsChecking(false);
+      return;
+    }
+
     if (sseAvailabilityChecked) {
       setIsAvailable(sseIsAvailable);
       return;
