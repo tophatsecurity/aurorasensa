@@ -49,6 +49,7 @@ export function UserMenu({ onNavigateToSettings }: UserMenuProps) {
         <DropdownMenuLabel className="font-normal">
           <div className="flex flex-col space-y-1">
             <p className="text-sm font-medium text-slate-200">{displayName}</p>
+            <p className="text-xs text-slate-400">{user?.email || ''}</p>
             <p className="text-xs text-slate-400 capitalize">{user?.role || 'user'}</p>
             {isAdmin && (
               <span className="text-xs text-cyan-400 font-medium">Admin</span>
