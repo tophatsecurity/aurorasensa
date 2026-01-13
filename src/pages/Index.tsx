@@ -41,7 +41,7 @@ const Index = () => {
   
   // Monitor EPIRB alerts and show toast notifications for new distress signals
   useEpirbAlertNotifications();
-  const { user, loading, signIn, serverStatus } = useAuroraAuthContext();
+  const { user, loading, signIn, signUp, serverStatus } = useAuroraAuthContext();
 
   // Show loading spinner while checking auth/session validity
   if (loading) {
@@ -66,7 +66,8 @@ const Index = () => {
   if (!user) {
     return (
       <AuroraAuthPage 
-        onLogin={signIn} 
+        onLogin={signIn}
+        onSignUp={signUp}
         isLoading={loading} 
         serverStatus={serverStatus}
       />
