@@ -86,11 +86,15 @@ Deno.serve(async (req) => {
 
     if (!response.ok) {
       console.error(`Aurora SSE error: ${response.status}`);
+      // Return 503 with streaming not available info - don't propagate 404
+      // This tells the client to fall back to polling
       return new Response(JSON.stringify({ 
-        error: 'Aurora stream unavailable',
-        status: response.status 
-      }), {
+        error: 'Aurora streaming not available',
         status: response.status,
+        fallback: 'polling',
+        message: 'SSE streaming endpoints not available on Aurora server. Use polling instead.'
+      }), {
+        status: 503,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
     }
