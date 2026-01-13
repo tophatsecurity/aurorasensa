@@ -117,22 +117,57 @@ Deno.serve(async (req) => {
       });
     }
     
+    // Helper to get empty data based on path
+    function getEmptyDataForPath(apiPath: string): unknown {
+      if (apiPath.includes('/list') || apiPath.includes('/vessels') || apiPath.includes('/stations') || 
+          apiPath.includes('/beacons') || apiPath.includes('/aircraft') || apiPath.includes('/devices') ||
+          apiPath.includes('/active') || apiPath.includes('/readings') || apiPath.includes('/rules') ||
+          apiPath.includes('/profiles') || apiPath.includes('/violations') || apiPath.includes('/baselines') ||
+          apiPath.includes('/clients') || apiPath.includes('/sensors') || apiPath.includes('/alerts')) {
+        return [];
+      }
+      if (apiPath.includes('/stats') || apiPath.includes('/statistics') || apiPath.includes('/overview')) {
+        return {};
+      }
+      return null;
+    }
+    
+    // Handle 500 errors gracefully - Aurora backend internal errors
+    // These are often transient (like "Sanic app name already in use")
+    if (response.status === 500) {
+      const responseText = await response.text();
+      console.error(`Aurora server error (500) for ${path}: ${responseText}`);
+      
+      // For data fetching endpoints, return empty data to prevent UI crashes
+      if (!isLoginEndpoint && method === 'GET') {
+        const emptyData = getEmptyDataForPath(path);
+        if (emptyData !== null) {
+          console.log(`Returning empty data for ${path} due to server error`);
+          return new Response(JSON.stringify(emptyData), {
+            status: 200,
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          });
+        }
+      }
+      
+      // For other requests, return a cleaner error with retry suggestion
+      return new Response(JSON.stringify({
+        error: 'Aurora server temporarily unavailable',
+        detail: 'The server is experiencing issues. Please try again in a moment.',
+        retryable: true,
+        originalError: responseText.substring(0, 200)
+      }), {
+        status: 503, // Return 503 instead of 500 to indicate temporary issue
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+    
     // Handle 404 errors gracefully - return empty data instead of error
-    // This prevents UI errors for endpoints not yet implemented on Aurora
     if (response.status === 404) {
       console.log(`Endpoint not found (404): ${path} - returning empty data`);
-      // Return appropriate empty data based on the path
-      let emptyData: unknown = null;
-      if (path.includes('/list') || path.includes('/vessels') || path.includes('/stations') || 
-          path.includes('/beacons') || path.includes('/aircraft') || path.includes('/devices') ||
-          path.includes('/active') || path.includes('/readings') || path.includes('/rules') ||
-          path.includes('/profiles') || path.includes('/violations') || path.includes('/baselines')) {
-        emptyData = [];
-      } else if (path.includes('/stats')) {
-        emptyData = {};
-      }
+      const emptyData = getEmptyDataForPath(path);
       return new Response(JSON.stringify(emptyData), {
-        status: 200, // Return 200 with empty data
+        status: 200,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
     }
