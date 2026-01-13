@@ -285,7 +285,7 @@ export default function StatsContent() {
               <CardHeader className="pb-2">
                 <CardTitle className="text-sm flex items-center gap-2">
                   <Activity className="w-4 h-4" />
-                  Active Devices ({filteredDevices.length})
+                  Active Clients ({filteredDevices.length})
                 </CardTitle>
               </CardHeader>
               <CardContent>
@@ -644,7 +644,7 @@ function GlobalStatsPanel({ stats, stats1hr, stats24hr, sensorStats, clientCount
             </div>
             <div>
               <p className="text-2xl font-bold">{global?.devices?.total_unique_devices ?? deviceCount}</p>
-              <p className="text-xs text-muted-foreground">Active Devices</p>
+              <p className="text-xs text-muted-foreground">Active Clients</p>
             </div>
           </div>
         </CardContent>
