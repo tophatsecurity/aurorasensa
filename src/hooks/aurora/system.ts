@@ -82,7 +82,7 @@ export interface ServerConfig {
 export function useSystemInfo() {
   return useQuery({
     queryKey: ["aurora", "system", "info"],
-    queryFn: () => callAuroraApi<SystemInfo>("/api/system/info"),
+    queryFn: () => callAuroraApi<SystemInfo>("/api/system/all"),
     enabled: hasAuroraSession(),
     staleTime: 120000,
     refetchInterval: 300000,

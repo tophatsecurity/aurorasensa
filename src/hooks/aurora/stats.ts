@@ -319,7 +319,7 @@ export function useEndpointStats() {
 export function usePowerStats() {
   return useQuery({
     queryKey: ["aurora", "stats", "power"],
-    queryFn: () => callAuroraApi<PowerStats>("/api/stats/power"),
+    queryFn: () => callAuroraApi<PowerStats>("/api/power/stats"),
     enabled: hasAuroraSession(),
     staleTime: 60000,
     refetchInterval: 120000,
@@ -327,14 +327,14 @@ export function usePowerStats() {
   });
 }
 
-// Note: /api/stats/performance endpoint does not exist in Aurora API
-// Return empty data to prevent API errors
 export function usePerformanceStats() {
   return useQuery({
     queryKey: ["aurora", "stats", "performance"],
-    queryFn: async (): Promise<PerformanceStats> => ({}),
+    queryFn: () => callAuroraApi<PerformanceStats>("/api/performance/stats"),
     enabled: hasAuroraSession(),
-    staleTime: Infinity,
+    staleTime: 60000,
+    refetchInterval: 120000,
+    retry: 1,
   });
 }
 

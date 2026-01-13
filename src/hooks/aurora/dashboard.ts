@@ -71,7 +71,14 @@ export interface DashboardSensorTimeseries {
 export function useDashboardStats() {
   return useQuery({
     queryKey: ["aurora", "dashboard", "stats"],
-    queryFn: () => callAuroraApi<DashboardStats>("/api/dashboard/stats"),
+    queryFn: async () => {
+      // Try sensor-stats first (per OpenAPI spec), fallback to generic stats
+      try {
+        return await callAuroraApi<DashboardStats>("/api/dashboard/sensor-stats");
+      } catch {
+        return await callAuroraApi<DashboardStats>("/api/stats/overview");
+      }
+    },
     enabled: hasAuroraSession(),
     staleTime: 60000,
     refetchInterval: 120000,
@@ -93,7 +100,7 @@ export function useDashboardTimeseries(hours: number = 24) {
 export function useDashboardSystemStats() {
   return useQuery({
     queryKey: ["aurora", "dashboard", "system"],
-    queryFn: () => callAuroraApi<DashboardSystemStats>("/api/dashboard/system"),
+    queryFn: () => callAuroraApi<DashboardSystemStats>("/api/dashboard/system-stats"),
     enabled: hasAuroraSession(),
     staleTime: 60000,
     refetchInterval: 120000,
