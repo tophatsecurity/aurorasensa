@@ -50,7 +50,7 @@ import {
   RemoteCommand,
   CommandResult,
 } from "@/hooks/useAuroraApi";
-// SSE imports removed - using polling only
+
 import { formatDateTime, formatLastSeen } from "@/utils/dateUtils";
 import { toast } from "sonner";
 
@@ -244,7 +244,7 @@ const RemoteCommandsContent = () => {
   const [selectedClients, setSelectedClients] = useState<string[]>([]);
   const [timeout, setTimeout] = useState("30");
   const [showSendDialog, setShowSendDialog] = useState(false);
-  // SSE removed - using polling only
+  
 
   // Get all available clients
   const allClients = clientsData ? [
@@ -294,7 +294,7 @@ const RemoteCommandsContent = () => {
     );
   };
 
-  // Auto-refresh commands list using polling
+  // Auto-refresh commands list
   useEffect(() => {
     const interval = setInterval(() => {
       refetch();

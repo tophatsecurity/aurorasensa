@@ -33,7 +33,7 @@ import {
   useStarlinkTimeseries,
   useStarlinkConnectivity,
 } from "@/hooks/useAuroraApi";
-import { useStarlinkRealTime } from "@/hooks/useSSE";
+
 
 interface SignalDataPoint {
   time: string;
@@ -59,7 +59,6 @@ const ChartSkeleton = () => (
 );
 
 const StarlinkSignalChart = memo(({ hours = 6, clientId, deviceId }: StarlinkSignalChartProps) => {
-  const [realTimeEnabled, setRealTimeEnabled] = useState(true);
   const [liveData, setLiveData] = useState<SignalDataPoint[]>([]);
   
   // API hooks
@@ -67,9 +66,6 @@ const StarlinkSignalChart = memo(({ hours = 6, clientId, deviceId }: StarlinkSig
   const { data: performance, isLoading: perfLoading, refetch: refetchPerf } = useStarlinkPerformance();
   const { data: connectivity } = useStarlinkConnectivity();
   const { data: timeseries, isLoading: timeseriesLoading } = useStarlinkTimeseries(hours, clientId, deviceId);
-  
-  // Real-time SSE hook
-  const realTimeData = useStarlinkRealTime(realTimeEnabled, clientId);
   
   // Process historical timeseries data
   const historicalData = useMemo(() => {
@@ -89,41 +85,6 @@ const StarlinkSignalChart = memo(({ hours = 6, clientId, deviceId }: StarlinkSig
     })).sort((a, b) => a.timestamp - b.timestamp);
   }, [timeseries]);
 
-  // Merge live data with historical data
-  useEffect(() => {
-    if (realTimeData.lastMessage && realTimeEnabled) {
-      const msg = realTimeData.lastMessage as {
-        timestamp?: string;
-        snr?: number;
-        signal_dbm?: number;
-        pop_ping_latency_ms?: number;
-        downlink_throughput_bps?: number;
-        uplink_throughput_bps?: number;
-      };
-      
-      if (msg.timestamp) {
-        const newPoint: SignalDataPoint = {
-          time: new Date(msg.timestamp).toLocaleTimeString('en-US', {
-            hour: '2-digit',
-            minute: '2-digit',
-            hour12: false,
-          }),
-          timestamp: new Date(msg.timestamp).getTime(),
-          snr: msg.snr,
-          signal_dbm: msg.signal_dbm,
-          latency: msg.pop_ping_latency_ms,
-          download: msg.downlink_throughput_bps ? msg.downlink_throughput_bps / 1e6 : undefined,
-          upload: msg.uplink_throughput_bps ? msg.uplink_throughput_bps / 1e6 : undefined,
-        };
-        
-        setLiveData(prev => {
-          // Keep only last 60 live data points
-          const updated = [...prev, newPoint].slice(-60);
-          return updated;
-        });
-      }
-    }
-  }, [realTimeData.lastMessage, realTimeEnabled]);
 
   // Combine historical and live data
   const chartData = useMemo(() => {
@@ -181,31 +142,13 @@ const StarlinkSignalChart = memo(({ hours = 6, clientId, deviceId }: StarlinkSig
               <Signal className="w-5 h-5 text-white" />
             </div>
             <div>
-              <h3 className="font-semibold text-foreground">Real-time Signal Strength</h3>
+              <h3 className="font-semibold text-foreground">Signal Strength</h3>
               <p className="text-xs text-muted-foreground">
-                Live SNR & performance metrics
+                SNR & performance metrics
               </p>
             </div>
           </div>
           <div className="flex items-center gap-2">
-            <Badge 
-              variant={realTimeData.isConnected ? "default" : "secondary"}
-              className={realTimeData.isConnected ? "bg-emerald-500/20 text-emerald-400 border-emerald-500/30" : ""}
-            >
-              {realTimeData.isSSE ? (
-                <>
-                  <Radio className="w-3 h-3 mr-1 animate-pulse" />
-                  SSE Live
-                </>
-              ) : realTimeData.isPolling ? (
-                <>
-                  <RefreshCw className="w-3 h-3 mr-1 animate-spin" />
-                  Polling
-                </>
-              ) : (
-                "Disconnected"
-              )}
-            </Badge>
             <Button 
               variant="outline" 
               size="sm" 
@@ -213,13 +156,6 @@ const StarlinkSignalChart = memo(({ hours = 6, clientId, deviceId }: StarlinkSig
               disabled={isLoading}
             >
               <RefreshCw className={`w-4 h-4 ${isLoading ? 'animate-spin' : ''}`} />
-            </Button>
-            <Button
-              variant={realTimeEnabled ? "default" : "outline"}
-              size="sm"
-              onClick={() => setRealTimeEnabled(!realTimeEnabled)}
-            >
-              {realTimeEnabled ? "Live" : "Paused"}
             </Button>
           </div>
         </div>
@@ -430,13 +366,6 @@ const StarlinkSignalChart = memo(({ hours = 6, clientId, deviceId }: StarlinkSig
         <div className="flex items-center justify-between text-xs text-muted-foreground">
           <span>
             {chartData.length} data points • {hours}h history
-          </span>
-          <span>
-            {liveData.length > 0 && (
-              <span className="text-emerald-400">
-                +{liveData.length} live points
-              </span>
-            )}
           </span>
         </div>
       </div>

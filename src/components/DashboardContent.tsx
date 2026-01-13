@@ -40,7 +40,7 @@ import ThermalProbeDeviceChart from "./ThermalProbeDeviceChart";
 import HumidityCharts from "./HumidityCharts";
 import PowerConsumptionCharts from "./PowerConsumptionCharts";
 import SystemMonitorCharts from "./SystemMonitorCharts";
-// SSE imports removed - using polling only
+
 import { AdsbSection, LoRaSection, WifiBluetoothSection, GpsSection, AlertsSection, BatchesSection, MaritimeSection } from "./dashboard";
 
 import { 
@@ -130,7 +130,7 @@ const DashboardContent = () => {
     periodHours 
   } = useClientContext();
   
-  // SSE disabled - using polling only
+  
   
   const { data: stats, isLoading: statsLoading } = useComprehensiveStats();
   const { data: dashboardStats, isLoading: dashboardStatsLoading } = useDashboardStats();
@@ -173,7 +173,7 @@ const DashboardContent = () => {
   // Latest readings for thermal sensors
   const { data: latestReadings, isLoading: latestReadingsLoading } = useLatestReadings();
   
-  // SSE removed - using polling only
+  
 
   // Check if thermal timeseries has actual temperature values (not just timestamps)
   const thermalHasValidData = useMemo(() => {

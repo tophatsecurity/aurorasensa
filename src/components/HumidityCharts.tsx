@@ -12,9 +12,6 @@ import {
 } from "recharts";
 import { Droplets, Loader2, RefreshCw } from "lucide-react";
 import { useDashboardTimeseries } from "@/hooks/useAuroraApi";
-// SSE imports removed - using polling only
-import { Switch } from "@/components/ui/switch";
-import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 
 interface ChartData {
@@ -118,7 +115,7 @@ const HumidityCharts = ({ hours = 24, clientId }: HumidityChartsProps) => {
           >
             <RefreshCw className="h-4 w-4" />
           </Button>
-          {/* Real-time toggle removed - using polling only */}
+          
         </div>
       </div>
 

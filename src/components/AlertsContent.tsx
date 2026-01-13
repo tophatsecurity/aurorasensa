@@ -47,7 +47,7 @@ import { useAlerts, useAcknowledgeAlert, useResolveAlert, useDeleteAlert, type A
 import { useQueryClient } from "@tanstack/react-query";
 import { usePagination } from "@/hooks/usePagination";
 import { TablePagination } from "@/components/TablePagination";
-// SSE imports removed - using polling only
+
 import { toast } from "sonner";
 
 const EXCLUSIONS_KEY = 'aurora_alert_exclusions';
@@ -132,7 +132,7 @@ const AlertsContent = () => {
   // Selection state
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
 
-  // SSE removed - using polling only
+  
 
   const handleRefresh = () => {
     queryClient.invalidateQueries({ queryKey: ["aurora", "alerts"] });
@@ -454,7 +454,7 @@ const AlertsContent = () => {
               {excludedCount} hidden
             </Badge>
           )}
-          {/* SSE status removed - using polling only */}
+          
         </div>
         <div className="flex items-center gap-3">
           <div className="flex items-center gap-2">
