@@ -40,7 +40,7 @@ import ThermalProbeDeviceChart from "./ThermalProbeDeviceChart";
 import HumidityCharts from "./HumidityCharts";
 import PowerConsumptionCharts from "./PowerConsumptionCharts";
 import SystemMonitorCharts from "./SystemMonitorCharts";
-import { SSEConnectionStatus } from "./SSEConnectionStatus";
+// SSE imports removed - using polling only
 import { AdsbSection, LoRaSection, WifiBluetoothSection, GpsSection, AlertsSection, BatchesSection, MaritimeSection } from "./dashboard";
 
 import { 
@@ -130,8 +130,7 @@ const DashboardContent = () => {
     periodHours 
   } = useClientContext();
   
-  // SSE state for real-time updates
-  const [sseEnabled, setSSEEnabled] = useState(true);
+  // SSE disabled - using polling only
   
   const { data: stats, isLoading: statsLoading } = useComprehensiveStats();
   const { data: dashboardStats, isLoading: dashboardStatsLoading } = useDashboardStats();
@@ -174,11 +173,7 @@ const DashboardContent = () => {
   // Latest readings for thermal sensors
   const { data: latestReadings, isLoading: latestReadingsLoading } = useLatestReadings();
   
-  // SSE for real-time sensor readings
-  const sensorSSE = useSensorReadingsSSE({
-    enabled: sseEnabled,
-    clientId: selectedClient,
-  });
+  // SSE removed - using polling only
 
   // Check if thermal timeseries has actual temperature values (not just timestamps)
   const thermalHasValidData = useMemo(() => {
@@ -407,26 +402,8 @@ const DashboardContent = () => {
       <div className="flex items-center justify-between mb-8">
         <div className="flex items-center gap-4">
           <h1 className="text-3xl font-bold text-foreground">AURORASENSE Server</h1>
-          <SSEConnectionStatus
-            isConnected={sensorSSE.isConnected}
-            isConnecting={sensorSSE.isConnecting}
-            error={sensorSSE.error}
-            reconnectCount={sensorSSE.reconnectCount}
-            onReconnect={sensorSSE.reconnect}
-            label="Live Data"
-          />
         </div>
         <div className="flex items-center gap-4">
-          <div className="flex items-center gap-2">
-            <Switch
-              id="sse-toggle-dashboard"
-              checked={sseEnabled}
-              onCheckedChange={setSSEEnabled}
-            />
-            <Label htmlFor="sse-toggle-dashboard" className="text-sm text-muted-foreground">
-              Real-time
-            </Label>
-          </div>
           <ContextFilters
             timePeriod={timePeriod}
             onTimePeriodChange={setTimePeriod}

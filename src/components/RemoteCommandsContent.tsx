@@ -50,8 +50,7 @@ import {
   RemoteCommand,
   CommandResult,
 } from "@/hooks/useAuroraApi";
-import { useCommandsStreamSSE } from "@/hooks/useSSE";
-import { SSEConnectionStatus } from "@/components/SSEConnectionStatus";
+// SSE imports removed - using polling only
 import { formatDateTime, formatLastSeen } from "@/utils/dateUtils";
 import { toast } from "sonner";
 
@@ -245,10 +244,7 @@ const RemoteCommandsContent = () => {
   const [selectedClients, setSelectedClients] = useState<string[]>([]);
   const [timeout, setTimeout] = useState("30");
   const [showSendDialog, setShowSendDialog] = useState(false);
-  const [sseEnabled, setSSEEnabled] = useState(true);
-
-  // SSE for real-time command updates
-  const sse = useCommandsStreamSSE(sseEnabled);
+  // SSE removed - using polling only
 
   // Get all available clients
   const allClients = clientsData ? [
@@ -298,17 +294,13 @@ const RemoteCommandsContent = () => {
     );
   };
 
-  // Auto-refresh commands list (fallback when SSE is disabled)
+  // Auto-refresh commands list using polling
   useEffect(() => {
-    if (sseEnabled && sse.isConnected) {
-      // SSE is handling updates, no need for polling
-      return;
-    }
     const interval = setInterval(() => {
       refetch();
     }, 10000);
     return () => clearInterval(interval);
-  }, [refetch, sseEnabled, sse.isConnected]);
+  }, [refetch]);
 
   if (isLoading) {
     return (
@@ -336,26 +328,8 @@ const RemoteCommandsContent = () => {
             </h1>
             <p className="text-muted-foreground">Send shell commands to clients and view results</p>
           </div>
-          <SSEConnectionStatus
-            isConnected={sse.isConnected}
-            isConnecting={sse.isConnecting}
-            error={sse.error}
-            reconnectCount={sse.reconnectCount}
-            onReconnect={sse.reconnect}
-            label="Live Updates"
-          />
         </div>
         <div className="flex items-center gap-4">
-          <div className="flex items-center gap-2">
-            <Switch
-              id="sse-toggle-commands"
-              checked={sseEnabled}
-              onCheckedChange={setSSEEnabled}
-            />
-            <Label htmlFor="sse-toggle-commands" className="text-sm text-muted-foreground">
-              Real-time
-            </Label>
-          </div>
           <Button variant="outline" onClick={() => refetch()}>
             <RefreshCw className="w-4 h-4 mr-2" />
             Refresh

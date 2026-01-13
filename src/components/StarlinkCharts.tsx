@@ -12,8 +12,7 @@ import {
 } from "recharts";
 import { Satellite, Zap, Signal, Wifi, Loader2, RefreshCw } from "lucide-react";
 import { useStarlinkTimeseries, useDashboardTimeseries, StarlinkTimeseriesPoint } from "@/hooks/useAuroraApi";
-import { useStarlinkRealTime } from "@/hooks/useSSE";
-import { SSEConnectionStatus } from "./SSEConnectionStatus";
+// SSE imports removed - using polling only
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
@@ -61,17 +60,8 @@ const StarlinkChart = ({ title, icon, color, unit, data, isLoading, chartType = 
             {icon}
           </div>
           <div>
-            <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider flex items-center gap-2">
+            <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
               {title}
-              {sseStatus && (
-                <SSEConnectionStatus
-                  isConnected={sseStatus.isConnected}
-                  isConnecting={sseStatus.isConnecting}
-                  error={sseStatus.error}
-                  reconnectCount={sseStatus.reconnectCount}
-                  onReconnect={sseStatus.onReconnect}
-                />
-              )}
             </h4>
             <p className="text-2xl font-bold" style={{ color }}>
               {isLoading ? '...' : `${formatValue(currentValue)}${unit}`}
@@ -194,13 +184,8 @@ interface StarlinkChartsProps {
 }
 
 const StarlinkCharts = ({ hours = 24, clientId }: StarlinkChartsProps) => {
-  const [realTimeEnabled, setRealTimeEnabled] = useState(true);
-  
   const { data: starlinkData, isLoading: starlinkLoading, refetch } = useStarlinkTimeseries(hours);
   const { data: dashboardTimeseries, isLoading: dashboardLoading } = useDashboardTimeseries(hours);
-  
-  // Polling-based real-time updates (replaces SSE)
-  const realTimeData = useStarlinkRealTime(realTimeEnabled, clientId);
 
   const isLoading = starlinkLoading || dashboardLoading;
 

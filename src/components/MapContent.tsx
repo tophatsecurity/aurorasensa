@@ -12,8 +12,7 @@ import { spreadOverlappingPoints, COVERAGE_RANGES, ONE_MILE_METERS } from "@/uti
 import { useMapData, AircraftTrailData } from "@/hooks/useMapData";
 import { useGpsHistory } from "@/hooks/useGpsHistory";
 import { useAdsbHistory, AircraftTrail } from "@/hooks/useAdsbHistory";
-import { useGpsSSE, useAdsbSSE } from "@/hooks/useSSE";
-import { useSSEMapUpdates } from "@/hooks/useSSEMapUpdates";
+// SSE imports removed - using polling only
 
 // Map components (non-leaflet)
 import { MapLegend } from "@/components/map/MapLegend";
@@ -23,7 +22,7 @@ import { MapFilters, ALL_FILTER_IDS } from "@/components/map/MapFilters";
 import { GpsHistorySettings } from "@/components/map/GpsHistorySettings";
 import { TimeframeSelector, TimeframeOption, timeframeToMinutes } from "@/components/map/TimeframeSelector";
 import { AutoRefreshSelector, AutoRefreshInterval, getRefreshIntervalMs } from "@/components/map/AutoRefreshSelector";
-import { SSEConnectionStatus } from "@/components/SSEConnectionStatus";
+// SSEConnectionStatus removed - using polling only
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
@@ -79,17 +78,14 @@ const MapContent = () => {
   const [countdown, setCountdown] = useState<number>(0);
   const lastRefreshTimeRef = useRef<number>(Date.now());
   
-  // SSE state for real-time updates
-  const [sseEnabled, setSSEEnabled] = useState(true);
+  // SSE disabled - using polling only
   
   // Load selected client from localStorage first (moved up so SSE hooks can use it)
   const [selectedClient, setSelectedClient] = useState<string>(() => {
     return localStorage.getItem(STORAGE_KEY_CLIENT) || 'all';
   });
   
-  // SSE for real-time GPS and ADS-B updates with client filtering
-  const gpsSSE = useGpsSSE(sseEnabled, selectedClient);
-  const adsbSSE = useAdsbSSE(sseEnabled, selectedClient);
+  // SSE hooks removed - using polling only
   
   // Load auto-refresh interval from localStorage, default to 5 minutes
   const [autoRefreshInterval, setAutoRefreshInterval] = useState<AutoRefreshInterval>(() => {
@@ -131,27 +127,11 @@ const MapContent = () => {
   });
   
   // Merge SSE real-time updates with base map data
-  const {
-    sensorMarkers,
-    adsbMarkers,
-    recentlyUpdatedIds,
-    gpsUpdateCount,
-    adsbUpdateCount,
-    clearUpdates,
-  } = useSSEMapUpdates({
-    gpsSSE,
-    adsbSSE,
-    baseSensorMarkers,
-    baseAdsbMarkers,
-    enabled: sseEnabled,
-  });
+  // Use base data directly (no SSE merging)
+  const sensorMarkers = baseSensorMarkers;
+  const adsbMarkers = baseAdsbMarkers;
   
-  // Clear SSE updates when client changes
-  useEffect(() => {
-    clearUpdates();
-  }, [selectedClient, clearUpdates]);
-  
-  // Recalculate stats with SSE-merged data
+  // Recalculate stats with base data
   const stats = useMemo(() => ({
     ...baseStats,
     gps: sensorMarkers.filter(s => s.type === 'gps').length,
@@ -159,17 +139,10 @@ const MapContent = () => {
     total: sensorMarkers.length + clientMarkers.length + adsbMarkers.length,
   }), [baseStats, sensorMarkers, adsbMarkers, clientMarkers]);
   
-  // Recalculate positions with SSE-merged data
+  // Recalculate positions with base data
   const allPositions = useMemo((): LatLngExpression[] => {
-    const positions: LatLngExpression[] = [...baseAllPositions];
-    // Add any new SSE-only aircraft positions
-    adsbMarkers.forEach(a => {
-      if (a.id.startsWith('adsb-sse-')) {
-        positions.push([a.location.lat, a.location.lng] as LatLngExpression);
-      }
-    });
-    return positions;
-  }, [baseAllPositions, adsbMarkers]);
+    return [...baseAllPositions];
+  }, [baseAllPositions]);
   
   // Refresh on page click/focus
   useEffect(() => {
@@ -1151,24 +1124,7 @@ const MapContent = () => {
             onClearHistory={clearHistory}
             onClearAdsbTrails={clearAllAdsbTrails}
           />
-          {/* Real-time SSE Status */}
-          <div className="flex items-center gap-2 border-l border-border/50 pl-3">
-            <Switch
-              id="sse-toggle-map"
-              checked={sseEnabled}
-              onCheckedChange={setSSEEnabled}
-            />
-            <Label htmlFor="sse-toggle-map" className="text-xs">SSE</Label>
-            {sseEnabled && (gpsSSE.isConnected || adsbSSE.isConnected) && (
-              <Badge className="gap-1 bg-success/10 text-success border-success/30 text-xs">
-                <span className="relative flex h-1.5 w-1.5">
-                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-success opacity-75"></span>
-                  <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-success"></span>
-                </span>
-                {gpsUpdateCount + adsbUpdateCount > 0 ? `${gpsUpdateCount + adsbUpdateCount} updates` : "Live"}
-              </Badge>
-            )}
-          </div>
+          {/* SSE toggle removed - using polling only */}
         </div>
         
         {/* Filter Buttons - Full Width Below */}
