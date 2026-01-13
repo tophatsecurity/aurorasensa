@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { 
   Activity, 
   Satellite, 
@@ -38,10 +38,6 @@ import {
   useStarlinkDevicesFromReadings,
   useStarlinkTimeseries,
   useStarlinkStats,
-  useComprehensiveStats,
-  use1hrStats,
-  use24hrStats,
-  useAllSensorStats,
 } from "@/hooks/aurora";
 import StarlinkCharts from "@/components/StarlinkCharts";
 import DeviceDetailsModal from "@/components/stats/DeviceDetailsModal";
@@ -74,7 +70,7 @@ interface DeviceGroup {
 }
 
 export default function StatsContent() {
-  const [selectedClient, setSelectedClient] = useState<string>("all");
+  const [selectedClient, setSelectedClient] = useState<string>("");
   const [activeTab, setActiveTab] = useState<string>("overview");
   const [selectedDevice, setSelectedDevice] = useState<DeviceGroup | null>(null);
   const [deviceModalOpen, setDeviceModalOpen] = useState(false);
@@ -85,15 +81,16 @@ export default function StatsContent() {
   const { data: starlinkDevices, isLoading: starlinkLoading } = useStarlinkDevicesFromReadings();
   const { data: starlinkStats } = useStarlinkStats();
   
-  // Comprehensive stats
-  const { data: comprehensiveStats } = useComprehensiveStats();
-  const { data: stats1hr } = use1hrStats();
-  const { data: stats24hr } = use24hrStats();
-  const { data: allSensorStats } = useAllSensorStats();
+  // Auto-select first client when clients load
+  useEffect(() => {
+    if (clients && clients.length > 0 && !selectedClient) {
+      setSelectedClient(clients[0].client_id);
+    }
+  }, [clients, selectedClient]);
   
   // Selected client details
-  const { data: selectedClientData } = useClient(selectedClient !== "all" ? selectedClient : "");
-  const { data: selectedClientSystemInfo } = useClientSystemInfo(selectedClient !== "all" ? selectedClient : "");
+  const { data: selectedClientData } = useClient(selectedClient || "");
+  const { data: selectedClientSystemInfo } = useClientSystemInfo(selectedClient || "");
   
   // Get timeseries for starlink
   const { data: starlinkTimeseries } = useStarlinkTimeseries(24);
@@ -139,7 +136,7 @@ export default function StatsContent() {
 
   // Filter devices by selected client
   const filteredDevices = useMemo(() => {
-    if (selectedClient === "all") return deviceGroups;
+    if (!selectedClient) return deviceGroups;
     return deviceGroups.filter(d => d.client_id === selectedClient);
   }, [deviceGroups, selectedClient]);
 
@@ -214,10 +211,9 @@ export default function StatsContent() {
               <SelectValue placeholder="Select Client" />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="all">All Clients</SelectItem>
-              {clients?.map((client: { client_id: string; name?: string }) => (
+              {clients?.map((client: { client_id: string; hostname?: string; name?: string }) => (
                 <SelectItem key={client.client_id} value={client.client_id}>
-                  {client.name || client.client_id}
+                  {client.hostname || client.name || client.client_id}
                 </SelectItem>
               ))}
             </SelectContent>
@@ -231,21 +227,12 @@ export default function StatsContent() {
       </div>
 
       {/* Client Overview Stats */}
-      {selectedClient !== "all" && selectedClientData ? (
+      {selectedClient && selectedClientData && (
         <ClientStatsPanel 
           client={selectedClientData as any} 
           systemInfo={selectedClientSystemInfo}
           deviceCount={filteredDevices.length}
           readingsCount={filteredDevices.reduce((sum, d) => sum + d.readings.length, 0)}
-        />
-      ) : (
-        <GlobalStatsPanel
-          stats={comprehensiveStats}
-          stats1hr={stats1hr}
-          stats24hr={stats24hr}
-          sensorStats={allSensorStats?.sensor_types}
-          clientCount={clients?.length || 0}
-          deviceCount={filteredDevices.length}
         />
       )}
 
@@ -576,138 +563,6 @@ export default function StatsContent() {
 }
 
 // Stats Panel Components
-
-interface GlobalStatsPanelProps {
-  stats?: {
-    global?: {
-      database?: {
-        total_readings?: number;
-        total_batches?: number;
-        total_clients?: number;
-        active_alerts?: number;
-      };
-      devices?: {
-        total_unique_devices?: number;
-        total_device_types?: number;
-      };
-      activity?: {
-        avg_readings_per_hour?: number;
-        last_1_hour?: {
-          readings_1h?: number;
-          batches_1h?: number;
-          active_devices_1h?: number;
-        };
-        last_24_hours?: {
-          readings_24h?: number;
-          batches_24h?: number;
-          active_devices_24h?: number;
-        };
-      };
-      time_ranges?: {
-        earliest_reading?: string;
-        latest_reading?: string;
-        data_span_days?: number;
-      };
-    };
-  };
-  stats1hr?: { readings?: number; devices?: number; clients?: number };
-  stats24hr?: { readings?: number; devices?: number; clients?: number };
-  sensorStats?: Array<{ device_type: string; count?: number; device_count?: number; total_readings?: number }>;
-  clientCount: number;
-  deviceCount: number;
-}
-
-function GlobalStatsPanel({ stats, stats1hr, stats24hr, sensorStats, clientCount, deviceCount }: GlobalStatsPanelProps) {
-  const global = stats?.global;
-  
-  return (
-    <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4">
-      <Card className="glass-card border-border/50">
-        <CardContent className="p-4">
-          <div className="flex items-center gap-3">
-            <div className="p-2 rounded-lg bg-cyan-500/20">
-              <Activity className="w-5 h-5 text-cyan-400" />
-            </div>
-            <div>
-              <p className="text-2xl font-bold">{global?.database?.total_readings?.toLocaleString() ?? 0}</p>
-              <p className="text-xs text-muted-foreground">Total Readings</p>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
-      
-      <Card className="glass-card border-border/50">
-        <CardContent className="p-4">
-          <div className="flex items-center gap-3">
-            <div className="p-2 rounded-lg bg-emerald-500/20">
-              <Thermometer className="w-5 h-5 text-emerald-400" />
-            </div>
-            <div>
-              <p className="text-2xl font-bold">{global?.devices?.total_unique_devices ?? deviceCount}</p>
-              <p className="text-xs text-muted-foreground">Active Clients</p>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
-      
-      <Card className="glass-card border-border/50">
-        <CardContent className="p-4">
-          <div className="flex items-center gap-3">
-            <div className="p-2 rounded-lg bg-violet-500/20">
-              <Radio className="w-5 h-5 text-violet-400" />
-            </div>
-            <div>
-              <p className="text-2xl font-bold">{clientCount}</p>
-              <p className="text-xs text-muted-foreground">Clients</p>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
-      
-      <Card className="glass-card border-border/50">
-        <CardContent className="p-4">
-          <div className="flex items-center gap-3">
-            <div className="p-2 rounded-lg bg-amber-500/20">
-              <Clock className="w-5 h-5 text-amber-400" />
-            </div>
-            <div>
-              <p className="text-2xl font-bold">{stats1hr?.readings ?? global?.activity?.last_1_hour?.readings_1h ?? 0}</p>
-              <p className="text-xs text-muted-foreground">Readings (1hr)</p>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
-      
-      <Card className="glass-card border-border/50">
-        <CardContent className="p-4">
-          <div className="flex items-center gap-3">
-            <div className="p-2 rounded-lg bg-blue-500/20">
-              <Activity className="w-5 h-5 text-blue-400" />
-            </div>
-            <div>
-              <p className="text-2xl font-bold">{stats24hr?.readings ?? global?.activity?.last_24_hours?.readings_24h ?? 0}</p>
-              <p className="text-xs text-muted-foreground">Readings (24hr)</p>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
-      
-      <Card className="glass-card border-border/50">
-        <CardContent className="p-4">
-          <div className="flex items-center gap-3">
-            <div className="p-2 rounded-lg bg-rose-500/20">
-              <Signal className="w-5 h-5 text-rose-400" />
-            </div>
-            <div>
-              <p className="text-2xl font-bold">{global?.devices?.total_device_types ?? sensorStats?.length ?? 0}</p>
-              <p className="text-xs text-muted-foreground">Sensor Types</p>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
-    </div>
-  );
-}
 
 interface ClientStatsPanelProps {
   client: {
