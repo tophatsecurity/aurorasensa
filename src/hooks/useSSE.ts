@@ -63,8 +63,20 @@ export function useSSE({
     return sessionStorage.getItem("aurora_cookie");
   }, []);
 
-  const connect = useCallback(() => {
+  const connect = useCallback(async () => {
     if (!enabled) return;
+
+    // Check if SSE is available first - if not, don't even try to connect
+    if (sseAvailabilityChecked && !sseIsAvailable) {
+      console.log('SSE not available, skipping EventSource connection');
+      setState(prev => ({
+        ...prev,
+        isConnected: false,
+        isConnecting: false,
+        error: null, // Not an error, just using polling instead
+      }));
+      return;
+    }
 
     const sessionCookie = getSessionCookie();
     if (!sessionCookie) {
@@ -161,34 +173,27 @@ export function useSSE({
       };
 
       eventSource.onerror = (error) => {
-        console.error(`SSE error: ${streamType}`, error);
+        console.log(`SSE error: ${streamType}`, error);
         eventSource.close();
         eventSourceRef.current = null;
+
+        // Mark SSE as unavailable to prevent further attempts
+        // The unified hook will automatically fall back to polling
+        sseIsAvailable = false;
+        sseAvailabilityChecked = true;
 
         setState(prev => ({
           ...prev,
           isConnected: false,
           isConnecting: false,
-          error: "Connection lost",
+          error: null, // Not a user-facing error - polling will take over
         }));
 
         onError?.(error);
 
-        // Attempt reconnection
-        if (reconnectCountRef.current < maxReconnectAttempts) {
-          reconnectCountRef.current++;
-          setState(prev => ({ ...prev, reconnectCount: reconnectCountRef.current }));
-
-          reconnectTimeoutRef.current = setTimeout(() => {
-            console.log(`SSE reconnecting (${reconnectCountRef.current}/${maxReconnectAttempts}): ${streamType}`);
-            connect();
-          }, reconnectInterval);
-        } else {
-          setState(prev => ({
-            ...prev,
-            error: `Failed to connect after ${maxReconnectAttempts} attempts`,
-          }));
-        }
+        // Don't retry SSE connections - let the unified hook use polling instead
+        // This prevents the blank screen caused by repeated SSE failures
+        console.log(`SSE connection failed for ${streamType}, polling will be used instead`);
       };
     } catch (e) {
       console.error("Failed to create EventSource:", e);
