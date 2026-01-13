@@ -553,12 +553,14 @@ export function useSSEAvailability() {
         headers: { 'Accept': 'text/event-stream' },
       });
       
-      // If we get 503 or 404, it means SSE is not available - fall back to polling
-      if (response.status === 503 || response.status === 404) {
-        console.log('SSE not available on Aurora server, using polling fallback');
+      // If we get any error status (4xx or 5xx), it means SSE is not available - fall back to polling
+      // This includes 404 (not found), 500 (server error), 503 (unavailable), etc.
+      if (!response.ok) {
+        console.log(`SSE not available on Aurora server (status: ${response.status}), using polling fallback`);
         sseIsAvailable = false;
         sseAvailabilityChecked = true;
         setIsAvailable(false);
+        setIsChecking(false);
         return;
       }
       
@@ -569,7 +571,9 @@ export function useSSEAvailability() {
       sseIsAvailable = isSSE && response.ok;
       sseAvailabilityChecked = true;
       setIsAvailable(sseIsAvailable);
-    } catch {
+    } catch (err) {
+      // Any error (timeout, network, etc.) means SSE is not available
+      console.log('SSE availability check failed, using polling fallback:', err);
       sseIsAvailable = false;
       sseAvailabilityChecked = true;
       setIsAvailable(false);
