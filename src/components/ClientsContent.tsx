@@ -3,7 +3,7 @@ import {
   Users, UserPlus, UserX, Trash2, RefreshCw, Search, CheckCircle, 
   Power, PowerOff, Ban, RotateCcw, Clock, History, ChevronDown, ChevronUp, Pencil,
   Cpu, Wifi, Radio, Plane, Navigation, Thermometer, Bluetooth, Monitor, Satellite,
-  Server, Activity, Eye, CheckSquare, Square, XSquare
+  Server, Activity, Eye, CheckSquare, Square, XSquare, Download
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -71,8 +71,9 @@ import {
   useLatestReadings,
   useDeleteSensor,
   Client,
-  ClientState
+  ClientState,
 } from "@/hooks/useAuroraApi";
+import { callAuroraApi } from "@/hooks/aurora/core";
 import { formatLastSeen, formatDateTime, getDeviceStatusFromLastSeen } from "@/utils/dateUtils";
 import { toast } from "sonner";
 import DeviceDetailDialog from "./DeviceDetailDialog";
@@ -149,7 +150,6 @@ const ClientsContent = () => {
   const { data: clientsData, isLoading, isError, refetch } = useClientsByState();
   const { data: statistics } = useClientStatistics();
   const { data: latestReadings } = useLatestReadings();
-  
   const adoptClient = useAdoptClientDirect();
   const registerClient = useRegisterClient();
   const disableClient = useDisableClient();
@@ -322,6 +322,55 @@ const ClientsContent = () => {
   const handleViewDetails = (client: Client) => {
     setDetailClient(client);
     setDetailsOpen(true);
+  };
+
+  const handleDownloadBatch = async (client: Client) => {
+    const clientName = client.hostname || client.client_id;
+    try {
+      toast.info(`Fetching latest batch for ${clientName}...`);
+      
+      // Fetch batches for this client
+      const batchesResponse = await callAuroraApi<{ batches: Array<{ batch_id: string; client_id: string; timestamp?: string }> }>(
+        `/api/batches/list?limit=50`
+      );
+      const batches = batchesResponse.batches || [];
+      
+      // Find the most recent batch for this client
+      const clientBatch = batches.find(b => {
+        // Match by client_id directly or extract from batch_id
+        if (b.client_id === client.client_id) return true;
+        if (b.batch_id.includes(client.client_id)) return true;
+        // Handle "unknown" client_id with client_xxx pattern in batch_id
+        if (b.client_id === "unknown" && client.client_id.startsWith("client_")) {
+          const clientHash = client.client_id.replace("client_", "");
+          return b.batch_id.includes(clientHash);
+        }
+        return false;
+      });
+      
+      if (!clientBatch) {
+        toast.error(`No batches found for ${clientName}`);
+        return;
+      }
+      
+      // Fetch the full batch data
+      const batchData = await callAuroraApi<Record<string, unknown>>(`/api/batches/${clientBatch.batch_id}`);
+      
+      // Create and download JSON file
+      const blob = new Blob([JSON.stringify(batchData, null, 2)], { type: "application/json" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `${clientName}_batch_${clientBatch.batch_id}.json`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+      
+      toast.success(`Downloaded latest batch for ${clientName}`);
+    } catch (error: any) {
+      toast.error(`Failed to download batch: ${error.message}`);
+    }
   };
 
   // Bulk selection handlers
@@ -809,6 +858,7 @@ const ClientsContent = () => {
                             onPermanentDelete={() => handlePermanentDelete(client)}
                             onViewHistory={() => setHistoryDialogClient(client.client_id)}
                             onEdit={() => handleEditClient(client)}
+                            onDownloadBatch={() => handleDownloadBatch(client)}
                             isLoading={
                               adoptClient.isPending || 
                               registerClient.isPending || 
@@ -1032,10 +1082,11 @@ interface ClientActionsProps {
   onPermanentDelete: () => void;
   onViewHistory: () => void;
   onEdit: () => void;
+  onDownloadBatch: () => void;
   isLoading: boolean;
 }
 
-const ClientActions = ({ client, clientState, onAction, onPermanentDelete, onViewHistory, onEdit, isLoading }: ClientActionsProps) => {
+const ClientActions = ({ client, clientState, onAction, onPermanentDelete, onViewHistory, onEdit, onDownloadBatch, isLoading }: ClientActionsProps) => {
   const primaryActions: Record<ClientState, { action: "adopt" | "register" | "enable" | "restore"; label: string; icon: React.ElementType; variant: "default" | "outline" }[]> = {
     pending: [
       { action: "adopt", label: "Adopt", icon: CheckCircle, variant: "default" },
@@ -1093,6 +1144,10 @@ const ClientActions = ({ client, clientState, onAction, onPermanentDelete, onVie
           </Button>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end" className="bg-popover border border-border shadow-lg z-50">
+          <DropdownMenuItem onClick={onDownloadBatch}>
+            <Download className="w-4 h-4 mr-2" />
+            Download Latest Batch
+          </DropdownMenuItem>
           <DropdownMenuItem onClick={onEdit}>
             <Pencil className="w-4 h-4 mr-2" />
             Edit Name
