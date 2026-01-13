@@ -33,9 +33,15 @@ import { format } from "date-fns";
 import { 
   useLatestReadings,
   useClients,
+  useClient,
+  useClientSystemInfo,
   useStarlinkDevicesFromReadings,
   useStarlinkTimeseries,
   useStarlinkStats,
+  useComprehensiveStats,
+  use1hrStats,
+  use24hrStats,
+  useAllSensorStats,
 } from "@/hooks/aurora";
 import StarlinkCharts from "@/components/StarlinkCharts";
 import DeviceDetailsModal from "@/components/stats/DeviceDetailsModal";
@@ -78,6 +84,16 @@ export default function StatsContent() {
   const { data: clients, isLoading: clientsLoading } = useClients();
   const { data: starlinkDevices, isLoading: starlinkLoading } = useStarlinkDevicesFromReadings();
   const { data: starlinkStats } = useStarlinkStats();
+  
+  // Comprehensive stats
+  const { data: comprehensiveStats } = useComprehensiveStats();
+  const { data: stats1hr } = use1hrStats();
+  const { data: stats24hr } = use24hrStats();
+  const { data: allSensorStats } = useAllSensorStats();
+  
+  // Selected client details
+  const { data: selectedClientData } = useClient(selectedClient !== "all" ? selectedClient : "");
+  const { data: selectedClientSystemInfo } = useClientSystemInfo(selectedClient !== "all" ? selectedClient : "");
   
   // Get timeseries for starlink
   const { data: starlinkTimeseries } = useStarlinkTimeseries(24);
@@ -213,6 +229,25 @@ export default function StatsContent() {
           </Button>
         </div>
       </div>
+
+      {/* Client Overview Stats */}
+      {selectedClient !== "all" && selectedClientData ? (
+        <ClientStatsPanel 
+          client={selectedClientData as any} 
+          systemInfo={selectedClientSystemInfo}
+          deviceCount={filteredDevices.length}
+          readingsCount={filteredDevices.reduce((sum, d) => sum + d.readings.length, 0)}
+        />
+      ) : (
+        <GlobalStatsPanel
+          stats={comprehensiveStats}
+          stats1hr={stats1hr}
+          stats24hr={stats24hr}
+          sensorStats={allSensorStats?.sensor_types}
+          clientCount={clients?.length || 0}
+          deviceCount={filteredDevices.length}
+        />
+      )}
 
       {/* Device Type Stats */}
       <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4">
@@ -537,6 +572,324 @@ export default function StatsContent() {
         onOpenChange={setDeviceModalOpen}
       />
     </div>
+  );
+}
+
+// Stats Panel Components
+
+interface GlobalStatsPanelProps {
+  stats?: {
+    global?: {
+      database?: {
+        total_readings?: number;
+        total_batches?: number;
+        total_clients?: number;
+        active_alerts?: number;
+      };
+      devices?: {
+        total_unique_devices?: number;
+        total_device_types?: number;
+      };
+      activity?: {
+        avg_readings_per_hour?: number;
+        last_1_hour?: {
+          readings_1h?: number;
+          batches_1h?: number;
+          active_devices_1h?: number;
+        };
+        last_24_hours?: {
+          readings_24h?: number;
+          batches_24h?: number;
+          active_devices_24h?: number;
+        };
+      };
+      time_ranges?: {
+        earliest_reading?: string;
+        latest_reading?: string;
+        data_span_days?: number;
+      };
+    };
+  };
+  stats1hr?: { readings?: number; devices?: number; clients?: number };
+  stats24hr?: { readings?: number; devices?: number; clients?: number };
+  sensorStats?: Array<{ device_type: string; count?: number; device_count?: number; total_readings?: number }>;
+  clientCount: number;
+  deviceCount: number;
+}
+
+function GlobalStatsPanel({ stats, stats1hr, stats24hr, sensorStats, clientCount, deviceCount }: GlobalStatsPanelProps) {
+  const global = stats?.global;
+  
+  return (
+    <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4">
+      <Card className="glass-card border-border/50">
+        <CardContent className="p-4">
+          <div className="flex items-center gap-3">
+            <div className="p-2 rounded-lg bg-cyan-500/20">
+              <Activity className="w-5 h-5 text-cyan-400" />
+            </div>
+            <div>
+              <p className="text-2xl font-bold">{global?.database?.total_readings?.toLocaleString() ?? 0}</p>
+              <p className="text-xs text-muted-foreground">Total Readings</p>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+      
+      <Card className="glass-card border-border/50">
+        <CardContent className="p-4">
+          <div className="flex items-center gap-3">
+            <div className="p-2 rounded-lg bg-emerald-500/20">
+              <Thermometer className="w-5 h-5 text-emerald-400" />
+            </div>
+            <div>
+              <p className="text-2xl font-bold">{global?.devices?.total_unique_devices ?? deviceCount}</p>
+              <p className="text-xs text-muted-foreground">Active Devices</p>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+      
+      <Card className="glass-card border-border/50">
+        <CardContent className="p-4">
+          <div className="flex items-center gap-3">
+            <div className="p-2 rounded-lg bg-violet-500/20">
+              <Radio className="w-5 h-5 text-violet-400" />
+            </div>
+            <div>
+              <p className="text-2xl font-bold">{clientCount}</p>
+              <p className="text-xs text-muted-foreground">Clients</p>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+      
+      <Card className="glass-card border-border/50">
+        <CardContent className="p-4">
+          <div className="flex items-center gap-3">
+            <div className="p-2 rounded-lg bg-amber-500/20">
+              <Clock className="w-5 h-5 text-amber-400" />
+            </div>
+            <div>
+              <p className="text-2xl font-bold">{stats1hr?.readings ?? global?.activity?.last_1_hour?.readings_1h ?? 0}</p>
+              <p className="text-xs text-muted-foreground">Readings (1hr)</p>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+      
+      <Card className="glass-card border-border/50">
+        <CardContent className="p-4">
+          <div className="flex items-center gap-3">
+            <div className="p-2 rounded-lg bg-blue-500/20">
+              <Activity className="w-5 h-5 text-blue-400" />
+            </div>
+            <div>
+              <p className="text-2xl font-bold">{stats24hr?.readings ?? global?.activity?.last_24_hours?.readings_24h ?? 0}</p>
+              <p className="text-xs text-muted-foreground">Readings (24hr)</p>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+      
+      <Card className="glass-card border-border/50">
+        <CardContent className="p-4">
+          <div className="flex items-center gap-3">
+            <div className="p-2 rounded-lg bg-rose-500/20">
+              <Signal className="w-5 h-5 text-rose-400" />
+            </div>
+            <div>
+              <p className="text-2xl font-bold">{global?.devices?.total_device_types ?? sensorStats?.length ?? 0}</p>
+              <p className="text-xs text-muted-foreground">Sensor Types</p>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
+
+interface ClientStatsPanelProps {
+  client: {
+    client_id: string;
+    hostname?: string;
+    ip_address?: string;
+    status?: string;
+    state?: string;
+    first_seen?: string;
+    last_seen?: string;
+    batches_received?: number;
+    location?: {
+      city?: string;
+      country?: string;
+      latitude?: number;
+      longitude?: number;
+    };
+  };
+  systemInfo?: {
+    cpu_percent?: number;
+    memory_percent?: number;
+    disk_percent?: number;
+    uptime_seconds?: number;
+    hostname?: string;
+    os?: string;
+    kernel?: string;
+    ip_addresses?: string[];
+  } | null;
+  deviceCount: number;
+  readingsCount: number;
+}
+
+function ClientStatsPanel({ client, systemInfo, deviceCount, readingsCount }: ClientStatsPanelProps) {
+  return (
+    <Card className="glass-card border-primary/30">
+      <CardHeader className="pb-3">
+        <CardTitle className="flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <div className="p-2 rounded-lg bg-primary/20">
+              <Radio className="w-5 h-5 text-primary" />
+            </div>
+            <div>
+              <span className="text-lg">{client.hostname || client.client_id}</span>
+              <p className="text-xs text-muted-foreground font-normal">{client.ip_address}</p>
+            </div>
+          </div>
+          <Badge variant={client.state === 'adopted' ? 'default' : 'secondary'}>
+            {client.state || client.status || 'Unknown'}
+          </Badge>
+        </CardTitle>
+      </CardHeader>
+      <CardContent>
+        <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4">
+          {/* Device Count */}
+          <div className="p-3 rounded-lg bg-muted/30 border border-border/50">
+            <div className="flex items-center gap-2 text-muted-foreground mb-1">
+              <Thermometer className="w-4 h-4" />
+              <span className="text-xs">Devices</span>
+            </div>
+            <p className="text-xl font-bold">{deviceCount}</p>
+          </div>
+          
+          {/* Readings */}
+          <div className="p-3 rounded-lg bg-muted/30 border border-border/50">
+            <div className="flex items-center gap-2 text-muted-foreground mb-1">
+              <Activity className="w-4 h-4" />
+              <span className="text-xs">Readings</span>
+            </div>
+            <p className="text-xl font-bold">{readingsCount}</p>
+          </div>
+          
+          {/* Batches */}
+          <div className="p-3 rounded-lg bg-muted/30 border border-border/50">
+            <div className="flex items-center gap-2 text-muted-foreground mb-1">
+              <Clock className="w-4 h-4" />
+              <span className="text-xs">Batches</span>
+            </div>
+            <p className="text-xl font-bold">{client.batches_received ?? 0}</p>
+          </div>
+          
+          {/* CPU */}
+          {systemInfo?.cpu_percent !== undefined && (
+            <div className="p-3 rounded-lg bg-muted/30 border border-border/50">
+              <div className="flex items-center gap-2 text-muted-foreground mb-1">
+                <Zap className="w-4 h-4" />
+                <span className="text-xs">CPU</span>
+              </div>
+              <p className="text-xl font-bold">{systemInfo.cpu_percent.toFixed(1)}%</p>
+            </div>
+          )}
+          
+          {/* Memory */}
+          {systemInfo?.memory_percent !== undefined && (
+            <div className="p-3 rounded-lg bg-muted/30 border border-border/50">
+              <div className="flex items-center gap-2 text-muted-foreground mb-1">
+                <Activity className="w-4 h-4" />
+                <span className="text-xs">Memory</span>
+              </div>
+              <p className="text-xl font-bold">{systemInfo.memory_percent.toFixed(1)}%</p>
+            </div>
+          )}
+          
+          {/* Disk */}
+          {systemInfo?.disk_percent !== undefined && (
+            <div className="p-3 rounded-lg bg-muted/30 border border-border/50">
+              <div className="flex items-center gap-2 text-muted-foreground mb-1">
+                <Signal className="w-4 h-4" />
+                <span className="text-xs">Disk</span>
+              </div>
+              <p className="text-xl font-bold">{systemInfo.disk_percent.toFixed(1)}%</p>
+            </div>
+          )}
+          
+          {/* Uptime */}
+          {systemInfo?.uptime_seconds !== undefined && (
+            <div className="p-3 rounded-lg bg-muted/30 border border-border/50">
+              <div className="flex items-center gap-2 text-muted-foreground mb-1">
+                <Clock className="w-4 h-4" />
+                <span className="text-xs">Uptime</span>
+              </div>
+              <p className="text-xl font-bold">{formatUptime(systemInfo.uptime_seconds)}</p>
+            </div>
+          )}
+          
+          {/* Location */}
+          {client.location && (
+            <div className="p-3 rounded-lg bg-muted/30 border border-border/50">
+              <div className="flex items-center gap-2 text-muted-foreground mb-1">
+                <MapPin className="w-4 h-4" />
+                <span className="text-xs">Location</span>
+              </div>
+              <p className="text-sm font-medium truncate">
+                {client.location.city || client.location.country || 'Unknown'}
+              </p>
+            </div>
+          )}
+          
+          {/* Last Seen */}
+          <div className="p-3 rounded-lg bg-muted/30 border border-border/50">
+            <div className="flex items-center gap-2 text-muted-foreground mb-1">
+              <Clock className="w-4 h-4" />
+              <span className="text-xs">Last Seen</span>
+            </div>
+            <p className="text-sm font-medium">
+              {client.last_seen ? format(new Date(client.last_seen), 'HH:mm:ss') : 'N/A'}
+            </p>
+          </div>
+        </div>
+        
+        {/* System Info Details */}
+        {systemInfo && (
+          <div className="mt-4 pt-4 border-t border-border/50">
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
+              {systemInfo.hostname && (
+                <div>
+                  <span className="text-muted-foreground">Hostname:</span>
+                  <span className="ml-2 font-mono">{systemInfo.hostname}</span>
+                </div>
+              )}
+              {systemInfo.os && (
+                <div>
+                  <span className="text-muted-foreground">OS:</span>
+                  <span className="ml-2 font-mono">{systemInfo.os}</span>
+                </div>
+              )}
+              {systemInfo.kernel && (
+                <div>
+                  <span className="text-muted-foreground">Kernel:</span>
+                  <span className="ml-2 font-mono text-xs">{systemInfo.kernel}</span>
+                </div>
+              )}
+              {systemInfo.ip_addresses && systemInfo.ip_addresses.length > 0 && (
+                <div>
+                  <span className="text-muted-foreground">IPs:</span>
+                  <span className="ml-2 font-mono text-xs">{systemInfo.ip_addresses.slice(0, 2).join(', ')}</span>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+      </CardContent>
+    </Card>
   );
 }
 

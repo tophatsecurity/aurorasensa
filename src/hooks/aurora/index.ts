@@ -265,11 +265,13 @@ export {
   usePowerStats,
   usePerformanceStats,
   useStatsOverview,
+  useClientStats,
   useGlobalStatsHistory,
   useSensorStatsHistory,
   useDeviceStatsHistory,
   useAlertStatsHistory,
   useSystemResourceStatsHistory,
+  type ClientStats,
 } from "./stats";
 
 // Re-export from the original file for hooks not yet migrated
