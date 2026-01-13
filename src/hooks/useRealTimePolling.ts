@@ -27,12 +27,25 @@ interface PollingState {
   pollCount: number;
 }
 
+// Helper to check if user has a valid Supabase session
+function hasSupabaseSession(): boolean {
+  const storageKey = `sb-hewwtgcrupegpcwfujln-auth-token`;
+  const stored = localStorage.getItem(storageKey);
+  return !!stored;
+}
+
+// Helper to get current session token for API calls
+async function getSessionToken(): Promise<string | null> {
+  const { data: { session } } = await supabase.auth.getSession();
+  return session?.access_token || null;
+}
+
 // Helper to call Aurora API through proxy
 async function callAuroraApi<T>(path: string): Promise<T> {
-  const sessionCookie = sessionStorage.getItem('aurora_cookie');
+  const sessionToken = await getSessionToken();
   
   const { data, error } = await supabase.functions.invoke("aurora-proxy", {
-    body: { path, method: "GET", sessionCookie },
+    body: { path, method: "GET", sessionToken },
   });
 
   if (error) {
@@ -69,7 +82,7 @@ export function useRealTimePolling<T>(
     pollCount: 0,
   });
 
-  const hasSession = !!sessionStorage.getItem('aurora_cookie');
+  const hasSession = hasSupabaseSession();
   const effectiveEnabled = enabled && hasSession && !state.isPaused;
 
   const query = useQuery({

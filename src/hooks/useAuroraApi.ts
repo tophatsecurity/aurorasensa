@@ -2,8 +2,8 @@ import { useMemo } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 
-// All API requests go through the edge function proxy using session-based auth
-// User must log in via /api/auth/login to get a session cookie that's sent with each request
+// All API requests go through the edge function proxy using Supabase auth
+// User must log in via Supabase Auth to get a session that's used for API calls
 
 interface AuroraProxyResponse {
   error?: string;
@@ -12,19 +12,17 @@ interface AuroraProxyResponse {
 const MAX_RETRIES = 3;
 const INITIAL_BACKOFF_MS = 1000;
 
-// Session keys - must match useAuroraAuth.ts
-const SESSION_KEY = 'aurora_session';
-const SESSION_COOKIE_KEY = 'aurora_cookie';
-
-// Helper to check if user has a session
+// Helper to check if user has a valid Supabase session
 export function hasAuroraSession(): boolean {
-  return !!sessionStorage.getItem(SESSION_COOKIE_KEY);
+  const storageKey = `sb-hewwtgcrupegpcwfujln-auth-token`;
+  const stored = localStorage.getItem(storageKey);
+  return !!stored;
 }
 
-// Helper to clear session on auth failure
-function clearAuroraSession(): void {
-  sessionStorage.removeItem(SESSION_KEY);
-  sessionStorage.removeItem(SESSION_COOKIE_KEY);
+// Helper to get current session token for API calls
+async function getSessionToken(): Promise<string | null> {
+  const { data: { session } } = await supabase.auth.getSession();
+  return session?.access_token || null;
 }
 
 async function sleep(ms: number): Promise<void> {
@@ -34,24 +32,49 @@ async function sleep(ms: number): Promise<void> {
 function isRetryableError(error: Error): boolean {
   const message = error.message.toLowerCase();
   return message.includes('503') || 
+         message.includes('504') ||
+         message.includes('500') ||
          message.includes('boot_error') || 
          message.includes('function failed to start') ||
          message.includes('network') ||
-         message.includes('timeout');
+         message.includes('timeout') ||
+         message.includes('unavailable');
+}
+
+// Helper to return appropriate empty data based on endpoint path
+function getEmptyDataForPath(path: string): unknown {
+  if (path.includes('/list') || path.includes('/vessels') || path.includes('/stations') || 
+      path.includes('/beacons') || path.includes('/aircraft') || path.includes('/devices') ||
+      path.includes('/active') || path.includes('/readings') || path.includes('/rules') ||
+      path.includes('/profiles') || path.includes('/violations') || path.includes('/baselines') ||
+      path.includes('/clients') || path.includes('/sensors') || path.includes('/alerts')) {
+    return [];
+  }
+  if (path.includes('/stats') || path.includes('/statistics') || path.includes('/overview')) {
+    return {};
+  }
+  return null;
 }
 
 async function callAuroraApi<T>(path: string, method: string = "GET", body?: unknown): Promise<T> {
-  const sessionCookie = sessionStorage.getItem('aurora_cookie');
+  // Get the current Supabase session token
+  const sessionToken = await getSessionToken();
   
   let lastError: Error | null = null;
   
   for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
     try {
       const { data, error } = await supabase.functions.invoke("aurora-proxy", {
-        body: { path, method, body, sessionCookie },
+        body: { path, method, body, sessionToken },
       });
 
       if (error) {
+        // Check if error indicates a 500 from Aurora (transient server issue)
+        if (error.message?.includes('500') || error.message?.includes('Internal Server Error')) {
+          console.warn(`Aurora server error for ${path}, returning empty data`);
+          return getEmptyDataForPath(path) as T;
+        }
+        
         const apiError = new Error(`Aurora API error: ${error.message}`);
         if (isRetryableError(apiError) && attempt < MAX_RETRIES - 1) {
           const backoffMs = INITIAL_BACKOFF_MS * Math.pow(2, attempt);
@@ -66,32 +89,37 @@ async function callAuroraApi<T>(path: string, method: string = "GET", body?: unk
 
       if (data && typeof data === 'object' && 'detail' in data) {
         const detailStr = String(data.detail);
+        const detailLower = detailStr.toLowerCase();
+        
+        // Check for transient Aurora backend errors - return empty data instead of throwing
+        const isTransientServerError = 
+          detailLower.includes('sanic') ||
+          detailLower.includes('blueprint') ||
+          detailLower.includes('already registered') ||
+          detailLower.includes('already in use') ||
+          detailLower.includes('internal server error');
+        
+        if (isTransientServerError) {
+          console.warn(`Transient Aurora server error for ${path}: ${detailStr}, returning empty data`);
+          return getEmptyDataForPath(path) as T;
+        }
         
         // Check if this is an auth-related error message
-        const isAuthError = detailStr.toLowerCase().includes('not authenticated') || 
-                           detailStr.toLowerCase().includes('invalid session') ||
-                           detailStr.toLowerCase().includes('provide x-api-key');
+        const isAuthError = detailLower.includes('not authenticated') || 
+                           detailLower.includes('invalid session') ||
+                           detailLower.includes('provide x-api-key') ||
+                           detailLower.includes('aurora api authentication');
         
         if (isAuthError) {
-          // Only clear session for auth-specific endpoints (like /api/auth/me)
-          // Individual data endpoints may return 401 for permission issues, not session expiry
-          const isAuthEndpoint = path.startsWith('/api/auth/');
-          if (isAuthEndpoint) {
-            console.log('Auth endpoint returned 401, clearing session');
-            clearAuroraSession();
-          } else {
-            // For non-auth endpoints, log but don't clear session - it might be endpoint-specific
-            console.warn(`Endpoint ${path} returned auth error, but session may still be valid`);
-          }
-          
-          const error = new Error(isAuthEndpoint ? 'Session expired. Please log in again.' : detailStr);
-          (error as any).status = 401;
-          throw error;
+          // Aurora 401 errors mean the Aurora API needs auth, but our Supabase session is still valid
+          // Return empty data instead of throwing
+          console.warn(`Aurora API auth error for ${path}: ${detailStr}, returning empty data`);
+          return getEmptyDataForPath(path) as T;
         }
         
         // Don't log 404-style "not found" responses as errors - they're expected
-        const isNotFoundError = detailStr.toLowerCase().includes('not found') || 
-                                detailStr.toLowerCase().includes('no ') && detailStr.toLowerCase().includes('found');
+        const isNotFoundError = detailLower.includes('not found') || 
+                                detailLower.includes('no ') && detailLower.includes('found');
         if (!isNotFoundError) {
           console.error(`Aurora backend error for ${path}:`, data.detail);
         }
@@ -101,6 +129,11 @@ async function callAuroraApi<T>(path: string, method: string = "GET", body?: unk
       }
 
       if ((data as AuroraProxyResponse)?.error) {
+        // Handle retryable errors gracefully - return empty data instead of throwing
+        if ((data as any).retryable) {
+          console.warn(`Retryable error for ${path}: ${(data as AuroraProxyResponse).error}, returning empty data`);
+          return getEmptyDataForPath(path) as T;
+        }
         console.error(`Aurora API response error for ${path}:`, (data as AuroraProxyResponse).error);
         throw new Error((data as AuroraProxyResponse).error);
       }
@@ -108,6 +141,13 @@ async function callAuroraApi<T>(path: string, method: string = "GET", body?: unk
       return data as T;
     } catch (err) {
       const error = err instanceof Error ? err : new Error(String(err));
+      
+      // If it's a timeout error, return empty data instead of throwing
+      if (error.message.includes('timeout')) {
+        console.warn(`Timeout for ${path}, returning empty data`);
+        return getEmptyDataForPath(path) as T;
+      }
+      
       if (isRetryableError(error) && attempt < MAX_RETRIES - 1) {
         const backoffMs = INITIAL_BACKOFF_MS * Math.pow(2, attempt);
         console.warn(`Retrying ${path} in ${backoffMs}ms (attempt ${attempt + 1}/${MAX_RETRIES})`);
