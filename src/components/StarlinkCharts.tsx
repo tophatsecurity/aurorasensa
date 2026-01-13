@@ -12,9 +12,6 @@ import {
 } from "recharts";
 import { Satellite, Zap, Signal, Wifi, Loader2, RefreshCw } from "lucide-react";
 import { useStarlinkTimeseries, useDashboardTimeseries, StarlinkTimeseriesPoint } from "@/hooks/useAuroraApi";
-// SSE imports removed - using polling only
-import { Switch } from "@/components/ui/switch";
-import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 
 interface ChartData {
@@ -30,16 +27,9 @@ interface StarlinkChartProps {
   data: ChartData[];
   isLoading?: boolean;
   chartType?: 'area' | 'line';
-  sseStatus?: {
-    isConnected: boolean;
-    isConnecting: boolean;
-    error: string | null;
-    reconnectCount: number;
-    onReconnect: () => void;
-  };
 }
 
-const StarlinkChart = ({ title, icon, color, unit, data, isLoading, chartType = 'area', sseStatus }: StarlinkChartProps) => {
+const StarlinkChart = ({ title, icon, color, unit, data, isLoading, chartType = 'area' }: StarlinkChartProps) => {
   const currentValue = data.length > 0 ? data[data.length - 1]?.value : null;
   const avgValue = data.length > 0 ? data.reduce((a, b) => a + b.value, 0) / data.length : null;
   const minValue = data.length > 0 ? Math.min(...data.map(d => d.value)) : null;

@@ -12,9 +12,6 @@ import {
 } from "recharts";
 import { Cpu, MemoryStick, HardDrive, Thermometer, Loader2, RefreshCw } from "lucide-react";
 import { useSystemMonitorTimeseries } from "@/hooks/useAuroraApi";
-// SSE imports removed - using polling only
-import { Switch } from "@/components/ui/switch";
-import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 
 interface ChartData {
@@ -264,10 +261,7 @@ const SystemMonitorCharts = ({ hours = 24, clientId }: SystemMonitorChartsProps)
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          {/* SSE status removed - using polling only */}
-        </div>
+      <div className="flex items-center justify-end">
         <div className="flex items-center gap-2">
           <Button
             variant="ghost"

@@ -13,7 +13,6 @@ import {
 } from "recharts";
 import { Zap, Loader2, TrendingUp, TrendingDown, Settings2, AlertTriangle, Bell, BellOff, RefreshCw } from "lucide-react";
 import { useStarlinkPower, useStarlinkTimeseries } from "@/hooks/useAuroraApi";
-// SSE imports removed - using polling only
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
@@ -270,7 +269,7 @@ const PowerConsumptionCharts = ({ hours = 24, clientId = 'all' }: PowerConsumpti
           >
             <RefreshCw className="h-4 w-4" />
           </Button>
-          {/* Real-time toggle removed - using polling only */}
+          
           <Popover>
             <PopoverTrigger asChild>
               <Button variant="ghost" size="icon" className="h-8 w-8">

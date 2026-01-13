@@ -12,7 +12,7 @@ import { spreadOverlappingPoints, COVERAGE_RANGES, ONE_MILE_METERS } from "@/uti
 import { useMapData, AircraftTrailData } from "@/hooks/useMapData";
 import { useGpsHistory } from "@/hooks/useGpsHistory";
 import { useAdsbHistory, AircraftTrail } from "@/hooks/useAdsbHistory";
-// SSE imports removed - using polling only
+
 
 // Map components (non-leaflet)
 import { MapLegend } from "@/components/map/MapLegend";
@@ -22,7 +22,7 @@ import { MapFilters, ALL_FILTER_IDS } from "@/components/map/MapFilters";
 import { GpsHistorySettings } from "@/components/map/GpsHistorySettings";
 import { TimeframeSelector, TimeframeOption, timeframeToMinutes } from "@/components/map/TimeframeSelector";
 import { AutoRefreshSelector, AutoRefreshInterval, getRefreshIntervalMs } from "@/components/map/AutoRefreshSelector";
-// SSEConnectionStatus removed - using polling only
+
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
@@ -78,14 +78,14 @@ const MapContent = () => {
   const [countdown, setCountdown] = useState<number>(0);
   const lastRefreshTimeRef = useRef<number>(Date.now());
   
-  // SSE disabled - using polling only
+  
   
   // Load selected client from localStorage first (moved up so SSE hooks can use it)
   const [selectedClient, setSelectedClient] = useState<string>(() => {
     return localStorage.getItem(STORAGE_KEY_CLIENT) || 'all';
   });
   
-  // SSE hooks removed - using polling only
+  
   
   // Load auto-refresh interval from localStorage, default to 5 minutes
   const [autoRefreshInterval, setAutoRefreshInterval] = useState<AutoRefreshInterval>(() => {
@@ -1124,7 +1124,7 @@ const MapContent = () => {
             onClearHistory={clearHistory}
             onClearAdsbTrails={clearAllAdsbTrails}
           />
-          {/* SSE toggle removed - using polling only */}
+          
         </div>
         
         {/* Filter Buttons - Full Width Below */}

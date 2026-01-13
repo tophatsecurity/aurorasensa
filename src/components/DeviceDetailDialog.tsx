@@ -251,9 +251,8 @@ interface SystemMetrics {
 
 const DeviceDetailDialog = ({ client, open, onOpenChange }: DeviceDetailDialogProps) => {
   const [expandedSensors, setExpandedSensors] = useState<Set<string>>(new Set());
-  const [pollingEnabled, setPollingEnabled] = useState(true);
   
-  // Real-time polling for system info
+  // System info
   const { data: liveSystemInfo, isLoading: systemLoading, refetch: refetchSystem } = useClientSystemInfo(
     client?.client_id || ""
   );
@@ -352,9 +351,6 @@ const DeviceDetailDialog = ({ client, open, onOpenChange }: DeviceDetailDialogPr
                 <RefreshCw className="w-4 h-4" />
                 Refresh
               </Button>
-              <Badge variant={pollingEnabled ? "default" : "secondary"} className="cursor-pointer" onClick={() => setPollingEnabled(!pollingEnabled)}>
-                {pollingEnabled ? "Live" : "Paused"}
-              </Badge>
             </div>
           </DialogTitle>
         </DialogHeader>

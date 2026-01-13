@@ -13,9 +13,6 @@ import {
 } from "recharts";
 import { Thermometer, Loader2, RefreshCw } from "lucide-react";
 import { useThermalProbeTimeseries, useDashboardTimeseries, ThermalProbeTimeseriesPoint } from "@/hooks/useAuroraApi";
-// SSE imports removed - using polling only
-import { Switch } from "@/components/ui/switch";
-import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 
 interface ChartData {
