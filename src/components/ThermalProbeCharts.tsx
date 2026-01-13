@@ -157,16 +157,6 @@ const ThermalProbeCharts = ({ hours = 24, clientId }: ThermalProbeChartsProps) =
           >
             <RefreshCw className="h-4 w-4" />
           </Button>
-          <div className="flex items-center gap-2">
-            <Switch
-              id="realtime-toggle-thermal"
-              checked={realTimeEnabled}
-              onCheckedChange={setRealTimeEnabled}
-            />
-            <Label htmlFor="realtime-toggle-thermal" className="text-xs text-muted-foreground">
-              Live
-            </Label>
-          </div>
         </div>
       </div>
 

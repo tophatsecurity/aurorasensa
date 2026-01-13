@@ -278,14 +278,6 @@ const SystemMonitorCharts = ({ hours = 24, clientId }: SystemMonitorChartsProps)
           >
             <RefreshCw className="h-4 w-4" />
           </Button>
-          <Switch
-            id="realtime-toggle-system"
-            checked={realTimeEnabled}
-            onCheckedChange={setRealTimeEnabled}
-          />
-          <Label htmlFor="realtime-toggle-system" className="text-xs text-muted-foreground">
-            Real-time
-          </Label>
         </div>
       </div>
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">

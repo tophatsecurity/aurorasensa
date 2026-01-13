@@ -241,14 +241,6 @@ const StarlinkCharts = ({ hours = 24, clientId }: StarlinkChartsProps) => {
     return formatStarlinkData(starlinkData?.readings, 'pop_ping_latency_ms');
   }, [starlinkData?.readings]);
 
-  const realTimeStatus = {
-    isConnected: realTimeData.isConnected,
-    isConnecting: realTimeData.isConnecting,
-    error: realTimeData.error || null,
-    reconnectCount: realTimeData.reconnectCount,
-    onReconnect: realTimeData.reconnect,
-  };
-
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-end gap-2 mb-2">
@@ -261,14 +253,6 @@ const StarlinkCharts = ({ hours = 24, clientId }: StarlinkChartsProps) => {
         >
           <RefreshCw className="h-4 w-4" />
         </Button>
-        <Switch
-          id="realtime-toggle-starlink"
-          checked={realTimeEnabled}
-          onCheckedChange={setRealTimeEnabled}
-        />
-        <Label htmlFor="realtime-toggle-starlink" className="text-xs text-muted-foreground">
-          Real-time
-        </Label>
       </div>
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <StarlinkChart
@@ -278,7 +262,7 @@ const StarlinkCharts = ({ hours = 24, clientId }: StarlinkChartsProps) => {
           unit=" dBm"
           data={signalData}
           isLoading={isLoading}
-          sseStatus={realTimeStatus}
+          
         />
         <StarlinkChart
           title="Power Draw"
