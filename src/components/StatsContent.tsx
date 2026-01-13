@@ -38,6 +38,7 @@ import {
   useStarlinkStats,
 } from "@/hooks/aurora";
 import StarlinkCharts from "@/components/StarlinkCharts";
+import DeviceDetailsModal from "@/components/stats/DeviceDetailsModal";
 
 // Custom marker icon
 const createIcon = (color: string) => L.divIcon({
@@ -69,6 +70,8 @@ interface DeviceGroup {
 export default function StatsContent() {
   const [selectedClient, setSelectedClient] = useState<string>("all");
   const [activeTab, setActiveTab] = useState<string>("overview");
+  const [selectedDevice, setSelectedDevice] = useState<DeviceGroup | null>(null);
+  const [deviceModalOpen, setDeviceModalOpen] = useState(false);
 
   // Fetch data
   const { data: readings, isLoading: readingsLoading, refetch: refetchReadings } = useLatestReadings();
@@ -256,7 +259,11 @@ export default function StatsContent() {
                     {filteredDevices.map(device => (
                       <div 
                         key={`${device.client_id}:${device.device_id}`}
-                        className="p-3 rounded-lg border border-border/50 hover:border-primary/50 transition-colors"
+                        className="p-3 rounded-lg border border-border/50 hover:border-primary/50 hover:bg-primary/5 transition-colors cursor-pointer"
+                        onClick={() => {
+                          setSelectedDevice(device);
+                          setDeviceModalOpen(true);
+                        }}
                       >
                         <div className="flex items-center justify-between">
                           <div className="flex items-center gap-3">
@@ -522,6 +529,13 @@ export default function StatsContent() {
           </Card>
         </TabsContent>
       </Tabs>
+
+      {/* Device Details Modal */}
+      <DeviceDetailsModal
+        device={selectedDevice}
+        open={deviceModalOpen}
+        onOpenChange={setDeviceModalOpen}
+      />
     </div>
   );
 }
