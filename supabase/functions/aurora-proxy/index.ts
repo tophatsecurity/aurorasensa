@@ -60,21 +60,17 @@ Deno.serve(async (req) => {
       });
     }
 
-    // Prepare headers and body based on endpoint type
-    const headers: Record<string, string> = {};
+    // Prepare headers and body - Aurora API expects JSON for all endpoints
+    const headers: Record<string, string> = {
+      'Content-Type': 'application/json',
+    };
     let bodyContent: string | undefined;
     
-    if (isLoginEndpoint && requestBody) {
-      // FastAPI OAuth2 expects form-urlencoded data
-      headers['Content-Type'] = 'application/x-www-form-urlencoded';
-      const formData = new URLSearchParams();
-      formData.append('username', requestBody.username || '');
-      formData.append('password', requestBody.password || '');
-      bodyContent = formData.toString();
-      console.log('Login request using form-urlencoded format');
-    } else {
-      headers['Content-Type'] = 'application/json';
-      bodyContent = requestBody && method !== 'GET' ? JSON.stringify(requestBody) : undefined;
+    if (requestBody && method !== 'GET') {
+      bodyContent = JSON.stringify(requestBody);
+      if (isLoginEndpoint) {
+        console.log('Login request using JSON format');
+      }
     }
     
     // Use session cookie/token for authentication
