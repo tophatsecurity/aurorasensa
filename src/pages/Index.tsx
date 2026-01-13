@@ -30,6 +30,7 @@ import StatsHistoryCharts from "@/components/StatsHistoryCharts";
 import AdsbAnalyticsContent from "@/components/AdsbAnalyticsContent";
 import BaselinesContent from "@/components/BaselinesContent";
 import MaritimeContent from "@/components/MaritimeContent";
+import StatsContent from "@/components/StatsContent";
 import { AuroraAuthPage } from "@/components/auth/AuroraAuthPage";
 import { useAuroraAuthContext } from "@/hooks/useAuroraAuth";
 import { useEpirbAlertNotifications } from "@/hooks/useEpirbAlertNotifications";
@@ -80,6 +81,8 @@ const Index = () => {
         return <CorrelationContent />;
       case "sensors":
         return <SensorsContent />;
+      case "stats":
+        return <StatsContent />;
       case "data-analytics":
         return <DataAnalyticsContent />;
       case "alerts":
