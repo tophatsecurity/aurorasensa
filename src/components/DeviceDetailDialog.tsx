@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useMemo } from "react";
 import { 
   Cpu, 
   Wifi, 
@@ -15,12 +15,10 @@ import {
   Clock,
   Settings,
   Activity,
-  ChevronDown,
-  ChevronUp,
-  Eye,
   Database,
   RefreshCw,
-  Loader2
+  Loader2,
+  FileJson,
 } from "lucide-react";
 import {
   Dialog,
@@ -32,8 +30,10 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { Client, useClientSystemInfo } from "@/hooks/useAuroraApi";
+import { Client, useClientSystemInfo, useBatchesByClient, useBatchReadings } from "@/hooks/useAuroraApi";
+import { useSensorReadings } from "@/hooks/aurora/sensors";
 import { formatDateTime } from "@/utils/dateUtils";
+import { ClientSensorTab, ClientRawBatchTab } from "@/components/client";
 
 interface DeviceDetailDialogProps {
   client: Client | null;
@@ -48,7 +48,7 @@ interface SensorConfig {
 }
 
 const getSensorIcon = (sensorType: string) => {
-  const iconClass = "w-5 h-5";
+  const iconClass = "w-4 h-4";
   switch (sensorType) {
     case 'arduino': return <Cpu className={iconClass} />;
     case 'lora': return <Radio className={iconClass} />;
@@ -57,8 +57,8 @@ const getSensorIcon = (sensorType: string) => {
     case 'bluetooth': return <Bluetooth className={iconClass} />;
     case 'adsb': return <Plane className={iconClass} />;
     case 'gps': return <Navigation className={iconClass} />;
-    case 'thermal': return <Thermometer className={iconClass} />;
-    case 'system': return <Monitor className={iconClass} />;
+    case 'thermal': case 'thermal_probe': return <Thermometer className={iconClass} />;
+    case 'system_monitor': case 'system': return <Monitor className={iconClass} />;
     default: return <Cpu className={iconClass} />;
   }
 };
@@ -72,170 +72,10 @@ const getSensorColor = (sensorType: string) => {
     case 'bluetooth': return '#6366f1';
     case 'adsb': return '#06b6d4';
     case 'gps': return '#22c55e';
-    case 'thermal': return '#f59e0b';
-    case 'system': return '#64748b';
+    case 'thermal': case 'thermal_probe': return '#f59e0b';
+    case 'system_monitor': case 'system': return '#64748b';
     default: return '#8b5cf6';
   }
-};
-
-const formatValue = (key: string, value: unknown): string => {
-  if (value === null || value === undefined) return '—';
-  if (typeof value === 'boolean') return value ? 'Yes' : 'No';
-  if (typeof value === 'number') {
-    if (key.includes('frequency')) return `${(value / 1000000).toFixed(2)} MHz`;
-    if (key.includes('seconds') || key.includes('interval') || key.includes('timeout')) return `${value}s`;
-    if (key.includes('bytes')) return `${(value / 1024 / 1024).toFixed(2)} MB`;
-    if (key.includes('percent')) return `${value.toFixed(1)}%`;
-    return value.toString();
-  }
-  if (typeof value === 'object') return JSON.stringify(value);
-  return String(value);
-};
-
-const formatLabel = (key: string): string => {
-  return key
-    .replace(/_/g, ' ')
-    .replace(/([A-Z])/g, ' $1')
-    .replace(/^./, str => str.toUpperCase())
-    .trim();
-};
-
-interface SensorCardProps {
-  sensorId: string;
-  config: SensorConfig | null;
-  type: string;
-  onViewAll: () => void;
-  isExpanded: boolean;
-}
-
-const SensorCard = ({ sensorId, config, type, onViewAll, isExpanded }: SensorCardProps) => {
-  const color = getSensorColor(type);
-  const enabled = config?.enabled ?? true;
-
-  // Get summary metrics (first 4 important values)
-  const getSummaryMetrics = () => {
-    if (!config) return [];
-    const metrics: { label: string; value: string }[] = [];
-    
-    const priorityKeys = [
-      'frequency', 'gain', 'sample_rate', 'interface', 'serial_port', 
-      'baud_rate', 'scan_interval', 'host', 'port', 'coverage_radius_km',
-      'sdr_type', 'rssi_threshold', 'refresh_interval', 'max_range_km'
-    ];
-
-    for (const key of priorityKeys) {
-      if (key in config && config[key] !== undefined && config[key] !== null) {
-        metrics.push({ label: formatLabel(key), value: formatValue(key, config[key]) });
-        if (metrics.length >= 4) break;
-      }
-    }
-
-    return metrics;
-  };
-
-  // Get all properties (excluding common ones for the detailed view)
-  const getAllProperties = () => {
-    if (!config) return [];
-    const properties: { key: string; label: string; value: string }[] = [];
-    
-    const excludeKeys = ['device_id', 'enabled'];
-    
-    Object.entries(config).forEach(([key, value]) => {
-      if (!excludeKeys.includes(key) && value !== undefined && value !== null) {
-        properties.push({
-          key,
-          label: formatLabel(key),
-          value: formatValue(key, value)
-        });
-      }
-    });
-
-    return properties.sort((a, b) => a.label.localeCompare(b.label));
-  };
-
-  const summaryMetrics = getSummaryMetrics();
-  const allProperties = getAllProperties();
-
-  return (
-    <div className="glass-card rounded-xl p-4 border border-border/50 transition-all">
-      <div className="flex items-start justify-between mb-3">
-        <div className="flex items-center gap-3">
-          <div 
-            className="w-10 h-10 rounded-lg flex items-center justify-center"
-            style={{ backgroundColor: `${color}20` }}
-          >
-            <span style={{ color }}>{getSensorIcon(type)}</span>
-          </div>
-          <div>
-            <h4 className="font-semibold text-sm">{sensorId.replace(/_/g, ' ')}</h4>
-            <p className="text-xs text-muted-foreground capitalize">{type} Sensor</p>
-          </div>
-        </div>
-        <Badge 
-          variant="outline" 
-          className={enabled ? 'bg-success/20 text-success border-success/30' : 'bg-muted text-muted-foreground'}
-        >
-          {enabled ? <CheckCircle className="w-3 h-3 mr-1" /> : <XCircle className="w-3 h-3 mr-1" />}
-          {enabled ? 'Active' : 'Disabled'}
-        </Badge>
-      </div>
-
-      {/* Summary Metrics */}
-      {summaryMetrics.length > 0 && (
-        <div className="grid grid-cols-2 gap-2 mt-3 pt-3 border-t border-border/30">
-          {summaryMetrics.map((metric, idx) => (
-            <div key={idx} className="text-xs">
-              <span className="text-muted-foreground">{metric.label}: </span>
-              <span className="font-medium">{metric.value}</span>
-            </div>
-          ))}
-        </div>
-      )}
-
-      {/* Expand/Collapse Button */}
-      {allProperties.length > 0 && (
-        <div className="mt-3 pt-3 border-t border-border/30">
-          <Button 
-            variant="ghost" 
-            size="sm" 
-            className="w-full text-xs gap-2"
-            onClick={onViewAll}
-          >
-            {isExpanded ? (
-              <>
-                <ChevronUp className="w-3 h-3" />
-                Hide Details
-              </>
-            ) : (
-              <>
-                <Eye className="w-3 h-3" />
-                View All Data ({allProperties.length} properties)
-              </>
-            )}
-          </Button>
-
-          {/* Expanded Details */}
-          {isExpanded && (
-            <div className="mt-3 p-3 rounded-lg bg-muted/30 max-h-64 overflow-y-auto">
-              <div className="grid grid-cols-1 gap-2">
-                {allProperties.map((prop) => (
-                  <div 
-                    key={prop.key} 
-                    className="flex justify-between items-start py-1 border-b border-border/20 last:border-0"
-                  >
-                    <span className="text-xs text-muted-foreground">{prop.label}</span>
-                    <span className="text-xs font-mono text-right max-w-[60%] break-all">
-                      {prop.value}
-                    </span>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-        </div>
-      )}
-    </div>
-  );
 };
 
 const formatDate = (dateString: string | null | undefined): string => {
@@ -250,12 +90,25 @@ interface SystemMetrics {
 }
 
 const DeviceDetailDialog = ({ client, open, onOpenChange }: DeviceDetailDialogProps) => {
-  const [expandedSensors, setExpandedSensors] = useState<Set<string>>(new Set());
+  const [activeTab, setActiveTab] = useState("overview");
   
   // System info
   const { data: liveSystemInfo, isLoading: systemLoading, refetch: refetchSystem } = useClientSystemInfo(
     client?.client_id || ""
   );
+
+  // Batches for this client
+  const { data: batchesData, isLoading: batchesLoading } = useBatchesByClient(client?.client_id || "");
+  const latestBatch = batchesData?.batches?.[0] || null;
+  
+  // Batch readings
+  const { data: batchReadingsData, isLoading: readingsLoading } = useBatchReadings(latestBatch?.batch_id || "");
+  
+  // Get sensor types from batch
+  const sensorTypes = useMemo(() => {
+    if (!latestBatch?.device_types) return [];
+    return latestBatch.device_types;
+  }, [latestBatch]);
 
   // Extract metrics from SystemInfo or use client metadata
   const extractMetrics = (systemInfo: unknown, clientMetadata: SystemMetrics | undefined): SystemMetrics => {
@@ -278,19 +131,6 @@ const DeviceDetailDialog = ({ client, open, onOpenChange }: DeviceDetailDialogPr
 
   const config = client.metadata?.config;
   const sensors = config?.sensors || {};
-
-  // Toggle sensor expansion
-  const toggleSensorExpanded = (sensorId: string) => {
-    setExpandedSensors(prev => {
-      const next = new Set(prev);
-      if (next.has(sensorId)) {
-        next.delete(sensorId);
-      } else {
-        next.add(sensorId);
-      }
-      return next;
-    });
-  };
 
   // Build sensor list from config
   const sensorItems: { id: string; type: string; config: SensorConfig | null }[] = [];
@@ -319,16 +159,19 @@ const DeviceDetailDialog = ({ client, open, onOpenChange }: DeviceDetailDialogPr
     }
   });
 
+  // Get unique sensor types for tabs
+  const uniqueSensorTypes = [...new Set(sensorItems.map(s => s.type))];
+
   // Calculate sensor data summary
   const sensorSummary = {
     total: sensorItems.length,
     active: sensorItems.filter(s => s.config?.enabled !== false).length,
-    types: [...new Set(sensorItems.map(s => s.type))].length,
+    types: uniqueSensorTypes.length,
   };
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-3xl max-h-[85vh] overflow-hidden flex flex-col">
+      <DialogContent className="max-w-4xl max-h-[90vh] overflow-hidden flex flex-col">
         <DialogHeader>
           <DialogTitle className="flex items-center justify-between">
             <div className="flex items-center gap-3">
@@ -341,7 +184,7 @@ const DeviceDetailDialog = ({ client, open, onOpenChange }: DeviceDetailDialogPr
               </div>
             </div>
             <div className="flex items-center gap-2">
-              {systemLoading && <Loader2 className="w-4 h-4 animate-spin text-muted-foreground" />}
+              {(systemLoading || batchesLoading) && <Loader2 className="w-4 h-4 animate-spin text-muted-foreground" />}
               <Button
                 variant="ghost"
                 size="sm"
@@ -355,183 +198,131 @@ const DeviceDetailDialog = ({ client, open, onOpenChange }: DeviceDetailDialogPr
           </DialogTitle>
         </DialogHeader>
 
-        <Tabs defaultValue="sensors" className="flex-1 overflow-hidden flex flex-col">
-          <TabsList className="grid w-full grid-cols-3">
-            <TabsTrigger value="sensors" className="gap-2">
-              <Activity className="w-4 h-4" />
-              Sensors ({sensorSummary.total})
-            </TabsTrigger>
-            <TabsTrigger value="info" className="gap-2">
-              <Server className="w-4 h-4" />
-              Device Info
-            </TabsTrigger>
-            <TabsTrigger value="config" className="gap-2">
-              <Settings className="w-4 h-4" />
-              Configuration
-            </TabsTrigger>
-          </TabsList>
+        <Tabs value={activeTab} onValueChange={setActiveTab} className="flex-1 overflow-hidden flex flex-col">
+          <ScrollArea className="w-full">
+            <TabsList className="inline-flex h-10 p-1 w-auto">
+              <TabsTrigger value="overview" className="gap-2 whitespace-nowrap">
+                <Database className="w-4 h-4" />
+                Overview
+              </TabsTrigger>
+              <TabsTrigger value="info" className="gap-2 whitespace-nowrap">
+                <Server className="w-4 h-4" />
+                Device Info
+              </TabsTrigger>
+              {uniqueSensorTypes.map((type) => (
+                <TabsTrigger 
+                  key={type} 
+                  value={`sensor-${type}`} 
+                  className="gap-2 whitespace-nowrap capitalize"
+                  style={{ color: activeTab === `sensor-${type}` ? getSensorColor(type) : undefined }}
+                >
+                  {getSensorIcon(type)}
+                  {type.replace(/_/g, ' ')}
+                </TabsTrigger>
+              ))}
+              <TabsTrigger value="raw-batch" className="gap-2 whitespace-nowrap">
+                <FileJson className="w-4 h-4" />
+                Raw Batch
+              </TabsTrigger>
+              <TabsTrigger value="config" className="gap-2 whitespace-nowrap">
+                <Settings className="w-4 h-4" />
+                Config
+              </TabsTrigger>
+            </TabsList>
+          </ScrollArea>
 
           <ScrollArea className="flex-1 mt-4">
-            <TabsContent value="sensors" className="m-0">
-              {/* Sensor Data Summary Page */}
-              {sensorItems.length > 0 && (
-                <div className="space-y-4 mb-6">
-                  {/* Overview Card */}
-                  <div className="glass-card rounded-xl p-5 border border-border/50">
-                    <div className="flex items-center gap-2 mb-4">
-                      <Database className="w-5 h-5 text-primary" />
-                      <h3 className="font-semibold">Sensor Overview</h3>
-                    </div>
-                    <div className="grid grid-cols-3 gap-4 mb-4">
-                      <div className="text-center p-4 rounded-lg bg-primary/10 border border-primary/20">
-                        <p className="text-3xl font-bold text-primary">{sensorSummary.total}</p>
-                        <p className="text-xs text-muted-foreground mt-1">Total Sensors</p>
-                      </div>
-                      <div className="text-center p-4 rounded-lg bg-success/10 border border-success/20">
-                        <p className="text-3xl font-bold text-success">{sensorSummary.active}</p>
-                        <p className="text-xs text-muted-foreground mt-1">Active</p>
-                      </div>
-                      <div className="text-center p-4 rounded-lg bg-warning/10 border border-warning/20">
-                        <p className="text-3xl font-bold text-warning">{sensorSummary.total - sensorSummary.active}</p>
-                        <p className="text-xs text-muted-foreground mt-1">Disabled</p>
-                      </div>
-                    </div>
-                    
-                    {/* Sensor Types Breakdown */}
-                    <div className="pt-4 border-t border-border/30">
-                      <p className="text-xs text-muted-foreground mb-3">Sensor Types</p>
-                      <div className="flex flex-wrap gap-2">
-                        {Object.entries(
-                          sensorItems.reduce((acc, s) => {
-                            acc[s.type] = (acc[s.type] || 0) + 1;
-                            return acc;
-                          }, {} as Record<string, number>)
-                        ).map(([type, count]) => (
-                          <div 
-                            key={type} 
-                            className="flex items-center gap-2 px-3 py-2 rounded-lg border border-border/50"
-                            style={{ backgroundColor: `${getSensorColor(type)}15` }}
-                          >
-                            <span style={{ color: getSensorColor(type) }}>{getSensorIcon(type)}</span>
-                            <span className="text-sm font-medium capitalize">{type}</span>
-                            <Badge variant="secondary" className="text-xs">{count}</Badge>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Key Metrics Card */}
-                  <div className="glass-card rounded-xl p-5 border border-border/50">
-                    <div className="flex items-center gap-2 mb-4">
-                      <Activity className="w-5 h-5 text-cyan-400" />
-                      <h3 className="font-semibold">Key Sensor Data</h3>
-                    </div>
-                    <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-                      {sensorItems.slice(0, 4).map((sensor) => {
-                        const metrics = sensor.config ? 
-                          Object.entries(sensor.config)
-                            .filter(([k, v]) => !['device_id', 'enabled'].includes(k) && v !== undefined && v !== null)
-                            .slice(0, 2) : [];
-                        return (
-                          <div 
-                            key={sensor.id} 
-                            className="p-3 rounded-lg bg-muted/30 border border-border/30"
-                          >
-                            <div className="flex items-center gap-2 mb-2">
-                              <span style={{ color: getSensorColor(sensor.type) }}>{getSensorIcon(sensor.type)}</span>
-                              <span className="text-xs font-medium truncate capitalize">{sensor.type}</span>
-                            </div>
-                            {metrics.map(([key, value]) => (
-                              <div key={key} className="text-xs">
-                                <span className="text-muted-foreground">{formatLabel(key)}: </span>
-                                <span className="font-mono">{formatValue(key, value)}</span>
-                              </div>
-                            ))}
-                          </div>
-                        );
-                      })}
-                    </div>
-                  </div>
-                </div>
-              )}
-
-              {/* Sensor Cards */}
-              <div className="mb-4">
-                <h4 className="text-sm font-medium text-muted-foreground mb-3">All Sensors</h4>
-              </div>
-              {sensorItems.length > 0 ? (
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                  {sensorItems.map((sensor) => (
-                    <SensorCard 
-                      key={sensor.id} 
-                      sensorId={sensor.id} 
-                      config={sensor.config}
-                      type={sensor.type}
-                      onViewAll={() => toggleSensorExpanded(sensor.id)}
-                      isExpanded={expandedSensors.has(sensor.id)}
-                    />
-                  ))}
-                </div>
-              ) : (
-                <div className="text-center py-12 text-muted-foreground">
-                  <Cpu className="w-12 h-12 mx-auto mb-3 opacity-50" />
-                  <p>No sensors configured for this device</p>
-                </div>
-              )}
-            </TabsContent>
-
-            <TabsContent value="info" className="m-0">
+            {/* Overview Tab */}
+            <TabsContent value="overview" className="m-0">
               <div className="space-y-4">
-                {/* Device Details */}
+                {/* Sensor Overview Card */}
                 <div className="glass-card rounded-xl p-5 border border-border/50">
-                  <h3 className="font-semibold mb-4 flex items-center gap-2">
-                    <Server className="w-4 h-4 text-primary" />
-                    Device Details
-                  </h3>
-                  <div className="grid grid-cols-2 gap-4">
-                    <div>
-                      <p className="text-xs text-muted-foreground">Client ID</p>
-                      <p className="font-mono text-sm">{client.client_id}</p>
+                  <div className="flex items-center gap-2 mb-4">
+                    <Database className="w-5 h-5 text-primary" />
+                    <h3 className="font-semibold">Sensor Overview</h3>
+                  </div>
+                  <div className="grid grid-cols-3 gap-4 mb-4">
+                    <div className="text-center p-4 rounded-lg bg-primary/10 border border-primary/20">
+                      <p className="text-3xl font-bold text-primary">{sensorSummary.total}</p>
+                      <p className="text-xs text-muted-foreground mt-1">Total Sensors</p>
                     </div>
-                    <div>
-                      <p className="text-xs text-muted-foreground">MAC Address</p>
-                      <p className="font-mono text-sm">{client.mac_address}</p>
+                    <div className="text-center p-4 rounded-lg bg-success/10 border border-success/20">
+                      <p className="text-3xl font-bold text-success">{sensorSummary.active}</p>
+                      <p className="text-xs text-muted-foreground mt-1">Active</p>
                     </div>
-                    <div>
-                      <p className="text-xs text-muted-foreground">IP Address</p>
-                      <p className="font-mono text-sm">{client.ip_address}</p>
+                    <div className="text-center p-4 rounded-lg bg-warning/10 border border-warning/20">
+                      <p className="text-3xl font-bold text-warning">{sensorSummary.total - sensorSummary.active}</p>
+                      <p className="text-xs text-muted-foreground mt-1">Disabled</p>
                     </div>
-                    <div>
-                      <p className="text-xs text-muted-foreground">Status</p>
-                      <Badge className="bg-success/20 text-success border-success/30">
-                        {client.status || 'Active'}
-                      </Badge>
-                    </div>
-                    <div>
-                      <p className="text-xs text-muted-foreground">Last Seen</p>
-                      <p className="text-sm flex items-center gap-1">
-                        <Clock className="w-3 h-3" />
-                        {formatDate(client.last_seen)}
-                      </p>
-                    </div>
-                    <div>
-                      <p className="text-xs text-muted-foreground">Adopted At</p>
-                      <p className="text-sm">{formatDate(client.adopted_at)}</p>
-                    </div>
-                    <div>
-                      <p className="text-xs text-muted-foreground">Batches Received</p>
-                      <p className="text-sm font-semibold">{(client.batches_received ?? 0).toLocaleString()}</p>
-                    </div>
-                    <div>
-                      <p className="text-xs text-muted-foreground">Auto Registered</p>
-                      <p className="text-sm">{client.auto_registered ? 'Yes' : 'No'}</p>
+                  </div>
+                  
+                  {/* Sensor Types Breakdown */}
+                  <div className="pt-4 border-t border-border/30">
+                    <p className="text-xs text-muted-foreground mb-3">Sensor Types (click to view details)</p>
+                    <div className="flex flex-wrap gap-2">
+                      {Object.entries(
+                        sensorItems.reduce((acc, s) => {
+                          acc[s.type] = (acc[s.type] || 0) + 1;
+                          return acc;
+                        }, {} as Record<string, number>)
+                      ).map(([type, count]) => (
+                        <button
+                          key={type} 
+                          className="flex items-center gap-2 px-3 py-2 rounded-lg border border-border/50 hover:border-primary/50 transition-colors cursor-pointer"
+                          style={{ backgroundColor: `${getSensorColor(type)}15` }}
+                          onClick={() => setActiveTab(`sensor-${type}`)}
+                        >
+                          <span style={{ color: getSensorColor(type) }}>{getSensorIcon(type)}</span>
+                          <span className="text-sm font-medium capitalize">{type.replace(/_/g, ' ')}</span>
+                          <Badge variant="secondary" className="text-xs">{count}</Badge>
+                        </button>
+                      ))}
                     </div>
                   </div>
                 </div>
+
+                {/* Latest Batch Summary */}
+                {latestBatch && (
+                  <div className="glass-card rounded-xl p-5 border border-border/50">
+                    <div className="flex items-center justify-between mb-4">
+                      <div className="flex items-center gap-2">
+                        <FileJson className="w-5 h-5 text-cyan-400" />
+                        <h3 className="font-semibold">Latest Batch</h3>
+                      </div>
+                      <Button variant="ghost" size="sm" onClick={() => setActiveTab("raw-batch")}>
+                        View Raw Data
+                      </Button>
+                    </div>
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                      <div>
+                        <p className="text-xs text-muted-foreground">Timestamp</p>
+                        <p className="text-sm flex items-center gap-1">
+                          <Clock className="w-3 h-3" />
+                          {formatDate(latestBatch.timestamp)}
+                        </p>
+                      </div>
+                      <div>
+                        <p className="text-xs text-muted-foreground">Readings</p>
+                        <p className="text-sm font-semibold">{latestBatch.reading_count}</p>
+                      </div>
+                      <div>
+                        <p className="text-xs text-muted-foreground">Device Types</p>
+                        <p className="text-sm">{latestBatch.device_types?.length || 0}</p>
+                      </div>
+                      <div>
+                        <p className="text-xs text-muted-foreground">Size</p>
+                        <p className="text-sm font-mono">
+                          {latestBatch.file_size_bytes 
+                            ? `${(latestBatch.file_size_bytes / 1024).toFixed(1)} KB` 
+                            : '—'}
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                )}
 
                 {/* System Metrics */}
-                {system && (
+                {system && Object.keys(system).length > 0 && (
                   <div className="glass-card rounded-xl p-5 border border-border/50">
                     <h3 className="font-semibold mb-4 flex items-center gap-2">
                       <Activity className="w-4 h-4 text-primary" />
@@ -570,6 +361,144 @@ const DeviceDetailDialog = ({ client, open, onOpenChange }: DeviceDetailDialogPr
               </div>
             </TabsContent>
 
+            {/* Device Info Tab */}
+            <TabsContent value="info" className="m-0">
+              <div className="space-y-4">
+                <div className="glass-card rounded-xl p-5 border border-border/50">
+                  <h3 className="font-semibold mb-4 flex items-center gap-2">
+                    <Server className="w-4 h-4 text-primary" />
+                    Device Details
+                  </h3>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <p className="text-xs text-muted-foreground">Client ID</p>
+                      <p className="font-mono text-sm">{client.client_id}</p>
+                    </div>
+                    <div>
+                      <p className="text-xs text-muted-foreground">MAC Address</p>
+                      <p className="font-mono text-sm">{client.mac_address}</p>
+                    </div>
+                    <div>
+                      <p className="text-xs text-muted-foreground">IP Address</p>
+                      <p className="font-mono text-sm">{client.ip_address}</p>
+                    </div>
+                    <div>
+                      <p className="text-xs text-muted-foreground">Status</p>
+                      <Badge className="bg-success/20 text-success border-success/30">
+                        {client.status || client.state || 'Active'}
+                      </Badge>
+                    </div>
+                    <div>
+                      <p className="text-xs text-muted-foreground">Last Seen</p>
+                      <p className="text-sm flex items-center gap-1">
+                        <Clock className="w-3 h-3" />
+                        {formatDate(client.last_seen)}
+                      </p>
+                    </div>
+                    <div>
+                      <p className="text-xs text-muted-foreground">First Seen</p>
+                      <p className="text-sm">{formatDate(client.first_seen)}</p>
+                    </div>
+                    <div>
+                      <p className="text-xs text-muted-foreground">Adopted At</p>
+                      <p className="text-sm">{formatDate(client.adopted_at)}</p>
+                    </div>
+                    <div>
+                      <p className="text-xs text-muted-foreground">Batches Received</p>
+                      <p className="text-sm font-semibold">{(client.batches_received ?? client.batch_count ?? 0).toLocaleString()}</p>
+                    </div>
+                    <div>
+                      <p className="text-xs text-muted-foreground">Auto Registered</p>
+                      <p className="text-sm">{client.auto_registered ? 'Yes' : 'No'}</p>
+                    </div>
+                    {(client as any).location && (
+                      <>
+                        <div>
+                          <p className="text-xs text-muted-foreground">Location</p>
+                          <p className="text-sm">
+                            {[(client as any).location.city, (client as any).location.region, (client as any).location.country]
+                              .filter(Boolean)
+                              .join(', ') || '—'}
+                          </p>
+                        </div>
+                        <div>
+                          <p className="text-xs text-muted-foreground">ISP</p>
+                          <p className="text-sm">{(client as any).location.isp || '—'}</p>
+                        </div>
+                      </>
+                    )}
+                  </div>
+                </div>
+
+                {/* Sensor Config Summary */}
+                <div className="glass-card rounded-xl p-5 border border-border/50">
+                  <h3 className="font-semibold mb-4 flex items-center gap-2">
+                    <Cpu className="w-4 h-4 text-primary" />
+                    Configured Sensors
+                  </h3>
+                  {sensorItems.length > 0 ? (
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                      {sensorItems.map((sensor) => (
+                        <div 
+                          key={sensor.id}
+                          className="flex items-center gap-3 p-3 rounded-lg border border-border/50"
+                          style={{ backgroundColor: `${getSensorColor(sensor.type)}10` }}
+                        >
+                          <span style={{ color: getSensorColor(sensor.type) }}>
+                            {getSensorIcon(sensor.type)}
+                          </span>
+                          <div className="flex-1 min-w-0">
+                            <p className="font-medium text-sm truncate">{sensor.id}</p>
+                            <p className="text-xs text-muted-foreground capitalize">{sensor.type.replace(/_/g, ' ')}</p>
+                          </div>
+                          <Badge 
+                            variant="outline" 
+                            className={sensor.config?.enabled !== false 
+                              ? 'bg-success/20 text-success border-success/30' 
+                              : 'bg-muted text-muted-foreground'
+                            }
+                          >
+                            {sensor.config?.enabled !== false ? (
+                              <><CheckCircle className="w-3 h-3 mr-1" />Active</>
+                            ) : (
+                              <><XCircle className="w-3 h-3 mr-1" />Disabled</>
+                            )}
+                          </Badge>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="text-center py-8 text-muted-foreground">
+                      <Cpu className="w-10 h-10 mx-auto mb-2 opacity-50" />
+                      <p>No sensors configured</p>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </TabsContent>
+
+            {/* Sensor Type Tabs */}
+            {uniqueSensorTypes.map((type) => (
+              <TabsContent key={type} value={`sensor-${type}`} className="m-0">
+                <SensorTabContent 
+                  sensorType={type} 
+                  clientId={client.client_id} 
+                  batchReadings={batchReadingsData?.readings || []}
+                  isLoading={readingsLoading}
+                />
+              </TabsContent>
+            ))}
+
+            {/* Raw Batch Tab */}
+            <TabsContent value="raw-batch" className="m-0">
+              <ClientRawBatchTab 
+                batch={latestBatch} 
+                readings={batchReadingsData?.readings || null}
+                isLoading={batchesLoading || readingsLoading}
+              />
+            </TabsContent>
+
+            {/* Config Tab */}
             <TabsContent value="config" className="m-0">
               <div className="glass-card rounded-xl p-5 border border-border/50">
                 <h3 className="font-semibold mb-4 flex items-center gap-2">
@@ -606,5 +535,52 @@ const DeviceDetailDialog = ({ client, open, onOpenChange }: DeviceDetailDialogPr
     </Dialog>
   );
 };
+
+// Separate component for sensor tab content to handle per-sensor-type data fetching
+interface SensorTabContentProps {
+  sensorType: string;
+  clientId: string;
+  batchReadings: Array<{ device_id: string; device_type: string; timestamp: string; data: Record<string, unknown> }>;
+  isLoading: boolean;
+}
+
+function SensorTabContent({ sensorType, clientId, batchReadings, isLoading }: SensorTabContentProps) {
+  // Get readings from API for this sensor type
+  const { data: apiReadings, isLoading: apiLoading } = useSensorReadings(sensorType, 24);
+  
+  // Filter readings for this client and sensor type
+  const filteredReadings = useMemo(() => {
+    // First try batch readings (most recent)
+    const fromBatch = batchReadings.filter(r => 
+      r.device_type === sensorType || 
+      r.device_type?.includes(sensorType) ||
+      sensorType.includes(r.device_type || '')
+    );
+    
+    // Also get from API readings if available
+    const apiReadingsList = Array.isArray(apiReadings) ? apiReadings : (apiReadings?.readings || []);
+    const fromApi = apiReadingsList.filter((r: { client_id?: string }) => 
+      !r.client_id || r.client_id === clientId || r.client_id === 'unknown'
+    );
+    
+    // Combine and dedupe by timestamp
+    const combined = [...fromBatch, ...fromApi];
+    const seen = new Set<string>();
+    return combined.filter(r => {
+      const key = `${r.device_id}-${r.timestamp}`;
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    }).sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
+  }, [batchReadings, apiReadings, sensorType, clientId]);
+
+  return (
+    <ClientSensorTab 
+      sensorType={sensorType}
+      readings={filteredReadings}
+      isLoading={isLoading || apiLoading}
+    />
+  );
+}
 
 export default DeviceDetailDialog;
