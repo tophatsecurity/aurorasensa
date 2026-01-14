@@ -104,15 +104,6 @@ export default function StatsContent() {
           readingsCount={filteredDevices.reduce((sum, d) => sum + d.readings.length, 0)}
         />
       )}
-      {selectedClient && selectedClientData && (
-        <ClientStatsPanel 
-          client={selectedClientData as any} 
-          systemInfo={selectedClientSystemInfo}
-          clientStats={clientStats}
-          deviceCount={filteredDevices.length}
-          readingsCount={filteredDevices.reduce((sum, d) => sum + d.readings.length, 0)}
-        />
-      )}
 
       {/* Device Type Stats */}
       <DeviceTypeStats devices={filteredDevices} />
