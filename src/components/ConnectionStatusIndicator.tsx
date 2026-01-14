@@ -1,17 +1,18 @@
 import { useState, useEffect } from "react";
-import { Wifi, WifiOff, AlertTriangle, RefreshCw, Server } from "lucide-react";
-import { Badge } from "@/components/ui/badge";
+import { Wifi, WifiOff, AlertTriangle, RefreshCw, Server, Flame } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { useHealth } from "@/hooks/useAuroraApi";
 import { hasAuroraSession } from "@/hooks/aurora/core";
-
-type ConnectionStatus = "connected" | "degraded" | "disconnected" | "checking";
+import { useConnectionStatus, ConnectionState } from "@/hooks/useConnectionStatus";
+import { Progress } from "@/components/ui/progress";
 
 const ConnectionStatusIndicator = () => {
-  const [status, setStatus] = useState<ConnectionStatus>("checking");
   const [lastChecked, setLastChecked] = useState<Date | null>(null);
   
   const isAuthenticated = hasAuroraSession();
+  
+  // Get global connection state from zustand store
+  const { state: globalState, retryCount, maxRetries } = useConnectionStatus();
   
   const { 
     data: health, 
@@ -22,44 +23,55 @@ const ConnectionStatusIndicator = () => {
     isFetching
   } = useHealth();
 
+  // Derive display state from both health check and global connection state
+  const [displayState, setDisplayState] = useState<ConnectionState>("checking");
+
   useEffect(() => {
+    // If we're warming up globally, show that state
+    if (globalState === 'warming_up') {
+      setDisplayState('warming_up');
+      return;
+    }
+    
     if (!isAuthenticated) {
-      setStatus("disconnected");
+      setDisplayState("disconnected");
       return;
     }
     
     if (isLoading || isFetching) {
-      setStatus("checking");
+      setDisplayState("checking");
       return;
     }
     
     if (isError) {
-      // Check if it's a temporary error
       const errorMessage = (error as Error)?.message?.toLowerCase() || "";
-      if (errorMessage.includes("timeout") || 
+      if (errorMessage.includes("boot_error") || 
+          errorMessage.includes("function failed to start")) {
+        setDisplayState("warming_up");
+      } else if (errorMessage.includes("timeout") || 
           errorMessage.includes("unavailable") || 
           errorMessage.includes("500") ||
           errorMessage.includes("temporarily")) {
-        setStatus("degraded");
+        setDisplayState("degraded");
       } else {
-        setStatus("disconnected");
+        setDisplayState("disconnected");
       }
       return;
     }
     
     if (health?.status === "ok" || health?.status === "healthy") {
-      setStatus("connected");
+      setDisplayState("connected");
       setLastChecked(new Date());
     } else if (health) {
-      setStatus("degraded");
+      setDisplayState("degraded");
       setLastChecked(new Date());
     } else {
-      setStatus("disconnected");
+      setDisplayState("disconnected");
     }
-  }, [health, isLoading, isError, error, isFetching, isAuthenticated]);
+  }, [health, isLoading, isError, error, isFetching, isAuthenticated, globalState]);
 
   const getStatusConfig = () => {
-    switch (status) {
+    switch (displayState) {
       case "connected":
         return {
           icon: Wifi,
@@ -69,6 +81,16 @@ const ConnectionStatusIndicator = () => {
           pulseColor: "bg-green-500",
           label: "Connected",
           description: "Aurora server is healthy and responding normally"
+        };
+      case "warming_up":
+        return {
+          icon: Flame,
+          color: "text-orange-400",
+          bgColor: "bg-orange-500/10",
+          borderColor: "border-orange-500/30",
+          pulseColor: "bg-orange-400",
+          label: "Warming Up",
+          description: `Edge function is starting up... ${retryCount > 0 ? `(Retry ${retryCount}/${maxRetries})` : ''}`
         };
       case "degraded":
         return {
@@ -108,7 +130,8 @@ const ConnectionStatusIndicator = () => {
 
   const config = getStatusConfig();
   const Icon = config.icon;
-  const isSpinning = status === "checking";
+  const isSpinning = displayState === "checking";
+  const isWarmingUp = displayState === "warming_up";
 
   const formatLastChecked = () => {
     if (!lastChecked) return null;
@@ -117,6 +140,8 @@ const ConnectionStatusIndicator = () => {
     if (seconds < 3600) return `${Math.floor(seconds / 60)}m ago`;
     return `${Math.floor(seconds / 3600)}h ago`;
   };
+
+  const warmupProgress = maxRetries > 0 ? (retryCount / maxRetries) * 100 : 0;
 
   return (
     <TooltipProvider>
@@ -128,19 +153,29 @@ const ConnectionStatusIndicator = () => {
           >
             {/* Pulse indicator */}
             <span className="relative flex h-2 w-2">
-              {status === "connected" && (
+              {(displayState === "connected" || displayState === "warming_up") && (
                 <span className={`animate-ping absolute inline-flex h-full w-full rounded-full ${config.pulseColor} opacity-75`} />
               )}
               <span className={`relative inline-flex rounded-full h-2 w-2 ${config.pulseColor}`} />
             </span>
             
             {/* Icon */}
-            <Icon className={`w-4 h-4 ${config.color} ${isSpinning ? "animate-spin" : ""}`} />
+            <Icon className={`w-4 h-4 ${config.color} ${isSpinning ? "animate-spin" : ""} ${isWarmingUp ? "animate-pulse" : ""}`} />
             
             {/* Label - hidden on small screens */}
             <span className={`hidden sm:inline text-xs font-medium ${config.color}`}>
               {config.label}
             </span>
+            
+            {/* Progress bar for warming up state */}
+            {isWarmingUp && maxRetries > 0 && (
+              <div className="hidden sm:block w-12 h-1.5 bg-orange-900/30 rounded-full overflow-hidden">
+                <div 
+                  className="h-full bg-orange-400 rounded-full transition-all duration-300 animate-pulse"
+                  style={{ width: `${warmupProgress}%` }}
+                />
+              </div>
+            )}
           </button>
         </TooltipTrigger>
         <TooltipContent side="bottom" className="max-w-xs">
@@ -150,7 +185,18 @@ const ConnectionStatusIndicator = () => {
               <span className="font-medium">Aurora Server Status</span>
             </div>
             <p className="text-xs text-muted-foreground">{config.description}</p>
-            {lastChecked && (
+            
+            {/* Show progress bar in tooltip for warming up */}
+            {isWarmingUp && maxRetries > 0 && (
+              <div className="space-y-1">
+                <Progress value={warmupProgress} className="h-2" />
+                <p className="text-xs text-orange-400">
+                  Starting edge function... This usually takes 2-5 seconds.
+                </p>
+              </div>
+            )}
+            
+            {lastChecked && displayState === "connected" && (
               <p className="text-xs text-muted-foreground">
                 Last checked: {formatLastChecked()}
               </p>
