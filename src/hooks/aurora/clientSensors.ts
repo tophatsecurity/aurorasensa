@@ -84,26 +84,61 @@ export function useBatchWithReadings(batchId: string) {
 }
 
 // Extract sensor readings from batch data
-function extractSensorReadings(batch: BatchWithSensors | null): ClientSensorReading[] {
-  if (!batch?.readings?.[0]?.sensors) return [];
+function extractSensorReadings(batch: BatchWithSensors | null, clientId: string): ClientSensorReading[] {
+  if (!batch) return [];
   
   const readings: ClientSensorReading[] = [];
-  const sensors = batch.readings[0].sensors;
-  const timestamp = batch.readings[0].timestamp || batch.timestamp;
   
-  for (const [sensorId, sensorData] of Object.entries(sensors)) {
-    if (!sensorData) continue;
-    
-    readings.push({
-      device_id: sensorData.device_id || sensorId,
-      device_type: sensorData.device_type || 'unknown',
-      timestamp,
-      data: sensorData.data || sensorData as Record<string, unknown>,
-      client_id: batch.client_id,
-    });
+  // Extract client_id from batch_id if not set (format: batch_client_XXXX_timestamp_id)
+  const extractedClientId = batch.client_id !== 'unknown' 
+    ? batch.client_id 
+    : extractClientIdFromBatchId(batch.batch_id) || clientId;
+  
+  // Handle readings array with sensors object
+  if (batch.readings && Array.isArray(batch.readings)) {
+    for (const reading of batch.readings) {
+      const timestamp = reading.timestamp || batch.timestamp;
+      const sensors = reading.sensors;
+      
+      if (sensors && typeof sensors === 'object') {
+        for (const [sensorId, sensorData] of Object.entries(sensors)) {
+          if (!sensorData) continue;
+          
+          // Determine device type from sensor ID (e.g., bluetooth_scanner_1 -> bluetooth_scanner)
+          const deviceType = sensorData.device_type || extractDeviceType(sensorId);
+          
+          readings.push({
+            device_id: sensorData.device_id || sensorId,
+            device_type: deviceType,
+            timestamp,
+            data: sensorData as Record<string, unknown>,
+            client_id: extractedClientId,
+          });
+        }
+      }
+    }
   }
   
   return readings;
+}
+
+// Extract client ID from batch ID (format: batch_client_XXXX_timestamp_id)
+function extractClientIdFromBatchId(batchId: string): string | null {
+  const match = batchId.match(/batch_client_([a-f0-9]+)_/i);
+  if (match) {
+    return `client_${match[1]}`;
+  }
+  return null;
+}
+
+// Extract device type from sensor ID (e.g., bluetooth_scanner_1 -> bluetooth_scanner)
+function extractDeviceType(sensorId: string): string {
+  // Remove trailing numbers and underscores
+  const match = sensorId.match(/^(.+?)_?\d*$/);
+  if (match) {
+    return match[1].replace(/_\d+$/, '');
+  }
+  return sensorId;
 }
 
 // Comprehensive hook to fetch all sensor data for a client
@@ -114,18 +149,27 @@ export function useClientSensorData(clientId: string) {
       if (!clientId) return { readings: [], byType: {} as SensorDataByType };
       
       try {
-        // Fetch recent batches for the client
+        // Fetch recent batches
         const batchesResponse = await callAuroraApi<{ batches: BatchWithSensors[] }>(
           `/api/batches/list?limit=50`
         );
         
-        // Filter batches for this client
+        // Extract client identifier from clientId (e.g., client_e45f01ac9b5f -> e45f01ac9b5f)
+        const clientIdentifier = clientId.replace('client_', '');
+        
+        // Filter batches for this client by checking batch_id pattern
         const clientBatches = (batchesResponse.batches || []).filter(b => {
-          // Match by client_id or by batch_id prefix
+          // Match by client_id field
           if (b.client_id === clientId) return true;
-          if (b.batch_id.includes(clientId.replace('client_', ''))) return true;
+          // Match by batch_id containing client identifier
+          if (b.batch_id.includes(clientIdentifier)) return true;
+          // Match extracted client_id from batch_id
+          const extractedClient = extractClientIdFromBatchId(b.batch_id);
+          if (extractedClient === clientId) return true;
           return false;
         });
+        
+        console.debug(`Found ${clientBatches.length} batches for client ${clientId}`);
         
         // Get the most recent batches (up to 10)
         const recentBatches = clientBatches.slice(0, 10);
@@ -137,13 +181,16 @@ export function useClientSensorData(clientId: string) {
           recentBatches.map(async (batch) => {
             try {
               const fullBatch = await callAuroraApi<BatchWithSensors>(`/api/batches/${batch.batch_id}`);
-              const readings = extractSensorReadings(fullBatch);
+              const readings = extractSensorReadings(fullBatch, clientId);
+              console.debug(`Extracted ${readings.length} sensors from batch ${batch.batch_id}`);
               allReadings.push(...readings);
             } catch (error) {
               console.debug(`Failed to fetch batch ${batch.batch_id}:`, error);
             }
           })
         );
+        
+        console.debug(`Total sensor readings for ${clientId}: ${allReadings.length}`);
         
         // Group readings by sensor type
         const byType: SensorDataByType = {};
