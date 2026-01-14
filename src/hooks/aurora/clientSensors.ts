@@ -613,14 +613,47 @@ export function useClientThermalData(clientId: string) {
       if (!clientId) return null;
       
       try {
-        const readingsResponse = await callAuroraApi<{ readings: ClientSensorReading[] }>(
-          `/api/readings/sensor/thermal_probe?hours=24`
-        );
+        // Use client-specific batch endpoint for accurate data
+        const batchResponse = await callAuroraApi<{ 
+          batches: BatchWithSensors[]; 
+          client_id?: string;
+          count?: number;
+        }>(`/api/batches/by-client/${clientId}?limit=20`);
         
-        const clientReadings = (readingsResponse.readings || []).filter(r =>
-          r.client_id === clientId ||
-          r.device_id?.includes(clientId.replace('client_', ''))
-        );
+        const batches = batchResponse.batches || [];
+        
+        // Extract Thermal readings from batches
+        const clientReadings: ClientSensorReading[] = [];
+        
+        for (const batch of batches) {
+          if (batch.readings && Array.isArray(batch.readings)) {
+            for (const reading of batch.readings) {
+              const sensors = reading.sensors;
+              if (sensors && typeof sensors === 'object') {
+                for (const [sensorId, sensorData] of Object.entries(sensors)) {
+                  if (!sensorData) continue;
+                  
+                  const deviceType = (sensorData.device_type as string)?.toLowerCase() || sensorId.toLowerCase();
+                  
+                  // Check if this is a Thermal sensor
+                  if (deviceType.includes('thermal') || deviceType.includes('temp') || deviceType.includes('probe') ||
+                      sensorId.toLowerCase().includes('thermal') || sensorId.toLowerCase().includes('temp')) {
+                    clientReadings.push({
+                      device_id: (sensorData.device_id as string) || sensorId,
+                      device_type: 'thermal_probe',
+                      timestamp: reading.timestamp || batch.timestamp,
+                      data: sensorData as Record<string, unknown>,
+                      client_id: clientId,
+                    });
+                  }
+                }
+              }
+            }
+          }
+        }
+        
+        // Sort by timestamp descending
+        clientReadings.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
         
         return {
           readings: clientReadings,
@@ -644,15 +677,46 @@ export function useClientArduinoData(clientId: string) {
       if (!clientId) return null;
       
       try {
-        // Get Arduino readings
-        const readingsResponse = await callAuroraApi<{ readings: ClientSensorReading[] }>(
-          `/api/readings/sensor/arduino?hours=24`
-        );
+        // Use client-specific batch endpoint for accurate data
+        const batchResponse = await callAuroraApi<{ 
+          batches: BatchWithSensors[]; 
+          client_id?: string;
+          count?: number;
+        }>(`/api/batches/by-client/${clientId}?limit=20`);
         
-        const clientReadings = (readingsResponse.readings || []).filter(r =>
-          r.client_id === clientId ||
-          r.device_id?.includes(clientId.replace('client_', ''))
-        );
+        const batches = batchResponse.batches || [];
+        
+        // Extract Arduino readings from batches
+        const clientReadings: ClientSensorReading[] = [];
+        
+        for (const batch of batches) {
+          if (batch.readings && Array.isArray(batch.readings)) {
+            for (const reading of batch.readings) {
+              const sensors = reading.sensors;
+              if (sensors && typeof sensors === 'object') {
+                for (const [sensorId, sensorData] of Object.entries(sensors)) {
+                  if (!sensorData) continue;
+                  
+                  const deviceType = (sensorData.device_type as string)?.toLowerCase() || sensorId.toLowerCase();
+                  
+                  // Check if this is an Arduino sensor
+                  if (deviceType.includes('arduino') || sensorId.toLowerCase().includes('arduino')) {
+                    clientReadings.push({
+                      device_id: (sensorData.device_id as string) || sensorId,
+                      device_type: 'arduino',
+                      timestamp: reading.timestamp || batch.timestamp,
+                      data: sensorData as Record<string, unknown>,
+                      client_id: clientId,
+                    });
+                  }
+                }
+              }
+            }
+          }
+        }
+        
+        // Sort by timestamp descending
+        clientReadings.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
         
         // Try Arduino stats
         let stats: Record<string, unknown> | null = null;
