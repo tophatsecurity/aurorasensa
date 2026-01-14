@@ -1,8 +1,9 @@
 import { useState, useMemo, useEffect } from "react";
-import { RefreshCw } from "lucide-react";
-import { Card, CardContent } from "@/components/ui/card";
+import { RefreshCw, Code2, Copy, Check } from "lucide-react";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { ScrollArea } from "@/components/ui/scroll-area";
 import {
   Select,
   SelectContent,
@@ -20,7 +21,6 @@ import {
   useClient,
   useClientSystemInfo,
   useStarlinkDevicesFromReadings,
-  useClientStats,
 } from "@/hooks/aurora";
 
 // Import refactored components
@@ -31,7 +31,6 @@ import {
   ClientInfoCard,
   MeasurementsSection,
   ClientLocationMap,
-  DeviceTypeStats,
   DeviceListCard,
   DeviceMeasurementsCard,
   DeviceLocationMap as DeviceMapLegacy,
@@ -78,7 +77,6 @@ export default function StatsContent() {
   // Selected client details
   const { data: selectedClientData } = useClient(selectedClient || "");
   const { data: selectedClientSystemInfo } = useClientSystemInfo(selectedClient || "");
-  const { data: clientStats } = useClientStats(selectedClient || "");
 
   // Process readings into device groups
   const deviceGroups = useMemo(() => {
@@ -190,6 +188,7 @@ export default function StatsContent() {
           <TabsTrigger value="starlink">Starlink</TabsTrigger>
           <TabsTrigger value="arduino">Arduino</TabsTrigger>
           <TabsTrigger value="map">Location Map</TabsTrigger>
+          <TabsTrigger value="raw">Raw JSON</TabsTrigger>
         </TabsList>
 
         {/* Overview Tab */}
@@ -251,6 +250,13 @@ export default function StatsContent() {
               </ComponentErrorBoundary>
             </CardContent>
           </Card>
+        </TabsContent>
+
+        {/* Raw JSON Tab */}
+        <TabsContent value="raw" className="space-y-4">
+          <ComponentErrorBoundary name="RawJsonTab">
+            <RawJsonPanel readings={readings || []} clientId={selectedClient} />
+          </ComponentErrorBoundary>
         </TabsContent>
       </Tabs>
 
@@ -325,5 +331,103 @@ function StatsLoadingSkeleton() {
       </div>
       <Skeleton className="h-96" />
     </div>
+  );
+}
+
+// =============================================
+// RAW JSON PANEL
+// =============================================
+
+interface RawJsonPanelProps {
+  readings: unknown[];
+  clientId: string;
+}
+
+function RawJsonPanel({ readings, clientId }: RawJsonPanelProps) {
+  const [copied, setCopied] = useState(false);
+
+  // Get latest readings for the selected client
+  const latestBatch = useMemo(() => {
+    if (!readings || readings.length === 0) return null;
+    
+    const clientReadings = clientId 
+      ? readings.filter((r: any) => r.client_id === clientId)
+      : readings;
+    
+    // Group by timestamp to find the latest batch
+    const sorted = [...clientReadings].sort((a: any, b: any) => 
+      new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
+    );
+    
+    // Get the most recent readings (batch)
+    return sorted.slice(0, 50);
+  }, [readings, clientId]);
+
+  const jsonString = useMemo(() => {
+    return JSON.stringify(latestBatch, null, 2);
+  }, [latestBatch]);
+
+  const handleCopy = async () => {
+    try {
+      await navigator.clipboard.writeText(jsonString);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch (err) {
+      console.error('Failed to copy:', err);
+    }
+  };
+
+  if (!latestBatch || latestBatch.length === 0) {
+    return (
+      <Card className="glass-card border-border/50">
+        <CardContent className="p-8 text-center">
+          <Code2 className="w-12 h-12 mx-auto mb-3 text-muted-foreground opacity-50" />
+          <p className="text-muted-foreground">No batch data available</p>
+        </CardContent>
+      </Card>
+    );
+  }
+
+  return (
+    <Card className="glass-card border-border/50">
+      <CardHeader className="pb-2">
+        <CardTitle className="text-sm flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <Code2 className="w-4 h-4 text-primary" />
+            <span>Latest Batch - Raw JSON</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <span className="text-xs font-normal text-muted-foreground">
+              {latestBatch.length} readings
+            </span>
+            <Button 
+              variant="outline" 
+              size="sm" 
+              onClick={handleCopy}
+              className="h-7 px-2"
+            >
+              {copied ? (
+                <>
+                  <Check className="w-3 h-3 mr-1" />
+                  Copied
+                </>
+              ) : (
+                <>
+                  <Copy className="w-3 h-3 mr-1" />
+                  Copy
+                </>
+              )}
+            </Button>
+          </div>
+        </CardTitle>
+      </CardHeader>
+      <CardContent className="p-3">
+        <ScrollArea className="h-[500px] rounded-lg border border-border/50 bg-muted/20">
+          <pre className="p-4 text-xs font-mono text-foreground/90 whitespace-pre-wrap break-all">
+            {jsonString}
+          </pre>
+        </ScrollArea>
+      </CardContent>
+    </Card>
   );
 }
