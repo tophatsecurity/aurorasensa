@@ -4,16 +4,15 @@ import { ApiError, ApiErrorBanner } from "@/components/ui/api-error";
 import { ComponentErrorBoundary } from "@/components/ui/error-boundary";
 import "leaflet/dist/leaflet.css";
 import { 
-  useLatestReadings,
   useClientsWithHostnames,
   useClient,
   useClientSystemInfo,
+  useClientSensorData,
 } from "@/hooks/aurora";
 
 import {
   type DeviceGroup,
   type SensorReading,
-  processReadingsToGroups,
   ClientInfoCard,
   ClientLocationMap,
   SensorTabs,
@@ -22,19 +21,75 @@ import {
   RawJsonPanel,
 } from "@/components/stats";
 
+// Helper to convert client sensor readings to device groups
+function processClientSensorDataToGroups(
+  readings: Array<{ device_id: string; device_type: string; timestamp: string; data: Record<string, unknown>; client_id?: string }>,
+  clientId: string
+): DeviceGroup[] {
+  if (!readings || readings.length === 0) return [];
+  
+  const groups = new Map<string, DeviceGroup>();
+  
+  readings.forEach((reading) => {
+    const key = `${clientId}:${reading.device_id}`;
+    
+    // Extract location if available
+    const data = reading.data || {};
+    let location: { lat: number; lng: number } | undefined;
+    
+    // Check for location in various places
+    const starlinkData = data.starlink as Record<string, unknown> | undefined;
+    if (starlinkData) {
+      if (typeof starlinkData.latitude === 'number' && typeof starlinkData.longitude === 'number') {
+        location = { lat: starlinkData.latitude, lng: starlinkData.longitude };
+      }
+    }
+    if (typeof data.latitude === 'number' && typeof data.longitude === 'number') {
+      location = { lat: data.latitude as number, lng: data.longitude as number };
+    }
+    
+    const sensorReading: SensorReading = {
+      device_id: reading.device_id,
+      device_type: reading.device_type,
+      client_id: clientId,
+      timestamp: reading.timestamp,
+      data: reading.data,
+    };
+    
+    if (!groups.has(key)) {
+      groups.set(key, {
+        device_id: reading.device_id,
+        device_type: reading.device_type,
+        client_id: clientId,
+        readings: [],
+        latest: sensorReading,
+        location
+      });
+    }
+    
+    const group = groups.get(key)!;
+    group.readings.push(sensorReading);
+    
+    // Update latest if this reading is newer
+    if (new Date(reading.timestamp) > new Date(group.latest.timestamp)) {
+      group.latest = sensorReading;
+    }
+    
+    // Update location if available
+    if (location) {
+      group.location = location;
+    }
+  });
+  
+  return Array.from(groups.values());
+}
+
 export default function StatsContent() {
   const [selectedClient, setSelectedClient] = useState<string>("");
   const [activeTab, setActiveTab] = useState<string>("sensors");
   const [isRetrying, setIsRetrying] = useState(false);
 
-  // Fetch data
-  const { 
-    data: readings, 
-    isLoading: readingsLoading, 
-    error: readingsError,
-    refetch: refetchReadings 
-  } = useLatestReadings();
-  
+  // Fetch clients
   const { 
     data: clients, 
     isLoading: clientsLoading,
@@ -49,36 +104,40 @@ export default function StatsContent() {
     }
   }, [clients, selectedClient]);
   
+  // Fetch client-specific sensor data (from batches)
+  const { 
+    data: clientSensorData, 
+    isLoading: sensorsLoading, 
+    error: sensorsError,
+    refetch: refetchSensors 
+  } = useClientSensorData(selectedClient);
+  
   // Selected client details
   const { data: selectedClientData } = useClient(selectedClient || "");
   const { data: selectedClientSystemInfo } = useClientSystemInfo(selectedClient || "");
 
   // Process readings into device groups
-  const deviceGroups = useMemo(() => {
-    return processReadingsToGroups(readings as SensorReading[] || []);
-  }, [readings]);
-
-  // Filter devices by selected client
   const filteredDevices = useMemo(() => {
-    if (!selectedClient) return deviceGroups;
-    return deviceGroups.filter(d => d.client_id === selectedClient);
-  }, [deviceGroups, selectedClient]);
+    if (!clientSensorData?.readings || clientSensorData.readings.length === 0) return [];
+    return processClientSensorDataToGroups(clientSensorData.readings, selectedClient);
+  }, [clientSensorData, selectedClient]);
 
   // Collect API errors
   const apiErrors = useMemo(() => {
     const errors: Array<{ endpoint: string; message: string }> = [];
-    if (readingsError) errors.push({ endpoint: "/readings", message: readingsError.message || "Failed to load readings" });
+    if (sensorsError) errors.push({ endpoint: "/sensors", message: sensorsError.message || "Failed to load sensor data" });
     if (clientsError) errors.push({ endpoint: "/clients", message: clientsError.message || "Failed to load clients" });
     return errors;
-  }, [readingsError, clientsError]);
+  }, [sensorsError, clientsError]);
 
-  const isLoading = readingsLoading || clientsLoading;
-  const hasData = (readings && readings.length > 0) || (clients && clients.length > 0);
+  const isLoading = clientsLoading;
+  const sensorsAreLoading = sensorsLoading && selectedClient;
+  const hasData = (clientSensorData?.readings && clientSensorData.readings.length > 0) || (clients && clients.length > 0);
   const hasCriticalError = apiErrors.length > 0 && !hasData && !isLoading;
 
   const handleRefresh = async () => {
     setIsRetrying(true);
-    await Promise.all([refetchReadings(), refetchClients()]);
+    await Promise.all([refetchSensors(), refetchClients()]);
     setIsRetrying(false);
   };
 
@@ -140,13 +199,18 @@ export default function StatsContent() {
 
         {/* Sensors Tab - Shows all sensors with their data */}
         <TabsContent value="sensors" className="space-y-4">
-          {filteredDevices.length > 0 ? (
+          {sensorsAreLoading ? (
+            <div className="text-center py-12 text-muted-foreground">
+              <p>Loading sensor data...</p>
+            </div>
+          ) : filteredDevices.length > 0 ? (
             <ComponentErrorBoundary name="SensorTabs">
-              <SensorTabs devices={filteredDevices} isLoading={readingsLoading} clientId={selectedClient} />
+              <SensorTabs devices={filteredDevices} isLoading={false} clientId={selectedClient} />
             </ComponentErrorBoundary>
           ) : (
             <div className="text-center py-12 text-muted-foreground">
               <p>No sensors found for this client</p>
+              <p className="text-xs mt-2">Sensor data is extracted from batch submissions</p>
             </div>
           )}
         </TabsContent>
