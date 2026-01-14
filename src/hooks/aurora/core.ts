@@ -3,9 +3,9 @@ import { supabase } from "@/integrations/supabase/client";
 import { auroraRequestQueue } from "./requestQueue";
 
 // Retry configuration with exponential backoff for edge function cold starts
-const MAX_RETRIES = 4;
-const INITIAL_BACKOFF_MS = 1000;
-const MAX_BACKOFF_MS = 16000;
+const MAX_RETRIES = 5;
+const INITIAL_BACKOFF_MS = 500; // Start with shorter delay
+const MAX_BACKOFF_MS = 10000;
 
 // Helper to check if user has a valid Supabase session
 export function hasAuroraSession(): boolean {
@@ -102,8 +102,26 @@ export async function callAuroraApi<T>(
         });
 
         if (error) {
+          const errorMessage = error.message?.toLowerCase() || '';
+          const errorContext = (error as any).context?.toLowerCase?.() || '';
+          const fullError = `${error.message} ${errorContext}`;
+          
+          // Check for BOOT_ERROR specifically (cold start failures)
+          const isBootError = errorMessage.includes('boot_error') || 
+                              errorMessage.includes('503') ||
+                              errorMessage.includes('function failed to start') ||
+                              errorContext.includes('boot_error');
+          
+          if (isBootError && attempt < MAX_RETRIES - 1) {
+            const backoffMs = calculateBackoff(attempt);
+            console.warn(`Edge function cold start for ${path}, retrying in ${backoffMs}ms (attempt ${attempt + 1}/${MAX_RETRIES})`);
+            await sleep(backoffMs);
+            lastError = new Error(`Boot error: ${fullError}`);
+            continue;
+          }
+          
           // Check if error message indicates a 500 from Aurora (transient server issue)
-          if (error.message?.includes('500') || error.message?.includes('Internal Server Error')) {
+          if (errorMessage.includes('500') || errorMessage.includes('internal server error')) {
             console.warn(`Aurora server error for ${path}, returning empty data`);
             return getEmptyDataForPath(path) as T;
           }
@@ -237,7 +255,7 @@ export const defaultQueryOptions = {
   enabled: true,
   staleTime: 120000, // 2 minutes - data stays fresh longer
   refetchInterval: 180000, // 3 minutes - less frequent refetching
-  retry: 4, // More retries for cold starts
+  retry: 5, // More retries for cold starts
   retryDelay,
   refetchOnWindowFocus: false,
 };
@@ -247,7 +265,7 @@ export const fastQueryOptions = {
   enabled: true,
   staleTime: 60000, // 1 minute
   refetchInterval: 120000, // 2 minutes
-  retry: 4,
+  retry: 5,
   retryDelay,
   refetchOnWindowFocus: false,
 };
