@@ -209,25 +209,21 @@ export function useClientSensorData(clientId: string) {
       if (!clientId) return { readings: [], byType: {} as SensorDataByType };
       
       try {
-        const batchesResponse = await callAuroraApi<{ batches: BatchWithSensors[] }>(
-          `/api/batches/list?limit=50`
+        // Use the client-specific batches endpoint for accurate filtering
+        const batchesResponse = await callAuroraApi<{ 
+          batches: BatchWithSensors[]; 
+          client_id?: string;
+          count?: number;
+        }>(
+          `/api/batches/by-client/${clientId}?limit=10`
         );
         
-        const clientIdentifier = clientId.replace('client_', '');
-        
-        const clientBatches = (batchesResponse.batches || []).filter(b => {
-          if (b.client_id === clientId) return true;
-          if (b.batch_id.includes(clientIdentifier)) return true;
-          const extractedClient = extractClientIdFromBatchId(b.batch_id);
-          if (extractedClient === clientId) return true;
-          return false;
-        });
-        
-        const recentBatches = clientBatches.slice(0, 10);
+        const clientBatches = batchesResponse.batches || [];
         const allReadings: ClientSensorReading[] = [];
         
+        // Fetch full batch data for each batch
         await Promise.all(
-          recentBatches.map(async (batch) => {
+          clientBatches.slice(0, 10).map(async (batch) => {
             try {
               const fullBatch = await callAuroraApi<BatchWithSensors>(`/api/batches/${batch.batch_id}`);
               const readings = extractSensorReadings(fullBatch, clientId);
