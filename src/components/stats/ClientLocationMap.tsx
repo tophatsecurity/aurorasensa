@@ -82,23 +82,21 @@ export function ClientLocationMap({
                     icon={createMarkerIcon('hsl(var(--primary))')}
                   >
                     <Popup>
-                      <div className="text-sm min-w-48">
-                        <p className="font-bold text-lg mb-2">
+                      <div className="text-sm min-w-48 p-1">
+                        <p className="font-bold text-base mb-2">
                           {client.hostname || client.client_id}
                         </p>
-                        <div className="space-y-1 text-muted-foreground">
-                          <p><span className="font-medium">Client:</span> {client.client_id}</p>
-                          {client.location.city && (
-                            <p><span className="font-medium">City:</span> {client.location.city}</p>
-                          )}
-                          {client.location.country && (
-                            <p><span className="font-medium">Country:</span> {client.location.country}</p>
-                          )}
-                          <p>
-                            <span className="font-medium">Coords:</span>{' '}
-                            {client.location.latitude?.toFixed(4)}, {client.location.longitude?.toFixed(4)}
-                          </p>
-                        </div>
+                        <p className="text-xs"><strong>Client:</strong> {client.client_id}</p>
+                        {client.location.city && (
+                          <p className="text-xs"><strong>City:</strong> {client.location.city}</p>
+                        )}
+                        {client.location.country && (
+                          <p className="text-xs"><strong>Country:</strong> {client.location.country}</p>
+                        )}
+                        <p className="text-xs">
+                          <strong>Coords:</strong>{' '}
+                          {client.location.latitude?.toFixed(4)}, {client.location.longitude?.toFixed(4)}
+                        </p>
                       </div>
                     </Popup>
                   </Marker>
@@ -113,20 +111,18 @@ export function ClientLocationMap({
                   icon={createMarkerIcon(getMarkerColor(device.device_type))}
                 >
                   <Popup>
-                    <div className="text-sm min-w-48">
-                      <p className="font-bold text-lg mb-2">{device.device_id}</p>
-                      <div className="space-y-1 text-muted-foreground">
-                        <p><span className="font-medium">Type:</span> {device.device_type}</p>
-                        <p><span className="font-medium">Readings:</span> {device.readings.length}</p>
-                        <p>
-                          <span className="font-medium">Last seen:</span>{' '}
-                          {format(new Date(device.latest.timestamp), 'PPp')}
-                        </p>
-                        <p>
-                          <span className="font-medium">Location:</span>{' '}
-                          {device.location!.lat.toFixed(4)}, {device.location!.lng.toFixed(4)}
-                        </p>
-                      </div>
+                    <div className="text-sm min-w-48 p-1">
+                      <p className="font-bold text-base mb-2">{device.device_id}</p>
+                      <p className="text-xs"><strong>Type:</strong> {device.device_type}</p>
+                      <p className="text-xs"><strong>Readings:</strong> {device.readings.length}</p>
+                      <p className="text-xs">
+                        <strong>Last seen:</strong>{' '}
+                        {format(new Date(device.latest.timestamp), 'PPp')}
+                      </p>
+                      <p className="text-xs">
+                        <strong>Location:</strong>{' '}
+                        {device.location!.lat.toFixed(4)}, {device.location!.lng.toFixed(4)}
+                      </p>
                     </div>
                   </Popup>
                 </Marker>

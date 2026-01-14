@@ -26,7 +26,7 @@ import {
   ResponsiveContainer,
   Legend,
 } from "recharts";
-import type { DeviceGroup, SensorReading } from "./types";
+import type { DeviceGroup } from "./types";
 
 interface SensorTabsProps {
   devices: DeviceGroup[];
