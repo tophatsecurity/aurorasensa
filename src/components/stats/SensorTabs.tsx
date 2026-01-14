@@ -22,7 +22,7 @@ import {
   Line,
   XAxis,
   YAxis,
-  Tooltip,
+  Tooltip as RechartsTooltip,
   ResponsiveContainer,
   Legend,
 } from "recharts";
@@ -191,7 +191,7 @@ function SensorPanel({ device }: { device: DeviceGroup }) {
                   stroke="hsl(var(--muted-foreground))"
                   width={50}
                 />
-                <Tooltip 
+                <RechartsTooltip 
                   contentStyle={{ 
                     backgroundColor: 'hsl(var(--card))', 
                     border: '1px solid hsl(var(--border))',
