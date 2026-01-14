@@ -21,21 +21,19 @@ export function RawJsonPanel({ clientId }: RawJsonPanelProps) {
     refetch: refetchBatches 
   } = useBatchesByClient(clientId);
 
-  // Get the latest batch ID - handle both array and object with batches property
+  // Get the latest batch ID from the batches response
   const latestBatchId = useMemo(() => {
     if (!batches) return null;
     
-    // Handle both formats: array directly or { batches: [...] }
-    const batchList = Array.isArray(batches) 
-      ? batches 
-      : (batches as { batches?: unknown[] })?.batches;
+    // Handle the new response format: { batches: [...], count: number }
+    const batchList = (batches as { batches?: Array<{ batch_id?: string; id?: string; batch_timestamp?: string; timestamp?: string; received_at?: string }> })?.batches;
     
     if (!batchList || !Array.isArray(batchList) || batchList.length === 0) return null;
     
     // Sort by timestamp descending and get the first one
-    const sorted = [...batchList].sort((a: any, b: any) => {
-      const timeA = new Date(a.timestamp || a.received_at || a.batch_timestamp || 0).getTime();
-      const timeB = new Date(b.timestamp || b.received_at || b.batch_timestamp || 0).getTime();
+    const sorted = [...batchList].sort((a, b) => {
+      const timeA = new Date(a.batch_timestamp || a.timestamp || a.received_at || 0).getTime();
+      const timeB = new Date(b.batch_timestamp || b.timestamp || b.received_at || 0).getTime();
       return timeB - timeA;
     });
     
