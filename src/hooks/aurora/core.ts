@@ -2,10 +2,12 @@
 import { supabase } from "@/integrations/supabase/client";
 import { auroraRequestQueue } from "./requestQueue";
 
-// Retry configuration with exponential backoff for edge function cold starts
-const MAX_RETRIES = 5;
-const INITIAL_BACKOFF_MS = 500; // Start with shorter delay
-const MAX_BACKOFF_MS = 10000;
+// Enhanced retry configuration for edge function cold starts
+const MAX_RETRIES = 6; // More retries for cold starts
+const COLD_START_RETRIES = 4; // Quick retries specifically for boot errors
+const INITIAL_BACKOFF_MS = 200; // Start very short for cold starts
+const COLD_START_BACKOFF_MS = 150; // Even shorter for boot errors
+const MAX_BACKOFF_MS = 8000;
 
 // Helper to check if user has a valid Supabase session
 export function hasAuroraSession(): boolean {
@@ -32,15 +34,25 @@ async function sleep(ms: number): Promise<void> {
   return new Promise(resolve => setTimeout(resolve, ms));
 }
 
+// Check if error is a cold-start/boot error
+function isBootError(error: Error | { code?: string; message?: string; context?: string }): boolean {
+  const message = ('message' in error ? error.message : '').toLowerCase();
+  const code = ('code' in error ? error.code : '').toLowerCase();
+  const context = ('context' in error ? String(error.context) : '').toLowerCase();
+  
+  return code === 'boot_error' || 
+         message.includes('boot_error') || 
+         message.includes('function failed to start') ||
+         context.includes('boot_error') ||
+         (message.includes('503') && (message.includes('function') || message.includes('edge')));
+}
+
 // Check if error is retryable (includes edge function cold start errors)
 function isRetryableError(error: Error | { code?: string; message?: string }): boolean {
   const message = ('message' in error ? error.message : '').toLowerCase();
-  const code = ('code' in error ? error.code : '').toLowerCase();
   
-  // Edge function boot errors (cold starts)
-  if (code === 'boot_error' || message.includes('boot_error') || message.includes('function failed to start')) {
-    return true;
-  }
+  // Boot errors are always retryable
+  if (isBootError(error)) return true;
   
   return message.includes('503') || 
          message.includes('504') ||
@@ -55,13 +67,15 @@ function isRetryableError(error: Error | { code?: string; message?: string }): b
          message.includes('already registered') ||
          message.includes('already in use') ||
          message.includes('failed to fetch') ||
-         message.includes('econnrefused');
+         message.includes('econnrefused') ||
+         message.includes('econnreset');
 }
 
-// Calculate backoff with jitter
-function calculateBackoff(attempt: number): number {
-  const baseBackoff = INITIAL_BACKOFF_MS * Math.pow(2, attempt);
-  const jitter = Math.random() * 500; // Add 0-500ms jitter
+// Calculate backoff with jitter - shorter for cold starts
+function calculateBackoff(attempt: number, isColdStart: boolean = false): number {
+  const initialDelay = isColdStart ? COLD_START_BACKOFF_MS : INITIAL_BACKOFF_MS;
+  const baseBackoff = initialDelay * Math.pow(1.8, attempt); // Gentler curve
+  const jitter = Math.random() * (isColdStart ? 100 : 300); // Less jitter for cold starts
   return Math.min(baseBackoff + jitter, MAX_BACKOFF_MS);
 }
 
@@ -94,6 +108,7 @@ export async function callAuroraApi<T>(
   
   const executor = async (): Promise<T> => {
     let lastError: Error | null = null;
+    let coldStartRetries = 0;
     
     for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
       try {
@@ -107,17 +122,18 @@ export async function callAuroraApi<T>(
           const fullError = `${error.message} ${errorContext}`;
           
           // Check for BOOT_ERROR specifically (cold start failures)
-          const isBootError = errorMessage.includes('boot_error') || 
-                              errorMessage.includes('503') ||
-                              errorMessage.includes('function failed to start') ||
-                              errorContext.includes('boot_error');
+          const isColdStartError = isBootError(error);
           
-          if (isBootError && attempt < MAX_RETRIES - 1) {
-            const backoffMs = calculateBackoff(attempt);
-            console.warn(`Edge function cold start for ${path}, retrying in ${backoffMs}ms (attempt ${attempt + 1}/${MAX_RETRIES})`);
-            await sleep(backoffMs);
-            lastError = new Error(`Boot error: ${fullError}`);
-            continue;
+          if (isColdStartError) {
+            coldStartRetries++;
+            if (coldStartRetries <= COLD_START_RETRIES) {
+              // Use shorter backoff for cold starts - function just needs time to boot
+              const backoffMs = calculateBackoff(coldStartRetries - 1, true);
+              console.log(`⏳ Edge function warming up for ${path}, retry ${coldStartRetries}/${COLD_START_RETRIES} in ${backoffMs}ms`);
+              await sleep(backoffMs);
+              lastError = new Error(`Boot error: ${fullError}`);
+              continue;
+            }
           }
           
           // Check if error message indicates a 500 from Aurora (transient server issue)
@@ -128,7 +144,7 @@ export async function callAuroraApi<T>(
           
           const apiError = new Error(`Aurora API error: ${error.message}`);
           if (isRetryableError(error) && attempt < MAX_RETRIES - 1) {
-            const backoffMs = calculateBackoff(attempt);
+            const backoffMs = calculateBackoff(attempt, false);
             console.warn(`Retrying ${path} in ${backoffMs}ms (attempt ${attempt + 1}/${MAX_RETRIES}) - ${error.message}`);
             await sleep(backoffMs);
             lastError = apiError;
@@ -244,10 +260,16 @@ function getEmptyDataForPath(path: string): unknown {
 }
 
 // Retry delay function for react-query with exponential backoff
+// Uses shorter delays for initial retries (likely cold starts)
 const retryDelay = (attemptIndex: number) => {
-  const baseDelay = 1000 * Math.pow(2, attemptIndex);
-  const jitter = Math.random() * 500;
-  return Math.min(baseDelay + jitter, 16000);
+  // First 2 retries are quick (cold start recovery)
+  if (attemptIndex < 2) {
+    return 200 + Math.random() * 100;
+  }
+  // Then exponential backoff
+  const baseDelay = 500 * Math.pow(1.8, attemptIndex - 2);
+  const jitter = Math.random() * 300;
+  return Math.min(baseDelay + jitter, 10000);
 };
 
 // Default query options - with enhanced retry for cold starts
@@ -255,7 +277,7 @@ export const defaultQueryOptions = {
   enabled: true,
   staleTime: 120000, // 2 minutes - data stays fresh longer
   refetchInterval: 180000, // 3 minutes - less frequent refetching
-  retry: 5, // More retries for cold starts
+  retry: 6, // More retries for cold starts
   retryDelay,
   refetchOnWindowFocus: false,
 };
