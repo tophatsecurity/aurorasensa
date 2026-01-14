@@ -11,6 +11,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
+import { ApiError, ApiErrorBanner } from "@/components/ui/api-error";
 import "leaflet/dist/leaflet.css";
 import { 
   useLatestReadings,
@@ -40,11 +41,28 @@ export default function StatsContent() {
   const [activeTab, setActiveTab] = useState<string>("overview");
   const [selectedDevice, setSelectedDevice] = useState<DeviceGroup | null>(null);
   const [deviceModalOpen, setDeviceModalOpen] = useState(false);
+  const [isRetrying, setIsRetrying] = useState(false);
 
-  // Fetch data
-  const { data: readings, isLoading: readingsLoading, refetch: refetchReadings } = useLatestReadings();
-  const { data: clients, isLoading: clientsLoading } = useClientsWithHostnames();
-  const { isLoading: starlinkLoading } = useStarlinkDevicesFromReadings();
+  // Fetch data with error tracking
+  const { 
+    data: readings, 
+    isLoading: readingsLoading, 
+    error: readingsError,
+    refetch: refetchReadings 
+  } = useLatestReadings();
+  
+  const { 
+    data: clients, 
+    isLoading: clientsLoading,
+    error: clientsError,
+    refetch: refetchClients 
+  } = useClientsWithHostnames();
+  
+  const { 
+    isLoading: starlinkLoading,
+    error: starlinkError,
+    refetch: refetchStarlink
+  } = useStarlinkDevicesFromReadings();
   
   // Auto-select first client when clients load
   useEffect(() => {
@@ -69,20 +87,51 @@ export default function StatsContent() {
     return deviceGroups.filter(d => d.client_id === selectedClient);
   }, [deviceGroups, selectedClient]);
 
-  const isLoading = readingsLoading || clientsLoading || starlinkLoading;
+  // Collect API errors
+  const apiErrors = useMemo(() => {
+    const errors: Array<{ endpoint: string; message: string }> = [];
+    if (readingsError) errors.push({ endpoint: "/readings", message: readingsError.message || "Failed to load readings" });
+    if (clientsError) errors.push({ endpoint: "/clients", message: clientsError.message || "Failed to load clients" });
+    if (starlinkError) errors.push({ endpoint: "/starlink", message: starlinkError.message || "Failed to load starlink data" });
+    return errors;
+  }, [readingsError, clientsError, starlinkError]);
 
-  if (isLoading) {
-    return <StatsLoadingSkeleton />;
-  }
+  const isLoading = readingsLoading || clientsLoading || starlinkLoading;
+  const hasData = (readings && readings.length > 0) || (clients && clients.length > 0);
+  const hasCriticalError = apiErrors.length > 0 && !hasData && !isLoading;
 
   const handleDeviceSelect = (device: DeviceGroup) => {
     setSelectedDevice(device);
     setDeviceModalOpen(true);
   };
 
-  const handleRefresh = () => {
-    refetchReadings();
+  const handleRefresh = async () => {
+    setIsRetrying(true);
+    await Promise.all([
+      refetchReadings(),
+      refetchClients(),
+      refetchStarlink(),
+    ]);
+    setIsRetrying(false);
   };
+
+  if (isLoading) {
+    return <StatsLoadingSkeleton />;
+  }
+
+  // Show full error page if no data at all
+  if (hasCriticalError) {
+    return (
+      <div className="flex-1 overflow-y-auto p-6">
+        <ApiError
+          title="Unable to Load Data"
+          message="Could not connect to the Aurora API. The server may be temporarily unavailable."
+          onRetry={handleRefresh}
+          isRetrying={isRetrying}
+        />
+      </div>
+    );
+  }
 
   return (
     <div className="flex-1 overflow-y-auto p-6 space-y-6">
@@ -92,7 +141,17 @@ export default function StatsContent() {
         selectedClient={selectedClient}
         onClientChange={setSelectedClient}
         onRefresh={handleRefresh}
+        isRefreshing={isRetrying}
       />
+
+      {/* Error Banner for partial failures */}
+      {apiErrors.length > 0 && hasData && (
+        <ApiErrorBanner
+          errors={apiErrors}
+          onRetryAll={handleRefresh}
+          isRetrying={isRetrying}
+        />
+      )}
 
       {/* Client Overview Stats */}
       {selectedClient && selectedClientData && (
@@ -181,9 +240,10 @@ interface StatsHeaderProps {
   selectedClient: string;
   onClientChange: (clientId: string) => void;
   onRefresh: () => void;
+  isRefreshing?: boolean;
 }
 
-function StatsHeader({ clients, selectedClient, onClientChange, onRefresh }: StatsHeaderProps) {
+function StatsHeader({ clients, selectedClient, onClientChange, onRefresh, isRefreshing }: StatsHeaderProps) {
   return (
     <div className="flex justify-between items-center">
       <div>
@@ -206,8 +266,8 @@ function StatsHeader({ clients, selectedClient, onClientChange, onRefresh }: Sta
           </SelectContent>
         </Select>
         
-        <Button variant="outline" size="icon" onClick={onRefresh}>
-          <RefreshCw className="h-4 w-4" />
+        <Button variant="outline" size="icon" onClick={onRefresh} disabled={isRefreshing}>
+          <RefreshCw className={`h-4 w-4 ${isRefreshing ? 'animate-spin' : ''}`} />
         </Button>
       </div>
     </div>
