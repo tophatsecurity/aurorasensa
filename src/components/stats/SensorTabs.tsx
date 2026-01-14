@@ -695,6 +695,22 @@ function BluetoothScannerPanel({ device, clientId }: { device: DeviceGroup; clie
     const other = devices_found.length - classic - ble;
     return { classic, ble, other };
   }, [devices_found]);
+
+  // Count devices with manufacturer info
+  const manufacturerStats = useMemo(() => {
+    const withManufacturer = devices_found.filter(d => d.manufacturer || d.manufacturer_data || d.company_id).length;
+    const connectable = devices_found.filter(d => d.connectable === true).length;
+    return { withManufacturer, connectable };
+  }, [devices_found]);
+
+  // Estimate distance from RSSI using path loss model
+  // Distance = 10 ^ ((txPower - RSSI) / (10 * n))
+  // Default txPower = -59 dBm (typical BLE at 1 meter), n = 2 (path loss exponent for free space)
+  const estimateBtDistance = (rssi: number, txPower?: number): number => {
+    const tx = txPower ?? -59;
+    const n = 2.5; // Path loss exponent for indoor environment
+    return Math.pow(10, (tx - rssi) / (10 * n));
+  };
   
   return (
     <div className="space-y-4">
@@ -716,44 +732,98 @@ function BluetoothScannerPanel({ device, clientId }: { device: DeviceGroup; clie
         <MetricCard icon={<Bluetooth className="w-4 h-4" />} label="Total Devices" value={String(deviceCount)} color="text-indigo-400" />
         <MetricCard icon={<Radio className="w-4 h-4" />} label="Classic" value={String(deviceTypes.classic)} color="text-blue-400" />
         <MetricCard icon={<Signal className="w-4 h-4" />} label="BLE" value={String(deviceTypes.ble)} color="text-cyan-400" />
-        <MetricCard icon={<Activity className="w-4 h-4" />} label="Readings" value={String(btApiData?.readings?.length || device.readings?.length || 0)} color="text-muted-foreground" />
+        <MetricCard icon={<Eye className="w-4 h-4" />} label="With Manufacturer" value={String(manufacturerStats.withManufacturer)} color="text-purple-400" />
       </div>
       
       {devices_found.length > 0 ? (
         <Card className="p-4">
           <h4 className="text-sm font-medium text-muted-foreground mb-3">Detected Devices ({devices_found.length})</h4>
-          <div className="space-y-2 max-h-[400px] overflow-auto">
+          <div className="space-y-2 max-h-[500px] overflow-auto">
             {devices_found.slice(0, 50).map((dev, idx) => {
               const rssiValue = dev.rssi as number;
+              const txPower = dev.tx_power as number | undefined;
               const rssiColor = rssiValue > -50 ? 'text-green-400' : rssiValue > -70 ? 'text-amber-400' : 'text-red-400';
+              const estimatedDist = rssiValue ? estimateBtDistance(rssiValue, txPower) : null;
+              const manufacturer = dev.manufacturer || dev.manufacturer_data;
+              const companyId = dev.company_id as number | undefined;
+              const uuids = (dev.uuids || dev.service_uuids || (dev.uuid ? [dev.uuid] : [])) as string[];
+              
               return (
-                <div key={idx} className="flex items-center justify-between p-2 rounded-lg bg-muted/30 hover:bg-muted/50 transition-colors">
-                  <div className="flex items-center gap-2 flex-1 min-w-0">
-                    <Bluetooth className={`w-4 h-4 shrink-0 ${rssiValue ? rssiColor : 'text-indigo-400'}`} />
-                    <div className="min-w-0">
-                      <span className="font-mono text-sm block truncate">
-                        {String(dev.name || dev.local_name || dev.complete_name || 'Unknown Device')}
-                      </span>
-                      {dev.address && (
-                        <span className="text-[10px] text-muted-foreground font-mono block truncate">
-                          {String(dev.address || dev.mac)}
+                <div key={idx} className="p-3 rounded-lg bg-muted/30 hover:bg-muted/50 transition-colors">
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="flex items-start gap-2 flex-1 min-w-0">
+                      <Bluetooth className={`w-4 h-4 shrink-0 mt-0.5 ${rssiValue ? rssiColor : 'text-indigo-400'}`} />
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span className="font-mono text-sm font-medium truncate">
+                            {String(dev.name || dev.local_name || dev.complete_name || 'Unknown Device')}
+                          </span>
+                          {dev.connectable !== undefined && (
+                            <Badge variant={dev.connectable ? "default" : "secondary"} className="text-[10px] shrink-0">
+                              {dev.connectable ? 'Connectable' : 'Non-Connectable'}
+                            </Badge>
+                          )}
+                          {(dev.paired || dev.bonded) && (
+                            <Badge variant="outline" className="text-[10px] text-green-400 border-green-500/30 shrink-0">
+                              {dev.paired ? 'Paired' : 'Bonded'}
+                            </Badge>
+                          )}
+                        </div>
+                        
+                        {/* MAC Address */}
+                        <span className="text-[11px] text-muted-foreground font-mono block mt-0.5">
+                          {String(dev.address || dev.mac || 'Unknown Address')}
                         </span>
+                        
+                        {/* Manufacturer Info */}
+                        {(manufacturer || companyId !== undefined) && (
+                          <div className="flex items-center gap-2 mt-1.5">
+                            <Badge variant="outline" className="text-[10px] bg-purple-500/20 text-purple-400 border-purple-500/30">
+                              Manufacturer
+                            </Badge>
+                            <span className="text-xs text-purple-300 truncate">
+                              {manufacturer ? String(manufacturer) : `Company ID: 0x${companyId?.toString(16).toUpperCase().padStart(4, '0')}`}
+                            </span>
+                          </div>
+                        )}
+                        
+                        {/* Service UUIDs */}
+                        {uuids.length > 0 && (
+                          <div className="mt-1.5">
+                            <span className="text-[10px] text-muted-foreground">UUIDs: </span>
+                            <span className="text-[10px] font-mono text-cyan-400">
+                              {uuids.slice(0, 2).map(u => String(u).slice(0, 8)).join(', ')}
+                              {uuids.length > 2 && ` +${uuids.length - 2} more`}
+                            </span>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                    
+                    {/* Right side metrics */}
+                    <div className="flex flex-col items-end gap-1 shrink-0">
+                      {rssiValue && (
+                        <div className="text-right">
+                          <span className={`font-mono text-sm font-medium ${rssiColor}`}>{rssiValue.toFixed(0)} dBm</span>
+                          {estimatedDist && (
+                            <span className="text-[10px] text-muted-foreground block">
+                              ~{estimatedDist < 1 ? `${(estimatedDist * 100).toFixed(0)} cm` : `${estimatedDist.toFixed(1)} m`}
+                            </span>
+                          )}
+                        </div>
+                      )}
+                      {txPower !== undefined && (
+                        <span className="text-[10px] text-muted-foreground">TX: {txPower} dBm</span>
+                      )}
+                      {(dev.type || dev.device_type) && (
+                        <Badge variant="outline" className="text-[10px]">
+                          {String(dev.type || dev.device_type)}
+                        </Badge>
+                      )}
+                      {dev.appearance !== undefined && (
+                        <span className="text-[10px] text-muted-foreground">Appearance: {String(dev.appearance)}</span>
                       )}
                     </div>
-                  </div>
-                  <div className="flex items-center gap-3 text-xs text-muted-foreground shrink-0">
-                    {rssiValue && <span className={rssiColor}>{rssiValue.toFixed(0)} dBm</span>}
-                    {(dev.type || dev.device_type) && (
-                      <Badge variant="outline" className="text-[10px]">
-                        {String(dev.type || dev.device_type)}
-                      </Badge>
-                    )}
-                    {dev.manufacturer && <span className="max-w-[100px] truncate">{String(dev.manufacturer)}</span>}
-                    {dev.connectable !== undefined && (
-                      <Badge variant={dev.connectable ? "default" : "secondary"} className="text-[10px]">
-                        {dev.connectable ? 'Conn' : 'N/C'}
-                      </Badge>
-                    )}
                   </div>
                 </div>
               );
