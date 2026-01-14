@@ -193,28 +193,34 @@ export function ClientInfoCard({ client, systemInfo, devices = [] }: ClientInfoC
             </p>
           </div>
 
-          {/* Hostname */}
+          {/* Hostname - prioritize SystemInfo */}
           <div className="space-y-1">
             <div className="flex items-center gap-1.5 text-muted-foreground">
               <Globe className="w-3.5 h-3.5" />
               <span className="text-xs font-medium">Hostname</span>
             </div>
-            <p className="font-mono text-sm font-semibold truncate" title={client.hostname}>
-              {client.hostname || systemInfo?.hostname || 'N/A'}
+            <p className="font-mono text-sm font-semibold truncate" title={systemInfo?.hostname || client.hostname}>
+              {systemInfo?.hostname || client.hostname || 'N/A'}
             </p>
+            {systemInfo?.hostname && (
+              <p className="text-[10px] text-muted-foreground">via System Info</p>
+            )}
           </div>
 
-          {/* IP Address */}
+          {/* IP Address - prioritize SystemInfo */}
           <div className="space-y-1">
             <div className="flex items-center gap-1.5 text-muted-foreground">
               <Wifi className="w-3.5 h-3.5" />
               <span className="text-xs font-medium">IP Address</span>
             </div>
-            <p className="font-mono text-sm font-semibold truncate">
-              {client.ip_address || 
-                (systemInfo?.ip_addresses && systemInfo.ip_addresses[0]) || 
+            <p className="font-mono text-sm font-semibold truncate" title={systemInfo?.ip_addresses?.[0] || client.ip_address}>
+              {(systemInfo?.ip_addresses && systemInfo.ip_addresses[0]) || 
+                client.ip_address || 
                 'N/A'}
             </p>
+            {systemInfo?.ip_addresses && systemInfo.ip_addresses.length > 0 && (
+              <p className="text-[10px] text-muted-foreground">via System Info</p>
+            )}
           </div>
 
           {/* Status */}

@@ -36,6 +36,7 @@ import {
   DeviceLocationMap as DeviceMapLegacy,
   StarlinkTab,
   ArduinoTab,
+  SensorTabs,
   DeviceDetailsModal,
 } from "@/components/stats";
 
@@ -166,10 +167,12 @@ export default function StatsContent() {
         </ComponentErrorBoundary>
       )}
 
-      {/* Second Row: Measurements by Category */}
-      <ComponentErrorBoundary name="MeasurementsSection">
-        <MeasurementsSection devices={filteredDevices} />
-      </ComponentErrorBoundary>
+      {/* Second Row: Sensor Tabs - One tab per sensor */}
+      {selectedClient && filteredDevices.length > 0 && (
+        <ComponentErrorBoundary name="SensorTabs">
+          <SensorTabs devices={filteredDevices} isLoading={readingsLoading} />
+        </ComponentErrorBoundary>
+      )}
 
       {/* Bottom Card: Location Map */}
       {selectedClient && (
