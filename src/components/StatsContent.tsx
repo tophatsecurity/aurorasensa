@@ -12,6 +12,7 @@ import {
 } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
 import { ApiError, ApiErrorBanner } from "@/components/ui/api-error";
+import { ComponentErrorBoundary } from "@/components/ui/error-boundary";
 import "leaflet/dist/leaflet.css";
 import { 
   useLatestReadings,
@@ -155,17 +156,21 @@ export default function StatsContent() {
 
       {/* Client Overview Stats */}
       {selectedClient && selectedClientData && (
-        <ClientStatsPanel 
-          client={selectedClientData as any} 
-          systemInfo={selectedClientSystemInfo}
-          clientStats={clientStats}
-          deviceCount={filteredDevices.length}
-          readingsCount={filteredDevices.reduce((sum, d) => sum + d.readings.length, 0)}
-        />
+        <ComponentErrorBoundary name="ClientStatsPanel">
+          <ClientStatsPanel 
+            client={selectedClientData as any} 
+            systemInfo={selectedClientSystemInfo}
+            clientStats={clientStats}
+            deviceCount={filteredDevices.length}
+            readingsCount={filteredDevices.reduce((sum, d) => sum + d.readings.length, 0)}
+          />
+        </ComponentErrorBoundary>
       )}
 
       {/* Device Type Stats */}
-      <DeviceTypeStats devices={filteredDevices} />
+      <ComponentErrorBoundary name="DeviceTypeStats">
+        <DeviceTypeStats devices={filteredDevices} />
+      </ComponentErrorBoundary>
 
       {/* Main Content Tabs */}
       <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4">
@@ -179,43 +184,53 @@ export default function StatsContent() {
         {/* Overview Tab */}
         <TabsContent value="overview" className="space-y-4">
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            <DeviceListCard 
-              devices={filteredDevices} 
-              onDeviceSelect={handleDeviceSelect} 
-            />
-            <DeviceLocationMap devices={filteredDevices} />
+            <ComponentErrorBoundary name="DeviceListCard">
+              <DeviceListCard 
+                devices={filteredDevices} 
+                onDeviceSelect={handleDeviceSelect} 
+              />
+            </ComponentErrorBoundary>
+            <ComponentErrorBoundary name="DeviceLocationMap">
+              <DeviceLocationMap devices={filteredDevices} />
+            </ComponentErrorBoundary>
           </div>
         </TabsContent>
 
         {/* Measurements Tab */}
         <TabsContent value="measurements" className="space-y-4">
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {filteredDevices.slice(0, 12).map(device => (
-              <DeviceMeasurementsCard key={device.device_id} device={device} />
-            ))}
-          </div>
-          {filteredDevices.length === 0 && (
-            <Card className="glass-card border-border/50 p-8 text-center">
-              <p className="text-muted-foreground">No devices found for selected client</p>
-            </Card>
-          )}
+          <ComponentErrorBoundary name="DeviceMeasurements">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              {filteredDevices.slice(0, 12).map(device => (
+                <DeviceMeasurementsCard key={device.device_id} device={device} />
+              ))}
+            </div>
+            {filteredDevices.length === 0 && (
+              <Card className="glass-card border-border/50 p-8 text-center">
+                <p className="text-muted-foreground">No devices found for selected client</p>
+              </Card>
+            )}
+          </ComponentErrorBoundary>
         </TabsContent>
 
         {/* Starlink Details Tab */}
         <TabsContent value="starlink" className="space-y-4">
-          <StarlinkTab />
+          <ComponentErrorBoundary name="StarlinkTab">
+            <StarlinkTab />
+          </ComponentErrorBoundary>
         </TabsContent>
 
         {/* Map Tab */}
         <TabsContent value="map">
           <Card className="glass-card border-border/50">
             <CardContent className="p-0">
-              <DeviceLocationMap 
-                devices={filteredDevices} 
-                height="h-[600px]" 
-                showHeader={false}
-                zoom={8}
-              />
+              <ComponentErrorBoundary name="DeviceLocationMap">
+                <DeviceLocationMap 
+                  devices={filteredDevices} 
+                  height="h-[600px]" 
+                  showHeader={false}
+                  zoom={8}
+                />
+              </ComponentErrorBoundary>
             </CardContent>
           </Card>
         </TabsContent>
