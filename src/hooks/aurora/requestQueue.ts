@@ -5,6 +5,7 @@ type QueuedRequest<T> = {
   path: string;
   method: string;
   body?: unknown;
+  executor: () => Promise<T>;
   resolve: (value: T) => void;
   reject: (error: Error) => void;
 };
@@ -12,8 +13,8 @@ type QueuedRequest<T> = {
 class AuroraRequestQueue {
   private queue: QueuedRequest<unknown>[] = [];
   private activeRequests = 0;
-  private maxConcurrent = 3; // Limit concurrent requests to Aurora
-  private requestDelay = 100; // ms between requests
+  private maxConcurrent = 4; // Increased for better parallelism
+  private requestDelay = 50; // Reduced delay between requests
   private lastRequestTime = 0;
   private cache = new Map<string, { data: unknown; timestamp: number }>();
   private cacheTTL = 30000; // 30 second cache
@@ -87,6 +88,7 @@ class AuroraRequestQueue {
         path,
         method,
         body,
+        executor: executor as () => Promise<unknown>,
         resolve: resolve as (value: unknown) => void,
         reject,
       });
@@ -129,10 +131,10 @@ class AuroraRequestQueue {
     const next = this.queue.shift();
     if (!next) return;
 
-    // We need to recreate the executor since we stored path/method
-    // The actual execution will be handled by the caller
-    // For now, just reject with a message to retry
-    next.reject(new Error('Request was queued but executor not available. Please retry.'));
+    // Execute the queued request with its stored executor
+    this.execute(next.path, next.method, next.executor)
+      .then(result => next.resolve(result))
+      .catch(error => next.reject(error));
   }
 
   getStats() {
