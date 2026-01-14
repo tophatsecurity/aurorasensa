@@ -129,10 +129,14 @@ export function ClientStatsPanel({ client, systemInfo, deviceCount, readingsCoun
                   <span className="ml-2 font-mono text-xs">{systemInfo.kernel}</span>
                 </div>
               )}
-              {systemInfo.ip_addresses && systemInfo.ip_addresses.length > 0 && (
+              {systemInfo.ip_addresses && (
                 <div>
                   <span className="text-muted-foreground">IPs:</span>
-                  <span className="ml-2 font-mono text-xs">{systemInfo.ip_addresses.slice(0, 2).join(', ')}</span>
+                  <span className="ml-2 font-mono text-xs">
+                    {Array.isArray(systemInfo.ip_addresses) 
+                      ? systemInfo.ip_addresses.slice(0, 2).join(', ')
+                      : String(systemInfo.ip_addresses)}
+                  </span>
                 </div>
               )}
             </div>
