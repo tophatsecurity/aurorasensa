@@ -275,6 +275,16 @@ export {
   type ClientStats,
 } from "./stats";
 
+export {
+  useArduinoDevicesFromReadings,
+  useArduinoReadings,
+  useArduinoStats,
+  useArduinoDeviceMetrics,
+  type ArduinoDeviceWithMetrics,
+  type ArduinoStats,
+  type ArduinoTimeseriesPoint,
+} from "./arduino";
+
 // Re-export from the original file for hooks not yet migrated
 // This ensures backward compatibility during the transition
 export {
