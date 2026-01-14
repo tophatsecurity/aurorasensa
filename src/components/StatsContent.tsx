@@ -142,7 +142,7 @@ export default function StatsContent() {
         <TabsContent value="sensors" className="space-y-4">
           {filteredDevices.length > 0 ? (
             <ComponentErrorBoundary name="SensorTabs">
-              <SensorTabs devices={filteredDevices} isLoading={readingsLoading} />
+              <SensorTabs devices={filteredDevices} isLoading={readingsLoading} clientId={selectedClient} />
             </ComponentErrorBoundary>
           ) : (
             <div className="text-center py-12 text-muted-foreground">
