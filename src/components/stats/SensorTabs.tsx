@@ -18,6 +18,7 @@ import {
   MapPin,
   ChevronDown,
   ChevronUp,
+  RefreshCw,
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -36,10 +37,16 @@ import {
   Area,
 } from "recharts";
 import type { DeviceGroup } from "./types";
+import {
+  useClientStarlinkData,
+  useClientAdsbData,
+  useSensorReadings,
+} from "@/hooks/aurora";
 
 interface SensorTabsProps {
   devices: DeviceGroup[];
   isLoading?: boolean;
+  clientId?: string;
 }
 
 // Sensor type configuration
@@ -188,31 +195,53 @@ const flattenData = (data: Record<string, unknown>, prefix = ''): Record<string,
 const CHART_COLORS = ['#8b5cf6', '#f97316', '#22c55e', '#3b82f6', '#ef4444', '#06b6d4'];
 
 // =============================================
-// STARLINK PANEL - Comprehensive display
+// STARLINK PANEL - Comprehensive display with live API data
 // =============================================
-function StarlinkPanel({ device }: { device: DeviceGroup }) {
+function StarlinkPanel({ device, clientId }: { device: DeviceGroup; clientId?: string }) {
+  // Fetch additional real-time Starlink data
+  const { data: starlinkApiData, isLoading: starlinkLoading } = useClientStarlinkData(clientId || '');
+  
   const latestReading = device.latest;
   const data = latestReading?.data as Record<string, unknown> || {};
   const starlinkData = (data.starlink as Record<string, unknown>) || data;
   
-  // Extract key metrics
-  const uptime = starlinkData.uptime_seconds as number | undefined;
-  const downlink = starlinkData.downlink_throughput_bps as number | undefined;
-  const uplink = starlinkData.uplink_throughput_bps as number | undefined;
-  const latency = starlinkData.pop_ping_latency_ms as number | undefined;
-  const obstruction = starlinkData.obstruction_percent as number | undefined;
-  const snr = starlinkData.snr as number | undefined;
-  const power = starlinkData.power_watts as number | undefined;
-  const state = starlinkData.state as string | undefined;
+  // Merge API data with device data - API takes priority if available
+  const apiLatest = starlinkApiData?.latest?.data as Record<string, unknown> | undefined;
+  const mergedData = apiLatest ? { ...starlinkData, ...apiLatest } : starlinkData;
+  
+  // Extract key metrics - prefer API data
+  const uptime = mergedData.uptime_seconds as number | undefined;
+  const downlink = mergedData.downlink_throughput_bps as number | undefined;
+  const uplink = mergedData.uplink_throughput_bps as number | undefined;
+  const latency = mergedData.pop_ping_latency_ms as number | undefined;
+  const obstruction = mergedData.obstruction_percent as number | undefined;
+  const snr = mergedData.snr as number | undefined;
+  const power = mergedData.power_watts as number | undefined;
+  const state = mergedData.state as string | undefined;
   
   // Location
-  const lat = starlinkData.latitude as number | undefined;
-  const lng = starlinkData.longitude as number | undefined;
-  const alt = starlinkData.altitude as number | undefined;
+  const lat = mergedData.latitude as number | undefined;
+  const lng = mergedData.longitude as number | undefined;
+  const alt = mergedData.altitude as number | undefined;
   
   // Additional details
-  const locationDetail = starlinkData.location_detail as Record<string, unknown> | undefined;
-  const pingLatency = starlinkData.ping_latency as Record<string, number> | undefined;
+  const locationDetail = mergedData.location_detail as Record<string, unknown> | undefined;
+  const pingLatency = mergedData.ping_latency as Record<string, number> | undefined;
+  
+  // Build chart data from readings - use API readings if available
+  const chartReadings = starlinkApiData?.readings || device.readings || [];
+  const chartData = useMemo(() => {
+    return chartReadings.slice(-30).map((r: any) => {
+      const d = r.data as Record<string, unknown> || {};
+      const sl = (d.starlink as Record<string, unknown>) || d;
+      return {
+        time: new Date(r.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+        downlink: (sl.downlink_throughput_bps as number) ? (sl.downlink_throughput_bps as number) / 1e6 : null,
+        uplink: (sl.uplink_throughput_bps as number) ? (sl.uplink_throughput_bps as number) / 1e6 : null,
+        latency: sl.pop_ping_latency_ms as number,
+      };
+    }).filter(d => d.downlink !== null || d.latency !== null);
+  }, [chartReadings]);
   
   return (
     <div className="space-y-4">
@@ -221,6 +250,7 @@ function StarlinkPanel({ device }: { device: DeviceGroup }) {
         <div className="flex items-center gap-3">
           <div className="w-12 h-12 rounded-xl bg-violet-500/20 flex items-center justify-center">
             <Satellite className="w-6 h-6 text-violet-400" />
+            {starlinkLoading && <Loader2 className="w-3 h-3 animate-spin absolute" />}
           </div>
           <div>
             <h3 className="font-semibold text-lg">Starlink Dish</h3>
@@ -238,7 +268,6 @@ function StarlinkPanel({ device }: { device: DeviceGroup }) {
           {state || 'Unknown'}
         </Badge>
       </div>
-
       {/* Key Metrics Grid */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
         <MetricCard 
@@ -566,23 +595,31 @@ function BluetoothScannerPanel({ device }: { device: DeviceGroup }) {
 }
 
 // =============================================
-// ADSB PANEL
+// ADSB PANEL - with real API data
 // =============================================
-function AdsbPanel({ device }: { device: DeviceGroup }) {
+function AdsbPanel({ device, clientId }: { device: DeviceGroup; clientId?: string }) {
+  // Fetch real ADS-B data from API
+  const { data: adsbApiData, isLoading: adsbLoading } = useClientAdsbData(clientId || '');
+  
   const latestReading = device.latest;
   const data = latestReading?.data as Record<string, unknown> || {};
   const adsbData = (data.adsb as Record<string, unknown>) || (data.adsb_detector as Record<string, unknown>) || data;
   
-  const aircraft = adsbData.aircraft as unknown[] | undefined;
-  const aircraftCount = adsbData.aircraft_count as number || adsbData.aircraft_active as number || (aircraft?.length || 0);
-  const messagesDecoded = adsbData.messages_decoded as number;
-  const maxRange = adsbData.max_range_nm as number;
+  // Merge with API data
+  const apiStats = adsbApiData?.stats as Record<string, unknown> || {};
+  const mergedData = { ...adsbData, ...apiStats };
+  
+  const aircraft = adsbApiData?.aircraft as unknown[] || adsbData.aircraft as unknown[] || [];
+  const aircraftCount = mergedData.aircraft_count as number || mergedData.aircraft_active as number || aircraft.length;
+  const messagesDecoded = mergedData.messages_decoded as number;
+  const maxRange = mergedData.max_range_nm as number;
   
   return (
     <div className="space-y-4">
       <div className="flex items-center gap-3 mb-4">
         <div className="w-10 h-10 rounded-lg bg-cyan-500/20 flex items-center justify-center">
           <Plane className="w-5 h-5 text-cyan-400" />
+          {adsbLoading && <Loader2 className="w-3 h-3 animate-spin absolute" />}
         </div>
         <div>
           <h3 className="font-semibold">ADS-B Detector</h3>
@@ -599,8 +636,29 @@ function AdsbPanel({ device }: { device: DeviceGroup }) {
         <MetricCard icon={<Signal className="w-4 h-4" />} label="Max Range" value={maxRange ? `${maxRange.toFixed(0)} nm` : '—'} color="text-amber-400" />
         <MetricCard icon={<Clock className="w-4 h-4" />} label="Readings" value={String(device.readings?.length || 0)} color="text-muted-foreground" />
       </div>
+      
+      {/* Aircraft List from API */}
+      {aircraft.length > 0 && (
+        <Card className="p-4">
+          <h4 className="text-sm font-medium text-muted-foreground mb-3">Tracked Aircraft ({aircraft.length})</h4>
+          <div className="space-y-2 max-h-[300px] overflow-auto">
+            {(aircraft as Record<string, unknown>[]).slice(0, 15).map((ac, idx) => (
+              <div key={idx} className="flex items-center justify-between p-2 rounded-lg bg-muted/30">
+                <div className="flex items-center gap-2">
+                  <Plane className="w-4 h-4 text-cyan-400" />
+                  <span className="font-mono text-sm">{String(ac.flight || ac.hex || 'Unknown')}</span>
+                </div>
+                <div className="flex items-center gap-3 text-xs text-muted-foreground">
+                  {ac.alt_baro && <span>{Number(ac.alt_baro).toLocaleString()} ft</span>}
+                  {ac.gs && <span>{Number(ac.gs).toFixed(0)} kts</span>}
+                </div>
+              </div>
+            ))}
+          </div>
+        </Card>
+      )}
 
-      <RawDataCard data={adsbData} title="All ADS-B Data" />
+      <RawDataCard data={mergedData} title="All ADS-B Data" />
     </div>
   );
 }
@@ -854,7 +912,7 @@ function RawDataCard({ data, title }: { data: Record<string, unknown>; title: st
 // =============================================
 // MAIN COMPONENT
 // =============================================
-export function SensorTabs({ devices, isLoading }: SensorTabsProps) {
+export function SensorTabs({ devices, isLoading, clientId }: SensorTabsProps) {
   if (isLoading) {
     return (
       <Card className="p-8">
@@ -886,14 +944,14 @@ export function SensorTabs({ devices, isLoading }: SensorTabsProps) {
 
   const defaultTab = sortedDevices[0]?.device_id || '';
 
-  // Select appropriate panel component
+  // Select appropriate panel component - pass clientId for API data fetching
   const getPanelComponent = (device: DeviceGroup) => {
     const type = device.device_type.toLowerCase();
-    if (type.includes('starlink')) return <StarlinkPanel device={device} />;
+    if (type.includes('starlink')) return <StarlinkPanel device={device} clientId={clientId} />;
     if (type.includes('system') || type.includes('monitor')) return <SystemMonitorPanel device={device} />;
     if (type.includes('wifi')) return <WifiScannerPanel device={device} />;
     if (type.includes('bluetooth') || type.includes('ble')) return <BluetoothScannerPanel device={device} />;
-    if (type.includes('adsb')) return <AdsbPanel device={device} />;
+    if (type.includes('adsb')) return <AdsbPanel device={device} clientId={clientId} />;
     if (type.includes('thermal') || type.includes('probe') || type.includes('temp')) return <ThermalProbePanel device={device} />;
     return <GenericSensorPanel device={device} />;
   };

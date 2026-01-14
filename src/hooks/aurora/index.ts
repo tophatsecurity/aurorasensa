@@ -275,6 +275,23 @@ export {
   type ClientStats,
 } from "./stats";
 
+// Client-specific sensor data hooks
+export {
+  useBatchesByClient as useClientBatches,
+  useBatchWithReadings,
+  useClientSensorData,
+  useClientSensorTypeData,
+  useClientStarlinkData,
+  useClientSystemMonitorData,
+  useClientWifiData,
+  useClientBluetoothData,
+  useClientAdsbData,
+  useClientGpsData,
+  useClientThermalData,
+  type ClientSensorReading,
+  type SensorDataByType,
+} from "./clientSensors";
+
 export {
   useArduinoDevicesFromReadings,
   useArduinoReadings,
