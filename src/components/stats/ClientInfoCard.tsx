@@ -10,29 +10,31 @@ import {
   Satellite,
   Navigation,
   HelpCircle,
+  Cpu,
+  Plane,
+  Thermometer,
+  Bluetooth,
+  Monitor,
 } from "lucide-react";
+import type { LucideIcon } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { formatDistanceToNow } from "date-fns";
 import { formatUptime } from "./utils";
 import type { ClientInfo, SystemInfo, DeviceGroup } from "./types";
+import { 
+  resolveClientLocation, 
+  getSourceLabel, 
+  getSourceColor,
+  type LocationSource,
+  type ResolvedLocation,
+} from "./locationResolver";
 
 interface ClientInfoCardProps {
   client: ClientInfo;
   systemInfo?: SystemInfo | null;
   devices?: DeviceGroup[];
-}
-
-type LocationSource = 'starlink' | 'gps' | 'geolocated' | 'unknown';
-
-interface ResolvedLocation {
-  city?: string;
-  country?: string;
-  latitude?: number;
-  longitude?: number;
-  source: LocationSource;
-  deviceId?: string;
 }
 
 export function ClientInfoCard({ client, systemInfo, devices = [] }: ClientInfoCardProps) {
@@ -56,133 +58,25 @@ export function ClientInfoCard({ client, systemInfo, devices = [] }: ClientInfoC
     }
   };
 
-  // Extract location from Starlink device data
-  const extractStarlinkLocation = (device: DeviceGroup): { lat: number; lng: number } | null => {
-    // Check device.location first (already extracted by utils)
-    if (device.location?.lat && device.location?.lng) {
-      return device.location;
-    }
-    
-    // Check nested starlink data in latest reading
-    const data = device.latest?.data as Record<string, unknown> | undefined;
-    if (!data) return null;
-    
-    const starlinkData = data.starlink as Record<string, unknown> | undefined;
-    if (starlinkData) {
-      // Check starlink.latitude/longitude directly
-      if (typeof starlinkData.latitude === 'number' && typeof starlinkData.longitude === 'number') {
-        return { lat: starlinkData.latitude, lng: starlinkData.longitude };
-      }
-      
-      // Check starlink.location_detail
-      const locationDetail = starlinkData.location_detail as Record<string, number> | undefined;
-      if (locationDetail?.latitude && locationDetail?.longitude) {
-        return { lat: locationDetail.latitude, lng: locationDetail.longitude };
-      }
-      
-      // Check starlink.gps_location
-      const gpsLocation = starlinkData.gps_location as Record<string, number> | undefined;
-      if (gpsLocation?.latitude && gpsLocation?.longitude) {
-        return { lat: gpsLocation.latitude, lng: gpsLocation.longitude };
-      }
-    }
-    
-    return null;
-  };
-
-  // Resolve location with priority: Starlink > GPS > Geolocated (client/device)
-  const resolveLocation = (): ResolvedLocation => {
-    // Priority 1: Starlink device location (most accurate for remote/maritime)
-    const starlinkDevice = devices.find(d => 
-      d.device_type?.toLowerCase().includes('starlink')
-    );
-    
-    if (starlinkDevice) {
-      const starlinkLocation = extractStarlinkLocation(starlinkDevice);
-      if (starlinkLocation) {
-        const data = starlinkDevice.latest?.data as Record<string, unknown> | undefined;
-        const starlinkData = data?.starlink as Record<string, unknown> | undefined;
-        return {
-          latitude: starlinkLocation.lat,
-          longitude: starlinkLocation.lng,
-          city: (starlinkData?.city as string) || (data?.city as string | undefined),
-          country: (starlinkData?.country as string) || (data?.country as string | undefined),
-          source: 'starlink',
-          deviceId: starlinkDevice.device_id,
-        };
-      }
-    }
-
-    // Priority 2: GPS device (precise coordinates)
-    const gpsDevice = devices.find(d => 
-      d.device_type?.toLowerCase().includes('gps') && 
-      d.location?.lat && d.location?.lng
-    );
-    if (gpsDevice?.location) {
-      const data = gpsDevice.latest?.data as Record<string, unknown> | undefined;
-      const gpsData = data?.gps as Record<string, unknown> | undefined;
-      return {
-        latitude: gpsDevice.location.lat,
-        longitude: gpsDevice.location.lng,
-        city: (gpsData?.city as string) || (data?.city as string | undefined),
-        country: (gpsData?.country as string) || (data?.country as string | undefined),
-        source: 'gps',
-        deviceId: gpsDevice.device_id,
-      };
-    }
-
-    // Priority 3: Any other device with location (geolocated via IP or other method)
-    const anyDeviceWithLocation = devices.find(d => d.location?.lat && d.location?.lng);
-    if (anyDeviceWithLocation?.location) {
-      const data = anyDeviceWithLocation.latest?.data as Record<string, unknown> | undefined;
-      return {
-        latitude: anyDeviceWithLocation.location.lat,
-        longitude: anyDeviceWithLocation.location.lng,
-        city: data?.city as string | undefined,
-        country: data?.country as string | undefined,
-        source: 'geolocated',
-        deviceId: anyDeviceWithLocation.device_id,
-      };
-    }
-
-    // Priority 4: Client's stored location (IP geolocation from registration)
-    if (client.location?.latitude && client.location?.longitude) {
-      return {
-        ...client.location,
-        source: 'geolocated',
-      };
-    }
-
-    return { source: 'unknown' };
-  };
-
-  const location = resolveLocation();
+  // Use the location resolver to get best location from all sensors
+  const location = resolveClientLocation(client, devices);
 
   const getSourceIcon = (source: LocationSource) => {
-    switch (source) {
-      case 'starlink': return <Satellite className="w-3 h-3" />;
-      case 'gps': return <Navigation className="w-3 h-3" />;
-      case 'geolocated': return <Globe className="w-3 h-3" />;
-      default: return <HelpCircle className="w-3 h-3" />;
-    }
-  };
-
-  const getSourceLabel = (source: LocationSource) => {
-    switch (source) {
-      case 'starlink': return 'Starlink';
-      case 'gps': return 'GPS';
-      case 'geolocated': return 'Geolocated';
-      default: return 'Unknown';
-    }
-  };
-
-  const getSourceColor = (source: LocationSource) => {
-    switch (source) {
-      case 'starlink': return 'text-violet-400';
-      case 'gps': return 'text-green-400';
-      case 'geolocated': return 'text-blue-400';
-      default: return 'text-muted-foreground';
-    }
+    const iconMap: Record<LocationSource, LucideIcon> = {
+      starlink: Satellite,
+      gps: Navigation,
+      lora: Radio,
+      arduino: Cpu,
+      adsb: Plane,
+      thermal: Thermometer,
+      system: Monitor,
+      wifi: Wifi,
+      bluetooth: Bluetooth,
+      geolocated: Globe,
+      unknown: HelpCircle,
+    };
+    const Icon = iconMap[source] || HelpCircle;
+    return <Icon className="w-3 h-3" />;
   };
 
   const formatLocationDisplay = () => {

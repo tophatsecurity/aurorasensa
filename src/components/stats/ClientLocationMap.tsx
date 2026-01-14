@@ -1,11 +1,20 @@
 import { useMemo } from "react";
-import { MapPin } from "lucide-react";
+import { MapPin, Satellite, Navigation, Radio, Cpu, Plane, Thermometer, Wifi, Bluetooth, Monitor, Globe, HelpCircle } from "lucide-react";
+import type { LucideIcon } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
 import { MapContainer, TileLayer, Marker, Popup, Circle } from "react-leaflet";
 import { format } from "date-fns";
 import "leaflet/dist/leaflet.css";
 import { createMarkerIcon, getMarkerColor, calculateMapCenter } from "./utils";
 import type { DeviceGroup, ClientInfo } from "./types";
+import { 
+  resolveClientLocation, 
+  getAllDeviceLocations, 
+  getSourceLabel, 
+  getSourceColor,
+  type LocationSource,
+} from "./locationResolver";
 
 interface ClientLocationMapProps {
   client?: ClientInfo | null;
@@ -18,22 +27,47 @@ export function ClientLocationMap({
   devices,
   height = "h-[350px]" 
 }: ClientLocationMapProps) {
+  // Get all device locations (enriched)
   const devicesWithLocation = useMemo(() => {
-    return devices.filter(d => d.location);
+    return devices.filter(d => d.location?.lat && d.location?.lng);
   }, [devices]);
 
-  // Determine map center - prefer client location, fallback to device center
+  // Get the best resolved location
+  const resolvedLocation = useMemo(() => {
+    return resolveClientLocation(client, devices);
+  }, [client, devices]);
+
+  // Determine map center - prefer resolved location, fallback to device center
   const mapCenter = useMemo(() => {
-    if (client?.location?.latitude && client?.location?.longitude) {
-      return { lat: client.location.latitude, lng: client.location.longitude };
+    if (resolvedLocation.latitude && resolvedLocation.longitude) {
+      return { lat: resolvedLocation.latitude, lng: resolvedLocation.longitude };
     }
     if (devicesWithLocation.length > 0) {
       return calculateMapCenter(devicesWithLocation);
     }
     return { lat: 0, lng: 0 };
-  }, [client, devicesWithLocation]);
+  }, [resolvedLocation, devicesWithLocation]);
 
   const hasLocation = mapCenter.lat !== 0 || mapCenter.lng !== 0;
+
+  const getSourceIcon = (source: LocationSource): LucideIcon => {
+    const iconMap: Record<LocationSource, LucideIcon> = {
+      starlink: Satellite,
+      gps: Navigation,
+      lora: Radio,
+      arduino: Cpu,
+      adsb: Plane,
+      thermal: Thermometer,
+      system: Monitor,
+      wifi: Wifi,
+      bluetooth: Bluetooth,
+      geolocated: Globe,
+      unknown: HelpCircle,
+    };
+    return iconMap[source] || HelpCircle;
+  };
+
+  const SourceIcon = getSourceIcon(resolvedLocation.source);
 
   return (
     <Card className="glass-card border-border/50">
@@ -44,9 +78,15 @@ export function ClientLocationMap({
             <span>Location Map</span>
           </div>
           {hasLocation && (
-            <span className="text-xs font-normal text-muted-foreground font-mono">
-              {mapCenter.lat.toFixed(4)}, {mapCenter.lng.toFixed(4)}
-            </span>
+            <div className="flex items-center gap-2">
+              <Badge variant="outline" className={`text-xs font-normal ${getSourceColor(resolvedLocation.source)}`}>
+                <SourceIcon className="w-3 h-3 mr-1" />
+                {getSourceLabel(resolvedLocation.source)}
+              </Badge>
+              <span className="text-xs font-normal text-muted-foreground font-mono">
+                {mapCenter.lat.toFixed(4)}, {mapCenter.lng.toFixed(4)}
+              </span>
+            </div>
           )}
         </CardTitle>
       </CardHeader>
