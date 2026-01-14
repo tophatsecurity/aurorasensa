@@ -180,10 +180,15 @@ function ResourceGauge({ label, value, color }: { label: string; value: number |
   );
 }
 
-function RawDataCard({ data, title }: { data: Record<string, unknown>; title: string }) {
+function RawDataCard({ data, title, latestReading }: { data: Record<string, unknown>; title: string; latestReading?: { timestamp: string; data: Record<string, unknown> } | null }) {
   const [isOpen, setIsOpen] = useState(false);
-  const entries = Object.entries(data).filter(([, v]) => v !== null && v !== undefined);
-  if (entries.length === 0) return null;
+  const [showRawJson, setShowRawJson] = useState(false);
+  
+  // Use latest reading data if available, otherwise use the passed data
+  const displayData = latestReading?.data || data;
+  const entries = Object.entries(displayData).filter(([, v]) => v !== null && v !== undefined);
+  
+  if (entries.length === 0 && !latestReading) return null;
   
   return (
     <Collapsible open={isOpen} onOpenChange={setIsOpen}>
@@ -193,20 +198,51 @@ function RawDataCard({ data, title }: { data: Record<string, unknown>; title: st
             <div className="flex items-center gap-2">
               <FileJson className="w-4 h-4 text-muted-foreground" />
               <span className="text-sm font-medium">{title}</span>
+              {latestReading?.timestamp && (
+                <Badge variant="secondary" className="text-[10px] ml-2">
+                  {new Date(latestReading.timestamp).toLocaleString()}
+                </Badge>
+              )}
             </div>
             {isOpen ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
           </Button>
         </CollapsibleTrigger>
         <CollapsibleContent>
-          <CardContent className="pt-0">
-            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2">
-              {entries.map(([key, value]) => (
-                <div key={key} className="p-2 rounded bg-muted/30 text-xs">
-                  <p className="text-muted-foreground truncate">{formatLabel(key)}</p>
-                  <p className="font-mono truncate" title={String(value)}>{formatValue(key, value)}</p>
-                </div>
-              ))}
+          <CardContent className="pt-0 space-y-3">
+            {/* Toggle between formatted and raw JSON view */}
+            <div className="flex justify-end">
+              <Button 
+                variant="outline" 
+                size="sm" 
+                className="text-xs h-7"
+                onClick={() => setShowRawJson(!showRawJson)}
+              >
+                {showRawJson ? 'Formatted View' : 'Raw JSON'}
+              </Button>
             </div>
+            
+            {showRawJson ? (
+              <div className="bg-muted/50 rounded-lg p-3 overflow-auto max-h-[400px]">
+                <pre className="text-xs font-mono whitespace-pre-wrap break-all">
+                  {JSON.stringify(displayData, null, 2)}
+                </pre>
+              </div>
+            ) : (
+              <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2">
+                {entries.map(([key, value]) => (
+                  <div key={key} className="p-2 rounded bg-muted/30 text-xs">
+                    <p className="text-muted-foreground truncate">{formatLabel(key)}</p>
+                    <p className="font-mono truncate" title={typeof value === 'object' ? JSON.stringify(value) : String(value)}>
+                      {typeof value === 'object' ? (
+                        <span className="text-blue-400">{Array.isArray(value) ? `[${value.length} items]` : '{...}'}</span>
+                      ) : (
+                        formatValue(key, value)
+                      )}
+                    </p>
+                  </div>
+                ))}
+              </div>
+            )}
           </CardContent>
         </CollapsibleContent>
       </Card>
@@ -320,7 +356,7 @@ function StarlinkPanel({ device, clientId }: { device: DeviceGroup; clientId?: s
         </Card>
       )}
       
-      <RawDataCard data={starlinkData} title="All Starlink Data" />
+      <RawDataCard data={starlinkData} title="Latest Batch Data" latestReading={latestReading ? { timestamp: latestReading.timestamp, data: latestReading.data as Record<string, unknown> } : null} />
     </div>
   );
 }
@@ -388,7 +424,7 @@ function SystemMonitorPanel({ device }: { device: DeviceGroup }) {
         </Card>
       )}
       
-      <RawDataCard data={systemData} title="All System Data" />
+      <RawDataCard data={systemData} title="Latest Batch Data" latestReading={latestReading ? { timestamp: latestReading.timestamp, data: latestReading.data as Record<string, unknown> } : null} />
     </div>
   );
 }
@@ -523,7 +559,7 @@ function WifiScannerPanel({ device, clientId }: { device: DeviceGroup; clientId?
         </Card>
       )}
       
-      <RawDataCard data={wifiData} title="All WiFi Data" />
+      <RawDataCard data={wifiData} title="Latest Batch Data" latestReading={latestReading ? { timestamp: latestReading.timestamp, data: latestReading.data as Record<string, unknown> } : null} />
     </div>
   );
 }
@@ -658,7 +694,7 @@ function BluetoothScannerPanel({ device, clientId }: { device: DeviceGroup; clie
         </Card>
       )}
       
-      <RawDataCard data={btData} title="All Bluetooth Data" />
+      <RawDataCard data={btData} title="Latest Batch Data" latestReading={latestReading ? { timestamp: latestReading.timestamp, data: latestReading.data as Record<string, unknown> } : null} />
     </div>
   );
 }
@@ -797,7 +833,7 @@ function AdsbPanel({ device, clientId }: { device: DeviceGroup; clientId?: strin
         </Card>
       )}
       
-      <RawDataCard data={mergedData} title="All ADS-B Data" />
+      <RawDataCard data={mergedData} title="Latest Batch Data" latestReading={latestReading ? { timestamp: latestReading.timestamp, data: latestReading.data as Record<string, unknown> } : null} />
     </div>
   );
 }
@@ -877,7 +913,7 @@ function GpsPanel({ device, clientId }: { device: DeviceGroup; clientId?: string
         </Card>
       )}
       
-      <RawDataCard data={gpsData} title="All GPS Data" />
+      <RawDataCard data={gpsData} title="Latest Batch Data" latestReading={latestReading ? { timestamp: latestReading.timestamp, data: latestReading.data as Record<string, unknown> } : null} />
     </div>
   );
 }
@@ -990,7 +1026,7 @@ function ThermalProbePanel({ device, clientId }: { device: DeviceGroup; clientId
         </Card>
       )}
       
-      <RawDataCard data={thermalData} title="All Thermal Data" />
+      <RawDataCard data={thermalData} title="Latest Batch Data" latestReading={latestReading ? { timestamp: latestReading.timestamp, data: latestReading.data as Record<string, unknown> } : null} />
     </div>
   );
 }
@@ -1201,7 +1237,7 @@ function ArduinoPanel({ device, clientId }: { device: DeviceGroup; clientId?: st
         </Card>
       )}
       
-      <RawDataCard data={mergedData} title="All Arduino Data" />
+      <RawDataCard data={mergedData} title="Latest Batch Data" latestReading={latestReading ? { timestamp: latestReading.timestamp, data: latestReading.data as Record<string, unknown> } : null} />
     </div>
   );
 }
@@ -1264,7 +1300,7 @@ function LoraPanel({ device, clientId }: { device: DeviceGroup; clientId?: strin
         </Card>
       )}
       
-      <RawDataCard data={loraData} title="All LoRa Data" />
+      <RawDataCard data={loraData} title="Latest Batch Data" latestReading={latestReading ? { timestamp: latestReading.timestamp, data: latestReading.data as Record<string, unknown> } : null} />
     </div>
   );
 }
@@ -1337,7 +1373,7 @@ function GenericSensorPanel({ device }: { device: DeviceGroup }) {
         </Card>
       )}
       
-      <RawDataCard data={data} title="All Data" />
+      <RawDataCard data={data} title="Latest Batch Data" latestReading={latestReading ? { timestamp: latestReading.timestamp, data: latestReading.data as Record<string, unknown> } : null} />
     </div>
   );
 }
