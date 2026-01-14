@@ -401,12 +401,61 @@ function WifiScannerPanel({ device, clientId }: { device: DeviceGroup; clientId?
   
   const latestReading = device.latest;
   const data = latestReading?.data as Record<string, unknown> || {};
-  const wifiData = (data.wifi as Record<string, unknown>) || (data.wifi_scanner as Record<string, unknown>) || data;
   
-  // Use API networks or fall back to device data
-  const networks = wifiApiData?.networks || wifiData.networks as unknown[] || [];
-  const networkCount = wifiApiData?.networkCount || wifiData.network_count as number || networks.length;
-  const scanDuration = wifiData.scan_duration_ms as number | undefined;
+  // Extract WiFi data from multiple possible locations
+  const wifiData = (data.wifi_scanner as Record<string, unknown>) || 
+                   (data.wifi as Record<string, unknown>) || 
+                   data;
+  
+  // Try to extract networks from various data structures
+  const extractNetworks = (): Record<string, unknown>[] => {
+    // First try API data
+    if (wifiApiData?.networks && Array.isArray(wifiApiData.networks) && wifiApiData.networks.length > 0) {
+      return wifiApiData.networks as unknown as Record<string, unknown>[];
+    }
+    // Try device data
+    if (Array.isArray(wifiData.networks)) {
+      return wifiData.networks as Record<string, unknown>[];
+    }
+    if (Array.isArray(wifiData.access_points)) {
+      return wifiData.access_points as Record<string, unknown>[];
+    }
+    if (Array.isArray(wifiData.aps)) {
+      return wifiData.aps as Record<string, unknown>[];
+    }
+    // Check if data itself contains network entries
+    if (Array.isArray(data)) {
+      return data as Record<string, unknown>[];
+    }
+    // Try to extract from readings
+    const readings = wifiApiData?.readings || device.readings || [];
+    if (readings.length > 0) {
+      const latestData = (readings[0] as any)?.data || {};
+      const wifiPart = latestData.wifi_scanner || latestData.wifi || latestData;
+      if (Array.isArray(wifiPart.networks)) return wifiPart.networks;
+      if (Array.isArray(wifiPart.access_points)) return wifiPart.access_points;
+    }
+    return [];
+  };
+  
+  const networks = extractNetworks();
+  const networkCount = wifiApiData?.networkCount || 
+                       wifiData.network_count as number || 
+                       wifiData.total_networks as number ||
+                       networks.length;
+  const scanDuration = wifiData.scan_duration_ms as number || wifiData.duration as number;
+  const lastScan = wifiData.timestamp as string || wifiData.last_scan as string;
+  
+  // Get signal strength distribution
+  const signalGroups = useMemo(() => {
+    const strong = networks.filter(n => (n.signal as number || n.rssi as number || -100) > -50).length;
+    const medium = networks.filter(n => {
+      const sig = n.signal as number || n.rssi as number || -100;
+      return sig <= -50 && sig > -70;
+    }).length;
+    const weak = networks.filter(n => (n.signal as number || n.rssi as number || -100) <= -70).length;
+    return { strong, medium, weak };
+  }, [networks]);
   
   return (
     <div className="space-y-4">
@@ -424,29 +473,52 @@ function WifiScannerPanel({ device, clientId }: { device: DeviceGroup; clientId?
         </Badge>
       </div>
       
-      <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
         <MetricCard icon={<Wifi className="w-4 h-4" />} label="Networks Found" value={String(networkCount)} color="text-blue-400" />
+        <MetricCard icon={<Signal className="w-4 h-4" />} label="Strong Signal" value={String(signalGroups.strong)} color="text-green-400" />
+        <MetricCard icon={<Signal className="w-4 h-4" />} label="Medium Signal" value={String(signalGroups.medium)} color="text-amber-400" />
+        <MetricCard icon={<Signal className="w-4 h-4" />} label="Weak Signal" value={String(signalGroups.weak)} color="text-red-400" />
+      </div>
+      
+      <div className="grid grid-cols-2 gap-3">
         <MetricCard icon={<Clock className="w-4 h-4" />} label="Scan Duration" value={scanDuration ? `${scanDuration}ms` : '—'} color="text-muted-foreground" />
         <MetricCard icon={<Activity className="w-4 h-4" />} label="Readings" value={String(wifiApiData?.readings?.length || device.readings?.length || 0)} color="text-muted-foreground" />
       </div>
       
-      {networks.length > 0 && (
+      {networks.length > 0 ? (
         <Card className="p-4">
           <h4 className="text-sm font-medium text-muted-foreground mb-3">Detected Networks ({networks.length})</h4>
-          <div className="space-y-2 max-h-[300px] overflow-auto">
-            {(networks as Record<string, unknown>[]).slice(0, 30).map((network, idx) => (
-              <div key={idx} className="flex items-center justify-between p-2 rounded-lg bg-muted/30">
-                <div className="flex items-center gap-2">
-                  <Wifi className="w-4 h-4 text-blue-400" />
-                  <span className="font-mono text-sm">{String(network.ssid || network.bssid || 'Hidden')}</span>
+          <div className="space-y-2 max-h-[400px] overflow-auto">
+            {networks.slice(0, 50).map((network, idx) => {
+              const signalValue = network.signal as number || network.rssi as number;
+              const signalColor = signalValue > -50 ? 'text-green-400' : signalValue > -70 ? 'text-amber-400' : 'text-red-400';
+              return (
+                <div key={idx} className="flex items-center justify-between p-2 rounded-lg bg-muted/30 hover:bg-muted/50 transition-colors">
+                  <div className="flex items-center gap-2 flex-1 min-w-0">
+                    <Wifi className={`w-4 h-4 shrink-0 ${signalColor}`} />
+                    <span className="font-mono text-sm truncate">{String(network.ssid || network.SSID || network.bssid || network.BSSID || 'Hidden Network')}</span>
+                  </div>
+                  <div className="flex items-center gap-3 text-xs text-muted-foreground shrink-0">
+                    {signalValue && <span className={signalColor}>{signalValue.toFixed(0)} dBm</span>}
+                    {(network.channel || network.Channel) && <span>Ch {String(network.channel || network.Channel)}</span>}
+                    {(network.frequency || network.freq) && <span>{((network.frequency || network.freq) as number / 1000).toFixed(1)} GHz</span>}
+                    {(network.security || network.Security || network.encryption) && (
+                      <Badge variant="outline" className="text-[10px]">
+                        {String(network.security || network.Security || network.encryption)}
+                      </Badge>
+                    )}
+                  </div>
                 </div>
-                <div className="flex items-center gap-3 text-xs text-muted-foreground">
-                  {network.signal && <span className="text-blue-400">{formatValue('signal', network.signal)}</span>}
-                  {network.channel && <span>Ch {String(network.channel)}</span>}
-                  {network.security && <Badge variant="outline" className="text-[10px]">{String(network.security)}</Badge>}
-                </div>
-              </div>
-            ))}
+              );
+            })}
+          </div>
+        </Card>
+      ) : (
+        <Card className="p-6">
+          <div className="text-center text-muted-foreground">
+            <Wifi className="w-8 h-8 mx-auto mb-2 opacity-50" />
+            <p className="text-sm">No WiFi networks detected yet</p>
+            <p className="text-xs mt-1">Data will appear when scans complete</p>
           </div>
         </Card>
       )}
@@ -464,11 +536,53 @@ function BluetoothScannerPanel({ device, clientId }: { device: DeviceGroup; clie
   
   const latestReading = device.latest;
   const data = latestReading?.data as Record<string, unknown> || {};
-  const btData = (data.bluetooth as Record<string, unknown>) || (data.bluetooth_scanner as Record<string, unknown>) || data;
   
-  // Use API devices or fall back to device data
-  const devices_found = btApiData?.devices || btData.devices as unknown[] || [];
-  const deviceCount = btApiData?.deviceCount || btData.device_count as number || devices_found.length;
+  // Extract Bluetooth data from multiple possible locations
+  const btData = (data.bluetooth_scanner as Record<string, unknown>) || 
+                 (data.bluetooth as Record<string, unknown>) || 
+                 (data.ble as Record<string, unknown>) ||
+                 data;
+  
+  // Try to extract devices from various data structures
+  const extractDevices = (): Record<string, unknown>[] => {
+    // First try API data
+    if (btApiData?.devices && Array.isArray(btApiData.devices) && btApiData.devices.length > 0) {
+      return btApiData.devices as unknown as Record<string, unknown>[];
+    }
+    // Try device data
+    if (Array.isArray(btData.devices)) {
+      return btData.devices as Record<string, unknown>[];
+    }
+    if (Array.isArray(btData.discovered)) {
+      return btData.discovered as Record<string, unknown>[];
+    }
+    if (Array.isArray(btData.peripherals)) {
+      return btData.peripherals as Record<string, unknown>[];
+    }
+    // Try to extract from readings
+    const readings = btApiData?.readings || device.readings || [];
+    if (readings.length > 0) {
+      const latestData = (readings[0] as any)?.data || {};
+      const btPart = latestData.bluetooth_scanner || latestData.bluetooth || latestData.ble || latestData;
+      if (Array.isArray(btPart.devices)) return btPart.devices;
+      if (Array.isArray(btPart.discovered)) return btPart.discovered;
+    }
+    return [];
+  };
+  
+  const devices_found = extractDevices();
+  const deviceCount = btApiData?.deviceCount || 
+                      btData.device_count as number || 
+                      btData.total_devices as number ||
+                      devices_found.length;
+  
+  // Categorize devices
+  const deviceTypes = useMemo(() => {
+    const classic = devices_found.filter(d => (d.type as string)?.toLowerCase() === 'classic').length;
+    const ble = devices_found.filter(d => (d.type as string)?.toLowerCase()?.includes('le') || (d.type as string)?.toLowerCase() === 'ble').length;
+    const other = devices_found.length - classic - ble;
+    return { classic, ble, other };
+  }, [devices_found]);
   
   return (
     <div className="space-y-4">
@@ -486,28 +600,60 @@ function BluetoothScannerPanel({ device, clientId }: { device: DeviceGroup; clie
         </Badge>
       </div>
       
-      <div className="grid grid-cols-2 gap-3">
-        <MetricCard icon={<Bluetooth className="w-4 h-4" />} label="Devices Found" value={String(deviceCount)} color="text-indigo-400" />
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+        <MetricCard icon={<Bluetooth className="w-4 h-4" />} label="Total Devices" value={String(deviceCount)} color="text-indigo-400" />
+        <MetricCard icon={<Radio className="w-4 h-4" />} label="Classic" value={String(deviceTypes.classic)} color="text-blue-400" />
+        <MetricCard icon={<Signal className="w-4 h-4" />} label="BLE" value={String(deviceTypes.ble)} color="text-cyan-400" />
         <MetricCard icon={<Activity className="w-4 h-4" />} label="Readings" value={String(btApiData?.readings?.length || device.readings?.length || 0)} color="text-muted-foreground" />
       </div>
       
-      {devices_found.length > 0 && (
+      {devices_found.length > 0 ? (
         <Card className="p-4">
           <h4 className="text-sm font-medium text-muted-foreground mb-3">Detected Devices ({devices_found.length})</h4>
-          <div className="space-y-2 max-h-[300px] overflow-auto">
-            {(devices_found as Record<string, unknown>[]).slice(0, 30).map((dev, idx) => (
-              <div key={idx} className="flex items-center justify-between p-2 rounded-lg bg-muted/30">
-                <div className="flex items-center gap-2">
-                  <Bluetooth className="w-4 h-4 text-indigo-400" />
-                  <span className="font-mono text-sm">{String(dev.name || dev.address || 'Unknown')}</span>
+          <div className="space-y-2 max-h-[400px] overflow-auto">
+            {devices_found.slice(0, 50).map((dev, idx) => {
+              const rssiValue = dev.rssi as number;
+              const rssiColor = rssiValue > -50 ? 'text-green-400' : rssiValue > -70 ? 'text-amber-400' : 'text-red-400';
+              return (
+                <div key={idx} className="flex items-center justify-between p-2 rounded-lg bg-muted/30 hover:bg-muted/50 transition-colors">
+                  <div className="flex items-center gap-2 flex-1 min-w-0">
+                    <Bluetooth className={`w-4 h-4 shrink-0 ${rssiValue ? rssiColor : 'text-indigo-400'}`} />
+                    <div className="min-w-0">
+                      <span className="font-mono text-sm block truncate">
+                        {String(dev.name || dev.local_name || dev.complete_name || 'Unknown Device')}
+                      </span>
+                      {dev.address && (
+                        <span className="text-[10px] text-muted-foreground font-mono block truncate">
+                          {String(dev.address || dev.mac)}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-3 text-xs text-muted-foreground shrink-0">
+                    {rssiValue && <span className={rssiColor}>{rssiValue.toFixed(0)} dBm</span>}
+                    {(dev.type || dev.device_type) && (
+                      <Badge variant="outline" className="text-[10px]">
+                        {String(dev.type || dev.device_type)}
+                      </Badge>
+                    )}
+                    {dev.manufacturer && <span className="max-w-[100px] truncate">{String(dev.manufacturer)}</span>}
+                    {dev.connectable !== undefined && (
+                      <Badge variant={dev.connectable ? "default" : "secondary"} className="text-[10px]">
+                        {dev.connectable ? 'Conn' : 'N/C'}
+                      </Badge>
+                    )}
+                  </div>
                 </div>
-                <div className="flex items-center gap-3 text-xs text-muted-foreground">
-                  {dev.rssi && <span className="text-indigo-400">{formatValue('rssi', dev.rssi)}</span>}
-                  {dev.type && <Badge variant="outline" className="text-[10px]">{String(dev.type)}</Badge>}
-                  {dev.manufacturer && <span>{String(dev.manufacturer)}</span>}
-                </div>
-              </div>
-            ))}
+              );
+            })}
+          </div>
+        </Card>
+      ) : (
+        <Card className="p-6">
+          <div className="text-center text-muted-foreground">
+            <Bluetooth className="w-8 h-8 mx-auto mb-2 opacity-50" />
+            <p className="text-sm">No Bluetooth devices detected yet</p>
+            <p className="text-xs mt-1">Data will appear when scans complete</p>
           </div>
         </Card>
       )}
@@ -525,17 +671,58 @@ function AdsbPanel({ device, clientId }: { device: DeviceGroup; clientId?: strin
   
   const latestReading = device.latest;
   const data = latestReading?.data as Record<string, unknown> || {};
-  const adsbData = (data.adsb as Record<string, unknown>) || (data.adsb_detector as Record<string, unknown>) || data;
+  
+  // Extract ADS-B data from multiple possible locations
+  const adsbData = (data.adsb_detector as Record<string, unknown>) || 
+                   (data.adsb as Record<string, unknown>) || 
+                   data;
   
   const apiStats = adsbApiData?.stats as Record<string, unknown> || {};
   const mergedData = { ...adsbData, ...apiStats };
   
-  const aircraft = adsbApiData?.aircraft as unknown[] || adsbData.aircraft as unknown[] || [];
-  const aircraftCount = mergedData.aircraft_count as number || mergedData.aircraft_active as number || aircraft.length;
-  const messagesDecoded = mergedData.messages_decoded as number;
-  const maxRange = mergedData.max_range_nm as number;
+  // Try to extract aircraft from various data structures
+  const extractAircraft = (): Record<string, unknown>[] => {
+    // First try API data
+    if (adsbApiData?.aircraft && Array.isArray(adsbApiData.aircraft) && adsbApiData.aircraft.length > 0) {
+      return adsbApiData.aircraft as Record<string, unknown>[];
+    }
+    // Try device data
+    if (Array.isArray(adsbData.aircraft)) {
+      return adsbData.aircraft as Record<string, unknown>[];
+    }
+    if (Array.isArray(adsbData.planes)) {
+      return adsbData.planes as Record<string, unknown>[];
+    }
+    if (Array.isArray(adsbData.targets)) {
+      return adsbData.targets as Record<string, unknown>[];
+    }
+    // Try to extract from readings
+    const readings = device.readings || [];
+    if (readings.length > 0) {
+      const latestData = (readings[0] as any)?.data || {};
+      const adsbPart = latestData.adsb_detector || latestData.adsb || latestData;
+      if (Array.isArray(adsbPart.aircraft)) return adsbPart.aircraft;
+    }
+    return [];
+  };
+  
+  const aircraft = extractAircraft();
+  const aircraftCount = mergedData.aircraft_count as number || 
+                       mergedData.aircraft_active as number || 
+                       mergedData.total_aircraft as number ||
+                       aircraft.length;
+  const messagesDecoded = mergedData.messages_decoded as number || mergedData.messages as number || mergedData.total_messages as number;
+  const maxRange = mergedData.max_range_nm as number || mergedData.max_range as number;
   const coverage = adsbApiData?.coverage as Record<string, unknown> || {};
   const emergencies = adsbApiData?.emergencies as unknown[] || [];
+  
+  // Calculate stats from aircraft
+  const aircraftStats = useMemo(() => {
+    const withPosition = aircraft.filter(ac => ac.lat !== undefined || ac.latitude !== undefined).length;
+    const withAltitude = aircraft.filter(ac => ac.alt_baro !== undefined || ac.altitude !== undefined).length;
+    const withSquawk = aircraft.filter(ac => ac.squawk !== undefined).length;
+    return { withPosition, withAltitude, withSquawk };
+  }, [aircraft]);
   
   return (
     <div className="space-y-4">
@@ -562,28 +749,50 @@ function AdsbPanel({ device, clientId }: { device: DeviceGroup; clientId?: strin
         <MetricCard icon={<Plane className="w-4 h-4" />} label="Aircraft Active" value={String(aircraftCount)} color="text-cyan-400" />
         <MetricCard icon={<Activity className="w-4 h-4" />} label="Messages" value={messagesDecoded ? messagesDecoded.toLocaleString() : '—'} color="text-green-400" />
         <MetricCard icon={<Signal className="w-4 h-4" />} label="Max Range" value={maxRange ? `${maxRange.toFixed(0)} nm` : '—'} color="text-amber-400" />
-        <MetricCard icon={<Eye className="w-4 h-4" />} label="Coverage" value={coverage.coverage_area_km2 ? `${(coverage.coverage_area_km2 as number).toFixed(0)} km²` : '—'} color="text-violet-400" />
+        <MetricCard icon={<MapPin className="w-4 h-4" />} label="With Position" value={String(aircraftStats.withPosition)} color="text-violet-400" />
       </div>
       
-      {aircraft.length > 0 && (
+      <div className="grid grid-cols-3 gap-3">
+        <MetricCard icon={<Navigation className="w-4 h-4" />} label="With Altitude" value={String(aircraftStats.withAltitude)} color="text-blue-400" />
+        <MetricCard icon={<Radio className="w-4 h-4" />} label="With Squawk" value={String(aircraftStats.withSquawk)} color="text-amber-400" />
+        <MetricCard icon={<Eye className="w-4 h-4" />} label="Coverage" value={coverage.coverage_area_km2 ? `${(coverage.coverage_area_km2 as number).toFixed(0)} km²` : '—'} color="text-green-400" />
+      </div>
+      
+      {aircraft.length > 0 ? (
         <Card className="p-4">
           <h4 className="text-sm font-medium text-muted-foreground mb-3">Tracked Aircraft ({aircraft.length})</h4>
           <div className="space-y-2 max-h-[400px] overflow-auto">
-            {(aircraft as Record<string, unknown>[]).slice(0, 20).map((ac, idx) => (
-              <div key={idx} className="flex items-center justify-between p-2 rounded-lg bg-muted/30 hover:bg-muted/50 transition-colors">
-                <div className="flex items-center gap-2">
-                  <Plane className={`w-4 h-4 ${ac.emergency ? 'text-red-500 animate-pulse' : 'text-cyan-400'}`} />
-                  <span className="font-mono text-sm font-medium">{String(ac.flight || ac.hex || 'Unknown')}</span>
-                  {ac.registration && <Badge variant="outline" className="text-[10px]">{String(ac.registration)}</Badge>}
+            {aircraft.slice(0, 30).map((ac, idx) => {
+              const altitude = ac.alt_baro as number || ac.altitude as number;
+              const speed = ac.gs as number || ac.ground_speed as number || ac.speed as number;
+              const heading = ac.track as number || ac.heading as number;
+              const callsign = ac.flight || ac.callsign || ac.hex || ac.icao || 'Unknown';
+              
+              return (
+                <div key={idx} className="flex items-center justify-between p-2 rounded-lg bg-muted/30 hover:bg-muted/50 transition-colors">
+                  <div className="flex items-center gap-2 flex-1 min-w-0">
+                    <Plane className={`w-4 h-4 shrink-0 ${ac.emergency ? 'text-red-500 animate-pulse' : 'text-cyan-400'}`} />
+                    <span className="font-mono text-sm font-medium truncate">{String(callsign).trim()}</span>
+                    {ac.registration && <Badge variant="outline" className="text-[10px] shrink-0">{String(ac.registration)}</Badge>}
+                    {ac.squawk && <Badge variant="secondary" className="text-[10px] shrink-0">SQ {String(ac.squawk)}</Badge>}
+                  </div>
+                  <div className="flex items-center gap-4 text-xs shrink-0">
+                    {altitude && <span className="text-muted-foreground">{Number(altitude).toLocaleString()} ft</span>}
+                    {speed && <span className="text-muted-foreground">{Number(speed).toFixed(0)} kts</span>}
+                    {heading && <span className="text-muted-foreground">{Number(heading).toFixed(0)}°</span>}
+                    {ac.rssi && <span className="text-cyan-400">{Number(ac.rssi).toFixed(0)} dBm</span>}
+                  </div>
                 </div>
-                <div className="flex items-center gap-4 text-xs">
-                  {ac.alt_baro && <span className="text-muted-foreground">{Number(ac.alt_baro).toLocaleString()} ft</span>}
-                  {ac.gs && <span className="text-muted-foreground">{Number(ac.gs).toFixed(0)} kts</span>}
-                  {ac.track && <span className="text-muted-foreground">{Number(ac.track).toFixed(0)}°</span>}
-                  {ac.rssi && <span className="text-cyan-400">{Number(ac.rssi).toFixed(0)} dBm</span>}
-                </div>
-              </div>
-            ))}
+              );
+            })}
+          </div>
+        </Card>
+      ) : (
+        <Card className="p-6">
+          <div className="text-center text-muted-foreground">
+            <Plane className="w-8 h-8 mx-auto mb-2 opacity-50" />
+            <p className="text-sm">No aircraft detected yet</p>
+            <p className="text-xs mt-1">Data will appear when aircraft are in range</p>
           </div>
         </Card>
       )}
@@ -787,67 +996,108 @@ function ThermalProbePanel({ device, clientId }: { device: DeviceGroup; clientId
 }
 
 // =============================================
-// ARDUINO PANEL - With all sensors and metric selection
+// ARDUINO PANEL - With all sensors and metric selection (similar to Thermal Probe)
 // =============================================
 function ArduinoPanel({ device, clientId }: { device: DeviceGroup; clientId?: string }) {
   const { data: arduinoApiData, isLoading } = useClientArduinoData(clientId || '');
-  const [selectedMetrics, setSelectedMetrics] = useState<string[]>(['temperature_c', 'humidity']);
+  const [selectedMetric, setSelectedMetric] = useState<string>('temperature_c');
   
   const latestReading = device.latest;
   const data = latestReading?.data as Record<string, unknown> || {};
-  const arduinoData = (data.arduino as Record<string, unknown>) || data;
+  
+  // Extract Arduino data from multiple possible locations (like Thermal Probe)
+  const extractArduinoData = (): Record<string, unknown> => {
+    // Try direct arduino key
+    if (data.arduino && typeof data.arduino === 'object') {
+      return data.arduino as Record<string, unknown>;
+    }
+    // Try arduino_sensor key
+    if (data.arduino_sensor && typeof data.arduino_sensor === 'object') {
+      return data.arduino_sensor as Record<string, unknown>;
+    }
+    // Try sensors.arduino
+    if ((data.sensors as Record<string, unknown>)?.arduino) {
+      return (data.sensors as Record<string, unknown>).arduino as Record<string, unknown>;
+    }
+    // Try to extract from readings
+    const readings = arduinoApiData?.readings || device.readings || [];
+    if (readings.length > 0) {
+      const latestData = (readings[0] as any)?.data || {};
+      if (latestData.arduino) return latestData.arduino;
+      if (latestData.arduino_sensor) return latestData.arduino_sensor;
+    }
+    // Fall back to raw data
+    return data;
+  };
+  
+  const arduinoData = extractArduinoData();
   
   // Merge with API data
   const apiMetrics = arduinoApiData?.metrics || {};
-  const mergedData = { ...arduinoData, ...apiMetrics };
+  const jsonlData = arduinoApiData?.jsonlData || {};
+  const mergedData = { ...arduinoData, ...apiMetrics, ...jsonlData };
   
-  const temperature = mergedData.temperature_c as number | undefined;
-  const humidity = mergedData.humidity as number | undefined;
-  const pressure = mergedData.pressure as number | undefined;
-  const lightLevel = mergedData.light_level as number | undefined;
-  const soilMoisture = mergedData.soil_moisture as number | undefined;
-  const co2 = mergedData.co2_ppm as number | undefined;
-  const tvoc = mergedData.tvoc_ppb as number | undefined;
-  const voltage = mergedData.voltage as number | undefined;
-  const power = mergedData.power_w as number | undefined;
+  // Extract metrics with fallback key names
+  const temperature = (mergedData.temperature_c ?? mergedData.temp_c ?? mergedData.temperature ?? mergedData.temp) as number | undefined;
+  const humidity = (mergedData.humidity ?? mergedData.hum ?? mergedData.rh) as number | undefined;
+  const pressure = (mergedData.pressure ?? mergedData.press ?? mergedData.baro) as number | undefined;
+  const lightLevel = (mergedData.light_level ?? mergedData.light ?? mergedData.lux ?? mergedData.illuminance) as number | undefined;
+  const soilMoisture = (mergedData.soil_moisture ?? mergedData.soil ?? mergedData.moisture) as number | undefined;
+  const co2 = (mergedData.co2_ppm ?? mergedData.co2 ?? mergedData.eCO2) as number | undefined;
+  const tvoc = (mergedData.tvoc_ppb ?? mergedData.tvoc ?? mergedData.TVOC) as number | undefined;
+  const voltage = (mergedData.voltage ?? mergedData.volts ?? mergedData.v) as number | undefined;
+  const current = (mergedData.current ?? mergedData.amps ?? mergedData.a) as number | undefined;
+  const power = (mergedData.power_w ?? mergedData.power ?? mergedData.watts) as number | undefined;
+  const gas = (mergedData.gas ?? mergedData.gas_resistance ?? mergedData.air_quality) as number | undefined;
   
   const readings = arduinoApiData?.readings || device.readings || [];
   
   const chartData = useMemo(() => {
     return readings.slice(-50).map((r: any) => {
       const d = r.data as Record<string, unknown> || {};
-      const ar = (d.arduino as Record<string, unknown>) || d;
+      const ar = (d.arduino as Record<string, unknown>) || 
+                 (d.arduino_sensor as Record<string, unknown>) || 
+                 d;
       return {
         time: new Date(r.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-        temperature_c: ar.temperature_c as number,
-        humidity: ar.humidity as number,
-        pressure: ar.pressure as number,
-        light_level: ar.light_level as number,
-        soil_moisture: ar.soil_moisture as number,
-        co2_ppm: ar.co2_ppm as number,
-        tvoc_ppb: ar.tvoc_ppb as number,
-        voltage: ar.voltage as number,
-        power_w: ar.power_w as number,
+        temperature_c: (ar.temperature_c ?? ar.temp_c ?? ar.temperature ?? ar.temp) as number,
+        humidity: (ar.humidity ?? ar.hum ?? ar.rh) as number,
+        pressure: (ar.pressure ?? ar.press ?? ar.baro) as number,
+        light_level: (ar.light_level ?? ar.light ?? ar.lux) as number,
+        soil_moisture: (ar.soil_moisture ?? ar.soil ?? ar.moisture) as number,
+        co2_ppm: (ar.co2_ppm ?? ar.co2 ?? ar.eCO2) as number,
+        tvoc_ppb: (ar.tvoc_ppb ?? ar.tvoc ?? ar.TVOC) as number,
+        voltage: (ar.voltage ?? ar.volts ?? ar.v) as number,
+        power_w: (ar.power_w ?? ar.power ?? ar.watts) as number,
       };
     });
   }, [readings]);
   
+  // Define all possible metrics with icons (similar to Thermal Probe)
   const allMetrics = [
-    { key: 'temperature_c', label: 'Temperature', unit: '°C', color: '#f97316', icon: Thermometer },
-    { key: 'humidity', label: 'Humidity', unit: '%', color: '#3b82f6', icon: Wind },
-    { key: 'pressure', label: 'Pressure', unit: 'hPa', color: '#8b5cf6', icon: Gauge },
-    { key: 'light_level', label: 'Light Level', unit: 'lux', color: '#eab308', icon: Eye },
-    { key: 'soil_moisture', label: 'Soil Moisture', unit: '%', color: '#22c55e', icon: Wind },
-    { key: 'co2_ppm', label: 'CO₂', unit: 'ppm', color: '#64748b', icon: Activity },
-    { key: 'tvoc_ppb', label: 'TVOC', unit: 'ppb', color: '#06b6d4', icon: Activity },
-    { key: 'voltage', label: 'Voltage', unit: 'V', color: '#ef4444', icon: Zap },
-    { key: 'power_w', label: 'Power', unit: 'W', color: '#f59e0b', icon: Zap },
+    { key: 'temperature_c', label: 'Temperature (°C)', color: '#f97316', icon: Thermometer, value: temperature },
+    { key: 'humidity', label: 'Humidity (%)', color: '#3b82f6', icon: Wind, value: humidity },
+    { key: 'pressure', label: 'Pressure (hPa)', color: '#8b5cf6', icon: Gauge, value: pressure },
+    { key: 'light_level', label: 'Light (lux)', color: '#eab308', icon: Eye, value: lightLevel },
+    { key: 'soil_moisture', label: 'Soil Moisture (%)', color: '#22c55e', icon: Wind, value: soilMoisture },
+    { key: 'co2_ppm', label: 'CO₂ (ppm)', color: '#64748b', icon: Activity, value: co2 },
+    { key: 'tvoc_ppb', label: 'TVOC (ppb)', color: '#06b6d4', icon: Activity, value: tvoc },
+    { key: 'voltage', label: 'Voltage (V)', color: '#ef4444', icon: Zap, value: voltage },
+    { key: 'power_w', label: 'Power (W)', color: '#f59e0b', icon: Zap, value: power },
   ];
   
-  const availableMetrics = allMetrics.filter(m => {
-    const val = mergedData[m.key];
-    return val !== undefined && val !== null;
-  });
+  const availableMetrics = allMetrics.filter(m => m.value !== undefined && m.value !== null);
+  
+  // Set default selected metric to first available
+  useMemo(() => {
+    if (availableMetrics.length > 0 && !availableMetrics.find(m => m.key === selectedMetric)) {
+      setSelectedMetric(availableMetrics[0].key);
+    }
+  }, [availableMetrics, selectedMetric]);
+  
+  // Get top 3 metrics for large display (like Thermal Probe)
+  const primaryMetrics = availableMetrics.slice(0, 3);
+  const primaryColors = ['amber', 'blue', 'violet'];
   
   return (
     <div className="space-y-4">
@@ -865,61 +1115,71 @@ function ArduinoPanel({ device, clientId }: { device: DeviceGroup; clientId?: st
         </Badge>
       </div>
       
-      {/* Metrics Grid */}
-      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
-        {temperature !== undefined && (
-          <MetricCard icon={<Thermometer className="w-4 h-4" />} label="Temperature" value={`${temperature.toFixed(1)}°C`} color="text-orange-400" />
-        )}
-        {humidity !== undefined && (
-          <MetricCard icon={<Wind className="w-4 h-4" />} label="Humidity" value={`${humidity.toFixed(1)}%`} color="text-blue-400" />
-        )}
-        {pressure !== undefined && (
-          <MetricCard icon={<Gauge className="w-4 h-4" />} label="Pressure" value={`${pressure.toFixed(0)} hPa`} color="text-violet-400" />
-        )}
-        {lightLevel !== undefined && (
-          <MetricCard icon={<Eye className="w-4 h-4" />} label="Light" value={`${lightLevel.toFixed(0)} lux`} color="text-yellow-400" />
-        )}
-        {soilMoisture !== undefined && (
-          <MetricCard icon={<Wind className="w-4 h-4" />} label="Soil Moisture" value={`${soilMoisture.toFixed(1)}%`} color="text-green-400" />
-        )}
-        {co2 !== undefined && (
-          <MetricCard icon={<Activity className="w-4 h-4" />} label="CO₂" value={`${co2.toFixed(0)} ppm`} color="text-slate-400" />
-        )}
-        {tvoc !== undefined && (
-          <MetricCard icon={<Activity className="w-4 h-4" />} label="TVOC" value={`${tvoc.toFixed(0)} ppb`} color="text-cyan-400" />
-        )}
-        {voltage !== undefined && (
-          <MetricCard icon={<Zap className="w-4 h-4" />} label="Voltage" value={`${voltage.toFixed(2)}V`} color="text-red-400" />
-        )}
-        {power !== undefined && (
-          <MetricCard icon={<Zap className="w-4 h-4" />} label="Power" value={`${power.toFixed(1)}W`} color="text-amber-400" />
-        )}
-      </div>
+      {/* Primary Metrics - Large Cards (like Thermal Probe) */}
+      {primaryMetrics.length > 0 && (
+        <div className={`grid gap-4 ${primaryMetrics.length === 1 ? 'grid-cols-1' : primaryMetrics.length === 2 ? 'grid-cols-2' : 'grid-cols-2 md:grid-cols-3'}`}>
+          {primaryMetrics.map((metric, idx) => {
+            const Icon = metric.icon;
+            const colorClass = primaryColors[idx] || 'orange';
+            return (
+              <Card key={metric.key} className={`p-4 border-${colorClass}-500/30 bg-${colorClass}-500/5`}>
+                <div className="text-center">
+                  <Icon className={`w-8 h-8 mx-auto mb-2`} style={{ color: metric.color }} />
+                  <p className={`text-3xl font-bold`} style={{ color: metric.color }}>
+                    {metric.value !== undefined ? formatValue(metric.key, metric.value) : '—'}
+                  </p>
+                  <p className="text-xs text-muted-foreground">{metric.label.split(' (')[0]}</p>
+                </div>
+              </Card>
+            );
+          })}
+        </div>
+      )}
       
-      {/* Chart with selectable metrics */}
+      {/* Secondary Metrics Grid */}
+      {availableMetrics.length > 3 && (
+        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
+          {availableMetrics.slice(3).map(metric => {
+            const Icon = metric.icon;
+            return (
+              <MetricCard 
+                key={metric.key}
+                icon={<Icon className="w-4 h-4" />} 
+                label={metric.label.split(' (')[0]} 
+                value={formatValue(metric.key, metric.value)} 
+                color={`text-[${metric.color}]`} 
+              />
+            );
+          })}
+        </div>
+      )}
+      
+      {/* No data fallback */}
+      {availableMetrics.length === 0 && (
+        <Card className="p-6">
+          <div className="text-center text-muted-foreground">
+            <Cpu className="w-8 h-8 mx-auto mb-2 opacity-50" />
+            <p className="text-sm">No Arduino sensor data yet</p>
+            <p className="text-xs mt-1">Data will appear when sensors report</p>
+          </div>
+        </Card>
+      )}
+      
+      {/* Chart with selectable metrics (like Thermal Probe) */}
       {chartData.length > 1 && availableMetrics.length > 0 && (
         <Card className="p-4">
           <div className="flex items-center justify-between mb-3">
-            <h4 className="text-sm font-medium text-muted-foreground">Sensor History</h4>
-            <div className="flex flex-wrap gap-1">
-              {availableMetrics.slice(0, 4).map(m => (
-                <Button
-                  key={m.key}
-                  variant={selectedMetrics.includes(m.key) ? "default" : "outline"}
-                  size="sm"
-                  className="text-xs h-7"
-                  onClick={() => {
-                    if (selectedMetrics.includes(m.key)) {
-                      setSelectedMetrics(selectedMetrics.filter(k => k !== m.key));
-                    } else {
-                      setSelectedMetrics([...selectedMetrics, m.key].slice(-3));
-                    }
-                  }}
-                >
-                  {m.label}
-                </Button>
-              ))}
-            </div>
+            <h4 className="text-sm font-medium text-muted-foreground">Sensor Trend</h4>
+            <Select value={selectedMetric} onValueChange={setSelectedMetric}>
+              <SelectTrigger className="w-[180px]">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {availableMetrics.map(m => (
+                  <SelectItem key={m.key} value={m.key}>{m.label}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </div>
           <div className="h-[200px]">
             <ResponsiveContainer width="100%" height="100%">
@@ -927,20 +1187,14 @@ function ArduinoPanel({ device, clientId }: { device: DeviceGroup; clientId?: st
                 <XAxis dataKey="time" tick={{ fontSize: 10 }} stroke="hsl(var(--muted-foreground))" />
                 <YAxis tick={{ fontSize: 10 }} stroke="hsl(var(--muted-foreground))" />
                 <RechartsTooltip contentStyle={{ backgroundColor: 'hsl(var(--card))', border: '1px solid hsl(var(--border))', borderRadius: '8px', fontSize: '12px' }} />
-                {selectedMetrics.map((key, idx) => {
-                  const metric = allMetrics.find(m => m.key === key);
-                  return (
-                    <Line
-                      key={key}
-                      type="monotone"
-                      dataKey={key}
-                      name={metric?.label || key}
-                      stroke={metric?.color || CHART_COLORS[idx % CHART_COLORS.length]}
-                      strokeWidth={2}
-                      dot={false}
-                    />
-                  );
-                })}
+                <Line 
+                  type="monotone" 
+                  dataKey={selectedMetric} 
+                  name={availableMetrics.find(m => m.key === selectedMetric)?.label} 
+                  stroke={availableMetrics.find(m => m.key === selectedMetric)?.color || '#f97316'} 
+                  strokeWidth={2} 
+                  dot={false} 
+                />
               </LineChart>
             </ResponsiveContainer>
           </div>
