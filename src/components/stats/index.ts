@@ -9,3 +9,4 @@ export { DeviceLocationMap } from "./DeviceLocationMap";
 export { StarlinkTab } from "./StarlinkTab";
 export { default as DeviceDetailsModal } from "./DeviceDetailsModal";
 export { default as DeviceMetricsCharts } from "./DeviceMetricsCharts";
+export { default as GlobalStatsCards } from "./GlobalStatsCards";

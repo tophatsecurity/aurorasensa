@@ -1,5 +1,5 @@
 import { useState, useMemo, useEffect } from "react";
-import { RefreshCw, MapPin } from "lucide-react";
+import { RefreshCw } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -18,6 +18,10 @@ import {
   useClient,
   useClientSystemInfo,
   useStarlinkDevicesFromReadings,
+  useComprehensiveStats,
+  useClientStats,
+  use1hrStats,
+  use24hrStats,
 } from "@/hooks/aurora";
 
 // Import refactored components
@@ -33,6 +37,7 @@ import {
   StarlinkTab,
   DeviceDetailsModal,
 } from "@/components/stats";
+import GlobalStatsCards from "@/components/stats/GlobalStatsCards";
 
 export default function StatsContent() {
   const [selectedClient, setSelectedClient] = useState<string>("");
@@ -45,6 +50,11 @@ export default function StatsContent() {
   const { data: clients, isLoading: clientsLoading } = useClientsWithHostnames();
   const { isLoading: starlinkLoading } = useStarlinkDevicesFromReadings();
   
+  // Comprehensive stats
+  const { data: comprehensiveStats, isLoading: statsLoading, refetch: refetchStats } = useComprehensiveStats();
+  const { data: stats1hr } = use1hrStats();
+  const { data: stats24hr } = use24hrStats();
+  
   // Auto-select first client when clients load
   useEffect(() => {
     if (clients && clients.length > 0 && !selectedClient) {
@@ -55,6 +65,7 @@ export default function StatsContent() {
   // Selected client details
   const { data: selectedClientData } = useClient(selectedClient || "");
   const { data: selectedClientSystemInfo } = useClientSystemInfo(selectedClient || "");
+  const { data: clientStats } = useClientStats(selectedClient || "");
 
   // Process readings into device groups
   const deviceGroups = useMemo(() => {
@@ -67,7 +78,7 @@ export default function StatsContent() {
     return deviceGroups.filter(d => d.client_id === selectedClient);
   }, [deviceGroups, selectedClient]);
 
-  const isLoading = readingsLoading || clientsLoading || starlinkLoading;
+  const isLoading = readingsLoading || clientsLoading || starlinkLoading || statsLoading;
 
   if (isLoading) {
     return <StatsLoadingSkeleton />;
@@ -78,6 +89,11 @@ export default function StatsContent() {
     setDeviceModalOpen(true);
   };
 
+  const handleRefresh = () => {
+    refetchReadings();
+    refetchStats();
+  };
+
   return (
     <div className="flex-1 overflow-y-auto p-6 space-y-6">
       {/* Header */}
@@ -85,7 +101,14 @@ export default function StatsContent() {
         clients={clients || []}
         selectedClient={selectedClient}
         onClientChange={setSelectedClient}
-        onRefresh={() => refetchReadings()}
+        onRefresh={handleRefresh}
+      />
+
+      {/* Global Stats Cards */}
+      <GlobalStatsCards 
+        comprehensiveStats={comprehensiveStats}
+        stats1hr={stats1hr}
+        stats24hr={stats24hr}
       />
 
       {/* Client Overview Stats */}
@@ -93,6 +116,7 @@ export default function StatsContent() {
         <ClientStatsPanel 
           client={selectedClientData as any} 
           systemInfo={selectedClientSystemInfo}
+          clientStats={clientStats}
           deviceCount={filteredDevices.length}
           readingsCount={filteredDevices.reduce((sum, d) => sum + d.readings.length, 0)}
         />
