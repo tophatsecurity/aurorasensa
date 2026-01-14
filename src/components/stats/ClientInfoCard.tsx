@@ -8,8 +8,7 @@ import {
   CheckCircle2,
   AlertCircle,
   Satellite,
-  Cpu,
-  Router,
+  Navigation,
   HelpCircle,
 } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
@@ -25,7 +24,7 @@ interface ClientInfoCardProps {
   devices?: DeviceGroup[];
 }
 
-type LocationSource = 'starlink' | 'gps' | 'arduino' | 'client' | 'unknown';
+type LocationSource = 'starlink' | 'gps' | 'geolocated' | 'unknown';
 
 interface ResolvedLocation {
   city?: string;
@@ -57,9 +56,9 @@ export function ClientInfoCard({ client, systemInfo, devices = [] }: ClientInfoC
     }
   };
 
-  // Resolve location with priority: Starlink > GPS > Arduino > Client
+  // Resolve location with priority: Starlink > GPS > Geolocated (client/device)
   const resolveLocation = (): ResolvedLocation => {
-    // Priority 1: Starlink device location
+    // Priority 1: Starlink device location (most accurate for remote/maritime)
     const starlinkDevice = devices.find(d => 
       d.device_type?.toLowerCase().includes('starlink') && 
       d.location?.lat && d.location?.lng
@@ -76,51 +75,42 @@ export function ClientInfoCard({ client, systemInfo, devices = [] }: ClientInfoC
       };
     }
 
-    // Priority 2: GPS device
+    // Priority 2: GPS device (precise coordinates)
     const gpsDevice = devices.find(d => 
       d.device_type?.toLowerCase().includes('gps') && 
       d.location?.lat && d.location?.lng
     );
     if (gpsDevice?.location) {
+      const data = gpsDevice.latest?.data as Record<string, unknown> | undefined;
       return {
         latitude: gpsDevice.location.lat,
         longitude: gpsDevice.location.lng,
+        city: data?.city as string | undefined,
+        country: data?.country as string | undefined,
         source: 'gps',
         deviceId: gpsDevice.device_id,
       };
     }
 
-    // Priority 3: Arduino/Probe with location
-    const arduinoDevice = devices.find(d => 
-      (d.device_type?.toLowerCase().includes('arduino') || 
-       d.device_type?.toLowerCase().includes('probe')) && 
-      d.location?.lat && d.location?.lng
-    );
-    if (arduinoDevice?.location) {
-      return {
-        latitude: arduinoDevice.location.lat,
-        longitude: arduinoDevice.location.lng,
-        source: 'arduino',
-        deviceId: arduinoDevice.device_id,
-      };
-    }
-
-    // Priority 4: Any device with location
+    // Priority 3: Any other device with location (geolocated via IP or other method)
     const anyDeviceWithLocation = devices.find(d => d.location?.lat && d.location?.lng);
     if (anyDeviceWithLocation?.location) {
+      const data = anyDeviceWithLocation.latest?.data as Record<string, unknown> | undefined;
       return {
         latitude: anyDeviceWithLocation.location.lat,
         longitude: anyDeviceWithLocation.location.lng,
-        source: 'unknown',
+        city: data?.city as string | undefined,
+        country: data?.country as string | undefined,
+        source: 'geolocated',
         deviceId: anyDeviceWithLocation.device_id,
       };
     }
 
-    // Priority 5: Client's stored location
+    // Priority 4: Client's stored location (IP geolocation from registration)
     if (client.location?.latitude && client.location?.longitude) {
       return {
         ...client.location,
-        source: 'client',
+        source: 'geolocated',
       };
     }
 
@@ -132,29 +122,26 @@ export function ClientInfoCard({ client, systemInfo, devices = [] }: ClientInfoC
   const getSourceIcon = (source: LocationSource) => {
     switch (source) {
       case 'starlink': return <Satellite className="w-3 h-3" />;
-      case 'gps': return <MapPin className="w-3 h-3" />;
-      case 'arduino': return <Cpu className="w-3 h-3" />;
-      case 'client': return <Router className="w-3 h-3" />;
+      case 'gps': return <Navigation className="w-3 h-3" />;
+      case 'geolocated': return <Globe className="w-3 h-3" />;
       default: return <HelpCircle className="w-3 h-3" />;
     }
   };
 
   const getSourceLabel = (source: LocationSource) => {
     switch (source) {
-      case 'starlink': return 'Starlink Dish';
-      case 'gps': return 'GPS Device';
-      case 'arduino': return 'Arduino/Probe';
-      case 'client': return 'Client Registration';
+      case 'starlink': return 'Starlink';
+      case 'gps': return 'GPS';
+      case 'geolocated': return 'Geolocated';
       default: return 'Unknown';
     }
   };
 
   const getSourceColor = (source: LocationSource) => {
     switch (source) {
-      case 'starlink': return 'text-blue-400';
+      case 'starlink': return 'text-violet-400';
       case 'gps': return 'text-green-400';
-      case 'arduino': return 'text-amber-400';
-      case 'client': return 'text-purple-400';
+      case 'geolocated': return 'text-blue-400';
       default: return 'text-muted-foreground';
     }
   };
