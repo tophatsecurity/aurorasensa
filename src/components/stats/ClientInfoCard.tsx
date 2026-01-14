@@ -7,19 +7,36 @@ import {
   Wifi,
   CheckCircle2,
   AlertCircle,
+  Satellite,
+  Cpu,
+  Router,
+  HelpCircle,
 } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { formatDistanceToNow } from "date-fns";
 import { formatUptime } from "./utils";
-import type { ClientInfo, SystemInfo } from "./types";
+import type { ClientInfo, SystemInfo, DeviceGroup } from "./types";
 
 interface ClientInfoCardProps {
   client: ClientInfo;
   systemInfo?: SystemInfo | null;
+  devices?: DeviceGroup[];
 }
 
-export function ClientInfoCard({ client, systemInfo }: ClientInfoCardProps) {
+type LocationSource = 'starlink' | 'gps' | 'arduino' | 'client' | 'unknown';
+
+interface ResolvedLocation {
+  city?: string;
+  country?: string;
+  latitude?: number;
+  longitude?: number;
+  source: LocationSource;
+  deviceId?: string;
+}
+
+export function ClientInfoCard({ client, systemInfo, devices = [] }: ClientInfoCardProps) {
   if (!client) return null;
 
   const getStatusColor = (state?: string) => {
@@ -40,8 +57,109 @@ export function ClientInfoCard({ client, systemInfo }: ClientInfoCardProps) {
     }
   };
 
-  const formatLocation = (location?: ClientInfo['location']) => {
-    if (!location) return null;
+  // Resolve location with priority: Starlink > GPS > Arduino > Client
+  const resolveLocation = (): ResolvedLocation => {
+    // Priority 1: Starlink device location
+    const starlinkDevice = devices.find(d => 
+      d.device_type?.toLowerCase().includes('starlink') && 
+      d.location?.lat && d.location?.lng
+    );
+    if (starlinkDevice?.location) {
+      const data = starlinkDevice.latest?.data as Record<string, unknown> | undefined;
+      return {
+        latitude: starlinkDevice.location.lat,
+        longitude: starlinkDevice.location.lng,
+        city: data?.city as string | undefined,
+        country: data?.country as string | undefined,
+        source: 'starlink',
+        deviceId: starlinkDevice.device_id,
+      };
+    }
+
+    // Priority 2: GPS device
+    const gpsDevice = devices.find(d => 
+      d.device_type?.toLowerCase().includes('gps') && 
+      d.location?.lat && d.location?.lng
+    );
+    if (gpsDevice?.location) {
+      return {
+        latitude: gpsDevice.location.lat,
+        longitude: gpsDevice.location.lng,
+        source: 'gps',
+        deviceId: gpsDevice.device_id,
+      };
+    }
+
+    // Priority 3: Arduino/Probe with location
+    const arduinoDevice = devices.find(d => 
+      (d.device_type?.toLowerCase().includes('arduino') || 
+       d.device_type?.toLowerCase().includes('probe')) && 
+      d.location?.lat && d.location?.lng
+    );
+    if (arduinoDevice?.location) {
+      return {
+        latitude: arduinoDevice.location.lat,
+        longitude: arduinoDevice.location.lng,
+        source: 'arduino',
+        deviceId: arduinoDevice.device_id,
+      };
+    }
+
+    // Priority 4: Any device with location
+    const anyDeviceWithLocation = devices.find(d => d.location?.lat && d.location?.lng);
+    if (anyDeviceWithLocation?.location) {
+      return {
+        latitude: anyDeviceWithLocation.location.lat,
+        longitude: anyDeviceWithLocation.location.lng,
+        source: 'unknown',
+        deviceId: anyDeviceWithLocation.device_id,
+      };
+    }
+
+    // Priority 5: Client's stored location
+    if (client.location?.latitude && client.location?.longitude) {
+      return {
+        ...client.location,
+        source: 'client',
+      };
+    }
+
+    return { source: 'unknown' };
+  };
+
+  const location = resolveLocation();
+
+  const getSourceIcon = (source: LocationSource) => {
+    switch (source) {
+      case 'starlink': return <Satellite className="w-3 h-3" />;
+      case 'gps': return <MapPin className="w-3 h-3" />;
+      case 'arduino': return <Cpu className="w-3 h-3" />;
+      case 'client': return <Router className="w-3 h-3" />;
+      default: return <HelpCircle className="w-3 h-3" />;
+    }
+  };
+
+  const getSourceLabel = (source: LocationSource) => {
+    switch (source) {
+      case 'starlink': return 'Starlink Dish';
+      case 'gps': return 'GPS Device';
+      case 'arduino': return 'Arduino/Probe';
+      case 'client': return 'Client Registration';
+      default: return 'Unknown';
+    }
+  };
+
+  const getSourceColor = (source: LocationSource) => {
+    switch (source) {
+      case 'starlink': return 'text-blue-400';
+      case 'gps': return 'text-green-400';
+      case 'arduino': return 'text-amber-400';
+      case 'client': return 'text-purple-400';
+      default: return 'text-muted-foreground';
+    }
+  };
+
+  const formatLocationDisplay = () => {
     const parts = [];
     if (location.city) parts.push(location.city);
     if (location.country) parts.push(location.country);
@@ -135,20 +253,40 @@ export function ClientInfoCard({ client, systemInfo }: ClientInfoCardProps) {
             </p>
           </div>
 
-          {/* Location */}
+          {/* Location with source */}
           <div className="space-y-1">
             <div className="flex items-center gap-1.5 text-muted-foreground">
               <MapPin className="w-3.5 h-3.5" />
               <span className="text-xs font-medium">Location</span>
             </div>
             <div>
-              <p className="text-sm font-semibold truncate">
-                {formatLocation(client.location) || 'N/A'}
-              </p>
-              {client.location?.latitude && client.location?.longitude && (
-                <p className="text-xs text-muted-foreground font-mono">
-                  {client.location.latitude.toFixed(4)}, {client.location.longitude.toFixed(4)}
-                </p>
+              {location.latitude && location.longitude ? (
+                <>
+                  <p className="text-sm font-semibold truncate">
+                    {formatLocationDisplay() || 'Coordinates only'}
+                  </p>
+                  <p className="text-xs text-muted-foreground font-mono">
+                    {location.latitude.toFixed(4)}, {location.longitude.toFixed(4)}
+                  </p>
+                  <TooltipProvider>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <div className={`flex items-center gap-1 mt-1 text-xs ${getSourceColor(location.source)}`}>
+                          {getSourceIcon(location.source)}
+                          <span className="capitalize">{getSourceLabel(location.source)}</span>
+                        </div>
+                      </TooltipTrigger>
+                      <TooltipContent>
+                        <p>Location sourced from: {getSourceLabel(location.source)}</p>
+                        {location.deviceId && (
+                          <p className="text-xs text-muted-foreground">Device: {location.deviceId}</p>
+                        )}
+                      </TooltipContent>
+                    </Tooltip>
+                  </TooltipProvider>
+                </>
+              ) : (
+                <p className="text-sm text-muted-foreground">N/A</p>
               )}
             </div>
           </div>
