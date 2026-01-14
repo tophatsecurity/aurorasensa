@@ -7,6 +7,7 @@ export { DeviceListCard } from "./DeviceListCard";
 export { DeviceMeasurementsCard } from "./DeviceMeasurementsCard";
 export { DeviceLocationMap } from "./DeviceLocationMap";
 export { StarlinkTab } from "./StarlinkTab";
+export { ArduinoTab } from "./ArduinoTab";
 export { default as DeviceDetailsModal } from "./DeviceDetailsModal";
 export { default as DeviceMetricsCharts } from "./DeviceMetricsCharts";
 export { default as GlobalStatsCards } from "./GlobalStatsCards";

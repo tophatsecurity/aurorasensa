@@ -34,6 +34,7 @@ import {
   DeviceMeasurementsCard,
   DeviceLocationMap,
   StarlinkTab,
+  ArduinoTab,
   DeviceDetailsModal,
 } from "@/components/stats";
 
@@ -177,7 +178,8 @@ export default function StatsContent() {
         <TabsList>
           <TabsTrigger value="overview">Overview</TabsTrigger>
           <TabsTrigger value="measurements">Measurements</TabsTrigger>
-          <TabsTrigger value="starlink">Starlink Details</TabsTrigger>
+          <TabsTrigger value="starlink">Starlink</TabsTrigger>
+          <TabsTrigger value="arduino">Arduino</TabsTrigger>
           <TabsTrigger value="map">Location Map</TabsTrigger>
         </TabsList>
 
@@ -212,10 +214,17 @@ export default function StatsContent() {
           </ComponentErrorBoundary>
         </TabsContent>
 
-        {/* Starlink Details Tab */}
+        {/* Starlink Tab */}
         <TabsContent value="starlink" className="space-y-4">
           <ComponentErrorBoundary name="StarlinkTab">
             <StarlinkTab />
+          </ComponentErrorBoundary>
+        </TabsContent>
+
+        {/* Arduino Tab */}
+        <TabsContent value="arduino" className="space-y-4">
+          <ComponentErrorBoundary name="ArduinoTab">
+            <ArduinoTab />
           </ComponentErrorBoundary>
         </TabsContent>
 
