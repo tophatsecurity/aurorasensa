@@ -23,6 +23,22 @@ import {
   Wind,
   Eye,
   FileJson,
+  Headphones,
+  Speaker,
+  Smartphone,
+  Watch,
+  Keyboard,
+  Mouse,
+  Gamepad2,
+  Printer,
+  Camera,
+  Heart,
+  Car,
+  Tv,
+  Laptop,
+  Tablet,
+  CircleDot,
+  type LucideIcon,
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -711,6 +727,135 @@ function BluetoothScannerPanel({ device, clientId }: { device: DeviceGroup; clie
     const n = 2.5; // Path loss exponent for indoor environment
     return Math.pow(10, (tx - rssi) / (10 * n));
   };
+
+  // Get Bluetooth device icon based on appearance value or device type/name
+  // Appearance values are defined in Bluetooth SIG Assigned Numbers
+  const getBluetoothDeviceIcon = (dev: Record<string, unknown>): { icon: LucideIcon; color: string; label: string } => {
+    const appearance = dev.appearance as number | undefined;
+    const deviceType = String(dev.type || dev.device_type || '').toLowerCase();
+    const deviceName = String(dev.name || dev.local_name || dev.complete_name || '').toLowerCase();
+    const manufacturer = String(dev.manufacturer || '').toLowerCase();
+
+    // Check appearance value first (Bluetooth SIG standard categories)
+    if (appearance !== undefined) {
+      // Category is in bits 6-15 (appearance >> 6)
+      const category = appearance >> 6;
+      
+      switch (category) {
+        case 1: return { icon: Smartphone, color: 'text-blue-400', label: 'Phone' }; // Phone
+        case 2: return { icon: Laptop, color: 'text-slate-400', label: 'Computer' }; // Computer
+        case 3: return { icon: Watch, color: 'text-cyan-400', label: 'Watch' }; // Watch
+        case 4: return { icon: Clock, color: 'text-amber-400', label: 'Clock' }; // Clock
+        case 5: return { icon: Monitor, color: 'text-purple-400', label: 'Display' }; // Display
+        case 6: return { icon: Car, color: 'text-red-400', label: 'Vehicle' }; // Remote Control
+        case 7: return { icon: Eye, color: 'text-green-400', label: 'Eye Glasses' }; // Eye-glasses
+        case 8: return { icon: CircleDot, color: 'text-orange-400', label: 'Tag' }; // Tag
+        case 9: return { icon: CircleDot, color: 'text-pink-400', label: 'Keyring' }; // Keyring
+        case 10: return { icon: Tv, color: 'text-indigo-400', label: 'Media Player' }; // Media player
+        case 11: return { icon: CircleDot, color: 'text-yellow-400', label: 'Barcode' }; // Barcode Scanner
+        case 12: return { icon: Thermometer, color: 'text-orange-400', label: 'Thermometer' }; // Thermometer
+        case 13: return { icon: Heart, color: 'text-red-400', label: 'Heart Rate' }; // Heart Rate Sensor
+        case 15: return { icon: Activity, color: 'text-green-400', label: 'Blood Pressure' }; // Blood Pressure
+        case 17: return { icon: Activity, color: 'text-blue-400', label: 'Glucose' }; // Glucose Meter
+        case 18: return { icon: Activity, color: 'text-cyan-400', label: 'Running' }; // Running Walking Sensor
+        case 19: return { icon: Activity, color: 'text-purple-400', label: 'Cycling' }; // Cycling
+        case 21: return { icon: Activity, color: 'text-amber-400', label: 'Pulse Oximeter' }; // Pulse Oximeter
+        case 22: return { icon: Activity, color: 'text-green-400', label: 'Weight Scale' }; // Weight Scale
+        case 49: return { icon: Activity, color: 'text-pink-400', label: 'Personal Mobility' }; // Personal Mobility
+        case 50: return { icon: Activity, color: 'text-blue-400', label: 'Glucose Monitor' }; // Continuous Glucose Monitor
+        case 51: return { icon: Activity, color: 'text-red-400', label: 'Insulin Pump' }; // Insulin Pump
+        case 52: return { icon: Activity, color: 'text-orange-400', label: 'Medication' }; // Medication Delivery
+        case 53: return { icon: Activity, color: 'text-cyan-400', label: 'Spirometer' }; // Spirometer
+        case 64: return { icon: Headphones, color: 'text-purple-400', label: 'Headset' }; // Generic Audio Sink (Headphones)
+        case 65: return { icon: Speaker, color: 'text-blue-400', label: 'Speaker' }; // Speaker
+        case 66: return { icon: Headphones, color: 'text-indigo-400', label: 'Headphones' }; // Headphones
+        case 67: return { icon: Speaker, color: 'text-cyan-400', label: 'Portable Audio' }; // Portable Audio
+        case 68: return { icon: Car, color: 'text-slate-400', label: 'Car Audio' }; // Car Audio
+        case 69: return { icon: Tv, color: 'text-pink-400', label: 'Set-top Box' }; // Set-top box
+        case 70: return { icon: Tv, color: 'text-amber-400', label: 'HiFi Audio' }; // HiFi Audio Device
+        case 71: return { icon: Tv, color: 'text-green-400', label: 'Microphone' }; // Microphone
+        case 72: return { icon: Headphones, color: 'text-purple-400', label: 'Soundbar' }; // Soundbar
+        case 80: return { icon: Printer, color: 'text-slate-400', label: 'Printer' }; // Printer
+        case 81: return { icon: Camera, color: 'text-amber-400', label: 'Scanner' }; // Scanner
+        case 82: return { icon: Camera, color: 'text-blue-400', label: 'Camera' }; // Camera
+        case 84: return { icon: Monitor, color: 'text-purple-400', label: 'Display' }; // Display
+        case 193: return { icon: Keyboard, color: 'text-slate-400', label: 'Keyboard' }; // Keyboard
+        case 194: return { icon: Mouse, color: 'text-slate-400', label: 'Mouse' }; // Mouse
+        case 195: return { icon: Gamepad2, color: 'text-green-400', label: 'Gamepad' }; // Joystick
+        case 196: return { icon: Gamepad2, color: 'text-purple-400', label: 'Gamepad' }; // Gamepad
+        case 197: return { icon: Tablet, color: 'text-blue-400', label: 'Tablet' }; // Digitizer Tablet
+        case 198: return { icon: CircleDot, color: 'text-orange-400', label: 'Card Reader' }; // Card Reader
+        case 199: return { icon: Keyboard, color: 'text-cyan-400', label: 'Digital Pen' }; // Digital Pen
+        case 200: return { icon: CircleDot, color: 'text-amber-400', label: 'Barcode' }; // Barcode Scanner
+        case 201: return { icon: Tablet, color: 'text-pink-400', label: 'Touchpad' }; // Touchpad
+        case 202: return { icon: Tablet, color: 'text-indigo-400', label: 'Presentation' }; // Presentation Remote
+      }
+    }
+
+    // Fallback: check device name/type for common keywords
+    if (deviceName.includes('airpod') || deviceName.includes('headphone') || deviceName.includes('earphone') || 
+        deviceName.includes('earbud') || deviceName.includes('buds') || deviceName.includes('headset') ||
+        deviceType.includes('headphone') || deviceType.includes('headset') || deviceType.includes('audio sink')) {
+      return { icon: Headphones, color: 'text-purple-400', label: 'Headphones' };
+    }
+    if (deviceName.includes('speaker') || deviceName.includes('soundbar') || deviceName.includes('bose') ||
+        deviceName.includes('sonos') || deviceName.includes('jbl') || deviceName.includes('echo') ||
+        deviceType.includes('speaker')) {
+      return { icon: Speaker, color: 'text-blue-400', label: 'Speaker' };
+    }
+    if (deviceName.includes('phone') || deviceName.includes('iphone') || deviceName.includes('galaxy') ||
+        deviceName.includes('pixel') || deviceName.includes('android') || deviceType.includes('phone')) {
+      return { icon: Smartphone, color: 'text-blue-400', label: 'Phone' };
+    }
+    if (deviceName.includes('watch') || deviceName.includes('band') || deviceName.includes('fitbit') ||
+        deviceName.includes('garmin') || deviceType.includes('watch') || deviceType.includes('wearable')) {
+      return { icon: Watch, color: 'text-cyan-400', label: 'Watch' };
+    }
+    if (deviceName.includes('keyboard') || deviceType.includes('keyboard')) {
+      return { icon: Keyboard, color: 'text-slate-400', label: 'Keyboard' };
+    }
+    if (deviceName.includes('mouse') || deviceName.includes('trackpad') || deviceType.includes('mouse')) {
+      return { icon: Mouse, color: 'text-slate-400', label: 'Mouse' };
+    }
+    if (deviceName.includes('gamepad') || deviceName.includes('controller') || deviceName.includes('xbox') ||
+        deviceName.includes('playstation') || deviceName.includes('dualsense') || deviceType.includes('gamepad')) {
+      return { icon: Gamepad2, color: 'text-green-400', label: 'Gamepad' };
+    }
+    if (deviceName.includes('printer') || deviceType.includes('printer')) {
+      return { icon: Printer, color: 'text-slate-400', label: 'Printer' };
+    }
+    if (deviceName.includes('camera') || deviceName.includes('gopro') || deviceType.includes('camera')) {
+      return { icon: Camera, color: 'text-amber-400', label: 'Camera' };
+    }
+    if (deviceName.includes('heart') || deviceName.includes('hr') || deviceType.includes('heart')) {
+      return { icon: Heart, color: 'text-red-400', label: 'Heart Rate' };
+    }
+    if (deviceName.includes('car') || deviceName.includes('vehicle') || deviceName.includes('obd') ||
+        deviceType.includes('car') || deviceType.includes('vehicle')) {
+      return { icon: Car, color: 'text-red-400', label: 'Vehicle' };
+    }
+    if (deviceName.includes('tv') || deviceName.includes('television') || deviceName.includes('roku') ||
+        deviceName.includes('firestick') || deviceName.includes('chromecast') || deviceType.includes('tv')) {
+      return { icon: Tv, color: 'text-indigo-400', label: 'TV' };
+    }
+    if (deviceName.includes('laptop') || deviceName.includes('macbook') || deviceName.includes('notebook') ||
+        deviceType.includes('computer') || deviceType.includes('laptop')) {
+      return { icon: Laptop, color: 'text-slate-400', label: 'Computer' };
+    }
+    if (deviceName.includes('tablet') || deviceName.includes('ipad') || deviceType.includes('tablet')) {
+      return { icon: Tablet, color: 'text-blue-400', label: 'Tablet' };
+    }
+    if (deviceName.includes('tag') || deviceName.includes('tile') || deviceName.includes('airtag') ||
+        deviceName.includes('tracker') || deviceType.includes('tag')) {
+      return { icon: CircleDot, color: 'text-orange-400', label: 'Tracker' };
+    }
+    if (manufacturer.includes('apple')) {
+      return { icon: Smartphone, color: 'text-slate-400', label: 'Apple Device' };
+    }
+
+    // Default Bluetooth icon
+    return { icon: Bluetooth, color: 'text-indigo-400', label: 'Bluetooth' };
+  };
   
   return (
     <div className="space-y-4">
@@ -747,12 +892,17 @@ function BluetoothScannerPanel({ device, clientId }: { device: DeviceGroup; clie
               const manufacturer = dev.manufacturer || dev.manufacturer_data;
               const companyId = dev.company_id as number | undefined;
               const uuids = (dev.uuids || dev.service_uuids || (dev.uuid ? [dev.uuid] : [])) as string[];
+              const deviceIcon = getBluetoothDeviceIcon(dev);
+              const DeviceIcon = deviceIcon.icon;
               
               return (
                 <div key={idx} className="p-3 rounded-lg bg-muted/30 hover:bg-muted/50 transition-colors">
                   <div className="flex items-start justify-between gap-3">
                     <div className="flex items-start gap-2 flex-1 min-w-0">
-                      <Bluetooth className={`w-4 h-4 shrink-0 mt-0.5 ${rssiValue ? rssiColor : 'text-indigo-400'}`} />
+                      <div className="flex flex-col items-center gap-0.5 shrink-0">
+                        <DeviceIcon className={`w-4 h-4 ${deviceIcon.color}`} />
+                        <span className="text-[8px] text-muted-foreground">{deviceIcon.label}</span>
+                      </div>
                       <div className="min-w-0 flex-1">
                         <div className="flex items-center gap-2 flex-wrap">
                           <span className="font-mono text-sm font-medium truncate">
