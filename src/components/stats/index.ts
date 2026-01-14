@@ -2,6 +2,9 @@
 export * from "./types";
 export * from "./utils";
 export { ClientStatsPanel } from "./ClientStatsPanel";
+export { ClientInfoCard } from "./ClientInfoCard";
+export { MeasurementsSection } from "./MeasurementsSection";
+export { ClientLocationMap } from "./ClientLocationMap";
 export { DeviceTypeStats } from "./DeviceTypeStats";
 export { DeviceListCard } from "./DeviceListCard";
 export { DeviceMeasurementsCard } from "./DeviceMeasurementsCard";
