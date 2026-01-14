@@ -44,12 +44,24 @@ export function ClientStatsPanel({ client, systemInfo, clientStats, deviceCount,
   }
 
   // Use clientStats if available, otherwise fall back to props
-  const totalDevices = clientStats?.total_devices ?? deviceCount;
-  const totalReadings = clientStats?.total_readings ?? readingsCount;
-  const activeDevices = clientStats?.active_devices ?? deviceCount;
+  const totalDevices = clientStats?.total_devices ?? deviceCount ?? 0;
+  const totalReadings = clientStats?.total_readings ?? readingsCount ?? 0;
+  const activeDevices = clientStats?.active_devices ?? deviceCount ?? 0;
   const readingsLastHour = clientStats?.readings_last_hour;
   const readingsLast24h = clientStats?.readings_last_24h;
   const avgReadingsPerHour = clientStats?.avg_readings_per_hour;
+
+  // Safe date formatting
+  const lastSeenFormatted = (() => {
+    if (!client.last_seen) return null;
+    try {
+      const date = new Date(client.last_seen);
+      if (isNaN(date.getTime())) return null;
+      return formatDistanceToNow(date, { addSuffix: true });
+    } catch {
+      return null;
+    }
+  })();
 
   return (
     <Card className="glass-card border-primary/30">
@@ -68,9 +80,9 @@ export function ClientStatsPanel({ client, systemInfo, clientStats, deviceCount,
             <Badge variant={client.state === 'adopted' ? 'default' : 'secondary'}>
               {client.state || client.status || 'Unknown'}
             </Badge>
-            {client.last_seen && (
+            {lastSeenFormatted && (
               <Badge variant="outline" className="text-xs">
-                {formatDistanceToNow(new Date(client.last_seen), { addSuffix: true })}
+                {lastSeenFormatted}
               </Badge>
             )}
           </div>
