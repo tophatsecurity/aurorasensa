@@ -161,6 +161,7 @@ export default function StatsContent() {
           <ClientInfoCard 
             client={selectedClientData as any} 
             systemInfo={selectedClientSystemInfo}
+            devices={filteredDevices}
           />
         </ComponentErrorBoundary>
       )}
