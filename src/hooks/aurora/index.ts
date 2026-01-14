@@ -288,8 +288,14 @@ export {
   useClientAdsbData,
   useClientGpsData,
   useClientThermalData,
+  useClientArduinoData,
+  useClientLoraData,
   type ClientSensorReading,
   type SensorDataByType,
+  type WifiNetwork,
+  type BluetoothDevice,
+  type GpsData,
+  type ArduinoMetrics,
 } from "./clientSensors";
 
 export {
