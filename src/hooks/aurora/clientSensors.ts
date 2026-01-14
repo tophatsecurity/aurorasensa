@@ -99,17 +99,26 @@ export interface ArduinoMetrics {
 // Fetch batches for a specific client
 export function useBatchesByClient(clientId: string, limit: number = 10) {
   return useQuery({
-    queryKey: ["aurora", "batches", "client", clientId, limit],
+    queryKey: ["aurora", "batches", "by-client", clientId, limit],
     queryFn: async () => {
-      if (!clientId) return [];
+      if (!clientId) return { batches: [], count: 0 };
       try {
-        const response = await callAuroraApi<{ batches: BatchWithSensors[] }>(
-          `/api/batches/list?client_id=${clientId}&limit=${limit}`
+        // Use the client-specific endpoint for accurate filtering
+        const response = await callAuroraApi<{ 
+          batches: BatchWithSensors[]; 
+          client_id?: string;
+          count?: number;
+          total?: number;
+        }>(
+          `/api/batches/by-client/${clientId}?limit=${limit}`
         );
-        return response.batches || [];
+        return {
+          batches: response.batches || [],
+          count: response.count || response.total || (response.batches?.length || 0),
+        };
       } catch (error) {
         console.warn(`Failed to fetch batches for client ${clientId}:`, error);
-        return [];
+        return { batches: [], count: 0 };
       }
     },
     enabled: hasAuroraSession() && !!clientId,
