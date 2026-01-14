@@ -155,7 +155,8 @@ function extractSensorReadings(batch: BatchWithSensors | null, clientId: string)
         for (const [sensorId, sensorData] of Object.entries(sensors)) {
           if (!sensorData) continue;
           
-          const deviceType = sensorData.device_type || extractDeviceType(sensorId);
+          // Extract device type from sensor data OR from sensorId (e.g., "adsb_rtlsdr_1" -> "adsb_detector")
+          const deviceType = sensorData.device_type || inferDeviceTypeFromSensorId(sensorId);
           
           readings.push({
             device_id: sensorData.device_id || sensorId,
@@ -180,12 +181,24 @@ function extractClientIdFromBatchId(batchId: string): string | null {
   return null;
 }
 
-function extractDeviceType(sensorId: string): string {
-  const match = sensorId.match(/^(.+?)_?\d*$/);
-  if (match) {
-    return match[1].replace(/_\d+$/, '');
-  }
-  return sensorId;
+// Infer device type from sensor ID patterns
+function inferDeviceTypeFromSensorId(sensorId: string): string {
+  const id = sensorId.toLowerCase();
+  
+  // Match common sensor ID patterns to device types
+  if (id.includes('adsb') || id.includes('rtlsdr') || id.includes('aircraft')) return 'adsb_detector';
+  if (id.includes('starlink')) return 'starlink';
+  if (id.includes('system') || id.includes('monitor')) return 'system_monitor';
+  if (id.includes('wifi')) return 'wifi_scanner';
+  if (id.includes('bluetooth') || id.includes('ble') || id.includes('bt_')) return 'bluetooth_scanner';
+  if (id.includes('gps') || id.includes('gnss')) return 'gps';
+  if (id.includes('thermal') || id.includes('probe') || id.includes('temp')) return 'thermal_probe';
+  if (id.includes('arduino')) return 'arduino';
+  if (id.includes('lora')) return 'lora';
+  
+  // Fallback: strip trailing numbers and underscores
+  const stripped = sensorId.replace(/_\d+$/, '').replace(/\d+$/, '');
+  return stripped || sensorId;
 }
 
 // Comprehensive hook to fetch all sensor data for a client
