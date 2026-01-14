@@ -162,10 +162,10 @@ export default function StatsContent() {
           </ComponentErrorBoundary>
         </TabsContent>
 
-        {/* Raw JSON Tab */}
+        {/* Raw JSON Tab - Latest Batch */}
         <TabsContent value="raw" className="space-y-4">
           <ComponentErrorBoundary name="RawJsonPanel">
-            <RawJsonPanel readings={readings || []} clientId={selectedClient} />
+            <RawJsonPanel clientId={selectedClient} />
           </ComponentErrorBoundary>
         </TabsContent>
       </Tabs>
