@@ -1,4 +1,4 @@
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2.89.0";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.1";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -38,6 +38,17 @@ function getEmptyDataForPath(apiPath: string): unknown {
     return {};
   }
   return null;
+}
+
+// Create Supabase client lazily to avoid boot-time issues
+let _supabase: ReturnType<typeof createClient> | null = null;
+function getSupabaseClient() {
+  if (!_supabase) {
+    const supabaseUrl = Deno.env.get('SUPABASE_URL') || '';
+    const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') || '';
+    _supabase = createClient(supabaseUrl, supabaseServiceKey);
+  }
+  return _supabase;
 }
 
 Deno.serve(async (req) => {
@@ -80,10 +91,7 @@ Deno.serve(async (req) => {
       }
 
       // Verify the Supabase JWT
-      const supabaseUrl = Deno.env.get('SUPABASE_URL') || '';
-      const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') || '';
-      
-      const supabase = createClient(supabaseUrl, supabaseServiceKey);
+      const supabase = getSupabaseClient();
       const token = authHeader.replace('Bearer ', '');
       
       const { data: { user }, error: authError } = await supabase.auth.getUser(token);
