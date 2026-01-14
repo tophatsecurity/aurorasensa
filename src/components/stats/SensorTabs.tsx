@@ -482,6 +482,35 @@ function WifiScannerPanel({ device, clientId }: { device: DeviceGroup; clientId?
   const scanDuration = wifiData.scan_duration_ms as number || wifiData.duration as number;
   const lastScan = wifiData.timestamp as string || wifiData.last_scan as string;
   
+  // Estimate distance from RSSI (using free-space path loss formula)
+  // Distance = 10 ^ ((TxPower - RSSI) / (10 * n))
+  // TxPower is typically -40 dBm at 1m, n is path loss exponent (2.7-4.3 for indoor)
+  const estimateDistance = (rssi: number): number => {
+    const txPower = -40; // Typical TX power at 1 meter
+    const pathLossExponent = 3.0; // Indoor environment
+    const distance = Math.pow(10, (txPower - rssi) / (10 * pathLossExponent));
+    return Math.max(0.1, Math.min(distance, 999)); // Clamp between 0.1m and 999m
+  };
+  
+  // Format distance for display
+  const formatDistance = (rssi: number): string => {
+    const dist = estimateDistance(rssi);
+    if (dist < 1) return `~${(dist * 100).toFixed(0)}cm`;
+    if (dist < 10) return `~${dist.toFixed(1)}m`;
+    return `~${dist.toFixed(0)}m`;
+  };
+  
+  // Get encryption color based on security type
+  const getEncryptionColor = (security: string): string => {
+    const sec = security?.toLowerCase() || '';
+    if (sec.includes('wpa3')) return 'bg-green-500/20 text-green-400 border-green-500/30';
+    if (sec.includes('wpa2')) return 'bg-blue-500/20 text-blue-400 border-blue-500/30';
+    if (sec.includes('wpa')) return 'bg-amber-500/20 text-amber-400 border-amber-500/30';
+    if (sec.includes('wep')) return 'bg-red-500/20 text-red-400 border-red-500/30';
+    if (sec === 'open' || sec === 'none' || sec === '') return 'bg-red-500/20 text-red-400 border-red-500/30';
+    return 'bg-muted text-muted-foreground border-border';
+  };
+  
   // Get signal strength distribution
   const signalGroups = useMemo(() => {
     const strong = networks.filter(n => (n.signal as number || n.rssi as number || -100) > -50).length;
@@ -491,6 +520,20 @@ function WifiScannerPanel({ device, clientId }: { device: DeviceGroup; clientId?
     }).length;
     const weak = networks.filter(n => (n.signal as number || n.rssi as number || -100) <= -70).length;
     return { strong, medium, weak };
+  }, [networks]);
+  
+  // Count encryption types
+  const encryptionStats = useMemo(() => {
+    const stats = { wpa3: 0, wpa2: 0, wpa: 0, wep: 0, open: 0 };
+    networks.forEach(n => {
+      const sec = String(n.security || n.Security || n.encryption || 'open').toLowerCase();
+      if (sec.includes('wpa3')) stats.wpa3++;
+      else if (sec.includes('wpa2')) stats.wpa2++;
+      else if (sec.includes('wpa')) stats.wpa++;
+      else if (sec.includes('wep')) stats.wep++;
+      else stats.open++;
+    });
+    return stats;
   }, [networks]);
   
   return (
@@ -516,6 +559,15 @@ function WifiScannerPanel({ device, clientId }: { device: DeviceGroup; clientId?
         <MetricCard icon={<Signal className="w-4 h-4" />} label="Weak Signal" value={String(signalGroups.weak)} color="text-red-400" />
       </div>
       
+      {/* Encryption Stats */}
+      <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
+        <MetricCard icon={<Eye className="w-4 h-4" />} label="WPA3" value={String(encryptionStats.wpa3)} color="text-green-400" />
+        <MetricCard icon={<Eye className="w-4 h-4" />} label="WPA2" value={String(encryptionStats.wpa2)} color="text-blue-400" />
+        <MetricCard icon={<Eye className="w-4 h-4" />} label="WPA" value={String(encryptionStats.wpa)} color="text-amber-400" />
+        <MetricCard icon={<AlertCircle className="w-4 h-4" />} label="WEP" value={String(encryptionStats.wep)} color="text-red-400" />
+        <MetricCard icon={<AlertCircle className="w-4 h-4" />} label="Open" value={String(encryptionStats.open)} color="text-red-400" />
+      </div>
+      
       <div className="grid grid-cols-2 gap-3">
         <MetricCard icon={<Clock className="w-4 h-4" />} label="Scan Duration" value={scanDuration ? `${scanDuration}ms` : '—'} color="text-muted-foreground" />
         <MetricCard icon={<Activity className="w-4 h-4" />} label="Readings" value={String(wifiApiData?.readings?.length || device.readings?.length || 0)} color="text-muted-foreground" />
@@ -528,21 +580,45 @@ function WifiScannerPanel({ device, clientId }: { device: DeviceGroup; clientId?
             {networks.slice(0, 50).map((network, idx) => {
               const signalValue = network.signal as number || network.rssi as number;
               const signalColor = signalValue > -50 ? 'text-green-400' : signalValue > -70 ? 'text-amber-400' : 'text-red-400';
+              const security = String(network.security || network.Security || network.encryption || 'Open');
+              const encryptionColorClass = getEncryptionColor(security);
+              
               return (
                 <div key={idx} className="flex items-center justify-between p-2 rounded-lg bg-muted/30 hover:bg-muted/50 transition-colors">
                   <div className="flex items-center gap-2 flex-1 min-w-0">
                     <Wifi className={`w-4 h-4 shrink-0 ${signalColor}`} />
-                    <span className="font-mono text-sm truncate">{String(network.ssid || network.SSID || network.bssid || network.BSSID || 'Hidden Network')}</span>
+                    <div className="min-w-0">
+                      <span className="font-mono text-sm block truncate">
+                        {String(network.ssid || network.SSID || 'Hidden Network')}
+                      </span>
+                      {(network.bssid || network.BSSID) && (
+                        <span className="text-[10px] text-muted-foreground font-mono block truncate">
+                          {String(network.bssid || network.BSSID)}
+                        </span>
+                      )}
+                    </div>
                   </div>
-                  <div className="flex items-center gap-3 text-xs text-muted-foreground shrink-0">
-                    {signalValue && <span className={signalColor}>{signalValue.toFixed(0)} dBm</span>}
-                    {(network.channel || network.Channel) && <span>Ch {String(network.channel || network.Channel)}</span>}
-                    {(network.frequency || network.freq) && <span>{((network.frequency || network.freq) as number / 1000).toFixed(1)} GHz</span>}
-                    {(network.security || network.Security || network.encryption) && (
-                      <Badge variant="outline" className="text-[10px]">
-                        {String(network.security || network.Security || network.encryption)}
+                  <div className="flex items-center gap-2 text-xs text-muted-foreground shrink-0 flex-wrap justify-end">
+                    {signalValue && (
+                      <span className={`${signalColor} font-mono`}>{signalValue.toFixed(0)} dBm</span>
+                    )}
+                    {signalValue && (
+                      <Badge variant="outline" className="text-[10px] bg-violet-500/20 text-violet-400 border-violet-500/30">
+                        <MapPin className="w-2.5 h-2.5 mr-1" />
+                        {formatDistance(signalValue)}
                       </Badge>
                     )}
+                    {(network.channel || network.Channel) && (
+                      <span className="font-mono">Ch {String(network.channel || network.Channel)}</span>
+                    )}
+                    {(network.frequency || network.freq) && (
+                      <Badge variant="secondary" className="text-[10px]">
+                        {((network.frequency || network.freq) as number / 1000).toFixed(1)} GHz
+                      </Badge>
+                    )}
+                    <Badge variant="outline" className={`text-[10px] ${encryptionColorClass}`}>
+                      {security}
+                    </Badge>
                   </div>
                 </div>
               );
