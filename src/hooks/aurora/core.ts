@@ -1,6 +1,7 @@
 // Aurora API Core - Base client and utilities
 import { supabase } from "@/integrations/supabase/client";
 import { auroraRequestQueue } from "./requestQueue";
+import { updateConnectionState } from "../useConnectionStatus";
 
 // Enhanced retry configuration for edge function cold starts
 const MAX_RETRIES = 6; // More retries for cold starts
@@ -8,6 +9,9 @@ const COLD_START_RETRIES = 4; // Quick retries specifically for boot errors
 const INITIAL_BACKOFF_MS = 200; // Start very short for cold starts
 const COLD_START_BACKOFF_MS = 150; // Even shorter for boot errors
 const MAX_BACKOFF_MS = 8000;
+
+// Track connection state globally
+let connectionHealthy = false;
 
 // Helper to check if user has a valid Supabase session
 export function hasAuroraSession(): boolean {
@@ -126,6 +130,9 @@ export async function callAuroraApi<T>(
           
           if (isColdStartError) {
             coldStartRetries++;
+            // Update global connection state to warming up
+            updateConnectionState('warming_up', coldStartRetries, COLD_START_RETRIES);
+            
             if (coldStartRetries <= COLD_START_RETRIES) {
               // Use shorter backoff for cold starts - function just needs time to boot
               const backoffMs = calculateBackoff(coldStartRetries - 1, true);
@@ -214,6 +221,12 @@ export async function callAuroraApi<T>(
         // Cache successful GET responses
         if (method === 'GET') {
           auroraRequestQueue.setCache(path, method, data);
+        }
+
+        // Mark connection as healthy on success
+        if (!connectionHealthy) {
+          connectionHealthy = true;
+          updateConnectionState('connected');
         }
 
         return data as T;
