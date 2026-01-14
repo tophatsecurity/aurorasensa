@@ -28,7 +28,6 @@ import {
   getSourceLabel, 
   getSourceColor,
   type LocationSource,
-  type ResolvedLocation,
 } from "./locationResolver";
 
 interface ClientInfoCardProps {
@@ -194,6 +193,21 @@ export function ClientInfoCard({ client, systemInfo, devices = [] }: ClientInfoC
                   <p className="text-xs text-muted-foreground font-mono">
                     {location.latitude.toFixed(4)}, {location.longitude.toFixed(4)}
                   </p>
+                  {/* Altitude display */}
+                  {location.altitude !== undefined && (
+                    <p className="text-xs text-muted-foreground font-mono">
+                      Alt: {location.altitude.toFixed(1)}m
+                      {location.accuracy !== undefined && (
+                        <span className="ml-2">±{location.accuracy.toFixed(0)}m</span>
+                      )}
+                    </p>
+                  )}
+                  {/* Accuracy only (no altitude) */}
+                  {location.altitude === undefined && location.accuracy !== undefined && (
+                    <p className="text-xs text-muted-foreground font-mono">
+                      Accuracy: ±{location.accuracy.toFixed(0)}m
+                    </p>
+                  )}
                   <TooltipProvider>
                     <Tooltip>
                       <TooltipTrigger asChild>
@@ -206,6 +220,12 @@ export function ClientInfoCard({ client, systemInfo, devices = [] }: ClientInfoC
                         <p>Location sourced from: {getSourceLabel(location.source)}</p>
                         {location.deviceId && (
                           <p className="text-xs text-muted-foreground">Device: {location.deviceId}</p>
+                        )}
+                        {location.altitude !== undefined && (
+                          <p className="text-xs text-muted-foreground">Altitude: {location.altitude.toFixed(1)}m</p>
+                        )}
+                        {location.accuracy !== undefined && (
+                          <p className="text-xs text-muted-foreground">Accuracy: ±{location.accuracy.toFixed(0)}m</p>
                         )}
                       </TooltipContent>
                     </Tooltip>
