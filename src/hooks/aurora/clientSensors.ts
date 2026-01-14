@@ -476,9 +476,31 @@ export function useClientAdsbData(clientId: string) {
       if (!clientId) return null;
       
       try {
-        const stats = await callAuroraApi<Record<string, unknown>>(`/api/adsb/stats`);
-        const aircraft = await callAuroraApi<{ aircraft: unknown[] }>(`/api/adsb/aircraft`);
-        const coverage = await callAuroraApi<Record<string, unknown>>(`/api/adsb/coverage`);
+        // Fetch stats and aircraft in parallel
+        const [stats, aircraftResp] = await Promise.all([
+          callAuroraApi<Record<string, unknown>>(`/api/adsb/stats`).catch(() => null),
+          callAuroraApi<{ aircraft?: unknown[] } | unknown[]>(`/api/adsb/aircraft`).catch(() => ({ aircraft: [] })),
+        ]);
+        
+        // Extract aircraft array from response
+        const aircraft = Array.isArray(aircraftResp) 
+          ? aircraftResp 
+          : (aircraftResp as { aircraft?: unknown[] }).aircraft || [];
+        
+        // Fetch devices to get device_id for coverage endpoint
+        let coverage: Record<string, unknown> | null = null;
+        try {
+          const devicesResp = await callAuroraApi<{ devices?: Array<{ device_id: string }> } | Array<{ device_id: string }>>(`/api/adsb/devices`);
+          const devices = Array.isArray(devicesResp) ? devicesResp : devicesResp.devices || [];
+          
+          if (devices.length > 0 && devices[0]?.device_id) {
+            coverage = await callAuroraApi<Record<string, unknown>>(
+              `/api/adsb/coverage?device_id=${devices[0].device_id}`
+            );
+          }
+        } catch {
+          // Coverage is optional, ignore errors
+        }
         
         // Try emergencies
         let emergencies: unknown[] = [];
@@ -491,10 +513,10 @@ export function useClientAdsbData(clientId: string) {
         
         return {
           stats,
-          aircraft: aircraft.aircraft || [],
+          aircraft,
           coverage,
           emergencies,
-          count: (aircraft.aircraft || []).length,
+          count: aircraft.length,
         };
       } catch (error) {
         console.warn(`Failed to fetch ADS-B data for ${clientId}:`, error);
