@@ -153,6 +153,53 @@ function formatValue(value: number, key: string): string {
   return value.toFixed(2);
 }
 
+// Extract location from reading data (handles nested Starlink location)
+function extractLocationFromReading(reading: SensorReading): { lat: number; lng: number } | undefined {
+  // First check top-level latitude/longitude
+  if (reading.latitude && reading.longitude) {
+    return { lat: reading.latitude, lng: reading.longitude };
+  }
+  
+  const data = reading.data as Record<string, unknown> | undefined;
+  if (!data) return undefined;
+  
+  // Check for Starlink location (nested in starlink object)
+  const starlinkData = data.starlink as Record<string, unknown> | undefined;
+  if (starlinkData) {
+    // Check starlink.latitude/longitude directly
+    if (typeof starlinkData.latitude === 'number' && typeof starlinkData.longitude === 'number') {
+      return { lat: starlinkData.latitude, lng: starlinkData.longitude };
+    }
+    
+    // Check starlink.location_detail
+    const locationDetail = starlinkData.location_detail as Record<string, number> | undefined;
+    if (locationDetail?.latitude && locationDetail?.longitude) {
+      return { lat: locationDetail.latitude, lng: locationDetail.longitude };
+    }
+    
+    // Check starlink.gps_location
+    const gpsLocation = starlinkData.gps_location as Record<string, number> | undefined;
+    if (gpsLocation?.latitude && gpsLocation?.longitude) {
+      return { lat: gpsLocation.latitude, lng: gpsLocation.longitude };
+    }
+  }
+  
+  // Check for GPS data
+  const gpsData = data.gps as Record<string, unknown> | undefined;
+  if (gpsData) {
+    if (typeof gpsData.latitude === 'number' && typeof gpsData.longitude === 'number') {
+      return { lat: gpsData.latitude, lng: gpsData.longitude };
+    }
+  }
+  
+  // Check top-level data for lat/lng
+  if (typeof data.latitude === 'number' && typeof data.longitude === 'number') {
+    return { lat: data.latitude as number, lng: data.longitude as number };
+  }
+  
+  return undefined;
+}
+
 // Process readings into device groups
 export function processReadingsToGroups(readings: SensorReading[]): DeviceGroup[] {
   if (!readings) return [];
@@ -161,6 +208,7 @@ export function processReadingsToGroups(readings: SensorReading[]): DeviceGroup[
   
   readings.forEach((reading: SensorReading) => {
     const key = `${reading.client_id || 'unknown'}:${reading.device_id}`;
+    const location = extractLocationFromReading(reading);
     
     if (!groups.has(key)) {
       groups.set(key, {
@@ -169,9 +217,7 @@ export function processReadingsToGroups(readings: SensorReading[]): DeviceGroup[
         client_id: reading.client_id || 'unknown',
         readings: [],
         latest: reading,
-        location: reading.latitude && reading.longitude 
-          ? { lat: reading.latitude, lng: reading.longitude }
-          : undefined
+        location
       });
     }
     
@@ -183,9 +229,9 @@ export function processReadingsToGroups(readings: SensorReading[]): DeviceGroup[
       group.latest = reading;
     }
     
-    // Update location if available
-    if (reading.latitude && reading.longitude) {
-      group.location = { lat: reading.latitude, lng: reading.longitude };
+    // Update location if available (prefer newer readings with location)
+    if (location) {
+      group.location = location;
     }
   });
   
