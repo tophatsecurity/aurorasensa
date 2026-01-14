@@ -211,6 +211,16 @@ Deno.serve(async (req) => {
       });
     }
     
+    // Handle 501 Not Implemented - endpoint exists but not yet implemented
+    if (response.status === 501) {
+      console.log(`Endpoint not implemented (501): ${path} - returning empty data`);
+      const emptyData = getEmptyDataForPath(path);
+      return new Response(JSON.stringify(emptyData), {
+        status: 200,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+    
     // Handle 422 validation errors for non-existent endpoints gracefully
     // The Aurora backend interprets "/api/alerts/rules" as "/api/alerts/{alert_id}" where alert_id="rules"
     if (response.status === 422) {
