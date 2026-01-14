@@ -2,9 +2,10 @@
 import { supabase } from "@/integrations/supabase/client";
 import { auroraRequestQueue } from "./requestQueue";
 
-// Retry configuration - reduced for slow server
-const MAX_RETRIES = 2;
-const INITIAL_BACKOFF_MS = 2000;
+// Retry configuration with exponential backoff for edge function cold starts
+const MAX_RETRIES = 4;
+const INITIAL_BACKOFF_MS = 1000;
+const MAX_BACKOFF_MS = 16000;
 
 // Helper to check if user has a valid Supabase session
 export function hasAuroraSession(): boolean {
@@ -31,14 +32,19 @@ async function sleep(ms: number): Promise<void> {
   return new Promise(resolve => setTimeout(resolve, ms));
 }
 
-// Check if error is retryable
-function isRetryableError(error: Error): boolean {
-  const message = error.message.toLowerCase();
+// Check if error is retryable (includes edge function cold start errors)
+function isRetryableError(error: Error | { code?: string; message?: string }): boolean {
+  const message = ('message' in error ? error.message : '').toLowerCase();
+  const code = ('code' in error ? error.code : '').toLowerCase();
+  
+  // Edge function boot errors (cold starts)
+  if (code === 'boot_error' || message.includes('boot_error') || message.includes('function failed to start')) {
+    return true;
+  }
+  
   return message.includes('503') || 
          message.includes('504') ||
          message.includes('500') ||
-         message.includes('boot_error') || 
-         message.includes('function failed to start') ||
          message.includes('network') ||
          message.includes('timeout') ||
          message.includes('unavailable') ||
@@ -47,7 +53,16 @@ function isRetryableError(error: Error): boolean {
          message.includes('sanic') ||
          message.includes('blueprint') ||
          message.includes('already registered') ||
-         message.includes('already in use');
+         message.includes('already in use') ||
+         message.includes('failed to fetch') ||
+         message.includes('econnrefused');
+}
+
+// Calculate backoff with jitter
+function calculateBackoff(attempt: number): number {
+  const baseBackoff = INITIAL_BACKOFF_MS * Math.pow(2, attempt);
+  const jitter = Math.random() * 500; // Add 0-500ms jitter
+  return Math.min(baseBackoff + jitter, MAX_BACKOFF_MS);
 }
 
 interface AuroraProxyResponse {
@@ -94,9 +109,9 @@ export async function callAuroraApi<T>(
           }
           
           const apiError = new Error(`Aurora API error: ${error.message}`);
-          if (isRetryableError(apiError) && attempt < MAX_RETRIES - 1) {
-            const backoffMs = INITIAL_BACKOFF_MS * Math.pow(2, attempt);
-            console.warn(`Retrying ${path} in ${backoffMs}ms (attempt ${attempt + 1}/${MAX_RETRIES})`);
+          if (isRetryableError(error) && attempt < MAX_RETRIES - 1) {
+            const backoffMs = calculateBackoff(attempt);
+            console.warn(`Retrying ${path} in ${backoffMs}ms (attempt ${attempt + 1}/${MAX_RETRIES}) - ${error.message}`);
             await sleep(backoffMs);
             lastError = apiError;
             continue;
@@ -178,8 +193,8 @@ export async function callAuroraApi<T>(
         }
         
         if (isRetryableError(error) && attempt < MAX_RETRIES - 1) {
-          const backoffMs = INITIAL_BACKOFF_MS * Math.pow(2, attempt);
-          console.warn(`Retrying ${path} in ${backoffMs}ms (attempt ${attempt + 1}/${MAX_RETRIES})`);
+          const backoffMs = calculateBackoff(attempt);
+          console.warn(`Retrying ${path} in ${backoffMs}ms (attempt ${attempt + 1}/${MAX_RETRIES}) - ${error.message}`);
           await sleep(backoffMs);
           lastError = error;
           continue;
@@ -210,25 +225,29 @@ function getEmptyDataForPath(path: string): unknown {
   return null;
 }
 
-// Retry delay function for react-query
-const retryDelay = (attemptIndex: number) => Math.min(2000 * 2 ** attemptIndex, 60000);
+// Retry delay function for react-query with exponential backoff
+const retryDelay = (attemptIndex: number) => {
+  const baseDelay = 1000 * Math.pow(2, attemptIndex);
+  const jitter = Math.random() * 500;
+  return Math.min(baseDelay + jitter, 16000);
+};
 
-// Default query options - increased stale times for slow server
+// Default query options - with enhanced retry for cold starts
 export const defaultQueryOptions = {
   enabled: true,
   staleTime: 120000, // 2 minutes - data stays fresh longer
   refetchInterval: 180000, // 3 minutes - less frequent refetching
-  retry: 2,
+  retry: 4, // More retries for cold starts
   retryDelay,
   refetchOnWindowFocus: false,
 };
 
-// Fast polling options (for real-time data) - still reduced for slow server
+// Fast polling options (for real-time data)
 export const fastQueryOptions = {
   enabled: true,
   staleTime: 60000, // 1 minute
   refetchInterval: 120000, // 2 minutes
-  retry: 2,
+  retry: 4,
   retryDelay,
   refetchOnWindowFocus: false,
 };
@@ -238,7 +257,7 @@ export const slowQueryOptions = {
   enabled: true,
   staleTime: 300000, // 5 minutes
   refetchInterval: 600000, // 10 minutes
-  retry: 1,
+  retry: 3,
   retryDelay,
   refetchOnWindowFocus: false,
 };
