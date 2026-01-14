@@ -1,6 +1,7 @@
 // Stats components barrel export
 export * from "./types";
 export * from "./utils";
+export * from "./locationResolver";
 export { ClientStatsPanel } from "./ClientStatsPanel";
 export { ClientInfoCard } from "./ClientInfoCard";
 export { MeasurementsSection } from "./MeasurementsSection";

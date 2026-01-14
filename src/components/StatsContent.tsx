@@ -19,6 +19,7 @@ import {
   StatsHeader,
   StatsLoadingSkeleton,
   RawJsonPanel,
+  enrichDevicesWithLocations,
 } from "@/components/stats";
 
 // Helper to convert client sensor readings to device groups
@@ -116,10 +117,12 @@ export default function StatsContent() {
   const { data: selectedClientData } = useClient(selectedClient || "");
   const { data: selectedClientSystemInfo } = useClientSystemInfo(selectedClient || "");
 
-  // Process readings into device groups
+  // Process readings into device groups and enrich with locations
   const filteredDevices = useMemo(() => {
     if (!clientSensorData?.readings || clientSensorData.readings.length === 0) return [];
-    return processClientSensorDataToGroups(clientSensorData.readings, selectedClient);
+    const devices = processClientSensorDataToGroups(clientSensorData.readings, selectedClient);
+    // Enrich devices with location data extracted from all sensor types
+    return enrichDevicesWithLocations(devices);
   }, [clientSensorData, selectedClient]);
 
   // Collect API errors
