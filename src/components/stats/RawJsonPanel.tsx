@@ -21,14 +21,21 @@ export function RawJsonPanel({ clientId }: RawJsonPanelProps) {
     refetch: refetchBatches 
   } = useBatchesByClient(clientId);
 
-  // Get the latest batch ID
+  // Get the latest batch ID - handle both array and object with batches property
   const latestBatchId = useMemo(() => {
-    if (!batches || !Array.isArray(batches) || batches.length === 0) return null;
+    if (!batches) return null;
+    
+    // Handle both formats: array directly or { batches: [...] }
+    const batchList = Array.isArray(batches) 
+      ? batches 
+      : (batches as { batches?: unknown[] })?.batches;
+    
+    if (!batchList || !Array.isArray(batchList) || batchList.length === 0) return null;
     
     // Sort by timestamp descending and get the first one
-    const sorted = [...batches].sort((a: any, b: any) => {
-      const timeA = new Date(a.timestamp || a.received_at || 0).getTime();
-      const timeB = new Date(b.timestamp || b.received_at || 0).getTime();
+    const sorted = [...batchList].sort((a: any, b: any) => {
+      const timeA = new Date(a.timestamp || a.received_at || a.batch_timestamp || 0).getTime();
+      const timeB = new Date(b.timestamp || b.received_at || b.batch_timestamp || 0).getTime();
       return timeB - timeA;
     });
     
