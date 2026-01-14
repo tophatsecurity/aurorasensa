@@ -318,15 +318,54 @@ export function useClientStarlinkData(clientId: string) {
       if (!clientId) return null;
       
       try {
-        const stats = await callAuroraApi<Record<string, unknown>>(`/api/stats/sensors/starlink?hours=1`);
-        const readingsResponse = await callAuroraApi<{ readings: ClientSensorReading[] }>(
-          `/api/readings/sensor/starlink?hours=24`
-        );
+        // Get stats
+        let stats: Record<string, unknown> | null = null;
+        try {
+          stats = await callAuroraApi<Record<string, unknown>>(`/api/stats/sensors/starlink?hours=1`);
+        } catch {
+          // Ignore
+        }
         
-        const clientReadings = (readingsResponse.readings || []).filter(r =>
-          r.client_id === clientId || 
-          r.device_id?.includes(clientId.replace('client_', ''))
-        );
+        // Use client-specific batch endpoint for accurate data
+        const batchResponse = await callAuroraApi<{ 
+          batches: BatchWithSensors[]; 
+          client_id?: string;
+          count?: number;
+        }>(`/api/batches/by-client/${clientId}?limit=20`);
+        
+        const batches = batchResponse.batches || [];
+        
+        // Extract Starlink readings from batches
+        const clientReadings: ClientSensorReading[] = [];
+        
+        for (const batch of batches) {
+          if (batch.readings && Array.isArray(batch.readings)) {
+            for (const reading of batch.readings) {
+              const sensors = reading.sensors;
+              if (sensors && typeof sensors === 'object') {
+                for (const [sensorId, sensorData] of Object.entries(sensors)) {
+                  if (!sensorData) continue;
+                  
+                  const deviceType = (sensorData.device_type as string)?.toLowerCase() || sensorId.toLowerCase();
+                  
+                  // Check if this is a Starlink sensor
+                  if (deviceType.includes('starlink') || sensorId.toLowerCase().includes('starlink')) {
+                    clientReadings.push({
+                      device_id: (sensorData.device_id as string) || sensorId,
+                      device_type: 'starlink',
+                      timestamp: reading.timestamp || batch.timestamp,
+                      data: sensorData as Record<string, unknown>,
+                      client_id: clientId,
+                    });
+                  }
+                }
+              }
+            }
+          }
+        }
+        
+        // Sort by timestamp descending
+        clientReadings.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
         
         return {
           stats,
@@ -626,15 +665,47 @@ export function useClientGpsData(clientId: string) {
           // Ignore
         }
         
-        // Get GPS readings
-        const readingsResponse = await callAuroraApi<{ readings: ClientSensorReading[] }>(
-          `/api/readings/sensor/gps?hours=24`
-        );
+        // Use client-specific batch endpoint for accurate data
+        const batchResponse = await callAuroraApi<{ 
+          batches: BatchWithSensors[]; 
+          client_id?: string;
+          count?: number;
+        }>(`/api/batches/by-client/${clientId}?limit=20`);
         
-        const clientReadings = (readingsResponse.readings || []).filter(r =>
-          r.client_id === clientId ||
-          r.device_id?.includes(clientId.replace('client_', ''))
-        );
+        const batches = batchResponse.batches || [];
+        
+        // Extract GPS readings from batches
+        const clientReadings: ClientSensorReading[] = [];
+        
+        for (const batch of batches) {
+          if (batch.readings && Array.isArray(batch.readings)) {
+            for (const reading of batch.readings) {
+              const sensors = reading.sensors;
+              if (sensors && typeof sensors === 'object') {
+                for (const [sensorId, sensorData] of Object.entries(sensors)) {
+                  if (!sensorData) continue;
+                  
+                  const deviceType = (sensorData.device_type as string)?.toLowerCase() || sensorId.toLowerCase();
+                  
+                  // Check if this is a GPS sensor
+                  if (deviceType.includes('gps') || deviceType.includes('gnss') || 
+                      sensorId.toLowerCase().includes('gps') || sensorId.toLowerCase().includes('gnss')) {
+                    clientReadings.push({
+                      device_id: (sensorData.device_id as string) || sensorId,
+                      device_type: 'gps',
+                      timestamp: reading.timestamp || batch.timestamp,
+                      data: sensorData as Record<string, unknown>,
+                      client_id: clientId,
+                    });
+                  }
+                }
+              }
+            }
+          }
+        }
+        
+        // Sort by timestamp descending
+        clientReadings.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
         
         // Extract GPS data from latest reading
         let latestGps: GpsData | null = null;
