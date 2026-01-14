@@ -43,6 +43,59 @@ export interface SensorDataByType {
   [key: string]: ClientSensorReading[] | undefined;
 }
 
+// WiFi Network interface
+export interface WifiNetwork {
+  ssid?: string;
+  bssid?: string;
+  signal?: number;
+  channel?: number;
+  frequency?: number;
+  security?: string;
+  band?: string;
+  last_seen?: string;
+}
+
+// Bluetooth Device interface
+export interface BluetoothDevice {
+  address?: string;
+  name?: string;
+  rssi?: number;
+  type?: string;
+  manufacturer?: string;
+  last_seen?: string;
+  uuid?: string;
+  connectable?: boolean;
+}
+
+// GPS Data interface
+export interface GpsData {
+  latitude?: number;
+  longitude?: number;
+  altitude?: number;
+  speed?: number;
+  heading?: number;
+  satellites?: number;
+  fix_quality?: number;
+  hdop?: number;
+  timestamp?: string;
+}
+
+// Arduino Metrics interface
+export interface ArduinoMetrics {
+  temperature_c?: number;
+  temperature_f?: number;
+  humidity?: number;
+  pressure?: number;
+  light_level?: number;
+  soil_moisture?: number;
+  co2_ppm?: number;
+  tvoc_ppb?: number;
+  voltage?: number;
+  current?: number;
+  power_w?: number;
+  [key: string]: number | string | undefined;
+}
+
 // Fetch batches for a specific client
 export function useBatchesByClient(clientId: string, limit: number = 10) {
   return useQuery({
@@ -89,12 +142,10 @@ function extractSensorReadings(batch: BatchWithSensors | null, clientId: string)
   
   const readings: ClientSensorReading[] = [];
   
-  // Extract client_id from batch_id if not set (format: batch_client_XXXX_timestamp_id)
   const extractedClientId = batch.client_id !== 'unknown' 
     ? batch.client_id 
     : extractClientIdFromBatchId(batch.batch_id) || clientId;
   
-  // Handle readings array with sensors object
   if (batch.readings && Array.isArray(batch.readings)) {
     for (const reading of batch.readings) {
       const timestamp = reading.timestamp || batch.timestamp;
@@ -104,7 +155,6 @@ function extractSensorReadings(batch: BatchWithSensors | null, clientId: string)
         for (const [sensorId, sensorData] of Object.entries(sensors)) {
           if (!sensorData) continue;
           
-          // Determine device type from sensor ID (e.g., bluetooth_scanner_1 -> bluetooth_scanner)
           const deviceType = sensorData.device_type || extractDeviceType(sensorId);
           
           readings.push({
@@ -122,7 +172,6 @@ function extractSensorReadings(batch: BatchWithSensors | null, clientId: string)
   return readings;
 }
 
-// Extract client ID from batch ID (format: batch_client_XXXX_timestamp_id)
 function extractClientIdFromBatchId(batchId: string): string | null {
   const match = batchId.match(/batch_client_([a-f0-9]+)_/i);
   if (match) {
@@ -131,9 +180,7 @@ function extractClientIdFromBatchId(batchId: string): string | null {
   return null;
 }
 
-// Extract device type from sensor ID (e.g., bluetooth_scanner_1 -> bluetooth_scanner)
 function extractDeviceType(sensorId: string): string {
-  // Remove trailing numbers and underscores
   const match = sensorId.match(/^(.+?)_?\d*$/);
   if (match) {
     return match[1].replace(/_\d+$/, '');
@@ -149,32 +196,21 @@ export function useClientSensorData(clientId: string) {
       if (!clientId) return { readings: [], byType: {} as SensorDataByType };
       
       try {
-        // Fetch recent batches
         const batchesResponse = await callAuroraApi<{ batches: BatchWithSensors[] }>(
           `/api/batches/list?limit=50`
         );
         
-        // Extract client identifier from clientId (e.g., client_e45f01ac9b5f -> e45f01ac9b5f)
         const clientIdentifier = clientId.replace('client_', '');
         
-        // Filter batches for this client by checking batch_id pattern
         const clientBatches = (batchesResponse.batches || []).filter(b => {
-          // Match by client_id field
           if (b.client_id === clientId) return true;
-          // Match by batch_id containing client identifier
           if (b.batch_id.includes(clientIdentifier)) return true;
-          // Match extracted client_id from batch_id
           const extractedClient = extractClientIdFromBatchId(b.batch_id);
           if (extractedClient === clientId) return true;
           return false;
         });
         
-        console.debug(`Found ${clientBatches.length} batches for client ${clientId}`);
-        
-        // Get the most recent batches (up to 10)
         const recentBatches = clientBatches.slice(0, 10);
-        
-        // Fetch full data for each batch
         const allReadings: ClientSensorReading[] = [];
         
         await Promise.all(
@@ -182,7 +218,6 @@ export function useClientSensorData(clientId: string) {
             try {
               const fullBatch = await callAuroraApi<BatchWithSensors>(`/api/batches/${batch.batch_id}`);
               const readings = extractSensorReadings(fullBatch, clientId);
-              console.debug(`Extracted ${readings.length} sensors from batch ${batch.batch_id}`);
               allReadings.push(...readings);
             } catch (error) {
               console.debug(`Failed to fetch batch ${batch.batch_id}:`, error);
@@ -190,9 +225,6 @@ export function useClientSensorData(clientId: string) {
           })
         );
         
-        console.debug(`Total sensor readings for ${clientId}: ${allReadings.length}`);
-        
-        // Group readings by sensor type
         const byType: SensorDataByType = {};
         
         for (const reading of allReadings) {
@@ -213,7 +245,6 @@ export function useClientSensorData(clientId: string) {
           byType[key]!.push(reading);
         }
         
-        // Sort each type by timestamp (newest first)
         for (const key of Object.keys(byType)) {
           byType[key]!.sort((a, b) => 
             new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
@@ -241,12 +272,10 @@ export function useClientSensorTypeData(clientId: string, sensorType: string, ho
       if (!clientId || !sensorType) return [];
       
       try {
-        // Try the readings endpoint with client filter
         const response = await callAuroraApi<{ readings: ClientSensorReading[]; count?: number }>(
           `/api/readings/sensor/${sensorType}?hours=${hours}`
         );
         
-        // Filter for this client
         const readings = (response.readings || []).filter(r => 
           r.client_id === clientId || 
           r.device_id?.includes(clientId.replace('client_', ''))
@@ -271,10 +300,7 @@ export function useClientStarlinkData(clientId: string) {
       if (!clientId) return null;
       
       try {
-        // Try direct starlink stats endpoint
         const stats = await callAuroraApi<Record<string, unknown>>(`/api/stats/sensors/starlink?hours=1`);
-        
-        // Also try to get readings
         const readingsResponse = await callAuroraApi<{ readings: ClientSensorReading[] }>(
           `/api/readings/sensor/starlink?hours=24`
         );
@@ -330,7 +356,7 @@ export function useClientSystemMonitorData(clientId: string) {
   });
 }
 
-// Hook for WiFi Scanner data
+// Hook for WiFi Scanner data with networks extraction
 export function useClientWifiData(clientId: string) {
   return useQuery({
     queryKey: ["aurora", "client", clientId, "wifi"],
@@ -338,6 +364,28 @@ export function useClientWifiData(clientId: string) {
       if (!clientId) return null;
       
       try {
+        // Try WiFi scan endpoint first
+        let networks: WifiNetwork[] = [];
+        try {
+          const scanResponse = await callAuroraApi<{ networks?: WifiNetwork[] }>(
+            `/api/clients/${clientId}/wifi/scan`
+          );
+          networks = scanResponse.networks || [];
+        } catch {
+          // Fallback to readings
+        }
+        
+        // Get WiFi status
+        let status: Record<string, unknown> | null = null;
+        try {
+          status = await callAuroraApi<Record<string, unknown>>(
+            `/api/clients/${clientId}/wifi/status`
+          );
+        } catch {
+          // Ignore
+        }
+        
+        // Get readings as backup
         const readingsResponse = await callAuroraApi<{ readings: ClientSensorReading[] }>(
           `/api/readings/sensor/wifi_scanner?hours=24`
         );
@@ -347,9 +395,23 @@ export function useClientWifiData(clientId: string) {
           r.device_id?.includes(clientId.replace('client_', ''))
         );
         
+        // Extract networks from readings if not from scan
+        if (networks.length === 0 && clientReadings.length > 0) {
+          const latestData = clientReadings[0]?.data || {};
+          const wifiData = (latestData.wifi_scanner as Record<string, unknown>) || 
+                          (latestData.wifi as Record<string, unknown>) || 
+                          latestData;
+          if (Array.isArray(wifiData.networks)) {
+            networks = wifiData.networks as WifiNetwork[];
+          }
+        }
+        
         return {
+          status,
+          networks,
           readings: clientReadings,
           latest: clientReadings[0] || null,
+          networkCount: networks.length,
         };
       } catch (error) {
         console.warn(`Failed to fetch WiFi data for ${clientId}:`, error);
@@ -361,7 +423,7 @@ export function useClientWifiData(clientId: string) {
   });
 }
 
-// Hook for Bluetooth Scanner data
+// Hook for Bluetooth Scanner data with device extraction
 export function useClientBluetoothData(clientId: string) {
   return useQuery({
     queryKey: ["aurora", "client", clientId, "bluetooth"],
@@ -378,9 +440,23 @@ export function useClientBluetoothData(clientId: string) {
           r.device_id?.includes(clientId.replace('client_', ''))
         );
         
+        // Extract devices from latest reading
+        let devices: BluetoothDevice[] = [];
+        if (clientReadings.length > 0) {
+          const latestData = clientReadings[0]?.data || {};
+          const btData = (latestData.bluetooth_scanner as Record<string, unknown>) || 
+                        (latestData.bluetooth as Record<string, unknown>) || 
+                        latestData;
+          if (Array.isArray(btData.devices)) {
+            devices = btData.devices as BluetoothDevice[];
+          }
+        }
+        
         return {
+          devices,
           readings: clientReadings,
           latest: clientReadings[0] || null,
+          deviceCount: devices.length,
         };
       } catch (error) {
         console.warn(`Failed to fetch Bluetooth data for ${clientId}:`, error);
@@ -400,15 +476,24 @@ export function useClientAdsbData(clientId: string) {
       if (!clientId) return null;
       
       try {
-        // Get ADS-B stats
         const stats = await callAuroraApi<Record<string, unknown>>(`/api/adsb/stats`);
-        
-        // Get aircraft data
         const aircraft = await callAuroraApi<{ aircraft: unknown[] }>(`/api/adsb/aircraft`);
+        const coverage = await callAuroraApi<Record<string, unknown>>(`/api/adsb/coverage`);
+        
+        // Try emergencies
+        let emergencies: unknown[] = [];
+        try {
+          const emergencyResp = await callAuroraApi<{ aircraft?: unknown[] }>(`/api/adsb/emergencies`);
+          emergencies = emergencyResp.aircraft || [];
+        } catch {
+          // Ignore
+        }
         
         return {
           stats,
           aircraft: aircraft.aircraft || [],
+          coverage,
+          emergencies,
           count: (aircraft.aircraft || []).length,
         };
       } catch (error) {
@@ -429,10 +514,15 @@ export function useClientGpsData(clientId: string) {
       if (!clientId) return null;
       
       try {
-        // Try GPSD status
-        const gpsdStatus = await callAuroraApi<Record<string, unknown>>(`/gpsd_status.jsonl`);
+        // Try GPSD status file
+        let gpsdStatus: GpsData | null = null;
+        try {
+          gpsdStatus = await callAuroraApi<GpsData>(`/gpsd_status.jsonl`);
+        } catch {
+          // Ignore
+        }
         
-        // Try GPS readings
+        // Get GPS readings
         const readingsResponse = await callAuroraApi<{ readings: ClientSensorReading[] }>(
           `/api/readings/sensor/gps?hours=24`
         );
@@ -442,10 +532,28 @@ export function useClientGpsData(clientId: string) {
           r.device_id?.includes(clientId.replace('client_', ''))
         );
         
+        // Extract GPS data from latest reading
+        let latestGps: GpsData | null = null;
+        if (clientReadings.length > 0) {
+          const data = clientReadings[0]?.data || {};
+          const gpsData = (data.gps as GpsData) || (data.gnss as GpsData) || data;
+          latestGps = {
+            latitude: gpsData.latitude as number,
+            longitude: gpsData.longitude as number,
+            altitude: gpsData.altitude as number,
+            speed: gpsData.speed as number,
+            heading: gpsData.heading as number,
+            satellites: gpsData.satellites as number,
+            fix_quality: gpsData.fix_quality as number,
+            hdop: gpsData.hdop as number,
+          };
+        }
+        
         return {
           gpsdStatus,
           readings: clientReadings,
           latest: clientReadings[0] || null,
+          gpsData: latestGps || gpsdStatus,
         };
       } catch (error) {
         console.warn(`Failed to fetch GPS data for ${clientId}:`, error);
@@ -480,6 +588,126 @@ export function useClientThermalData(clientId: string) {
         };
       } catch (error) {
         console.warn(`Failed to fetch Thermal data for ${clientId}:`, error);
+        return null;
+      }
+    },
+    enabled: hasAuroraSession() && !!clientId,
+    ...fastQueryOptions,
+  });
+}
+
+// Hook for Arduino data with all metrics
+export function useClientArduinoData(clientId: string) {
+  return useQuery({
+    queryKey: ["aurora", "client", clientId, "arduino"],
+    queryFn: async () => {
+      if (!clientId) return null;
+      
+      try {
+        // Get Arduino readings
+        const readingsResponse = await callAuroraApi<{ readings: ClientSensorReading[] }>(
+          `/api/readings/sensor/arduino?hours=24`
+        );
+        
+        const clientReadings = (readingsResponse.readings || []).filter(r =>
+          r.client_id === clientId ||
+          r.device_id?.includes(clientId.replace('client_', ''))
+        );
+        
+        // Try Arduino stats
+        let stats: Record<string, unknown> | null = null;
+        try {
+          stats = await callAuroraApi<Record<string, unknown>>(`/api/stats/sensors/arduino`);
+        } catch {
+          // Ignore
+        }
+        
+        // Try Arduino JSONL file
+        let jsonlData: ArduinoMetrics | null = null;
+        try {
+          jsonlData = await callAuroraApi<ArduinoMetrics>(`/arduino_data.jsonl`);
+        } catch {
+          // Ignore
+        }
+        
+        // Extract metrics from latest reading
+        let metrics: ArduinoMetrics | null = null;
+        if (clientReadings.length > 0) {
+          const data = clientReadings[0]?.data || {};
+          const arduinoData = (data.arduino as Record<string, unknown>) || data as Record<string, unknown>;
+          metrics = {
+            temperature_c: arduinoData.temperature_c as number | undefined,
+            temperature_f: arduinoData.temperature_f as number | undefined,
+            humidity: arduinoData.humidity as number | undefined,
+            pressure: arduinoData.pressure as number | undefined,
+            light_level: arduinoData.light_level as number | undefined,
+            soil_moisture: arduinoData.soil_moisture as number | undefined,
+            co2_ppm: arduinoData.co2_ppm as number | undefined,
+            tvoc_ppb: arduinoData.tvoc_ppb as number | undefined,
+            voltage: arduinoData.voltage as number | undefined,
+            current: arduinoData.current as number | undefined,
+            power_w: arduinoData.power_w as number | undefined,
+          };
+        }
+        
+        return {
+          stats,
+          jsonlData,
+          readings: clientReadings,
+          latest: clientReadings[0] || null,
+          metrics: metrics || jsonlData,
+        };
+      } catch (error) {
+        console.warn(`Failed to fetch Arduino data for ${clientId}:`, error);
+        return null;
+      }
+    },
+    enabled: hasAuroraSession() && !!clientId,
+    ...fastQueryOptions,
+  });
+}
+
+// Hook for LoRa data
+export function useClientLoraData(clientId: string) {
+  return useQuery({
+    queryKey: ["aurora", "client", clientId, "lora"],
+    queryFn: async () => {
+      if (!clientId) return null;
+      
+      try {
+        // Get LoRa devices
+        let devices: unknown[] = [];
+        try {
+          const devResp = await callAuroraApi<{ devices?: unknown[] }>(`/api/lora/devices`);
+          devices = devResp.devices || [];
+        } catch {
+          // Ignore
+        }
+        
+        // Get LoRa detections
+        let detections: unknown[] = [];
+        try {
+          const detResp = await callAuroraApi<{ detections?: unknown[] }>(`/api/lora/detections/recent`);
+          detections = detResp.detections || [];
+        } catch {
+          // Ignore
+        }
+        
+        // Get global stats
+        let stats: Record<string, unknown> | null = null;
+        try {
+          stats = await callAuroraApi<Record<string, unknown>>(`/api/lora/stats/global`);
+        } catch {
+          // Ignore
+        }
+        
+        return {
+          devices,
+          detections,
+          stats,
+        };
+      } catch (error) {
+        console.warn(`Failed to fetch LoRa data for ${clientId}:`, error);
         return null;
       }
     },
