@@ -5,25 +5,51 @@ import {
   Radio,
   MapPin,
   Clock,
-  Signal
+  Signal,
+  TrendingUp,
+  Database,
+  Layers,
+  Wifi
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { format } from "date-fns";
+import { format, formatDistanceToNow } from "date-fns";
 import { formatUptime } from "./utils";
 import type { ClientInfo, SystemInfo } from "./types";
+
+interface ClientStats {
+  client_id: string;
+  hostname?: string;
+  total_readings?: number;
+  total_devices?: number;
+  active_devices?: number;
+  readings_last_hour?: number;
+  readings_last_24h?: number;
+  avg_readings_per_hour?: number;
+  device_types?: string[];
+  sensors?: string[];
+}
 
 interface ClientStatsPanelProps {
   client: ClientInfo;
   systemInfo?: SystemInfo | null;
+  clientStats?: ClientStats | null;
   deviceCount: number;
   readingsCount: number;
 }
 
-export function ClientStatsPanel({ client, systemInfo, deviceCount, readingsCount }: ClientStatsPanelProps) {
+export function ClientStatsPanel({ client, systemInfo, clientStats, deviceCount, readingsCount }: ClientStatsPanelProps) {
   if (!client) {
     return null;
   }
+
+  // Use clientStats if available, otherwise fall back to props
+  const totalDevices = clientStats?.total_devices ?? deviceCount;
+  const totalReadings = clientStats?.total_readings ?? readingsCount;
+  const activeDevices = clientStats?.active_devices ?? deviceCount;
+  const readingsLastHour = clientStats?.readings_last_hour;
+  const readingsLast24h = clientStats?.readings_last_24h;
+  const avgReadingsPerHour = clientStats?.avg_readings_per_hour;
 
   return (
     <Card className="glass-card border-primary/30">
@@ -38,46 +64,47 @@ export function ClientStatsPanel({ client, systemInfo, deviceCount, readingsCoun
               <p className="text-xs text-muted-foreground font-normal">{client.ip_address || 'N/A'}</p>
             </div>
           </div>
-          <Badge variant={client.state === 'adopted' ? 'default' : 'secondary'}>
-            {client.state || client.status || 'Unknown'}
-          </Badge>
+          <div className="flex items-center gap-2">
+            <Badge variant={client.state === 'adopted' ? 'default' : 'secondary'}>
+              {client.state || client.status || 'Unknown'}
+            </Badge>
+            {client.last_seen && (
+              <Badge variant="outline" className="text-xs">
+                {formatDistanceToNow(new Date(client.last_seen), { addSuffix: true })}
+              </Badge>
+            )}
+          </div>
         </CardTitle>
       </CardHeader>
       <CardContent>
-        <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4">
-          <StatMetricCard icon={Thermometer} label="Devices" value={deviceCount} />
-          <StatMetricCard icon={Activity} label="Readings" value={readingsCount} />
-          <StatMetricCard icon={Clock} label="Batches" value={client.batches_received ?? 0} />
+        {/* Primary Stats Row */}
+        <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-8 gap-3 mb-4">
+          <StatMetricCard icon={Thermometer} label="Total Devices" value={totalDevices} />
+          <StatMetricCard icon={Activity} label="Active Devices" value={activeDevices} />
+          <StatMetricCard icon={Database} label="Total Readings" value={formatLargeNumber(totalReadings)} />
+          <StatMetricCard icon={Layers} label="Batches" value={client.batches_received ?? 0} />
           
-          {systemInfo?.cpu_percent !== undefined && (
+          {readingsLastHour !== undefined && (
             <StatMetricCard 
-              icon={Zap} 
-              label="CPU" 
-              value={`${systemInfo.cpu_percent.toFixed(1)}%`} 
+              icon={TrendingUp} 
+              label="Readings/1h" 
+              value={formatLargeNumber(readingsLastHour)} 
             />
           )}
           
-          {systemInfo?.memory_percent !== undefined && (
+          {readingsLast24h !== undefined && (
             <StatMetricCard 
-              icon={Activity} 
-              label="Memory" 
-              value={`${systemInfo.memory_percent.toFixed(1)}%`} 
+              icon={TrendingUp} 
+              label="Readings/24h" 
+              value={formatLargeNumber(readingsLast24h)} 
             />
           )}
           
-          {systemInfo?.disk_percent !== undefined && (
+          {avgReadingsPerHour !== undefined && (
             <StatMetricCard 
-              icon={Signal} 
-              label="Disk" 
-              value={`${systemInfo.disk_percent.toFixed(1)}%`} 
-            />
-          )}
-          
-          {systemInfo?.uptime_seconds !== undefined && (
-            <StatMetricCard 
-              icon={Clock} 
-              label="Uptime" 
-              value={formatUptime(systemInfo.uptime_seconds)} 
+              icon={TrendingUp} 
+              label="Avg/Hour" 
+              value={avgReadingsPerHour.toFixed(1)} 
             />
           )}
           
@@ -89,27 +116,85 @@ export function ClientStatsPanel({ client, systemInfo, deviceCount, readingsCoun
               isText
             />
           )}
-          
-          <div className="p-3 rounded-lg bg-muted/30 border border-border/50">
-            <div className="flex items-center gap-2 text-muted-foreground mb-1">
-              <Clock className="w-4 h-4" />
-              <span className="text-xs">Last Seen</span>
-            </div>
-            <p className="text-sm font-medium">
-              {client.last_seen ? (() => {
-                try {
-                  return format(new Date(client.last_seen), 'HH:mm:ss');
-                } catch {
-                  return 'N/A';
-                }
-              })() : 'N/A'}
-            </p>
-          </div>
         </div>
+        
+        {/* System Resources Row */}
+        {systemInfo && (
+          <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-3 mb-4">
+            {systemInfo.cpu_percent !== undefined && (
+              <ResourceMetricCard 
+                icon={Zap} 
+                label="CPU Usage" 
+                value={systemInfo.cpu_percent}
+                unit="%"
+                color={getResourceColor(systemInfo.cpu_percent)}
+              />
+            )}
+            
+            {systemInfo.memory_percent !== undefined && (
+              <ResourceMetricCard 
+                icon={Activity} 
+                label="Memory" 
+                value={systemInfo.memory_percent}
+                unit="%"
+                color={getResourceColor(systemInfo.memory_percent)}
+              />
+            )}
+            
+            {systemInfo.disk_percent !== undefined && (
+              <ResourceMetricCard 
+                icon={Signal} 
+                label="Disk Usage" 
+                value={systemInfo.disk_percent}
+                unit="%"
+                color={getResourceColor(systemInfo.disk_percent)}
+              />
+            )}
+            
+            {systemInfo.uptime_seconds !== undefined && (
+              <StatMetricCard 
+                icon={Clock} 
+                label="Uptime" 
+                value={formatUptime(systemInfo.uptime_seconds)} 
+                isText
+              />
+            )}
+            
+            <div className="p-3 rounded-lg bg-muted/30 border border-border/50">
+              <div className="flex items-center gap-2 text-muted-foreground mb-1">
+                <Clock className="w-4 h-4" />
+                <span className="text-xs">Last Seen</span>
+              </div>
+              <p className="text-sm font-medium">
+                {client.last_seen ? (() => {
+                  try {
+                    return format(new Date(client.last_seen), 'MMM dd, HH:mm:ss');
+                  } catch {
+                    return 'N/A';
+                  }
+                })() : 'N/A'}
+              </p>
+            </div>
+          </div>
+        )}
+        
+        {/* Device Types */}
+        {clientStats?.device_types && clientStats.device_types.length > 0 && (
+          <div className="mb-4">
+            <p className="text-xs text-muted-foreground mb-2">Device Types</p>
+            <div className="flex flex-wrap gap-1">
+              {clientStats.device_types.map(type => (
+                <Badge key={type} variant="outline" className="text-xs capitalize">
+                  {type.replace(/_/g, ' ')}
+                </Badge>
+              ))}
+            </div>
+          </div>
+        )}
         
         {/* System Info Details */}
         {systemInfo && (
-          <div className="mt-4 pt-4 border-t border-border/50">
+          <div className="pt-3 border-t border-border/50">
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
               {systemInfo.hostname && (
                 <div>
@@ -147,6 +232,20 @@ export function ClientStatsPanel({ client, systemInfo, deviceCount, readingsCoun
   );
 }
 
+function formatLargeNumber(num?: number): string {
+  if (num === undefined || num === null) return "0";
+  if (num >= 1000000) return `${(num / 1000000).toFixed(1)}M`;
+  if (num >= 1000) return `${(num / 1000).toFixed(1)}K`;
+  return num.toLocaleString();
+}
+
+function getResourceColor(percent: number): string {
+  if (percent >= 90) return "text-red-400";
+  if (percent >= 75) return "text-amber-400";
+  if (percent >= 50) return "text-yellow-400";
+  return "text-green-400";
+}
+
 function StatMetricCard({ 
   icon: Icon, 
   label, 
@@ -167,6 +266,40 @@ function StatMetricCard({
       <p className={isText ? "text-sm font-medium truncate" : "text-xl font-bold"}>
         {value}
       </p>
+    </div>
+  );
+}
+
+function ResourceMetricCard({ 
+  icon: Icon, 
+  label, 
+  value,
+  unit,
+  color
+}: { 
+  icon: React.ElementType; 
+  label: string; 
+  value: number;
+  unit: string;
+  color: string;
+}) {
+  return (
+    <div className="p-3 rounded-lg bg-muted/30 border border-border/50">
+      <div className="flex items-center gap-2 text-muted-foreground mb-1">
+        <Icon className="w-4 h-4" />
+        <span className="text-xs">{label}</span>
+      </div>
+      <div className="flex items-baseline gap-1">
+        <p className={`text-xl font-bold ${color}`}>{value.toFixed(1)}</p>
+        <span className="text-xs text-muted-foreground">{unit}</span>
+      </div>
+      {/* Progress bar */}
+      <div className="mt-2 h-1 bg-muted rounded-full overflow-hidden">
+        <div 
+          className={`h-full ${color.replace('text-', 'bg-')}`}
+          style={{ width: `${Math.min(value, 100)}%` }}
+        />
+      </div>
     </div>
   );
 }
