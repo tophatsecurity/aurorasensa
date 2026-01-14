@@ -4,14 +4,15 @@ import { auroraRequestQueue } from "./requestQueue";
 import { updateConnectionState } from "../useConnectionStatus";
 
 // Enhanced retry configuration for edge function cold starts
-const MAX_RETRIES = 6; // More retries for cold starts
-const COLD_START_RETRIES = 4; // Quick retries specifically for boot errors
-const INITIAL_BACKOFF_MS = 200; // Start very short for cold starts
-const COLD_START_BACKOFF_MS = 150; // Even shorter for boot errors
-const MAX_BACKOFF_MS = 8000;
+const MAX_RETRIES = 8; // More retries for cold starts
+const COLD_START_RETRIES = 6; // More quick retries specifically for boot errors
+const INITIAL_BACKOFF_MS = 150; // Start very short for cold starts
+const COLD_START_BACKOFF_MS = 100; // Even shorter for boot errors
+const MAX_BACKOFF_MS = 6000;
 
 // Track connection state globally
 let connectionHealthy = false;
+let consecutiveBootErrors = 0;
 
 // Helper to check if user has a valid Supabase session
 export function hasAuroraSession(): boolean {
@@ -130,6 +131,8 @@ export async function callAuroraApi<T>(
           
           if (isColdStartError) {
             coldStartRetries++;
+            consecutiveBootErrors++;
+            
             // Update global connection state to warming up
             updateConnectionState('warming_up', coldStartRetries, COLD_START_RETRIES);
             
@@ -141,11 +144,20 @@ export async function callAuroraApi<T>(
               lastError = new Error(`Boot error: ${fullError}`);
               continue;
             }
+            
+            // If we've exhausted boot retries, return empty data gracefully instead of throwing
+            console.warn(`⚠️ Edge function failed to boot after ${COLD_START_RETRIES} retries for ${path}, returning empty data`);
+            updateConnectionState('degraded');
+            return getEmptyDataForPath(path) as T;
           }
           
-          // Check if error message indicates a 500 from Aurora (transient server issue)
-          if (errorMessage.includes('500') || errorMessage.includes('internal server error')) {
-            console.warn(`Aurora server error for ${path}, returning empty data`);
+          // Reset boot error counter on non-boot errors
+          consecutiveBootErrors = 0;
+          
+          // Check if error message indicates a 500/503 from edge function or Aurora
+          if (errorMessage.includes('500') || errorMessage.includes('503') || 
+              errorMessage.includes('internal server error') || errorMessage.includes('boot_error')) {
+            console.warn(`Server error for ${path}, returning empty data`);
             return getEmptyDataForPath(path) as T;
           }
           
@@ -157,8 +169,10 @@ export async function callAuroraApi<T>(
             lastError = apiError;
             continue;
           }
-          console.error(`Aurora API error for ${path}:`, error.message);
-          throw apiError;
+          
+          // For final failure, return empty data instead of throwing to prevent UI crashes
+          console.error(`Aurora API error for ${path} after retries:`, error.message);
+          return getEmptyDataForPath(path) as T;
         }
 
         if (data && typeof data === 'object' && 'detail' in data) {
@@ -223,7 +237,8 @@ export async function callAuroraApi<T>(
           auroraRequestQueue.setCache(path, method, data);
         }
 
-        // Mark connection as healthy on success
+        // Mark connection as healthy on success and reset boot error counter
+        consecutiveBootErrors = 0;
         if (!connectionHealthy) {
           connectionHealthy = true;
           updateConnectionState('connected');
@@ -246,11 +261,16 @@ export async function callAuroraApi<T>(
           lastError = error;
           continue;
         }
-        throw error;
+        
+        // Return empty data instead of throwing to prevent UI crashes
+        console.error(`Failed request for ${path}:`, error.message);
+        return getEmptyDataForPath(path) as T;
       }
     }
     
-    throw lastError || new Error(`Failed after ${MAX_RETRIES} retries`);
+    // Return empty data instead of throwing after all retries exhausted
+    console.warn(`All ${MAX_RETRIES} retries exhausted for ${path}, returning empty data`);
+    return getEmptyDataForPath(path) as T;
   };
   
   // Use request queue to limit concurrent requests
@@ -290,9 +310,10 @@ export const defaultQueryOptions = {
   enabled: true,
   staleTime: 120000, // 2 minutes - data stays fresh longer
   refetchInterval: 180000, // 3 minutes - less frequent refetching
-  retry: 6, // More retries for cold starts
+  retry: 8, // More retries for cold starts
   retryDelay,
   refetchOnWindowFocus: false,
+  throwOnError: false, // Don't throw errors - we handle them gracefully
 };
 
 // Fast polling options (for real-time data)
@@ -300,9 +321,10 @@ export const fastQueryOptions = {
   enabled: true,
   staleTime: 60000, // 1 minute
   refetchInterval: 120000, // 2 minutes
-  retry: 5,
+  retry: 6,
   retryDelay,
   refetchOnWindowFocus: false,
+  throwOnError: false,
 };
 
 // Slow polling options (for rarely changing data)
@@ -310,9 +332,10 @@ export const slowQueryOptions = {
   enabled: true,
   staleTime: 300000, // 5 minutes
   refetchInterval: 600000, // 10 minutes
-  retry: 3,
+  retry: 4,
   retryDelay,
   refetchOnWindowFocus: false,
+  throwOnError: false,
 };
 
 // Export cache invalidation for manual cache clearing
