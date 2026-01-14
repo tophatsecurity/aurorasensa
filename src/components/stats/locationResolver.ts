@@ -6,12 +6,13 @@
  * 2. GPS (precise coordinates)
  * 3. LoRa (if GPS-enabled LoRa device)
  * 4. Arduino (if GPS-equipped Arduino)
- * 5. ADS-B (receiver location if available)
- * 6. Any other device with location
- * 7. Client IP geolocation
+ * 5. Thermal/System/WiFi/Bluetooth (if location embedded)
+ * 6. Client IP geolocation
+ * 
+ * NOTE: ADS-B is excluded as it reports aircraft positions, not receiver location
  */
 
-import type { DeviceGroup, ClientInfo, SensorReading } from "./types";
+import type { DeviceGroup, ClientInfo } from "./types";
 
 export type LocationSource = 
   | 'starlink' 
@@ -50,18 +51,19 @@ interface LocationData {
 }
 
 // Location source priorities (lower = higher priority)
+// Note: ADS-B is excluded from location resolution (receivers report aircraft positions, not their own)
 const SOURCE_PRIORITY: Record<LocationSource, number> = {
   starlink: 1,
   gps: 2,
   lora: 3,
   arduino: 4,
-  adsb: 5,
-  thermal: 6,
-  system: 7,
-  wifi: 8,
-  bluetooth: 9,
-  geolocated: 10,
-  unknown: 99,
+  thermal: 5,
+  system: 6,
+  wifi: 7,
+  bluetooth: 8,
+  geolocated: 9,
+  adsb: 99,  // ADS-B should NOT be used for client location (it reports aircraft, not receiver position)
+  unknown: 100,
 };
 
 /**
