@@ -28,11 +28,13 @@ import {
   type DeviceGroup,
   type SensorReading,
   processReadingsToGroups,
-  ClientStatsPanel,
+  ClientInfoCard,
+  MeasurementsSection,
+  ClientLocationMap,
   DeviceTypeStats,
   DeviceListCard,
   DeviceMeasurementsCard,
-  DeviceLocationMap,
+  DeviceLocationMap as DeviceMapLegacy,
   StarlinkTab,
   ArduinoTab,
   DeviceDetailsModal,
@@ -155,23 +157,30 @@ export default function StatsContent() {
         />
       )}
 
-      {/* Client Overview Stats */}
+      {/* Top Card: Client Info */}
       {selectedClient && selectedClientData && (
-        <ComponentErrorBoundary name="ClientStatsPanel">
-          <ClientStatsPanel 
+        <ComponentErrorBoundary name="ClientInfoCard">
+          <ClientInfoCard 
             client={selectedClientData as any} 
             systemInfo={selectedClientSystemInfo}
-            clientStats={clientStats}
-            deviceCount={filteredDevices.length}
-            readingsCount={filteredDevices.reduce((sum, d) => sum + d.readings.length, 0)}
           />
         </ComponentErrorBoundary>
       )}
 
-      {/* Device Type Stats */}
-      <ComponentErrorBoundary name="DeviceTypeStats">
-        <DeviceTypeStats devices={filteredDevices} />
+      {/* Second Row: Measurements by Category */}
+      <ComponentErrorBoundary name="MeasurementsSection">
+        <MeasurementsSection devices={filteredDevices} />
       </ComponentErrorBoundary>
+
+      {/* Bottom Card: Location Map */}
+      {selectedClient && (
+        <ComponentErrorBoundary name="ClientLocationMap">
+          <ClientLocationMap 
+            client={selectedClientData as any} 
+            devices={filteredDevices}
+          />
+        </ComponentErrorBoundary>
+      )}
 
       {/* Main Content Tabs */}
       <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4">
@@ -193,7 +202,7 @@ export default function StatsContent() {
               />
             </ComponentErrorBoundary>
             <ComponentErrorBoundary name="DeviceLocationMap">
-              <DeviceLocationMap devices={filteredDevices} />
+              <DeviceMapLegacy devices={filteredDevices} />
             </ComponentErrorBoundary>
           </div>
         </TabsContent>
@@ -233,7 +242,7 @@ export default function StatsContent() {
           <Card className="glass-card border-border/50">
             <CardContent className="p-0">
               <ComponentErrorBoundary name="DeviceLocationMap">
-                <DeviceLocationMap 
+                <DeviceMapLegacy 
                   devices={filteredDevices} 
                   height="h-[600px]" 
                   showHeader={false}
