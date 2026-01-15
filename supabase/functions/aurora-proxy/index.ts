@@ -303,6 +303,18 @@ Deno.serve(async (req) => {
     // Handle 401 from Aurora - this means Aurora token is invalid/missing
     if (response.status === 401) {
       console.log(`Aurora returned 401 for ${path}`);
+      
+      // For GET requests, return empty data to prevent UI crashes
+      if (method === 'GET') {
+        console.log(`Returning empty data for GET ${path} due to 401`);
+        const emptyData = getEmptyDataForPath(path);
+        return new Response(JSON.stringify(emptyData), {
+          status: 200,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
+      
+      // For non-GET requests, return the auth error
       return new Response(JSON.stringify({ 
         detail: 'Aurora API authentication required. Please log in again.',
         requiresAuth: true
