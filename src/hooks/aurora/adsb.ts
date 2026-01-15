@@ -19,7 +19,14 @@ import type {
 export function useAdsbAircraft() {
   return useQuery({
     queryKey: ["aurora", "adsb", "aircraft"],
-    queryFn: () => callAuroraApi<AdsbAircraft[]>(ADSB.AIRCRAFT),
+    queryFn: async () => {
+      const response = await callAuroraApi<AdsbAircraft[] | { aircraft?: AdsbAircraft[] }>(ADSB.AIRCRAFT);
+      // Handle both array and wrapped object responses
+      if (Array.isArray(response)) {
+        return response;
+      }
+      return response?.aircraft || [];
+    },
     enabled: hasAuroraSession(),
     ...fastQueryOptions,
   });
