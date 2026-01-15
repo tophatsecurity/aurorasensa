@@ -499,6 +499,20 @@ export function useAdoptClient() {
   });
 }
 
+// Adopt a client directly, skipping the registered state
+export function useAdoptClientDirect() {
+  const queryClient = useQueryClient();
+  
+  return useMutation({
+    mutationFn: async (clientId: string) => {
+      return callAuroraApi<StateTransitionResponse>(CLIENTS.ADOPT_DIRECT(clientId), "POST");
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["aurora", "clients"] });
+    },
+  });
+}
+
 export function useRegisterClient() {
   const queryClient = useQueryClient();
   
