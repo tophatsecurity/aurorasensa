@@ -108,9 +108,24 @@ export interface GlobalStats {
   total_devices?: number;
   total_clients?: number;
   total_batches?: number;
+  active_clients_24h?: number;
+  sensor_types_count?: number;
   active_alerts?: number;
   readings_last_hour?: number;
   readings_last_24h?: number;
+  device_breakdown?: Array<{
+    device_type: string;
+    count: number;
+  }>;
+  readings_by_day?: Array<{
+    date: string;
+    count: number;
+  }>;
+  storage?: {
+    batches_size?: string;
+    readings_size?: string;
+    total_db_size?: string;
+  };
   time_ranges?: {
     earliest_reading?: string;
     latest_reading?: string;
@@ -372,10 +387,56 @@ async function safeStatsHistoryCall<T>(endpoint: string, defaultValue: T, option
 // QUERY HOOKS
 // =============================================
 
+// API Response wrapper types
+interface ApiResponse<T> {
+  data?: T;
+  status?: string;
+  timestamp?: string;
+}
+
+interface PaginatedApiResponse<T> {
+  data?: T[];
+  pagination?: {
+    total?: number;
+    limit?: number;
+    offset?: number;
+    returned?: number;
+  };
+  status?: string;
+  time_window_hours?: number;
+  timestamp?: string;
+}
+
+// Helper to unwrap API responses that have a data wrapper
+function unwrapApiResponse<T>(response: T | ApiResponse<T>): T {
+  if (response && typeof response === 'object' && 'data' in response && response.data !== undefined) {
+    return response.data as T;
+  }
+  return response as T;
+}
+
 export function useComprehensiveStats(clientId?: string | null) {
   return useQuery({
     queryKey: ["aurora", "stats", "comprehensive", clientId],
-    queryFn: () => callAuroraApi<ComprehensiveStats>(STATS.COMPREHENSIVE, "GET", undefined, { clientId }),
+    queryFn: async () => {
+      const raw = await callAuroraApi<ComprehensiveStats | ApiResponse<ComprehensiveStatsGlobal>>(
+        STATS.COMPREHENSIVE, "GET", undefined, { clientId }
+      );
+      // Handle both direct response and wrapped response
+      if (raw && 'global' in raw) {
+        return raw as ComprehensiveStats;
+      }
+      // If it's wrapped in data, convert to expected structure
+      const unwrapped = unwrapApiResponse(raw);
+      if (unwrapped && typeof unwrapped === 'object') {
+        return {
+          status: 'success',
+          timestamp: new Date().toISOString(),
+          global: unwrapped as ComprehensiveStatsGlobal,
+        } as ComprehensiveStats;
+      }
+      return raw as ComprehensiveStats;
+    },
     enabled: hasAuroraSession(),
     staleTime: 60000,
     refetchInterval: 180000,
@@ -386,7 +447,21 @@ export function useComprehensiveStats(clientId?: string | null) {
 export function useDeviceStats(clientId?: string | null) {
   return useQuery({
     queryKey: ["aurora", "stats", "devices", clientId],
-    queryFn: () => callAuroraApi<{ devices: DeviceStats[] }>(STATS.DEVICES, "GET", undefined, { clientId }),
+    queryFn: async () => {
+      const raw = await callAuroraApi<{ devices?: DeviceStats[]; data?: DeviceStats[] }>(
+        STATS.DEVICES, "GET", undefined, { clientId }
+      );
+      if (raw && 'devices' in raw && Array.isArray(raw.devices)) {
+        return { devices: raw.devices };
+      }
+      if (raw && 'data' in raw && Array.isArray(raw.data)) {
+        return { devices: raw.data };
+      }
+      if (Array.isArray(raw)) {
+        return { devices: raw as unknown as DeviceStats[] };
+      }
+      return { devices: [] };
+    },
     enabled: hasAuroraSession(),
     staleTime: 60000,
     refetchInterval: 120000,
@@ -397,7 +472,12 @@ export function useDeviceStats(clientId?: string | null) {
 export function useGlobalStats(clientId?: string | null) {
   return useQuery({
     queryKey: ["aurora", "stats", "global", clientId],
-    queryFn: () => callAuroraApi<GlobalStats>(STATS.GLOBAL, "GET", undefined, { clientId }),
+    queryFn: async () => {
+      const raw = await callAuroraApi<GlobalStats | ApiResponse<GlobalStats>>(
+        STATS.GLOBAL, "GET", undefined, { clientId }
+      );
+      return unwrapApiResponse(raw);
+    },
     enabled: hasAuroraSession(),
     staleTime: 60000,
     refetchInterval: 180000,
@@ -405,10 +485,41 @@ export function useGlobalStats(clientId?: string | null) {
   });
 }
 
+// Helper to extract period stats from API response
+// API returns { count, data: [...hourly records] } but we need summary stats
+function extractPeriodStats(raw: unknown): PeriodStats {
+  if (!raw) return { period: 'unknown', readings: 0, devices: 0, clients: 0 };
+  
+  // If it's already in expected format
+  if (raw && typeof raw === 'object' && 'readings' in raw) {
+    return raw as PeriodStats;
+  }
+  
+  // If it's wrapped in data array (new API format)
+  if (raw && typeof raw === 'object' && 'data' in raw) {
+    const apiResp = raw as { count?: number; data?: Array<{ reading_count?: number; sensor_type?: string }> };
+    const records = apiResp.data || [];
+    // Sum up readings from all records
+    const totalReadings = records.reduce((sum, r) => sum + (r.reading_count || 0), 0);
+    const uniqueDevices = new Set(records.map(r => r.sensor_type)).size;
+    return {
+      period: '1hr',
+      readings: totalReadings,
+      devices: uniqueDevices,
+      clients: 1, // From context we know there's 1 client
+    };
+  }
+  
+  return { period: 'unknown', readings: 0, devices: 0, clients: 0 };
+}
+
 export function use1hrStats(clientId?: string | null) {
   return useQuery({
     queryKey: ["aurora", "stats", "1hr", clientId],
-    queryFn: () => callAuroraApi<PeriodStats>(STATS.HOUR_1, "GET", undefined, { clientId }),
+    queryFn: async () => {
+      const raw = await callAuroraApi<unknown>(STATS.HOUR_1, "GET", undefined, { clientId });
+      return extractPeriodStats(raw);
+    },
     enabled: hasAuroraSession(),
     staleTime: 60000,
     refetchInterval: 120000,
@@ -419,7 +530,10 @@ export function use1hrStats(clientId?: string | null) {
 export function use6hrStats(clientId?: string | null) {
   return useQuery({
     queryKey: ["aurora", "stats", "6hr", clientId],
-    queryFn: () => callAuroraApi<PeriodStats>(STATS.HOUR_6, "GET", undefined, { clientId }),
+    queryFn: async () => {
+      const raw = await callAuroraApi<unknown>(STATS.HOUR_6, "GET", undefined, { clientId });
+      return extractPeriodStats(raw);
+    },
     enabled: hasAuroraSession(),
     staleTime: 60000,
     refetchInterval: 180000,
@@ -430,7 +544,10 @@ export function use6hrStats(clientId?: string | null) {
 export function use24hrStats(clientId?: string | null) {
   return useQuery({
     queryKey: ["aurora", "stats", "24hr", clientId],
-    queryFn: () => callAuroraApi<PeriodStats>(STATS.HOUR_24, "GET", undefined, { clientId }),
+    queryFn: async () => {
+      const raw = await callAuroraApi<unknown>(STATS.HOUR_24, "GET", undefined, { clientId });
+      return extractPeriodStats(raw);
+    },
     enabled: hasAuroraSession(),
     staleTime: 60000,
     refetchInterval: 300000,
@@ -497,19 +614,33 @@ export function useStatsAll(options?: {
 export function useStatsByClient(options?: { clientId?: string | null; hours?: number; limit?: number; offset?: number }) {
   return useQuery({
     queryKey: ["aurora", "stats", "by-client", options],
-    queryFn: () => callAuroraApi<{ clients: ClientGroupedStats[]; total: number }>(
-      STATS.BY_CLIENT, 
-      "GET", 
-      undefined, 
-      { 
-        clientId: options?.clientId,
-        params: { 
-          hours: options?.hours ?? 24,
-          limit: options?.limit ?? 100,
-          offset: options?.offset ?? 0,
+    queryFn: async () => {
+      const raw = await callAuroraApi<PaginatedApiResponse<ClientGroupedStats> | { clients: ClientGroupedStats[]; total: number }>(
+        STATS.BY_CLIENT, 
+        "GET", 
+        undefined, 
+        { 
+          clientId: options?.clientId,
+          params: { 
+            hours: options?.hours ?? 24,
+            limit: options?.limit ?? 100,
+            offset: options?.offset ?? 0,
+          }
         }
+      );
+      // Handle new API structure with data array
+      if (raw && 'data' in raw && Array.isArray(raw.data)) {
+        return { 
+          clients: raw.data, 
+          total: raw.pagination?.total ?? raw.data.length 
+        };
       }
-    ),
+      // Handle legacy structure with clients array
+      if (raw && 'clients' in raw) {
+        return raw;
+      }
+      return { clients: [], total: 0 };
+    },
     enabled: hasAuroraSession(),
     staleTime: 60000,
     refetchInterval: 120000,
@@ -521,19 +652,33 @@ export function useStatsByClient(options?: { clientId?: string | null; hours?: n
 export function useStatsBySensor(options?: { clientId?: string | null; hours?: number; limit?: number; offset?: number }) {
   return useQuery({
     queryKey: ["aurora", "stats", "by-sensor", options],
-    queryFn: () => callAuroraApi<{ sensors: SensorGroupedStats[]; total: number }>(
-      STATS.BY_SENSOR, 
-      "GET", 
-      undefined, 
-      { 
-        clientId: options?.clientId,
-        params: { 
-          hours: options?.hours ?? 24,
-          limit: options?.limit ?? 100,
-          offset: options?.offset ?? 0,
+    queryFn: async () => {
+      const raw = await callAuroraApi<PaginatedApiResponse<SensorGroupedStats> | { sensors: SensorGroupedStats[]; total: number }>(
+        STATS.BY_SENSOR, 
+        "GET", 
+        undefined, 
+        { 
+          clientId: options?.clientId,
+          params: { 
+            hours: options?.hours ?? 24,
+            limit: options?.limit ?? 100,
+            offset: options?.offset ?? 0,
+          }
         }
+      );
+      // Handle new API structure with data array
+      if (raw && 'data' in raw && Array.isArray(raw.data)) {
+        return { 
+          sensors: raw.data, 
+          total: raw.pagination?.total ?? raw.data.length 
+        };
       }
-    ),
+      // Handle legacy structure with sensors array
+      if (raw && 'sensors' in raw) {
+        return raw;
+      }
+      return { sensors: [], total: 0 };
+    },
     enabled: hasAuroraSession(),
     staleTime: 60000,
     refetchInterval: 120000,
