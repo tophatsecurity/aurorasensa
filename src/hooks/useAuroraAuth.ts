@@ -104,17 +104,55 @@ export function useAuroraAuth(): AuroraAuthContextValue {
     };
   });
 
-  // Verify session on mount
+  // Verify session on mount - resilient to endpoint issues
   const verifySession = useCallback(async (token: string) => {
     try {
-      const { data, error } = await callAuroraAuth<{ valid: boolean; user?: AuroraUser }>(
+      // Try to get user info to verify the session
+      const { data: meData, error: meError } = await callAuroraAuth<AuroraUser>(
+        AUTH.ME,
+        'GET',
+        undefined,
+        token
+      );
+
+      if (meData && meData.username) {
+        // Session valid - update stored user
+        storeAuth(token, meData);
+        setAuthState({
+          user: meData,
+          token,
+          loading: false,
+          error: null,
+          serverStatus: 'online',
+        });
+        return;
+      }
+
+      // If /me fails, try /verify endpoint
+      const { data: verifyData, error: verifyError } = await callAuroraAuth<{ valid: boolean; user?: AuroraUser }>(
         AUTH.VERIFY,
         'GET',
         undefined,
         token
       );
 
-      if (error || !data?.valid) {
+      if (verifyData?.valid !== false) {
+        // Session seems valid or endpoint not available - trust cached user
+        const { user } = getStoredAuth();
+        if (user) {
+          setAuthState({
+            user,
+            token,
+            loading: false,
+            error: null,
+            serverStatus: 'online',
+          });
+          return;
+        }
+      }
+
+      // Only clear if we got explicit invalid response
+      if (verifyData?.valid === false || (meError && meError.includes('401'))) {
         clearStoredAuth();
         setAuthState({
           user: null,
@@ -126,36 +164,17 @@ export function useAuroraAuth(): AuroraAuthContextValue {
         return;
       }
 
-      // Get fresh user data
-      const { data: meData } = await callAuroraAuth<AuroraUser>(
-        AUTH.ME,
-        'GET',
-        undefined,
-        token
-      );
-
-      if (meData) {
-        storeAuth(token, meData);
-        setAuthState({
-          user: meData,
-          token,
-          loading: false,
-          error: null,
-          serverStatus: 'online',
-        });
-      } else {
-        // Session valid but can't get user - use stored user
-        const { user } = getStoredAuth();
-        setAuthState({
-          user,
-          token,
-          loading: false,
-          error: null,
-          serverStatus: 'online',
-        });
-      }
+      // Fallback - trust cached data
+      const { user } = getStoredAuth();
+      setAuthState({
+        user,
+        token,
+        loading: false,
+        error: null,
+        serverStatus: 'online',
+      });
     } catch {
-      // Network error - check if we have cached user
+      // Network error - trust cached user data
       const { user } = getStoredAuth();
       if (user) {
         setAuthState({
@@ -166,7 +185,6 @@ export function useAuroraAuth(): AuroraAuthContextValue {
           serverStatus: 'offline',
         });
       } else {
-        clearStoredAuth();
         setAuthState({
           user: null,
           token: null,
