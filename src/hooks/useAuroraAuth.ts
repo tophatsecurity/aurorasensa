@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback, createContext, useContext } from 'react';
 import { supabase } from '@/integrations/supabase/client';
-import type { User, Session } from '@supabase/supabase-js';
+import { AUTH } from './aurora/endpoints';
 
 export interface AuroraUser {
   id: string;
@@ -9,11 +9,12 @@ export interface AuroraUser {
   role: string;
   created_at?: string;
   last_login?: string;
+  is_active?: boolean;
 }
 
 interface AuroraAuthState {
   user: AuroraUser | null;
-  session: Session | null;
+  token: string | null;
   loading: boolean;
   error: string | null;
   serverStatus: 'online' | 'offline' | 'checking';
@@ -27,141 +28,261 @@ interface AuroraAuthContextValue extends AuroraAuthState {
   isAdmin: boolean;
 }
 
-// Helper to extract display name from email
-function getDisplayName(email: string, displayName?: string | null): string {
-  if (displayName) return displayName;
-  return email.split('@')[0];
+// Storage keys for Aurora auth
+const AURORA_TOKEN_KEY = 'aurora_access_token';
+const AURORA_USER_KEY = 'aurora_user';
+
+// Helper to get stored auth data
+function getStoredAuth(): { token: string | null; user: AuroraUser | null } {
+  try {
+    const token = localStorage.getItem(AURORA_TOKEN_KEY);
+    const userStr = localStorage.getItem(AURORA_USER_KEY);
+    const user = userStr ? JSON.parse(userStr) : null;
+    return { token, user };
+  } catch {
+    return { token: null, user: null };
+  }
+}
+
+// Helper to store auth data
+function storeAuth(token: string, user: AuroraUser): void {
+  localStorage.setItem(AURORA_TOKEN_KEY, token);
+  localStorage.setItem(AURORA_USER_KEY, JSON.stringify(user));
+}
+
+// Helper to clear auth data
+function clearStoredAuth(): void {
+  localStorage.removeItem(AURORA_TOKEN_KEY);
+  localStorage.removeItem(AURORA_USER_KEY);
+}
+
+// Call Aurora API through edge function
+async function callAuroraAuth<T>(
+  path: string, 
+  method: 'GET' | 'POST' = 'GET', 
+  body?: unknown,
+  token?: string | null
+): Promise<{ data?: T; error?: string }> {
+  try {
+    const { data, error } = await supabase.functions.invoke("aurora-proxy", {
+      body: { 
+        path, 
+        method, 
+        body,
+        // Pass Aurora token for authenticated requests
+        auroraToken: token,
+      },
+    });
+
+    if (error) {
+      return { error: error.message };
+    }
+
+    if (data?.detail) {
+      return { error: data.detail };
+    }
+
+    if (data?.error) {
+      return { error: data.error };
+    }
+
+    return { data: data as T };
+  } catch (err) {
+    return { error: err instanceof Error ? err.message : 'Request failed' };
+  }
 }
 
 export function useAuroraAuth(): AuroraAuthContextValue {
-  const [authState, setAuthState] = useState<AuroraAuthState>({
-    user: null,
-    session: null,
-    loading: true,
-    error: null,
-    serverStatus: 'online',
+  const [authState, setAuthState] = useState<AuroraAuthState>(() => {
+    const { token, user } = getStoredAuth();
+    return {
+      user,
+      token,
+      loading: !!token, // If we have a token, we need to verify it
+      error: null,
+      serverStatus: 'checking',
+    };
   });
 
-  const fetchUserProfile = useCallback(async (supabaseUser: User, session: Session) => {
+  // Verify session on mount
+  const verifySession = useCallback(async (token: string) => {
     try {
-      // Try to get profile from profiles table
-      const { data: profile } = await supabase
-        .from('profiles')
-        .select('*')
-        .eq('user_id', supabaseUser.id)
-        .single();
+      const { data, error } = await callAuroraAuth<{ valid: boolean; user?: AuroraUser }>(
+        AUTH.VERIFY,
+        'GET',
+        undefined,
+        token
+      );
 
-      // Get user roles
-      const { data: roles } = await supabase
-        .from('user_roles')
-        .select('role')
-        .eq('user_id', supabaseUser.id);
+      if (error || !data?.valid) {
+        clearStoredAuth();
+        setAuthState({
+          user: null,
+          token: null,
+          loading: false,
+          error: null,
+          serverStatus: 'online',
+        });
+        return;
+      }
 
-      const role = roles?.find(r => r.role === 'admin') ? 'admin' : 'user';
+      // Get fresh user data
+      const { data: meData } = await callAuroraAuth<AuroraUser>(
+        AUTH.ME,
+        'GET',
+        undefined,
+        token
+      );
 
-      const auroraUser: AuroraUser = {
-        id: supabaseUser.id,
-        email: supabaseUser.email || '',
-        username: profile?.display_name || getDisplayName(supabaseUser.email || '', supabaseUser.user_metadata?.display_name),
-        role,
-        created_at: supabaseUser.created_at,
-        last_login: new Date().toISOString(),
-      };
+      if (meData) {
+        storeAuth(token, meData);
+        setAuthState({
+          user: meData,
+          token,
+          loading: false,
+          error: null,
+          serverStatus: 'online',
+        });
+      } else {
+        // Session valid but can't get user - use stored user
+        const { user } = getStoredAuth();
+        setAuthState({
+          user,
+          token,
+          loading: false,
+          error: null,
+          serverStatus: 'online',
+        });
+      }
+    } catch {
+      // Network error - check if we have cached user
+      const { user } = getStoredAuth();
+      if (user) {
+        setAuthState({
+          user,
+          token,
+          loading: false,
+          error: null,
+          serverStatus: 'offline',
+        });
+      } else {
+        clearStoredAuth();
+        setAuthState({
+          user: null,
+          token: null,
+          loading: false,
+          error: null,
+          serverStatus: 'offline',
+        });
+      }
+    }
+  }, []);
 
-      setAuthState({
-        user: auroraUser,
-        session,
-        loading: false,
-        error: null,
-        serverStatus: 'online',
-      });
-    } catch (error) {
-      console.error('Error fetching user profile:', error);
-      // Still set user even if profile fetch fails
-      const auroraUser: AuroraUser = {
-        id: supabaseUser.id,
-        email: supabaseUser.email || '',
-        username: getDisplayName(supabaseUser.email || '', supabaseUser.user_metadata?.display_name),
-        role: 'user',
-        created_at: supabaseUser.created_at,
-      };
-
-      setAuthState({
-        user: auroraUser,
-        session,
-        loading: false,
-        error: null,
-        serverStatus: 'online',
-      });
+  // Check server health
+  const checkServerHealth = useCallback(async () => {
+    try {
+      const { error } = await callAuroraAuth('/health', 'GET');
+      return !error;
+    } catch {
+      return false;
     }
   }, []);
 
   useEffect(() => {
-    // Set up auth state listener FIRST
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      async (event, session) => {
-        if (session?.user) {
-          // Use setTimeout to avoid blocking
-          setTimeout(() => {
-            fetchUserProfile(session.user, session);
-          }, 0);
-        } else {
-          setAuthState({
-            user: null,
-            session: null,
-            loading: false,
-            error: null,
-            serverStatus: 'online',
-          });
-        }
-      }
-    );
-
-    // THEN get initial session
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      if (session?.user) {
-        fetchUserProfile(session.user, session);
+    const init = async () => {
+      const { token } = getStoredAuth();
+      
+      if (token) {
+        await verifySession(token);
       } else {
-        setAuthState(prev => ({ ...prev, loading: false }));
+        // No token - check server health
+        const isOnline = await checkServerHealth();
+        setAuthState({
+          user: null,
+          token: null,
+          loading: false,
+          error: null,
+          serverStatus: isOnline ? 'online' : 'offline',
+        });
       }
-    });
+    };
 
-    return () => subscription.unsubscribe();
-  }, [fetchUserProfile]);
+    init();
+  }, [verifySession, checkServerHealth]);
 
   const refreshUser = useCallback(async () => {
-    const { data: { session } } = await supabase.auth.getSession();
-    if (session?.user) {
-      await fetchUserProfile(session.user, session);
+    const { token } = getStoredAuth();
+    if (token) {
+      await verifySession(token);
     }
-  }, [fetchUserProfile]);
+  }, [verifySession]);
 
   const signIn = useCallback(async (email: string, password: string) => {
     setAuthState(prev => ({ ...prev, loading: true, error: null }));
 
     try {
-      const { data, error } = await supabase.auth.signInWithPassword({
-        email,
-        password,
-      });
+      // Aurora API uses OAuth2 password flow
+      // The login endpoint expects form data or JSON with username/password
+      const { data, error } = await callAuroraAuth<{ 
+        access_token: string; 
+        token_type: string;
+        user?: AuroraUser;
+      }>(
+        AUTH.LOGIN,
+        'POST',
+        { 
+          username: email, // Aurora may use username or email
+          password 
+        }
+      );
 
       if (error) {
         setAuthState(prev => ({
           ...prev,
           loading: false,
-          error: error.message,
+          error,
+          serverStatus: error.includes('network') || error.includes('fetch') ? 'offline' : 'online',
         }));
-        return { success: false, error: error.message };
+        return { success: false, error };
       }
 
-      if (data.user && data.session) {
-        await fetchUserProfile(data.user, data.session);
-        return { success: true };
+      if (!data?.access_token) {
+        setAuthState(prev => ({
+          ...prev,
+          loading: false,
+          error: 'Invalid response from server',
+        }));
+        return { success: false, error: 'Invalid response from server' };
       }
 
-      return { success: false, error: 'Login failed' };
-    } catch (error) {
-      const errorMsg = error instanceof Error ? error.message : 'Login failed';
+      // Get user info with the new token
+      const { data: userData, error: userError } = await callAuroraAuth<AuroraUser>(
+        AUTH.ME,
+        'GET',
+        undefined,
+        data.access_token
+      );
+
+      const user: AuroraUser = userData || data.user || {
+        id: email,
+        email,
+        username: email.split('@')[0],
+        role: 'user',
+      };
+
+      storeAuth(data.access_token, user);
+      
+      setAuthState({
+        user,
+        token: data.access_token,
+        loading: false,
+        error: null,
+        serverStatus: 'online',
+      });
+
+      return { success: true };
+    } catch (err) {
+      const errorMsg = err instanceof Error ? err.message : 'Login failed';
       setAuthState(prev => ({
         ...prev,
         loading: false,
@@ -169,43 +290,52 @@ export function useAuroraAuth(): AuroraAuthContextValue {
       }));
       return { success: false, error: errorMsg };
     }
-  }, [fetchUserProfile]);
+  }, []);
 
   const signUp = useCallback(async (email: string, password: string, displayName?: string) => {
     setAuthState(prev => ({ ...prev, loading: true, error: null }));
 
     try {
-      const { data, error } = await supabase.auth.signUp({
-        email,
-        password,
-        options: {
-          emailRedirectTo: window.location.origin,
-          data: {
-            display_name: displayName || getDisplayName(email),
-          },
-        },
-      });
+      // Create user through Aurora API
+      const { data, error } = await callAuroraAuth<{ 
+        success: boolean; 
+        message?: string;
+        user_id?: string;
+      }>(
+        '/api/users',
+        'POST',
+        { 
+          username: displayName || email.split('@')[0],
+          email,
+          password,
+          role: 'user'
+        }
+      );
 
       if (error) {
         setAuthState(prev => ({
           ...prev,
           loading: false,
-          error: error.message,
+          error,
         }));
-        return { success: false, error: error.message };
+        return { success: false, error };
       }
 
-      if (data.user) {
-        // With auto-confirm enabled, user should be logged in immediately
-        if (data.session) {
-          await fetchUserProfile(data.user, data.session);
-        }
-        return { success: true };
+      if (!data?.success) {
+        const msg = data?.message || 'Sign up failed';
+        setAuthState(prev => ({
+          ...prev,
+          loading: false,
+          error: msg,
+        }));
+        return { success: false, error: msg };
       }
 
-      return { success: false, error: 'Sign up failed' };
-    } catch (error) {
-      const errorMsg = error instanceof Error ? error.message : 'Sign up failed';
+      // Auto-login after signup
+      const loginResult = await signIn(email, password);
+      return loginResult;
+    } catch (err) {
+      const errorMsg = err instanceof Error ? err.message : 'Sign up failed';
       setAuthState(prev => ({
         ...prev,
         loading: false,
@@ -213,13 +343,24 @@ export function useAuroraAuth(): AuroraAuthContextValue {
       }));
       return { success: false, error: errorMsg };
     }
-  }, [fetchUserProfile]);
+  }, [signIn]);
 
   const signOut = useCallback(async () => {
-    await supabase.auth.signOut();
+    const { token } = getStoredAuth();
+    
+    // Call logout endpoint if we have a token
+    if (token) {
+      try {
+        await callAuroraAuth(AUTH.LOGOUT, 'POST', undefined, token);
+      } catch {
+        // Ignore logout errors - we're clearing local state anyway
+      }
+    }
+
+    clearStoredAuth();
     setAuthState({
       user: null,
-      session: null,
+      token: null,
       loading: false,
       error: null,
       serverStatus: 'online',
@@ -253,4 +394,16 @@ export function useAuroraAuthContext() {
     throw new Error('useAuroraAuthContext must be used within AuroraAuthProvider');
   }
   return context;
+}
+
+// Export helper to check if user has Aurora session (for API hooks)
+export function hasAuroraSession(): boolean {
+  const { token } = getStoredAuth();
+  return !!token;
+}
+
+// Export helper to get Aurora token
+export function getAuroraToken(): string | null {
+  const { token } = getStoredAuth();
+  return token;
 }

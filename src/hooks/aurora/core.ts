@@ -11,6 +11,9 @@ const INITIAL_BACKOFF_MS = 150;
 const COLD_START_BACKOFF_MS = 100;
 const MAX_BACKOFF_MS = 6000;
 
+// Storage keys for Aurora auth
+const AURORA_TOKEN_KEY = 'aurora_access_token';
+
 // Track connection state globally
 let connectionHealthy = false;
 let consecutiveBootErrors = 0;
@@ -20,18 +23,17 @@ let consecutiveBootErrors = 0;
 // =============================================
 
 export function hasAuroraSession(): boolean {
-  const storageKey = `sb-hewwtgcrupegpcwfujln-auth-token`;
-  const stored = localStorage.getItem(storageKey);
-  return !!stored;
+  const token = localStorage.getItem(AURORA_TOKEN_KEY);
+  return !!token;
 }
 
-async function getSessionToken(): Promise<string | null> {
-  const { data: { session } } = await supabase.auth.getSession();
-  return session?.access_token || null;
+function getAuroraToken(): string | null {
+  return localStorage.getItem(AURORA_TOKEN_KEY);
 }
 
 export function clearAuroraSession(): void {
-  supabase.auth.signOut();
+  localStorage.removeItem(AURORA_TOKEN_KEY);
+  localStorage.removeItem('aurora_user');
 }
 
 // =============================================
@@ -212,7 +214,7 @@ export async function callAuroraApi<T>(
   options?: AuroraApiOptions
 ): Promise<T> {
   const finalPath = buildFinalPath(path, options);
-  const sessionToken = await getSessionToken();
+  const auroraToken = getAuroraToken();
   
   // Check cache first for GET requests
   if (method === 'GET' && !options?.skipCache) {
@@ -224,8 +226,8 @@ export async function callAuroraApi<T>(
   
   // Log if no session for debugging (but allow public endpoints)
   const isPublicEndpoint = path === '/api/health' || path === '/health' || path.startsWith('/api/auth/');
-  if (!sessionToken && !isPublicEndpoint) {
-    console.warn(`No session token for protected endpoint: ${path}`);
+  if (!auroraToken && !isPublicEndpoint) {
+    console.warn(`No Aurora token for protected endpoint: ${path}`);
   }
   
   const executor = async (): Promise<T> => {
@@ -235,7 +237,7 @@ export async function callAuroraApi<T>(
     for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
       try {
         const { data, error } = await supabase.functions.invoke("aurora-proxy", {
-          body: { path: finalPath, method, body, sessionToken },
+          body: { path: finalPath, method, body, auroraToken },
         });
 
         if (error) {
