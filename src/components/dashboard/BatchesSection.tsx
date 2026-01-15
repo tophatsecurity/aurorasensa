@@ -5,7 +5,7 @@ import {
   useBatchesList,
   useLatestBatch,
   useDiskUsageInfo,
-} from "@/hooks/useAuroraApi";
+} from "@/hooks/aurora";
 import { useAuroraAuthContext } from "@/hooks/useAuroraAuth";
 import { formatLastSeen, formatDateTime } from "@/utils/dateUtils";
 import { Progress } from "@/components/ui/progress";

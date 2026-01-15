@@ -9,7 +9,7 @@ import {
   Area
 } from "recharts";
 import { Thermometer, Droplets, Signal, Zap, Loader2 } from "lucide-react";
-import { useDashboardTimeseries } from "@/hooks/useAuroraApi";
+import { useDashboardTimeseries } from "@/hooks/aurora";
 
 interface ChartData {
   time: string;

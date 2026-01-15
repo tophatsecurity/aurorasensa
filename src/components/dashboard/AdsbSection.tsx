@@ -6,7 +6,7 @@ import {
   useAdsbStats, 
   useAdsbEmergencies,
   useAdsbCoverage,
-} from "@/hooks/useAuroraApi";
+} from "@/hooks/aurora";
 import { Loader2 } from "lucide-react";
 import { formatLastSeen } from "@/utils/dateUtils";
 

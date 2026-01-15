@@ -58,7 +58,6 @@ import {
 import { 
   useClientsByState, 
   useClientStatistics,
-  useAdoptClientDirect,
   useRegisterClient,
   useDisableClient,
   useEnableClient,
@@ -70,10 +69,11 @@ import {
   useRenameClient,
   useLatestReadings,
   useDeleteSensor,
-  Client,
-  ClientState,
-} from "@/hooks/useAuroraApi";
-import { callAuroraApi } from "@/hooks/aurora/core";
+  type Client,
+  type ClientState,
+  callAuroraApi,
+} from "@/hooks/aurora";
+import { useAdoptClientDirect } from "@/hooks/useAuroraApi";
 import { formatLastSeen, formatDateTime, getDeviceStatusFromLastSeen } from "@/utils/dateUtils";
 import { toast } from "sonner";
 import DeviceDetailDialog from "./DeviceDetailDialog";
@@ -212,7 +212,6 @@ const ClientsContent = () => {
     hostname?: string
   ) => {
     const actionMap = {
-      adopt: { fn: adoptClient, label: "adopted" },
       register: { fn: registerClient, label: "registered" },
       disable: { fn: disableClient, label: "disabled" },
       enable: { fn: enableClient, label: "enabled" },
@@ -221,7 +220,21 @@ const ClientsContent = () => {
       restore: { fn: restoreClient, label: "restored" },
     };
 
-    const { fn, label } = actionMap[action];
+    // Handle adopt separately due to different signature
+    if (action === "adopt") {
+      adoptClient.mutate(clientId, {
+        onSuccess: () => {
+          toast.success(`Successfully adopted ${hostname || clientId}`);
+          refetch();
+        },
+        onError: (error: Error) => {
+          toast.error(`Failed to adopt: ${error.message}`);
+        },
+      });
+      return;
+    }
+
+    const { fn, label } = actionMap[action as keyof typeof actionMap];
     fn.mutate(
       { clientId, reason: `Manual ${action} from dashboard` },
       {

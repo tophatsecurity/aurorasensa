@@ -279,6 +279,13 @@ export {
   type ClientStats,
   type TimePeriodStats,
   type SensorTypeStats,
+  type GlobalStatsHistoryPoint,
+  type SensorStatsHistoryPoint,
+  type DeviceStatsHistoryPoint,
+  type AlertStatsHistoryPoint,
+  type SystemResourceStatsHistoryPoint,
+  type PeriodStats,
+  type PerformanceStats,
 } from "./stats";
 
 // Client-specific sensor data hooks
@@ -332,6 +339,7 @@ export {
   // Audit
   useAuditLogs,
   useAuditStats,
+  type AuditLog,
   // Logs
   useLogs,
   useDatacollectorLogs,
@@ -346,6 +354,7 @@ export {
   // AHT/Arduino Sensor Timeseries
   useAhtSensorTimeseries,
   useArduinoSensorTimeseries,
+  useBmtSensorTimeseries,
   // Devices & Batches
   useDeviceTree,
   useDeviceStatus,
@@ -374,6 +383,8 @@ export {
   useCommandResults,
   useClientPendingCommands,
   useSubmitCommandResult,
+  type RemoteCommand,
+  type CommandResult,
   // Update Management
   useUpdatePackages,
   useUpdateStatus,
@@ -382,6 +393,8 @@ export {
   useClientUpdateHistory,
   useClientAvailableUpdates,
   useReportUpdateStatus,
+  type UpdatePackage,
+  type UpdateAssignment,
   // Health
   useHealth,
   useHealthCheck,
@@ -415,4 +428,9 @@ export {
   useLoraDetectorTimeseries,
   // LoRa
   useRecentLoraDetections,
+  // Users
+  useCurrentUser,
+  type User,
+  // Rename client
+  useRenameClient,
 } from "../useAuroraApi";

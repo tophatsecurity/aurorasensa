@@ -5,7 +5,7 @@ import {
   useGpsReadings,
   useGpsdStatus,
   useVisibleSatellites,
-} from "@/hooks/useAuroraApi";
+} from "@/hooks/aurora";
 import { formatLastSeen } from "@/utils/dateUtils";
 import {
   ResponsiveContainer,

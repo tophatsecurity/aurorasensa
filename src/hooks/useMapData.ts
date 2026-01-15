@@ -31,7 +31,7 @@ import {
 import type { StarlinkMetrics, WirelessDetectionMarker } from "@/types/map";
 import { useQueryClient } from "@tanstack/react-query";
 import type { MapStats, SensorMarker, ClientMarker, AdsbMarker } from "@/types/map";
-import { useWifiScannerTimeseries, useBluetoothScannerTimeseries } from "@/hooks/useAuroraApi";
+import { useWifiScannerTimeseries, useBluetoothScannerTimeseries } from "@/hooks/aurora";
 
 export interface UseMapDataOptions {
   adsbHistoryMinutes?: number;

@@ -34,12 +34,12 @@ import {
   useDeviceStatsHistory,
   useAlertStatsHistory,
   useSystemResourceStatsHistory,
-  GlobalStatsHistoryPoint,
-  SensorStatsHistoryPoint,
-  DeviceStatsHistoryPoint,
-  AlertStatsHistoryPoint,
-  SystemResourceStatsHistoryPoint,
-} from "@/hooks/useAuroraApi";
+  type GlobalStatsHistoryPoint,
+  type SensorStatsHistoryPoint,
+  type DeviceStatsHistoryPoint,
+  type AlertStatsHistoryPoint,
+  type SystemResourceStatsHistoryPoint,
+} from "@/hooks/aurora";
 
 interface StatsHistoryChartsProps {
   hours?: number;

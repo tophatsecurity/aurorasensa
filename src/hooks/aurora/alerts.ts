@@ -60,8 +60,12 @@ export interface AlertStats {
 }
 
 export interface AlertSettings {
+  email_enabled?: boolean;
   email_notifications?: boolean;
+  email_recipients?: string[];
+  webhook_enabled?: boolean;
   webhook_url?: string;
+  cooldown_seconds?: number;
   default_severity?: string;
   auto_acknowledge_minutes?: number;
   retention_days?: number;

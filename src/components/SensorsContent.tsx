@@ -22,7 +22,7 @@ import {
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { useComprehensiveStats, useDashboardTimeseries, useDashboardStats, useClients } from "@/hooks/useAuroraApi";
+import { useComprehensiveStats, useDashboardTimeseries, useDashboardStats, useClients } from "@/hooks/aurora";
 import { useQueryClient } from "@tanstack/react-query";
 import {
   AreaChart,

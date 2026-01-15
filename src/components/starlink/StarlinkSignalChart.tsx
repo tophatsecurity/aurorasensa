@@ -32,7 +32,7 @@ import {
   useStarlinkPerformance,
   useStarlinkTimeseries,
   useStarlinkConnectivity,
-} from "@/hooks/useAuroraApi";
+} from "@/hooks/aurora";
 
 
 interface SignalDataPoint {

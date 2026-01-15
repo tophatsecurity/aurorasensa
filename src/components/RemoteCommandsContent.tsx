@@ -47,9 +47,9 @@ import {
   useSendCommand,
   useCommandResults,
   useClientsByState,
-  RemoteCommand,
-  CommandResult,
-} from "@/hooks/useAuroraApi";
+  type RemoteCommand,
+  type CommandResult,
+} from "@/hooks/aurora";
 
 import { formatDateTime, formatLastSeen } from "@/utils/dateUtils";
 import { toast } from "sonner";

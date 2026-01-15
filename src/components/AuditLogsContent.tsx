@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useAuditLogs, useAuditStats, AuditLog } from "@/hooks/useAuroraApi";
+import { useAuditLogs, useAuditStats, type AuditLog } from "@/hooks/aurora";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";

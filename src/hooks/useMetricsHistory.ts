@@ -1,5 +1,5 @@
 import { useEffect, useState, useRef } from 'react';
-import { useClients } from './useAuroraApi';
+import { useClients } from "@/hooks/aurora";
 
 interface MetricDataPoint {
   time: string;

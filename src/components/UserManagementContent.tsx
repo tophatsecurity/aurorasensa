@@ -63,8 +63,8 @@ import {
   useCreateUser, 
   useDeleteUser, 
   useChangePassword,
-  User as ApiUser 
-} from "@/hooks/useAuroraApi";
+  type User as ApiUser 
+} from "@/hooks/aurora";
 
 const UserManagementContent = () => {
   const [newUserDialog, setNewUserDialog] = useState(false);

@@ -23,7 +23,7 @@ import { Switch } from "@/components/ui/switch";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { toast } from "sonner";
-import { useAlertSettings, useUpdateAlertSettings, useTestAlert } from "@/hooks/useAuroraApi";
+import { useAlertSettings, useUpdateAlertSettings, useTestAlert } from "@/hooks/aurora";
 import { useQueryClient } from "@tanstack/react-query";
 
 const WebhooksContent = () => {
