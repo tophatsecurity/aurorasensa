@@ -84,6 +84,25 @@ export interface CreateAlertRulePayload {
   }[];
   notification_channels?: string[];
   cooldown_minutes?: number;
+  rule_type?: string;
+  category?: string;
+}
+
+// API format - what the backend actually expects
+interface ApiAlertRulePayload {
+  rule_name: string;
+  rule_type: string;
+  description?: string;
+  enabled?: boolean;
+  severity?: string;
+  sensor_type_filter?: string;
+  conditions?: {
+    field: string;
+    operator?: string | null;
+    value?: number | string | null;
+  }[];
+  notification_channels?: string[];
+  cooldown_minutes?: number;
 }
 
 export interface UpdateAlertRulePayload extends Partial<CreateAlertRulePayload> {}
@@ -271,7 +290,20 @@ export function useCreateAlertRule() {
   
   return useMutation({
     mutationFn: async (rule: CreateAlertRulePayload) => {
-      return callAuroraApi<{ success: boolean; id?: number }>(ALERTS.RULES, "POST", rule);
+      // Transform from frontend format to API format
+      // API requires rule_name and rule_type fields
+      const apiPayload: ApiAlertRulePayload = {
+        rule_name: rule.name,
+        rule_type: rule.rule_type || rule.category || deriveRuleType(rule.sensor_type_filter),
+        description: rule.description,
+        enabled: rule.enabled,
+        severity: rule.severity,
+        sensor_type_filter: rule.sensor_type_filter,
+        conditions: rule.conditions,
+        notification_channels: rule.notification_channels,
+        cooldown_minutes: rule.cooldown_minutes,
+      };
+      return callAuroraApi<{ success: boolean; id?: number }>(ALERTS.RULES, "POST", apiPayload);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["aurora", "alerts", "rules"] });
@@ -279,12 +311,51 @@ export function useCreateAlertRule() {
   });
 }
 
+// Helper function to derive rule_type from sensor_type_filter
+function deriveRuleType(sensorTypeFilter?: string): string {
+  if (!sensorTypeFilter) return "threshold";
+  
+  const typeMap: Record<string, string> = {
+    "arduino_sensor_kit": "threshold",
+    "system_monitor": "threshold",
+    "starlink": "threshold",
+    "starlink_dish_comprehensive": "threshold",
+    "wifi_scanner": "threshold",
+    "bluetooth_scanner": "threshold",
+    "lora_detector": "detection",
+    "gps": "geofence",
+    "adsb": "detection",
+    "ais": "detection",
+    "aprs": "detection",
+    "epirb": "emergency",
+  };
+  
+  return typeMap[sensorTypeFilter] || "threshold";
+}
+
 export function useUpdateAlertRule() {
   const queryClient = useQueryClient();
   
   return useMutation({
     mutationFn: async ({ ruleId, updates }: { ruleId: number; updates: UpdateAlertRulePayload }) => {
-      return callAuroraApi<{ success: boolean }>(ALERTS.RULE(ruleId), "PUT", updates);
+      // Transform from frontend format to API format if name is present
+      const apiPayload: Partial<ApiAlertRulePayload> = {
+        ...updates,
+      };
+      
+      // Map name to rule_name if present
+      if (updates.name) {
+        apiPayload.rule_name = updates.name;
+        delete (apiPayload as unknown as { name?: string }).name;
+      }
+      
+      // Add rule_type if category is present
+      if (updates.category) {
+        apiPayload.rule_type = updates.category;
+        delete (apiPayload as unknown as { category?: string }).category;
+      }
+      
+      return callAuroraApi<{ success: boolean }>(ALERTS.RULE(ruleId), "PUT", apiPayload);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["aurora", "alerts", "rules"] });
