@@ -93,9 +93,11 @@ async function tryLoginEndpoints(
       if (response.ok) {
         const data = await response.json();
         console.log(`Login successful via ${endpoint} (JSON format)`);
-        // Aurora returns { success: true, username: "...", token?: "..." }
-        // Normalize to include access_token if token is present
-        if (data.token && !data.access_token) {
+        // Aurora returns { success: true, username: "...", session_token?: "...", token?: "..." }
+        // Normalize to include access_token for consistency
+        if (data.session_token && !data.access_token) {
+          data.access_token = data.session_token;
+        } else if (data.token && !data.access_token) {
           data.access_token = data.token;
         }
         return { data, status: response.status };
