@@ -548,7 +548,7 @@ const ConfigurationContent = () => {
                       <Skeleton className="h-6 w-24" />
                     ) : (
                       <div className="text-2xl font-bold">
-                        {stats?.global?.database?.total_readings?.toLocaleString() || 0}
+                        {(stats?.global?.total_readings ?? stats.global?.database?.total_readings ?? 0).toLocaleString()}
                       </div>
                     )}
                   </CardContent>
@@ -628,11 +628,11 @@ const ConfigurationContent = () => {
                     <CardContent className="space-y-3">
                       <div className="flex justify-between text-sm">
                         <span className="text-muted-foreground">Total Batches</span>
-                        <span className="font-mono">{stats.global?.database?.total_batches?.toLocaleString() || 0}</span>
+                        <span className="font-mono">{(stats.global?.total_batches ?? stats.global?.database?.total_batches ?? 0).toLocaleString()}</span>
                       </div>
                       <div className="flex justify-between text-sm">
                         <span className="text-muted-foreground">Total Clients</span>
-                        <span className="font-mono">{stats.global?.database?.total_clients || 0}</span>
+                        <span className="font-mono">{stats.global?.total_clients ?? stats.global?.database?.total_clients ?? 0}</span>
                       </div>
                       <div className="flex justify-between text-sm">
                         <span className="text-muted-foreground">Alert Rules</span>

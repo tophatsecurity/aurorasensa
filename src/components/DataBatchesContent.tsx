@@ -17,8 +17,9 @@ const DataBatchesContent = () => {
   };
 
   const global = stats?.global;
-  const totalBatches = global?.database?.total_batches ?? 0;
-  const totalReadings = global?.database?.total_readings ?? 0;
+  // Use flat structure first, fallback to nested
+  const totalBatches = global?.total_batches ?? global?.database?.total_batches ?? 0;
+  const totalReadings = global?.total_readings ?? global?.database?.total_readings ?? 0;
   const batchesLast24h = global?.activity?.last_24_hours?.batches_24h ?? 0;
   const readingsLast24h = global?.activity?.last_24_hours?.readings_24h ?? 0;
   const avgReadingsPerHour = global?.activity?.avg_readings_per_hour ?? 0;

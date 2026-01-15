@@ -1497,21 +1497,54 @@ export interface ServerConfig {
 
 /** Comprehensive statistics response */
 export interface ComprehensiveStats {
+  status?: string;
   timestamp: string;
+  filters?: {
+    client_id: string | null;
+    device_id: string | null;
+    sensor_type: string | null;
+  };
   global: {
-    timestamp: string;
-    database: {
+    // New flat structure
+    total_clients?: number;
+    total_devices?: number;
+    total_batches?: number;
+    total_readings?: number;
+    sensor_types_count?: number;
+    active_clients_24h?: number;
+    device_breakdown?: Array<{
+      device_type: string;
+      count: number;
+    }>;
+    readings_by_day?: Array<{
+      date: string;
+      count: number;
+    }>;
+    storage?: {
+      batches_size: string;
+      readings_size: string;
+      total_db_size: string;
+    };
+    time_ranges?: {
+      earliest_reading?: string;
+      latest_reading?: string;
+      data_span_seconds?: number;
+      data_span_days?: number;
+    };
+    // Legacy nested structure (backward compatibility)
+    timestamp?: string;
+    database?: {
       total_readings: number;
       total_batches: number;
       total_clients: number;
       active_alerts: number;
       total_alert_rules: number;
     };
-    devices: {
+    devices?: {
       total_unique_devices: number;
       total_device_types: number;
     };
-    activity: {
+    activity?: {
       avg_readings_per_hour: number;
       last_1_hour: {
         readings_1h: number;
@@ -1524,13 +1557,7 @@ export interface ComprehensiveStats {
         active_devices_24h: number;
       };
     };
-    time_ranges: {
-      earliest_reading: string;
-      latest_reading: string;
-      data_span_seconds: number;
-      data_span_days: number;
-    };
-    sensors: {
+    sensors?: {
       by_type: Array<{
         device_type: string;
         device_count: number;
@@ -1540,11 +1567,11 @@ export interface ComprehensiveStats {
       }>;
     };
   };
-  devices_summary: {
+  devices_summary?: {
     total_devices: number;
     devices: DeviceSummary[];
   };
-  sensors_summary: {
+  sensors_summary?: {
     total_sensor_types: number;
     sensor_types: SensorTypeSummary[];
   };

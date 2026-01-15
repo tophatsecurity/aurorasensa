@@ -139,8 +139,9 @@ const SettingsContent = () => {
   };
 
   const isConnected = !statsError && stats;
-  const totalClients = stats?.global?.database?.total_clients ?? 0;
-  const totalReadings = stats?.global?.database?.total_readings ?? 0;
+  // Use flat structure first, fallback to nested
+  const totalClients = stats?.global?.total_clients ?? stats?.global?.database?.total_clients ?? 0;
+  const totalReadings = stats?.global?.total_readings ?? stats?.global?.database?.total_readings ?? 0;
 
   const handleRefresh = () => {
     queryClient.invalidateQueries({ queryKey: ["aurora"] });
