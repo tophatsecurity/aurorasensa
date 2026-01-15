@@ -322,6 +322,39 @@ Deno.serve(async (req) => {
       });
     }
     
+    // Handle 400 bad request errors gracefully for GET requests
+    if (response.status === 400) {
+      const responseText = await response.text();
+      console.log(`Bad request (400) for ${path}: ${responseText}`);
+      
+      // For GET requests with parameter errors, return empty data
+      if (method === 'GET') {
+        try {
+          const errorData = JSON.parse(responseText);
+          const errorMsg = (errorData.message || errorData.detail || '').toLowerCase();
+          // Check for parameter-related errors
+          if (errorMsg.includes('required parameter') || 
+              errorMsg.includes('is required') ||
+              errorMsg.includes('missing') ||
+              errorData.status === 'error') {
+            console.log(`Parameter error for GET ${path}, returning empty data`);
+            const emptyData = getEmptyDataForPath(path);
+            return new Response(JSON.stringify(emptyData), {
+              status: 200,
+              headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+            });
+          }
+        } catch {
+          // Not JSON, continue with normal response
+        }
+      }
+      
+      return new Response(responseText, {
+        status: 400,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+    
     // Handle 422 validation errors
     if (response.status === 422) {
       const responseText = await response.text();
