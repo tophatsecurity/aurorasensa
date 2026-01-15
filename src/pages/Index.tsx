@@ -32,6 +32,7 @@ import AdsbAnalyticsContent from "@/components/AdsbAnalyticsContent";
 import BaselinesContent from "@/components/BaselinesContent";
 import MaritimeContent from "@/components/MaritimeContent";
 import StatsContent from "@/components/StatsContent";
+import ClientSensorBreakdownContent from "@/components/ClientSensorBreakdownContent";
 import { AuroraAuthPage } from "@/components/auth/AuroraAuthPage";
 import { useAuroraAuthContext } from "@/hooks/useAuroraAuth";
 import { useEpirbAlertNotifications } from "@/hooks/useEpirbAlertNotifications";
@@ -93,6 +94,8 @@ function AuthenticatedDashboard({ activeItem, onNavigate }: { activeItem: string
         return <StatsContent />;
       case "data-analytics":
         return <DataAnalyticsContent />;
+      case "data-breakdown":
+        return <ClientSensorBreakdownContent />;
       case "alerts":
         return <AlertsContent />;
       case "map":
