@@ -1,6 +1,6 @@
 // Aurora API - Alerts domain hooks
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { callAuroraApi, hasAuroraSession } from "./core";
+import { callAuroraApi, hasAuroraSession, AuroraApiOptions } from "./core";
 
 // =============================================
 // TYPES
@@ -102,9 +102,9 @@ export interface UpdateAlertRulePayload {
 // =============================================
 
 // Safe wrapper that returns default empty data on API errors (404, etc.)
-async function safeAlertApiCall<T>(endpoint: string, defaultValue: T): Promise<T> {
+async function safeAlertApiCall<T>(endpoint: string, defaultValue: T, options?: AuroraApiOptions): Promise<T> {
   try {
-    return await callAuroraApi<T>(endpoint);
+    return await callAuroraApi<T>(endpoint, "GET", undefined, options);
   } catch (error) {
     // Return default value for 404s or other API errors
     console.warn(`Alert API endpoint ${endpoint} not available, using defaults`);
@@ -112,10 +112,10 @@ async function safeAlertApiCall<T>(endpoint: string, defaultValue: T): Promise<T
   }
 }
 
-export function useAlerts(limit: number = 100) {
+export function useAlerts(limit: number = 100, clientId?: string | null) {
   return useQuery({
-    queryKey: ["aurora", "alerts", limit],
-    queryFn: () => safeAlertApiCall<{ alerts: Alert[] }>(`/api/alerts?limit=${limit}`, { alerts: [] }),
+    queryKey: ["aurora", "alerts", limit, clientId],
+    queryFn: () => safeAlertApiCall<{ alerts: Alert[] }>(`/api/alerts?limit=${limit}`, { alerts: [] }, { clientId }),
     enabled: hasAuroraSession(),
     staleTime: 30000,
     refetchInterval: 60000,
@@ -123,7 +123,7 @@ export function useAlerts(limit: number = 100) {
   });
 }
 
-export function useAlertsList(params?: { severity?: string; acknowledged?: boolean; resolved?: boolean; limit?: number }) {
+export function useAlertsList(params?: { severity?: string; acknowledged?: boolean; resolved?: boolean; limit?: number; clientId?: string | null }) {
   const queryParams = new URLSearchParams();
   if (params?.severity) queryParams.append("severity", params.severity);
   if (params?.acknowledged !== undefined) queryParams.append("acknowledged", String(params.acknowledged));
@@ -132,7 +132,7 @@ export function useAlertsList(params?: { severity?: string; acknowledged?: boole
   
   return useQuery({
     queryKey: ["aurora", "alerts", "list", params],
-    queryFn: () => safeAlertApiCall<{ alerts: Alert[]; count: number }>(`/api/alerts/list?${queryParams}`, { alerts: [], count: 0 }),
+    queryFn: () => safeAlertApiCall<{ alerts: Alert[]; count: number }>(`/api/alerts/list?${queryParams}`, { alerts: [], count: 0 }, { clientId: params?.clientId }),
     enabled: hasAuroraSession(),
     staleTime: 30000,
     refetchInterval: 60000,
@@ -160,17 +160,18 @@ export function useAlertRules() {
   });
 }
 
-export function useAlertStats() {
+export function useAlertStats(clientId?: string | null) {
   return useQuery({
-    queryKey: ["aurora", "alerts", "stats"],
+    queryKey: ["aurora", "alerts", "stats", clientId],
     queryFn: async () => {
+      const options: AuroraApiOptions = { clientId };
       try {
-        return await callAuroraApi<AlertStats>("/api/alerts/stats");
+        return await callAuroraApi<AlertStats>("/api/alerts/stats", "GET", undefined, options);
       } catch (error) {
         // Fallback: compute stats from alerts list if /api/alerts/stats endpoint fails
         console.warn("Alert stats endpoint unavailable, computing from alerts list");
         try {
-          const response = await callAuroraApi<{ alerts: Alert[] }>("/api/alerts/list?limit=1000");
+          const response = await callAuroraApi<{ alerts: Alert[] }>("/api/alerts/list?limit=1000", "GET", undefined, options);
           const alerts = response.alerts || [];
           const now = new Date();
           const last24h = new Date(now.getTime() - 24 * 60 * 60 * 1000);

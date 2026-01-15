@@ -1,6 +1,6 @@
 // Aurora API - LoRa domain hooks
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { callAuroraApi, hasAuroraSession } from "./core";
+import { callAuroraApi, hasAuroraSession, AuroraApiOptions } from "./core";
 
 // =============================================
 // TYPES

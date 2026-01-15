@@ -1,6 +1,6 @@
 // Aurora API - Stats domain hooks
 import { useQuery } from "@tanstack/react-query";
-import { callAuroraApi, hasAuroraSession } from "./core";
+import { callAuroraApi, hasAuroraSession, AuroraApiOptions } from "./core";
 
 // =============================================
 // TYPES
@@ -206,10 +206,10 @@ export interface StatsOverview {
 // QUERY HOOKS
 // =============================================
 
-export function useComprehensiveStats() {
+export function useComprehensiveStats(clientId?: string | null) {
   return useQuery({
-    queryKey: ["aurora", "stats", "comprehensive"],
-    queryFn: () => callAuroraApi<ComprehensiveStats>("/api/stats/comprehensive"),
+    queryKey: ["aurora", "stats", "comprehensive", clientId],
+    queryFn: () => callAuroraApi<ComprehensiveStats>("/api/stats/comprehensive", "GET", undefined, { clientId }),
     enabled: hasAuroraSession(),
     staleTime: 60000,
     refetchInterval: 180000,
@@ -217,10 +217,10 @@ export function useComprehensiveStats() {
   });
 }
 
-export function useDeviceStats() {
+export function useDeviceStats(clientId?: string | null) {
   return useQuery({
-    queryKey: ["aurora", "stats", "devices"],
-    queryFn: () => callAuroraApi<{ devices: DeviceStats[] }>("/api/stats/devices"),
+    queryKey: ["aurora", "stats", "devices", clientId],
+    queryFn: () => callAuroraApi<{ devices: DeviceStats[] }>("/api/stats/devices", "GET", undefined, { clientId }),
     enabled: hasAuroraSession(),
     staleTime: 60000,
     refetchInterval: 120000,
@@ -228,10 +228,10 @@ export function useDeviceStats() {
   });
 }
 
-export function useGlobalStats() {
+export function useGlobalStats(clientId?: string | null) {
   return useQuery({
-    queryKey: ["aurora", "stats", "global"],
-    queryFn: () => callAuroraApi<GlobalStats>("/api/stats/global"),
+    queryKey: ["aurora", "stats", "global", clientId],
+    queryFn: () => callAuroraApi<GlobalStats>("/api/stats/global", "GET", undefined, { clientId }),
     enabled: hasAuroraSession(),
     staleTime: 60000,
     refetchInterval: 180000,
@@ -239,10 +239,10 @@ export function useGlobalStats() {
   });
 }
 
-export function use1hrStats() {
+export function use1hrStats(clientId?: string | null) {
   return useQuery({
-    queryKey: ["aurora", "stats", "1hr"],
-    queryFn: () => callAuroraApi<PeriodStats>("/api/stats/1hr"),
+    queryKey: ["aurora", "stats", "1hr", clientId],
+    queryFn: () => callAuroraApi<PeriodStats>("/api/stats/1hr", "GET", undefined, { clientId }),
     enabled: hasAuroraSession(),
     staleTime: 60000,
     refetchInterval: 120000,
@@ -250,10 +250,10 @@ export function use1hrStats() {
   });
 }
 
-export function use6hrStats() {
+export function use6hrStats(clientId?: string | null) {
   return useQuery({
-    queryKey: ["aurora", "stats", "6hr"],
-    queryFn: () => callAuroraApi<PeriodStats>("/api/stats/6hr"),
+    queryKey: ["aurora", "stats", "6hr", clientId],
+    queryFn: () => callAuroraApi<PeriodStats>("/api/stats/6hr", "GET", undefined, { clientId }),
     enabled: hasAuroraSession(),
     staleTime: 60000,
     refetchInterval: 180000,
@@ -261,10 +261,10 @@ export function use6hrStats() {
   });
 }
 
-export function use24hrStats() {
+export function use24hrStats(clientId?: string | null) {
   return useQuery({
-    queryKey: ["aurora", "stats", "24hr"],
-    queryFn: () => callAuroraApi<PeriodStats>("/api/stats/24hr"),
+    queryKey: ["aurora", "stats", "24hr", clientId],
+    queryFn: () => callAuroraApi<PeriodStats>("/api/stats/24hr", "GET", undefined, { clientId }),
     enabled: hasAuroraSession(),
     staleTime: 60000,
     refetchInterval: 300000,
@@ -272,10 +272,10 @@ export function use24hrStats() {
   });
 }
 
-export function useWeeklyStats() {
+export function useWeeklyStats(clientId?: string | null) {
   return useQuery({
-    queryKey: ["aurora", "stats", "weekly"],
-    queryFn: () => callAuroraApi<PeriodStats>("/api/stats/weekly"),
+    queryKey: ["aurora", "stats", "weekly", clientId],
+    queryFn: () => callAuroraApi<PeriodStats>("/api/stats/weekly", "GET", undefined, { clientId }),
     enabled: hasAuroraSession(),
     staleTime: 60000,
     refetchInterval: 600000,
@@ -283,10 +283,10 @@ export function useWeeklyStats() {
   });
 }
 
-export function usePeriodStats(period: string) {
+export function usePeriodStats(period: string, clientId?: string | null) {
   return useQuery({
-    queryKey: ["aurora", "stats", "period", period],
-    queryFn: () => callAuroraApi<PeriodStats>(`/api/stats/period/${period}`),
+    queryKey: ["aurora", "stats", "period", period, clientId],
+    queryFn: () => callAuroraApi<PeriodStats>(`/api/stats/period/${period}`, "GET", undefined, { clientId }),
     enabled: !!period && hasAuroraSession(),
     staleTime: 60000,
     refetchInterval: 120000,
@@ -294,10 +294,10 @@ export function usePeriodStats(period: string) {
   });
 }
 
-export function useAircraftStats() {
+export function useAircraftStats(clientId?: string | null) {
   return useQuery({
-    queryKey: ["aurora", "stats", "aircraft"],
-    queryFn: () => callAuroraApi<AircraftStats>("/api/stats/aircraft"),
+    queryKey: ["aurora", "stats", "aircraft", clientId],
+    queryFn: () => callAuroraApi<AircraftStats>("/api/stats/aircraft", "GET", undefined, { clientId }),
     enabled: hasAuroraSession(),
     staleTime: 60000,
     refetchInterval: 120000,
@@ -316,10 +316,10 @@ export function useEndpointStats() {
   });
 }
 
-export function usePowerStats() {
+export function usePowerStats(clientId?: string | null) {
   return useQuery({
-    queryKey: ["aurora", "stats", "power"],
-    queryFn: () => callAuroraApi<PowerStats>("/api/power/stats"),
+    queryKey: ["aurora", "stats", "power", clientId],
+    queryFn: () => callAuroraApi<PowerStats>("/api/power/stats", "GET", undefined, { clientId }),
     enabled: hasAuroraSession(),
     staleTime: 60000,
     refetchInterval: 120000,
@@ -338,10 +338,10 @@ export function usePerformanceStats() {
   });
 }
 
-export function useStatsOverview() {
+export function useStatsOverview(clientId?: string | null) {
   return useQuery({
-    queryKey: ["aurora", "stats", "overview"],
-    queryFn: () => callAuroraApi<StatsOverview>("/api/stats/overview"),
+    queryKey: ["aurora", "stats", "overview", clientId],
+    queryFn: () => callAuroraApi<StatsOverview>("/api/stats/overview", "GET", undefined, { clientId }),
     enabled: hasAuroraSession(),
     staleTime: 60000,
     refetchInterval: 180000,
@@ -409,9 +409,9 @@ export function useClientStats(clientId: string | null) {
 
 // Historical Stats Hooks with error handling for large data responses
 
-async function safeStatsHistoryCall<T>(endpoint: string, defaultValue: T): Promise<T> {
+async function safeStatsHistoryCall<T>(endpoint: string, defaultValue: T, options?: AuroraApiOptions): Promise<T> {
   try {
-    return await callAuroraApi<T>(endpoint);
+    return await callAuroraApi<T>(endpoint, "GET", undefined, options);
   } catch (error) {
     // Handle JSONB size limit errors or other API failures gracefully
     const errorMsg = error instanceof Error ? error.message : String(error);
@@ -424,10 +424,10 @@ async function safeStatsHistoryCall<T>(endpoint: string, defaultValue: T): Promi
   }
 }
 
-export function useGlobalStatsHistory(hours: number = 24) {
+export function useGlobalStatsHistory(hours: number = 24, clientId?: string | null) {
   return useQuery({
-    queryKey: ["aurora", "stats", "history", "global", hours],
-    queryFn: () => safeStatsHistoryCall<GlobalStatsHistoryPoint[]>(`/api/stats/history/global?hours=${hours}`, []),
+    queryKey: ["aurora", "stats", "history", "global", hours, clientId],
+    queryFn: () => safeStatsHistoryCall<GlobalStatsHistoryPoint[]>(`/api/stats/history/global?hours=${hours}`, [], { clientId }),
     enabled: hasAuroraSession(),
     staleTime: 60000,
     refetchInterval: 120000,
@@ -435,13 +435,13 @@ export function useGlobalStatsHistory(hours: number = 24) {
   });
 }
 
-export function useSensorStatsHistory(hours: number = 24, sensorType?: string) {
+export function useSensorStatsHistory(hours: number = 24, sensorType?: string, clientId?: string | null) {
   const params = new URLSearchParams({ hours: hours.toString() });
   if (sensorType) params.append("sensor_type", sensorType);
   
   return useQuery({
-    queryKey: ["aurora", "stats", "history", "sensors", hours, sensorType],
-    queryFn: () => safeStatsHistoryCall<SensorStatsHistoryPoint[]>(`/api/stats/history/sensors?${params}`, []),
+    queryKey: ["aurora", "stats", "history", "sensors", hours, sensorType, clientId],
+    queryFn: () => safeStatsHistoryCall<SensorStatsHistoryPoint[]>(`/api/stats/history/sensors?${params}`, [], { clientId }),
     enabled: hasAuroraSession(),
     staleTime: 60000,
     refetchInterval: 120000,
@@ -449,13 +449,13 @@ export function useSensorStatsHistory(hours: number = 24, sensorType?: string) {
   });
 }
 
-export function useDeviceStatsHistory(hours: number = 24, deviceId?: string) {
+export function useDeviceStatsHistory(hours: number = 24, deviceId?: string, clientId?: string | null) {
   const params = new URLSearchParams({ hours: hours.toString() });
   if (deviceId) params.append("device_id", deviceId);
   
   return useQuery({
-    queryKey: ["aurora", "stats", "history", "devices", hours, deviceId],
-    queryFn: () => safeStatsHistoryCall<DeviceStatsHistoryPoint[]>(`/api/stats/history/devices?${params}`, []),
+    queryKey: ["aurora", "stats", "history", "devices", hours, deviceId, clientId],
+    queryFn: () => safeStatsHistoryCall<DeviceStatsHistoryPoint[]>(`/api/stats/history/devices?${params}`, [], { clientId }),
     enabled: hasAuroraSession(),
     staleTime: 60000,
     refetchInterval: 120000,
@@ -463,10 +463,10 @@ export function useDeviceStatsHistory(hours: number = 24, deviceId?: string) {
   });
 }
 
-export function useAlertStatsHistory(hours: number = 24) {
+export function useAlertStatsHistory(hours: number = 24, clientId?: string | null) {
   return useQuery({
-    queryKey: ["aurora", "stats", "history", "alerts", hours],
-    queryFn: () => safeStatsHistoryCall<AlertStatsHistoryPoint[]>(`/api/stats/history/alerts?hours=${hours}`, []),
+    queryKey: ["aurora", "stats", "history", "alerts", hours, clientId],
+    queryFn: () => safeStatsHistoryCall<AlertStatsHistoryPoint[]>(`/api/stats/history/alerts?hours=${hours}`, [], { clientId }),
     enabled: hasAuroraSession(),
     staleTime: 60000,
     refetchInterval: 120000,
@@ -474,10 +474,10 @@ export function useAlertStatsHistory(hours: number = 24) {
   });
 }
 
-export function useSystemResourceStatsHistory(hours: number = 24) {
+export function useSystemResourceStatsHistory(hours: number = 24, clientId?: string | null) {
   return useQuery({
-    queryKey: ["aurora", "stats", "history", "system", hours],
-    queryFn: () => safeStatsHistoryCall<SystemResourceStatsHistoryPoint[]>(`/api/stats/history/system?hours=${hours}`, []),
+    queryKey: ["aurora", "stats", "history", "system", hours, clientId],
+    queryFn: () => safeStatsHistoryCall<SystemResourceStatsHistoryPoint[]>(`/api/stats/history/system?hours=${hours}`, [], { clientId }),
     enabled: hasAuroraSession(),
     staleTime: 60000,
     refetchInterval: 120000,
