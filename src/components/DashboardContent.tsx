@@ -43,7 +43,7 @@ import HumidityCharts from "./HumidityCharts";
 import PowerConsumptionCharts from "./PowerConsumptionCharts";
 import SystemMonitorCharts from "./SystemMonitorCharts";
 
-import { AdsbSection, LoRaSection, WifiBluetoothSection, GpsSection, AlertsSection, BatchesSection, MaritimeSection } from "./dashboard";
+import { AdsbSection, LoRaSection, WifiBluetoothSection, GpsSection, AlertsSection, BatchesSection, MaritimeSection, DashboardStatsHeader, DashboardSensorSummary, DashboardDeviceActivity } from "./dashboard";
 
 import { 
   ContextFilters,  
@@ -482,54 +482,8 @@ const DashboardContent = () => {
         </div>
       </div>
 
-      {/* Key Stats */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
-        <StatCardWithChart
-          title="CONNECTED CLIENTS"
-          value={clientsLoading ? "..." : totalClients.toString()}
-          subtitle={`${activeDevices1h} devices active in last hour`}
-          icon={Server}
-          iconBgColor="bg-green-500/20"
-          isLoading={clientsLoading}
-          devices={activeClients.map((c, idx) => ({
-            device_id: `${c.client_id}_${idx}`,
-            device_type: 'client',
-            color: ['#22c55e', '#3b82f6', '#f59e0b', '#ec4899'][idx % 4],
-            reading_count: c.batches_received * 50,
-            status: c.status || 'active'
-          }))}
-        />
-        <StatCardWithChart
-          title="TOTAL READINGS"
-          value={statsLoading ? "..." : totalReadings.toLocaleString()}
-          subtitle={`${readings1h.toLocaleString()} last hour`}
-          icon={Database}
-          iconBgColor="bg-blue-500/20"
-          isLoading={statsLoading}
-          devices={(sensorsSummary?.sensor_types || []).slice(0, 6).map((s, idx) => ({
-            device_id: s.device_type,
-            device_type: s.device_type,
-            color: ['#3b82f6', '#22c55e', '#f59e0b', '#8b5cf6', '#ec4899', '#06b6d4'][idx % 6],
-            reading_count: s.total_readings,
-            status: s.active_last_hour ? 'active' : 'inactive'
-          }))}
-        />
-        <StatCardWithChart
-          title="SENSOR TYPES"
-          value={statsLoading ? "..." : totalSensorTypes.toString()}
-          subtitle={`${totalDevices} unique devices`}
-          icon={Radio}
-          iconBgColor="bg-purple-500/20"
-          isLoading={statsLoading}
-          devices={(devicesSummary?.devices || []).slice(0, 6).map((d, idx) => ({
-            device_id: d.device_id,
-            device_type: d.device_type,
-            color: ['#8b5cf6', '#06b6d4', '#ef4444', '#84cc16', '#f59e0b', '#ec4899'][idx % 6],
-            reading_count: d.total_readings,
-            status: d.status
-          }))}
-        />
-      </div>
+      {/* Key Stats - Refactored Component */}
+      <DashboardStatsHeader periodHours={periodHours} />
 
       {/* Power Consumption */}
       <div className="mb-8">
@@ -1250,36 +1204,8 @@ const DashboardContent = () => {
         <HumidityCharts hours={periodHours} />
       </div>
 
-      {/* Sensor Types Summary */}
-      <div className="mb-8">
-        <h2 className="text-lg font-semibold mb-4 flex items-center gap-2">
-          <Radio className="w-5 h-5 text-primary" />
-          Active Sensor Types ({sensorsSummary?.total_sensor_types ?? 0})
-        </h2>
-        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
-          {sensorsSummary?.sensor_types?.slice(0, 6).map((sensor) => (
-            <div 
-              key={sensor.device_type}
-              className="glass-card rounded-lg p-3 border border-border/50 hover:border-primary/30 transition-colors"
-            >
-              <div className="text-xs text-muted-foreground capitalize truncate">
-                {sensor.device_type.replace(/_/g, ' ')}
-              </div>
-              <div className="text-lg font-bold text-foreground">
-                {sensor.device_count}
-              </div>
-              <div className="text-xs text-muted-foreground">
-                {sensor.total_readings.toLocaleString()} readings
-              </div>
-              {sensor.active_last_hour && (
-                <Badge variant="outline" className="mt-1 text-[10px] px-1.5 py-0 bg-success/10 text-success border-success/30">
-                  Active
-                </Badge>
-              )}
-            </div>
-          ))}
-        </div>
-      </div>
+      {/* Sensor Types Summary - Refactored Component */}
+      <DashboardSensorSummary periodHours={periodHours} />
 
       {/* 24h Sensor Comparison */}
       <div className="mb-8">
@@ -1597,71 +1523,8 @@ const DashboardContent = () => {
         )}
       </div>
 
-      {/* GPS Position & Device Activity */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-8">
-        <SensorCard
-          title="DATA TIME RANGE"
-          icon={Clock}
-          iconBgColor="bg-green-500/20"
-          className="min-h-[200px]"
-        >
-          <div className="space-y-2 text-sm">
-            <div className="flex justify-between">
-              <span className="text-muted-foreground">Data Span:</span>
-              <span className="font-medium">{global?.time_ranges?.data_span_days?.toFixed(1) ?? "—"} days</span>
-            </div>
-            <div className="flex justify-between">
-              <span className="text-muted-foreground">Earliest Reading:</span>
-              <span className="font-medium text-xs">
-                {formatDate(global?.time_ranges?.earliest_reading)}
-              </span>
-            </div>
-            <div className="flex justify-between">
-              <span className="text-muted-foreground">Latest Reading:</span>
-              <span className="font-medium text-xs">
-                {formatDateTime(global?.time_ranges?.latest_reading)}
-              </span>
-            </div>
-            <div className="flex justify-between">
-              <span className="text-muted-foreground">Active Alerts:</span>
-              <span className="font-medium">{activeAlerts}</span>
-            </div>
-          </div>
-        </SensorCard>
-
-        {/* Device Activity */}
-        <SensorCard
-          title="DEVICE ACTIVITY"
-          icon={Activity}
-          iconBgColor="bg-cyan-500/20"
-          className="min-h-[200px]"
-        >
-          {statsLoading ? (
-            <div className="flex items-center justify-center py-4">
-              <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
-            </div>
-          ) : (
-            <div className="space-y-2 text-sm">
-              <div className="flex justify-between">
-                <span className="text-muted-foreground">Active (1h):</span>
-                <span className="font-medium text-success">{activeDevices1h || "—"} devices</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-muted-foreground">Active (24h):</span>
-                <span className="font-medium">{global?.active_clients_24h ?? global?.activity?.last_24_hours?.active_devices_24h ?? "—"} devices</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-muted-foreground">Readings (24h):</span>
-                <span className="font-medium">{global?.activity?.last_24_hours?.readings_24h?.toLocaleString() ?? "—"}</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-muted-foreground">Avg/Hour:</span>
-                <span className="font-medium">{global?.activity?.avg_readings_per_hour?.toFixed(1) ?? "—"}</span>
-              </div>
-            </div>
-          )}
-        </SensorCard>
-      </div>
+      {/* Device Activity - Refactored Component */}
+      <DashboardDeviceActivity periodHours={periodHours} />
 
       {/* Maritime & RF Tracking */}
       <div className="mb-8">

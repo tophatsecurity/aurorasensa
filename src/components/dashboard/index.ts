@@ -5,3 +5,6 @@ export { GpsSection } from './GpsSection';
 export { AlertsSection } from './AlertsSection';
 export { BatchesSection } from './BatchesSection';
 export { MaritimeSection } from './MaritimeSection';
+export { default as DashboardStatsHeader } from './DashboardStatsHeader';
+export { default as DashboardSensorSummary } from './DashboardSensorSummary';
+export { default as DashboardDeviceActivity } from './DashboardDeviceActivity';
