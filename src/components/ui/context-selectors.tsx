@@ -82,6 +82,24 @@ interface ClientSelectorProps {
   showAllOption?: boolean;
 }
 
+// Helper to get a meaningful display name for a client
+const getClientDisplayName = (client: Client, index: number): string => {
+  // Use hostname if available and not empty/unknown
+  if (client.hostname && client.hostname !== 'unknown' && client.hostname.trim() !== '') {
+    return client.hostname;
+  }
+  // Use client_id if it's meaningful (not just "unknown")
+  if (client.client_id && client.client_id !== 'unknown' && client.client_id.trim() !== '') {
+    // If it looks like a UUID or hash, show a truncated version
+    if (client.client_id.length > 20) {
+      return `Client ${client.client_id.slice(0, 8)}...`;
+    }
+    return client.client_id;
+  }
+  // Fallback to indexed name
+  return `Client ${index + 1}`;
+};
+
 export const ClientSelector = memo(function ClientSelector({
   value,
   onChange,
@@ -95,9 +113,9 @@ export const ClientSelector = memo(function ClientSelector({
   const effectiveValue = value ?? context?.selectedClientId ?? "all";
   const effectiveOnChange = onChange ?? context?.setSelectedClientId;
   
-  // Filter out deleted/disabled clients
+  // Filter out deleted/disabled clients and clients with null/undefined client_id
   const activeClients = clients?.filter((c: Client) => 
-    !['deleted', 'disabled', 'suspended'].includes(c.state || '')
+    c && c.client_id && !['deleted', 'disabled', 'suspended'].includes(c.state || '')
   ) || [];
 
   return (
@@ -113,13 +131,13 @@ export const ClientSelector = memo(function ClientSelector({
               All Clients
             </SelectItem>
           )}
-          {activeClients.map((client: Client) => (
+          {activeClients.map((client: Client, index: number) => (
             <SelectItem 
               key={client.client_id} 
               value={client.client_id}
               className="text-xs"
             >
-              {client.hostname || client.client_id}
+              {getClientDisplayName(client, index)}
             </SelectItem>
           ))}
         </SelectContent>
