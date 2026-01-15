@@ -869,8 +869,8 @@ const DataAnalyticsContent = () => {
                   <p className="text-3xl font-bold text-primary">
                     {formatNumber(
                       (selectedClients.length === 0 && selectedSensorTypes.length === 0)
-                        ? globalStats?.database?.total_readings
-                        : filteredSensorTypes.reduce((sum, s) => sum + s.total_readings, 0)
+                        ? (globalStats?.total_readings ?? globalStats?.database?.total_readings)
+                        : filteredSensorTypes.reduce((sum: number, s: { total_readings: number }) => sum + s.total_readings, 0)
                     )}
                   </p>
                   <p className="text-xs text-muted-foreground mt-1">

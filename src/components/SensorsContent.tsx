@@ -234,8 +234,9 @@ const SensorsContent = () => {
 
   const global = stats?.global;
   const sensorTypes = stats?.sensors_summary?.sensor_types || [];
-  const totalReadings = global?.database?.total_readings ?? 0;
-  const totalDevices = global?.devices?.total_unique_devices ?? 0;
+  // Use flat structure first, fallback to nested
+  const totalReadings = global?.total_readings ?? global?.database?.total_readings ?? 0;
+  const totalDevices = global?.total_devices ?? global?.devices?.total_unique_devices ?? 0;
   const activeDevices1h = global?.activity?.last_1_hour?.active_devices_1h ?? 0;
 
   // Live sensor values

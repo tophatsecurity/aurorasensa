@@ -14,6 +14,19 @@ import { formatDistanceToNow } from "date-fns";
 interface GlobalStatsCardsProps {
   comprehensiveStats?: {
     global?: {
+      // New flat structure
+      total_readings?: number;
+      total_batches?: number;
+      total_clients?: number;
+      total_devices?: number;
+      sensor_types_count?: number;
+      active_clients_24h?: number;
+      device_breakdown?: Array<{ device_type: string; count: number }>;
+      time_ranges?: {
+        latest_reading?: string;
+        data_span_days?: number;
+      };
+      // Legacy nested (backward compatibility)
       database?: {
         total_readings?: number;
         total_batches?: number;
@@ -36,10 +49,6 @@ interface GlobalStatsCardsProps {
           batches_24h?: number;
           active_devices_24h?: number;
         };
-      };
-      time_ranges?: {
-        latest_reading?: string;
-        data_span_days?: number;
       };
     };
   } | null;
@@ -64,51 +73,58 @@ function formatNumber(num?: number): string {
 
 export default function GlobalStatsCards({ comprehensiveStats, stats1hr, stats24hr }: GlobalStatsCardsProps) {
   const global = comprehensiveStats?.global;
-  const database = global?.database;
-  const devices = global?.devices;
-  const activity = global?.activity;
+  
+  // Use flat structure first, fallback to nested
+  const totalReadings = global?.total_readings ?? global?.database?.total_readings;
+  const totalBatches = global?.total_batches ?? global?.database?.total_batches;
+  const totalClients = global?.total_clients ?? global?.database?.total_clients;
+  const totalDevices = global?.total_devices ?? global?.devices?.total_unique_devices;
+  const deviceTypes = global?.sensor_types_count ?? global?.device_breakdown?.length ?? global?.devices?.total_device_types;
+  const activeDevices1h = global?.activity?.last_1_hour?.active_devices_1h;
+  const avgReadingsPerHour = global?.activity?.avg_readings_per_hour;
+  const activeAlerts = global?.database?.active_alerts;
   const timeRanges = global?.time_ranges;
 
   const stats = [
     {
       title: "Total Readings",
-      value: formatNumber(database?.total_readings),
+      value: formatNumber(totalReadings),
       icon: Database,
       color: "text-cyan-400",
       bgColor: "bg-cyan-500/20",
     },
     {
       title: "Total Devices",
-      value: formatNumber(devices?.total_unique_devices),
-      subtitle: devices?.total_device_types ? `${devices.total_device_types} types` : undefined,
+      value: formatNumber(totalDevices),
+      subtitle: deviceTypes ? `${deviceTypes} types` : undefined,
       icon: Cpu,
       color: "text-violet-400",
       bgColor: "bg-violet-500/20",
     },
     {
       title: "Active Clients",
-      value: formatNumber(database?.total_clients),
+      value: formatNumber(totalClients),
       icon: Users,
       color: "text-emerald-400",
       bgColor: "bg-emerald-500/20",
     },
     {
       title: "Data Batches",
-      value: formatNumber(database?.total_batches),
+      value: formatNumber(totalBatches),
       icon: Layers,
       color: "text-blue-400",
       bgColor: "bg-blue-500/20",
     },
     {
       title: "Active Alerts",
-      value: formatNumber(database?.active_alerts),
+      value: formatNumber(activeAlerts),
       icon: AlertTriangle,
-      color: database?.active_alerts && database.active_alerts > 0 ? "text-amber-400" : "text-green-400",
-      bgColor: database?.active_alerts && database.active_alerts > 0 ? "bg-amber-500/20" : "bg-green-500/20",
+      color: activeAlerts && activeAlerts > 0 ? "text-amber-400" : "text-green-400",
+      bgColor: activeAlerts && activeAlerts > 0 ? "bg-amber-500/20" : "bg-green-500/20",
     },
     {
       title: "Readings/Hour",
-      value: formatNumber(activity?.avg_readings_per_hour),
+      value: formatNumber(avgReadingsPerHour),
       subtitle: stats1hr?.readings ? `${formatNumber(stats1hr.readings)} last hr` : undefined,
       icon: BarChart3,
       color: "text-orange-400",
@@ -116,7 +132,7 @@ export default function GlobalStatsCards({ comprehensiveStats, stats1hr, stats24
     },
     {
       title: "Active (1h)",
-      value: formatNumber(activity?.last_1_hour?.active_devices_1h),
+      value: formatNumber(activeDevices1h),
       subtitle: "devices",
       icon: Activity,
       color: "text-pink-400",

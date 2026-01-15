@@ -165,7 +165,7 @@ const PerformanceContent = () => {
                 <Server className="w-4 h-4 text-blue-500" />
                 <span className="text-sm font-medium">Clients</span>
               </div>
-              <span className="text-lg font-bold">{stats?.global?.database?.total_clients || clients?.length || 0}</span>
+              <span className="text-lg font-bold">{stats?.global?.total_clients ?? stats?.global?.database?.total_clients ?? clients?.length ?? 0}</span>
             </div>
             <Progress value={100} className="h-2" />
           </CardContent>
@@ -425,7 +425,7 @@ const PerformanceContent = () => {
             <div className="space-y-3">
               <div className="flex justify-between">
                 <span className="text-muted-foreground">Total Clients</span>
-                <span className="font-mono text-sm">{stats?.global?.database?.total_clients || clients?.length || 0}</span>
+                <span className="font-mono text-sm">{stats?.global?.total_clients ?? stats?.global?.database?.total_clients ?? clients?.length ?? 0}</span>
               </div>
               <div className="flex justify-between">
                 <span className="text-muted-foreground">With System Metrics</span>
@@ -433,7 +433,7 @@ const PerformanceContent = () => {
               </div>
               <div className="flex justify-between">
                 <span className="text-muted-foreground">Total Devices</span>
-                <span className="font-mono text-sm">{stats?.global?.devices?.total_unique_devices || 0}</span>
+                <span className="font-mono text-sm">{stats?.global?.total_devices ?? stats?.global?.devices?.total_unique_devices ?? 0}</span>
               </div>
             </div>
             <div className="space-y-3">

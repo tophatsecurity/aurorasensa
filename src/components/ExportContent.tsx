@@ -4,14 +4,15 @@ import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { useComprehensiveStats } from "@/hooks/useAuroraApi";
+import { useComprehensiveStats } from "@/hooks/aurora";
 
 const ExportContent = () => {
   const { data: stats, isLoading } = useComprehensiveStats();
 
   // Get real sensor types from API
   const sensorTypes = stats?.sensors_summary?.sensor_types || [];
-  const totalReadings = stats?.global?.database?.total_readings ?? 0;
+  // Use flat structure first, fallback to nested
+  const totalReadings = stats?.global?.total_readings ?? stats?.global?.database?.total_readings ?? 0;
 
   // Estimate export size based on readings
   const estimatedSize = (totalReadings * 0.0001).toFixed(1); // ~100 bytes per reading

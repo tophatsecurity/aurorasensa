@@ -1637,11 +1637,11 @@ const DashboardContent = () => {
             <div className="space-y-2 text-sm">
               <div className="flex justify-between">
                 <span className="text-muted-foreground">Active (1h):</span>
-                <span className="font-medium text-success">{activeDevices1h} devices</span>
+                <span className="font-medium text-success">{activeDevices1h || "—"} devices</span>
               </div>
               <div className="flex justify-between">
                 <span className="text-muted-foreground">Active (24h):</span>
-                <span className="font-medium">{global?.activity?.last_24_hours?.active_devices_24h ?? "—"} devices</span>
+                <span className="font-medium">{global?.active_clients_24h ?? global?.activity?.last_24_hours?.active_devices_24h ?? "—"} devices</span>
               </div>
               <div className="flex justify-between">
                 <span className="text-muted-foreground">Readings (24h):</span>
