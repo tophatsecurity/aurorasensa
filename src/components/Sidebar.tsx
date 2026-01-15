@@ -65,6 +65,7 @@ const menuSections = [
     items: [
       { id: "sensors", label: "Sensors", icon: Thermometer },
       { id: "data-analytics", label: "Data Analytics", icon: BarChart3 },
+      { id: "data-breakdown", label: "Data Breakdown", icon: TrendingUp },
       { id: "stats-history", label: "Stats History", icon: TrendingUp },
       { id: "data-batches", label: "Data Batches", icon: Database },
       { id: "export", label: "Export", icon: Download },
