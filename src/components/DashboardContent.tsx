@@ -53,7 +53,9 @@ import { useClientContext } from "@/contexts/ClientContext";
 import { 
   useComprehensiveStats, 
   useAlerts, 
-  useClients, 
+  useClients,
+  useClientsByState,
+  useClientStatistics,
   useDashboardStats, 
   useDashboardTimeseries, 
   useSensorTypeStatsWithPeriod,
@@ -72,6 +74,7 @@ import {
   usePerformanceStats,
   useStatsOverview,
   useGlobalStats,
+  useDeviceTree,
   type Client 
 } from "@/hooks/aurora";
 import { useSensorReadingsSSE } from "@/hooks/useSSE";
@@ -136,7 +139,17 @@ const DashboardContent = () => {
   const { data: dashboardStats, isLoading: dashboardStatsLoading } = useDashboardStats();
   const { data: timeseries, isLoading: timeseriesLoading } = useDashboardTimeseries(periodHours, selectedClient);
   const { data: alerts } = useAlerts();
+  
+  // Use both useClients and useClientsByState for better data coverage
   const { data: clients, isLoading: clientsLoading } = useClients();
+  const { data: clientsByState, isLoading: clientsByStateLoading } = useClientsByState();
+  const { data: clientStatistics, isLoading: clientStatisticsLoading } = useClientStatistics();
+  
+  // Use statsOverview for accurate reading counts
+  const { data: statsOverview, isLoading: statsOverviewLoading } = useStatsOverview();
+  
+  // Device tree for sensor types count
+  const { data: deviceTree, isLoading: deviceTreeLoading } = useDeviceTree();
   
   // Period-specific stats that update with time period selection
   const { data: periodStats, isLoading: periodStatsLoading } = usePeriodStatsByHours(periodHours);
@@ -158,7 +171,6 @@ const DashboardContent = () => {
   const { data: alertStats, isLoading: alertStatsLoading } = useAlertStats();
   const { data: batchesData, isLoading: batchesLoading } = useBatchesList(10);
   const { data: deviceStatus, isLoading: deviceStatusLoading } = useDeviceStatus();
-  const { data: statsOverview, isLoading: statsOverviewLoading } = useStatsOverview();
   const { data: performanceStats, isLoading: performanceLoading } = usePerformanceStats();
   const { data: globalStats, isLoading: globalStatsLoading } = useGlobalStats();
   // Real timeseries data for sparklines - now using context filters
@@ -203,17 +215,61 @@ const DashboardContent = () => {
   const devicesSummary = stats?.devices_summary;
   const sensorsSummary = stats?.sensors_summary;
 
-  const totalReadings = global?.database?.total_readings ?? 0;
+  // Aggregate all clients from clientsByState for accurate count
+  const allClientsFromState = useMemo(() => {
+    if (!clientsByState?.clients_by_state) return [];
+    const { pending = [], registered = [], adopted = [], disabled = [], suspended = [] } = clientsByState.clients_by_state;
+    return [...pending, ...registered, ...adopted, ...disabled, ...suspended];
+  }, [clientsByState]);
+
+  // Use statsOverview for accurate total readings, fallback to comprehensive stats
+  const totalReadings = statsOverview?.total_readings ?? global?.database?.total_readings ?? 0;
+  
+  // Get client counts - prefer clientStatistics
+  // API returns { status, statistics: { total, by_state, summary } }
+  const clientStatsTotal = clientStatistics?.statistics?.total ?? clientStatistics?.total ?? 0;
+  const aggregatedClientCount = allClientsFromState.length;
+  const clientsArrayCount = clients?.length ?? 0;
+  
+  // Use the best available client count (prefer clientStatistics as it's most accurate)
+  const effectiveClients = clientStatsTotal > 0 ? clientStatsTotal : 
+                          aggregatedClientCount > 0 ? aggregatedClientCount : 
+                          clientsArrayCount;
+
   // Filter out deleted/disabled/suspended clients for dashboard display
-  const activeClients = clients?.filter((c: Client) => 
-    !['deleted', 'disabled', 'suspended'].includes(c.state || '')
-  ) || [];
-  const totalClients = activeClients.length;
+  const activeClients = useMemo(() => {
+    // Prefer clientsByState data since it has better structure
+    if (allClientsFromState.length > 0) {
+      return allClientsFromState.filter((c: Client) => 
+        !['deleted', 'disabled', 'suspended'].includes(c.state || '')
+      );
+    }
+    // Fallback to clients array
+    return (clients || []).filter((c: Client) => 
+      !['deleted', 'disabled', 'suspended'].includes(c.state || '')
+    );
+  }, [allClientsFromState, clients]);
+
+  const totalClients = activeClients.length > 0 ? activeClients.length : effectiveClients;
   const activeDevices1h = global?.activity?.last_1_hour?.active_devices_1h ?? 0;
   const readings1h = global?.activity?.last_1_hour?.readings_1h ?? 0;
-  const totalSensorTypes = sensorsSummary?.total_sensor_types ?? 0;
-  const totalDevices = devicesSummary?.total_devices ?? 0;
-  const activeAlerts = global?.database?.active_alerts ?? 0;
+  
+  // Get sensor types count from device tree or sensor summary
+  // deviceTree is DeviceTreeNode[] (array), not an object with .devices
+  const deviceTypes = useMemo(() => {
+    if (Array.isArray(deviceTree) && deviceTree.length > 0) {
+      const types = new Set<string>();
+      deviceTree.forEach((d) => {
+        if (d.device_type) types.add(d.device_type);
+      });
+      return types.size;
+    }
+    return sensorsSummary?.total_sensor_types ?? 0;
+  }, [deviceTree, sensorsSummary]);
+  
+  const totalSensorTypes = deviceTypes;
+  const totalDevices = Array.isArray(deviceTree) ? deviceTree.length : (devicesSummary?.total_devices ?? 0);
+  const activeAlerts = global?.database?.active_alerts ?? alertStats?.active ?? 0;
 
   // Extract real sensor data from numeric_field_stats_24h
   const thermalFieldStats = thermalProbeStats?.numeric_field_stats_24h;

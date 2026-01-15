@@ -456,11 +456,22 @@ export interface ClientsByStateResponse {
   };
 }
 
-/** Client statistics summary */
+/** Client statistics summary - API returns { status, statistics: {...} } */
 export interface ClientStatisticsResponse {
-  total: number;
-  by_state: Record<ClientState, number>;
-  summary: {
+  status?: string;
+  statistics?: {
+    total: number;
+    by_state: Record<ClientState, number>;
+    summary: {
+      active: number;
+      needs_attention: number;
+      inactive: number;
+    };
+  };
+  // Also support direct structure for backwards compatibility
+  total?: number;
+  by_state?: Record<ClientState, number>;
+  summary?: {
     active: number;
     needs_attention: number;
     inactive: number;
