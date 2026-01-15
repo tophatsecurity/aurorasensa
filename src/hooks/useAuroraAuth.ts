@@ -21,7 +21,7 @@ interface AuroraAuthState {
 }
 
 interface AuroraAuthContextValue extends AuroraAuthState {
-  signIn: (email: string, password: string) => Promise<{ success: boolean; error?: string }>;
+  signIn: (identifier: string, password: string) => Promise<{ success: boolean; error?: string }>;
   signUp: (email: string, password: string, displayName?: string) => Promise<{ success: boolean; error?: string }>;
   signOut: () => Promise<void>;
   refreshUser: () => Promise<void>;
@@ -217,12 +217,13 @@ export function useAuroraAuth(): AuroraAuthContextValue {
     }
   }, [verifySession]);
 
-  const signIn = useCallback(async (email: string, password: string) => {
+  const signIn = useCallback(async (identifier: string, password: string) => {
     setAuthState(prev => ({ ...prev, loading: true, error: null }));
 
     try {
       // Aurora API uses OAuth2 password flow
       // The login endpoint expects form data or JSON with username/password
+      // identifier can be either email or username
       const { data, error } = await callAuroraAuth<{ 
         access_token: string; 
         token_type: string;
@@ -231,7 +232,7 @@ export function useAuroraAuth(): AuroraAuthContextValue {
         AUTH.LOGIN,
         'POST',
         { 
-          username: email, // Aurora may use username or email
+          username: identifier, // Aurora accepts username or email
           password 
         }
       );
@@ -264,9 +265,9 @@ export function useAuroraAuth(): AuroraAuthContextValue {
       );
 
       const user: AuroraUser = userData || data.user || {
-        id: email,
-        email,
-        username: email.split('@')[0],
+        id: identifier,
+        email: identifier.includes('@') ? identifier : '',
+        username: identifier.includes('@') ? identifier.split('@')[0] : identifier,
         role: 'user',
       };
 
