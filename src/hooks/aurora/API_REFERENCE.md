@@ -248,24 +248,35 @@ Based on the official API documentation at http://aurora.tophatsecurity.com:9151
 - `GET /api/config` - Get Config
 - `POST /api/config` - Update Config
 
-## Statistics
-- `GET /api/stats` - Get All Statistics (all granularities)
+## Statistics (API v2.0.2)
+- `GET /api/stats` - Get All Statistics (all granularities combined)
   - Query params: `client_id`, `device_id`, `sensor_type`, `limit_hourly`, `limit_sixhour`, `limit_twelvehour`, `limit_daily`, `limit_weekly`
+  - Returns: `{ hourly: [], six_hour: [], twelve_hour: [], daily: [], weekly: [] }`
 - `GET /api/stats/comprehensive` - Get Comprehensive Stats
+  - Returns global totals, device breakdowns, storage usage, time ranges
 - `GET /api/stats/summary` - Get Stats Summary
 - `GET /api/stats/global` - Get Global Stats
+  - Returns: total_readings, total_devices, total_clients, total_batches, sensor_types_count, active_clients_24h, device_breakdown, readings_by_day, storage
 - `GET /api/stats/overview` - Get General Stats
 - `GET /api/stats/1hr` - Get 1Hr Sensor Stats (last 24 hours)
+  - Query params: `client_id`, `device_id`, `sensor_type`, `limit` (default: 100), `offset`
 - `GET /api/stats/6hr` - Get 6Hr Sensor Stats (last 48 hours)
-- `GET /api/stats/12hr` - Get 12Hr Sensor Stats (last 7 days)
+  - Query params: `client_id`, `device_id`, `sensor_type`, `limit` (default: 100), `offset`
+- `GET /api/stats/12hr` - Get 12Hr Sensor Stats (last 7 days) ✅ NEW
+  - Query params: `client_id`, `device_id`, `sensor_type`, `limit` (default: 100), `offset`
 - `GET /api/stats/24hr` - Get 24Hr Sensor Stats (last 30 days)
-- `GET /api/stats/weekly` - Get Weekly Sensor Stats (last 12 weeks)
+  - Query params: `client_id`, `device_id`, `sensor_type`, `limit` (default: 100), `offset`
+- `GET /api/stats/weekly` - Get Weekly Sensor Stats (last 12 weeks) ✅ OPERATIONAL
+  - Query params: `client_id`, `device_id`, `sensor_type`, `limit` (default: 100), `offset`
 - `GET /api/stats/by-client` - Get Statistics Grouped by Client
   - Query params: `client_id`, `hours` (default: 24), `limit` (default: 100), `offset` (default: 0)
+  - Returns: `{ clients: [{ client_id, hostname, reading_count, device_count, sensor_type_count, sensor_types, first_reading, last_reading }], total }`
 - `GET /api/stats/by-sensor` - Get Statistics Grouped by Sensor Type
   - Query params: `client_id`, `hours` (default: 24), `limit` (default: 100), `offset` (default: 0)
+  - Returns: `{ sensors: [{ sensor_type, reading_count, client_count, device_count, avg_data_size, first_reading, last_reading }], total }`
 - `GET /api/stats/client/{client_id}` - Get Detailed Client Statistics
   - Query params: `hours` (default: 24)
+  - Returns: `{ client_id, overall: {...}, by_sensor_type: [...], recent_devices: [...] }`
 - `GET /api/stats/devices` - Get All Devices Stats
 - `GET /api/stats/devices/{device_id}` - Get Device Stats
 - `GET /api/stats/sensors` - Get All Sensor Stats
@@ -274,6 +285,7 @@ Based on the official API documentation at http://aurora.tophatsecurity.com:9151
 - `GET /api/stats/endpoints` - Get Endpoint Stats Summary
 - `GET /api/stats/endpoints/history` - Get Endpoint Stats History
 - `GET /api/performance/stats` - Get Performance Stats
+- `GET /api/power/stats` - Get Power Stats
 
 ## Device Data
 - `GET /api/devices/{device_id}` - Get Device Details
