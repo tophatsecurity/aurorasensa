@@ -299,11 +299,12 @@ export function useEpirbStats() {
   });
 }
 
-export function useEpirbActiveAlerts() {
+export function useEpirbActiveAlerts(options?: { enabled?: boolean }) {
+  const isEnabled = options?.enabled ?? true;
   return useQuery({
     queryKey: ["aurora", "epirb", "active"],
     queryFn: () => callAuroraApi<EpirbBeacon[]>(EPIRB.ACTIVE),
-    enabled: MARITIME_API_ENABLED && hasAuroraSession(),
+    enabled: isEnabled && MARITIME_API_ENABLED && hasAuroraSession(),
     ...fastQueryOptions,
   });
 }
