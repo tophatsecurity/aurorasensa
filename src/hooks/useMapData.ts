@@ -13,7 +13,7 @@ import {
   useGpsReadings,
   useStarlinkStatusData,
   useStarlinkDevices,
-  useStarlinkSensorReadings,
+  useStarlinkTimeseries,
   useStarlinkSignalStrength,
   useStarlinkPerformance,
   useStarlinkPower,
@@ -255,7 +255,7 @@ export function useMapData(options: UseMapDataOptions = {}) {
   const { data: starlinkDevicesApi } = useStarlinkDevices();
 
   // Get Starlink sensor readings with GPS data
-  const { data: starlinkSensorReadings } = useStarlinkSensorReadings();
+  const { data: starlinkSensorReadings } = useStarlinkTimeseries();
 
   // Get Starlink metrics for detailed popup
   const { data: starlinkSignal } = useStarlinkSignalStrength();
@@ -310,7 +310,7 @@ export function useMapData(options: UseMapDataOptions = {}) {
       gpsdStatus: !!gpsdStatus,
       gpsReadings: gpsReadings?.count || 0,
       starlinkStatusData: starlinkStatusData?.length || 0,
-      starlinkSensorReadings: starlinkSensorReadings?.length || 0,
+      starlinkSensorReadings: starlinkSensorReadings?.readings?.length || 0,
       starlinkDevicesApi: starlinkDevicesApi?.length || 0,
     });
   }, [sensors, clients, latestReadings, geoLocations, adsbAircraft, aisVessels, aprsStations, epirbBeacons, wifiData, bluetoothData, starlinkStats, starlinkLatest, gpsdStatus, gpsReadings, starlinkStatusData, starlinkSensorReadings, starlinkDevicesApi]);
@@ -825,14 +825,16 @@ export function useMapData(options: UseMapDataOptions = {}) {
     }
     
     // Fifth, add from Starlink sensor readings (/api/readings/sensor/starlink)
-    if (starlinkSensorReadings && starlinkSensorReadings.length > 0) {
+    const starlinkReadingsArr = starlinkSensorReadings?.readings || [];
+    if (starlinkReadingsArr.length > 0) {
       // Group by client_id + unique device_id and get the latest entry for each
-      const sensorMap = new Map<string, { reading: typeof starlinkSensorReadings[0]; uniqueId: string; coords: { lat: number; lng: number; altitude?: number } | null }>();
+      const sensorMap = new Map<string, { reading: typeof starlinkReadingsArr[0]; uniqueId: string; coords: { lat: number; lng: number; altitude?: number } | null }>();
       
-      starlinkSensorReadings.forEach(reading => {
-        const data = reading.data as Record<string, unknown>;
-        const result = extractStarlinkCoordsWithId(data, reading.device_id);
-        const uniqueId = result?.device_id || extractStarlinkDeviceId(data, reading.device_id);
+      starlinkReadingsArr.forEach(reading => {
+        // StarlinkTimeseriesPoint has metrics at top level, not nested in .data
+        const data = reading as unknown as Record<string, unknown>;
+        const result = extractStarlinkCoordsWithId(data, reading.device_id || 'unknown');
+        const uniqueId = result?.device_id || extractStarlinkDeviceId(data, reading.device_id || 'unknown');
         const clientId = reading.client_id;
         const compositeKey = makeCompositeKey(clientId, uniqueId);
         
@@ -885,12 +887,13 @@ export function useMapData(options: UseMapDataOptions = {}) {
           }
         } else if (!addedIds.has(compositeKey) && !noGpsIds.has(compositeKey)) {
           // Device exists but has no GPS - track for fallback
-          const data = reading.data as Record<string, unknown>;
+          // StarlinkTimeseriesPoint has metrics at top level
+          const readingData = reading as unknown as Record<string, unknown>;
           devicesWithoutGps.push({
             device_id: uniqueId,
             client_id: clientId,
             timestamp: reading.timestamp,
-            metrics: data.starlink as Record<string, unknown> | undefined
+            metrics: readingData
           });
           noGpsIds.add(compositeKey);
           console.log('[MapData] Starlink device without GPS, will use client fallback:', compositeKey);
