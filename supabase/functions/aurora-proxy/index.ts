@@ -70,63 +70,75 @@ function getEmptyDataForPath(apiPath: string): unknown {
   return null;
 }
 
-// OAuth2 login endpoints to try in order
-const LOGIN_ENDPOINTS = ['/token', '/api/token', '/api/auth/login', '/api/login'];
+// Login endpoints to try in order - JSON format first (based on actual API behavior)
+const LOGIN_ENDPOINTS = ['/api/login', '/api/auth/login', '/token', '/api/token'];
 
 async function tryLoginEndpoints(
   username: string, 
   password: string
 ): Promise<{ data?: unknown; error?: string; status: number }> {
-  // Try OAuth2 form-urlencoded format (FastAPI standard)
-  const formBody = new URLSearchParams();
-  formBody.append('username', username);
-  formBody.append('password', password);
-  formBody.append('grant_type', 'password');
   
+  // Try JSON format first (Aurora API uses this)
   for (const endpoint of LOGIN_ENDPOINTS) {
     const url = `${AURORA_ENDPOINT}${endpoint}`;
-    console.log(`Trying login endpoint: ${url}`);
+    console.log(`Trying login endpoint (JSON): ${url}`);
     
     try {
       const response = await fetchWithTimeout(url, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/x-www-form-urlencoded',
-        },
-        body: formBody.toString(),
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ username, password }),
       });
       
       if (response.ok) {
         const data = await response.json();
-        console.log(`Login successful via ${endpoint}`);
+        console.log(`Login successful via ${endpoint} (JSON format)`);
+        // Aurora returns { success: true, username: "...", token?: "..." }
+        // Normalize to include access_token if token is present
+        if (data.token && !data.access_token) {
+          data.access_token = data.token;
+        }
         return { data, status: response.status };
       }
       
       if (response.status === 401 || response.status === 403) {
         const text = await response.text();
         console.log(`Auth failed at ${endpoint}: ${text}`);
-        return { error: 'Invalid credentials', status: response.status };
+        try {
+          const errorData = JSON.parse(text);
+          return { error: errorData.detail || errorData.message || 'Invalid credentials', status: response.status };
+        } catch {
+          return { error: 'Invalid credentials', status: response.status };
+        }
+      }
+      
+      if (response.status === 404) {
+        console.log(`${endpoint} not found, trying next...`);
+        continue;
       }
       
       if (response.status === 422) {
-        // Validation error - try JSON format instead
-        console.log(`${endpoint} returned 422, trying JSON format...`);
-        const jsonResponse = await fetchWithTimeout(url, {
+        // Validation error - try OAuth2 form-urlencoded format
+        console.log(`${endpoint} returned 422, trying form-urlencoded format...`);
+        const formBody = new URLSearchParams();
+        formBody.append('username', username);
+        formBody.append('password', password);
+        formBody.append('grant_type', 'password');
+        
+        const formResponse = await fetchWithTimeout(url, {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ username, password }),
+          headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+          body: formBody.toString(),
         });
         
-        if (jsonResponse.ok) {
-          const data = await jsonResponse.json();
-          console.log(`Login successful via ${endpoint} (JSON format)`);
-          return { data, status: jsonResponse.status };
+        if (formResponse.ok) {
+          const data = await formResponse.json();
+          console.log(`Login successful via ${endpoint} (form-urlencoded)`);
+          return { data, status: formResponse.status };
         }
         
-        if (jsonResponse.status === 401 || jsonResponse.status === 403) {
-          const text = await jsonResponse.text();
-          console.log(`Auth failed at ${endpoint} (JSON): ${text}`);
-          return { error: 'Invalid credentials', status: jsonResponse.status };
+        if (formResponse.status === 401 || formResponse.status === 403) {
+          return { error: 'Invalid credentials', status: formResponse.status };
         }
       }
       
