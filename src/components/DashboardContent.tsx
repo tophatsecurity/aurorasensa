@@ -25,8 +25,10 @@ import {
   Navigation,
   ArrowUp,
   ArrowDown,
-  Minus
+  Minus,
+  RefreshCw
 } from "lucide-react";
+import ConnectionStatusIndicator from "./ConnectionStatusIndicator";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
@@ -400,6 +402,7 @@ const DashboardContent = () => {
       <div className="flex items-center justify-between mb-8">
         <div className="flex items-center gap-4">
           <h1 className="text-3xl font-bold text-foreground">AURORASENSE Server</h1>
+          <ConnectionStatusIndicator />
         </div>
         <div className="flex items-center gap-4">
           <ContextFilters
