@@ -108,6 +108,12 @@ export interface PeriodStats {
   clients: number;
   start_time?: string;
   end_time?: string;
+  averages?: {
+    temperature_c?: number;
+    humidity?: number;
+    power_w?: number;
+    signal_dbm?: number;
+  };
 }
 
 export interface AircraftStats {
@@ -128,7 +134,16 @@ export interface PowerStats {
 }
 
 export interface PerformanceStats {
+  cpu_percent?: number;
+  memory_percent?: number;
+  disk_percent?: number;
+  network_io?: {
+    bytes_sent: number;
+    bytes_recv: number;
+  };
+  request_count_1h?: number;
   avg_response_time_ms?: number;
+  uptime_seconds?: number;
   requests_per_second?: number;
   error_rate?: number;
   uptime_percent?: number;

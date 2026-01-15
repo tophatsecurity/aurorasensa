@@ -343,6 +343,9 @@ export {
   // Thermal Probe
   useThermalProbeStats,
   useThermalProbeTimeseries,
+  // AHT/Arduino Sensor Timeseries
+  useAhtSensorTimeseries,
+  useArduinoSensorTimeseries,
   // Devices & Batches
   useDeviceTree,
   useDeviceStatus,
