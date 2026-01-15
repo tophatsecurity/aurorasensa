@@ -1,6 +1,7 @@
 // Aurora API - Arduino Sensor Hooks
 import { useQuery } from "@tanstack/react-query";
 import { callAuroraApi, hasAuroraSession, fastQueryOptions, defaultQueryOptions } from "./core";
+import { READINGS, STATS, withQuery } from "./endpoints";
 import type { LatestReading } from "./types";
 
 // =============================================
@@ -66,7 +67,7 @@ export function useArduinoDevicesFromReadings() {
     queryKey: ["aurora", "arduino", "devices-from-readings"],
     queryFn: async () => {
       try {
-        const response = await callAuroraApi<{ count: number; readings: LatestReading[] }>("/api/readings/latest");
+        const response = await callAuroraApi<{ count: number; readings: LatestReading[] }>(READINGS.LATEST);
         const readings = response?.readings || [];
         
         // Filter for arduino readings
@@ -176,16 +177,17 @@ export function useArduinoReadings(hours: number = 24, clientId?: string, device
           sensor_type?: string;
         }
         
-        const params = new URLSearchParams();
-        params.append('hours', hours.toString());
+        const params: Record<string, string | number | undefined> = { hours };
         if (clientId && clientId !== 'all') {
-          params.append('client_id', clientId);
+          params.client_id = clientId;
         }
         if (deviceId) {
-          params.append('device_id', deviceId);
+          params.device_id = deviceId;
         }
         
-        const response = await callAuroraApi<RawResponse>(`/api/readings/sensor/arduino?${params.toString()}`);
+        const response = await callAuroraApi<RawResponse>(
+          withQuery(READINGS.BY_SENSOR_TYPE('arduino'), params)
+        );
         
         const transformedReadings: ArduinoTimeseriesPoint[] = (response.readings || []).map(r => {
           const arduinoData = r.data?.arduino || r.data || {};
@@ -228,7 +230,7 @@ export function useArduinoStats() {
     queryKey: ["aurora", "arduino", "stats"],
     queryFn: async () => {
       try {
-        return await callAuroraApi<ArduinoStats>("/api/stats/sensors/arduino");
+        return await callAuroraApi<ArduinoStats>(STATS.SENSOR_TYPE('arduino'));
       } catch (error) {
         console.warn("Failed to fetch Arduino stats:", error);
         return null;
@@ -248,11 +250,6 @@ export function useArduinoDeviceMetrics(clientId: string | null, deviceId: strin
       if (!clientId || !deviceId) return { count: 0, readings: [] };
       
       try {
-        const params = new URLSearchParams();
-        params.append('hours', hours.toString());
-        params.append('client_id', clientId);
-        params.append('device_id', deviceId);
-        
         interface RawReading {
           timestamp: string;
           device_id?: string;
@@ -265,7 +262,9 @@ export function useArduinoDeviceMetrics(clientId: string | null, deviceId: strin
           readings?: RawReading[];
         }
         
-        const response = await callAuroraApi<RawResponse>(`/api/readings/sensor/arduino?${params.toString()}`);
+        const response = await callAuroraApi<RawResponse>(
+          withQuery(READINGS.BY_SENSOR_TYPE('arduino'), { hours, client_id: clientId, device_id: deviceId })
+        );
         
         const transformedReadings: ArduinoTimeseriesPoint[] = (response.readings || []).map(r => {
           const arduinoData = (r.data?.arduino as Record<string, number | undefined>) || r.data || {};

@@ -364,7 +364,70 @@ export const GEO = {
 } as const;
 
 // =============================================
-// ADMIN - UPDATE MANAGEMENT
+// GPS
+// =============================================
+export const GPS = {
+  READINGS: '/api/readings/sensor/gps',
+  STATUS: '/api/gpsd/status',
+  SATELLITES: '/api/gpsd/satellites',
+} as const;
+
+// =============================================
+// THERMAL PROBE
+// =============================================
+export const THERMAL = {
+  READINGS: '/api/readings/sensor/thermal_probe',
+  STATS: '/api/stats/sensors/thermal_probe',
+} as const;
+
+// =============================================
+// ARDUINO
+// =============================================
+export const ARDUINO = {
+  READINGS: '/api/readings/sensor/arduino',
+  STATS: '/api/stats/sensors/arduino',
+} as const;
+
+// =============================================
+// SYSTEM MONITOR
+// =============================================
+export const SYSTEM_MONITOR = {
+  READINGS: '/api/readings/sensor/system_monitor',
+  STATS: '/api/stats/sensors/system_monitor',
+} as const;
+
+// =============================================
+// AHT/BMT SENSORS
+// =============================================
+export const AHT_SENSOR = {
+  READINGS: '/api/readings/sensor/aht_sensor',
+  STATS: '/api/stats/sensors/aht_sensor',
+} as const;
+
+export const BMT_SENSOR = {
+  READINGS: '/api/readings/sensor/bmt_sensor',
+  STATS: '/api/stats/sensors/bmt_sensor',
+} as const;
+
+// =============================================
+// REAL-TIME STREAMS (SSE)
+// =============================================
+export const STREAMS = {
+  READINGS: '/api/stream/readings',
+  COMMAND_STATUS: (commandId: string) => `/api/stream/commands/${commandId}/status`,
+  CLIENTS: '/api/stream/clients',
+  ALERTS: '/api/stream/alerts',
+  DASHBOARD_STATS: '/api/stream/dashboard/stats',
+  // Sensor-specific streams
+  STARLINK: '/api/stream/readings/starlink',
+  THERMAL_PROBE: '/api/stream/readings/thermal_probe',
+  ADSB: '/api/stream/readings/adsb',
+  ARDUINO: '/api/stream/readings/arduino',
+  GPS: '/api/stream/readings/gps',
+  POWER: '/api/stream/readings/power',
+  SYSTEM_MONITOR: '/api/stream/readings/system_monitor',
+  RADIO: '/api/stream/readings/radio',
+} as const;
 // =============================================
 export const ADMIN_UPDATES = {
   UPLOAD: '/api/admin/updates/upload',

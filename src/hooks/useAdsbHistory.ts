@@ -1,6 +1,7 @@
 import { useState, useCallback } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { callAuroraApi, hasAuroraSession } from "@/hooks/aurora/core";
+import { ADSB } from "@/hooks/aurora/endpoints";
 
 interface AdsbHistoryPoint {
   lat: number;
@@ -33,7 +34,7 @@ export function useAdsbHistory() {
 
   const { data, isLoading, error } = useQuery({
     queryKey: ["adsb-history", selectedIcao],
-    queryFn: () => callAuroraApi<AdsbHistoryResponse>(`/api/adsb/history/${selectedIcao}`),
+    queryFn: () => callAuroraApi<AdsbHistoryResponse>(ADSB.HISTORY(selectedIcao!)),
     enabled: hasAuroraSession() && !!selectedIcao,
     staleTime: 30000, // 30 seconds
     refetchInterval: 30000, // Refresh every 30 seconds when selected
