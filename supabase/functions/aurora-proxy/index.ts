@@ -25,8 +25,91 @@ async function fetchWithTimeout(url: string, options: RequestInit): Promise<Resp
   }
 }
 
-// Helper to get empty data based on path
+// Helper to get empty data based on path - returns appropriate structure for each endpoint type
 function getEmptyDataForPath(apiPath: string): unknown {
+  // Specific endpoint patterns that return wrapped arrays
+  if (apiPath.includes('/lora/devices')) {
+    return { devices: [] };
+  }
+  if (apiPath.includes('/lora/detections')) {
+    return { detections: [] };
+  }
+  if (apiPath.includes('/lora/channels')) {
+    return [];
+  }
+  if (apiPath.includes('/lora/spectrum')) {
+    return { frequencies: [], power_levels: [], noise_floor: 0, channel_activity: [] };
+  }
+  if (apiPath.includes('/lora/stats') || apiPath.includes('/lora/config')) {
+    return {};
+  }
+  if (apiPath.includes('/adsb/aircraft')) {
+    return { aircraft: [] };
+  }
+  if (apiPath.includes('/adsb/devices')) {
+    return { devices: [] };
+  }
+  if (apiPath.includes('/starlink/devices')) {
+    return { devices: [] };
+  }
+  if (apiPath.includes('/alerts/rules')) {
+    return { rules: [] };
+  }
+  if (apiPath.includes('/alerts/list') || apiPath.match(/\/alerts(\?|$)/)) {
+    return { alerts: [], count: 0 };
+  }
+  if (apiPath.includes('/alerts/stats')) {
+    return { total: 0, active: 0, acknowledged: 0, resolved: 0, by_severity: {}, by_type: {}, last_24h: 0, last_hour: 0 };
+  }
+  if (apiPath.includes('/alerts/settings')) {
+    return {};
+  }
+  if (apiPath.includes('/clients/list') || apiPath.includes('/clients/all-states')) {
+    return { clients: [], count: 0 };
+  }
+  if (apiPath.includes('/clients/pending') || apiPath.includes('/clients/registered') ||
+      apiPath.includes('/clients/adopted') || apiPath.includes('/clients/disabled') ||
+      apiPath.includes('/clients/suspended') || apiPath.includes('/clients/deleted')) {
+    return { clients: [] };
+  }
+  if (apiPath.includes('/clients/statistics')) {
+    return { total: 0, pending: 0, registered: 0, adopted: 0, disabled: 0, suspended: 0 };
+  }
+  if (apiPath.includes('/batches/list') || apiPath.includes('/batches/by-client')) {
+    return { batches: [], count: 0 };
+  }
+  if (apiPath.includes('/sensors/list') || apiPath.includes('/sensors/recent')) {
+    return { sensors: [] };
+  }
+  if (apiPath.includes('/maritime/vessels') || apiPath.includes('/maritime/stations') || apiPath.includes('/maritime/beacons')) {
+    return [];
+  }
+  if (apiPath.includes('/stats/history')) {
+    return [];
+  }
+  if (apiPath.includes('/stats/devices')) {
+    return { devices: [] };
+  }
+  if (apiPath.includes('/stats/endpoints')) {
+    return { endpoints: [] };
+  }
+  if (apiPath.includes('/audit/logs')) {
+    return { logs: [], count: 0 };
+  }
+  if (apiPath.includes('/activity')) {
+    return { activities: [] };
+  }
+  if (apiPath.includes('/users') && !apiPath.includes('/users/')) {
+    return { users: [] };
+  }
+  if (apiPath.includes('/roles') && !apiPath.includes('/roles/')) {
+    return { roles: [] };
+  }
+  if (apiPath.includes('/permissions') && !apiPath.includes('/permissions/')) {
+    return { permissions: [] };
+  }
+  
+  // Generic patterns - check last as fallback
   if (apiPath.includes('/list') || apiPath.includes('/vessels') || apiPath.includes('/stations') || 
       apiPath.includes('/beacons') || apiPath.includes('/aircraft') || apiPath.includes('/devices') ||
       apiPath.includes('/active') || apiPath.includes('/readings') || apiPath.includes('/rules') ||
