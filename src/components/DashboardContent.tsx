@@ -55,7 +55,7 @@ import {
   useDashboardStats, 
   useDashboardTimeseries, 
   useSensorTypeStatsWithPeriod,
-  usePeriodStats,
+  usePeriodStatsByHours,
   useStarlinkTimeseries,
   useStarlinkPower,
   useThermalProbeTimeseries,
@@ -68,12 +68,10 @@ import {
   useBatchesList,
   useDeviceStatus,
   usePerformanceStats,
-  Client 
-} from "@/hooks/useAuroraApi";
-import { 
   useStatsOverview,
   useGlobalStats,
-} from "@/hooks/aurora/stats";
+  type Client 
+} from "@/hooks/aurora";
 import { useSensorReadingsSSE } from "@/hooks/useSSE";
 import { MemoryStick, HardDrive } from "lucide-react";
 import { formatLastSeen, formatDate, formatDateTime, getDeviceStatusFromLastSeen } from "@/utils/dateUtils";
@@ -139,7 +137,7 @@ const DashboardContent = () => {
   const { data: clients, isLoading: clientsLoading } = useClients();
   
   // Period-specific stats that update with time period selection
-  const { data: periodStats, isLoading: periodStatsLoading } = usePeriodStats(periodHours);
+  const { data: periodStats, isLoading: periodStatsLoading } = usePeriodStatsByHours(periodHours);
   
   // Sensor type specific stats - use period-aware version for dynamic updates
   const { data: thermalProbeStats, isLoading: thermalLoading } = useSensorTypeStatsWithPeriod("thermal_probe", periodHours);
@@ -1632,16 +1630,16 @@ const DashboardContent = () => {
       </div>
 
       {/* Recent Alerts */}
-      {alerts && alerts.length > 0 && (
+      {alerts?.alerts && alerts.alerts.length > 0 && (
         <div className="mb-8">
           <h2 className="text-lg font-semibold mb-4 flex items-center gap-2">
             <span className="text-warning">⚠</span>
-            Recent Alerts ({alerts.length})
+            Recent Alerts ({alerts.alerts.length})
           </h2>
           <div className="space-y-2">
-            {alerts.slice(0, 5).map((alert) => (
+            {alerts.alerts.slice(0, 5).map((alert) => (
               <div 
-                key={alert.id} 
+                key={alert.alert_id} 
                 className="glass-card rounded-lg p-4 border border-border/50 flex items-center justify-between"
               >
                 <div className="flex items-center gap-3">
@@ -1653,7 +1651,7 @@ const DashboardContent = () => {
                   </Badge>
                   <span className="text-sm">{alert.message}</span>
                 </div>
-                <span className="text-xs text-muted-foreground">{alert.timestamp}</span>
+                <span className="text-xs text-muted-foreground">{alert.triggered_at}</span>
               </div>
             ))}
           </div>
