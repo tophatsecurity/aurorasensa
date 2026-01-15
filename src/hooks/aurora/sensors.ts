@@ -1,17 +1,35 @@
 // Aurora API - Sensor Hooks
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { callAuroraApi, hasAuroraSession, defaultQueryOptions, fastQueryOptions, AuroraApiOptions } from "./core";
+import { callAuroraApi, hasAuroraSession, defaultQueryOptions, fastQueryOptions, type AuroraApiOptions } from "./core";
+import { SENSORS, READINGS, STATS } from "./endpoints";
 import type { 
   SensorData, 
   SensorTypeStats, 
   LatestReading, 
-  LatestReadingsResponse 
 } from "./types";
 
-// Response types
+// =============================================
+// RESPONSE TYPES
+// =============================================
+
 interface SensorsListResponse {
   count: number;
   sensors: SensorData[];
+}
+
+interface LatestReadingsResponse {
+  data?: LatestReading[];
+  readings?: LatestReading[];
+  count?: number;
+}
+
+interface SensorReadingsResponse {
+  count: number;
+  readings: LatestReading[];
+}
+
+interface SensorStatsResponse {
+  sensor_types: SensorTypeStats[];
 }
 
 // =============================================
@@ -22,7 +40,7 @@ export function useSensors(clientId?: string | null) {
   return useQuery({
     queryKey: ["aurora", "sensors", clientId],
     queryFn: async () => {
-      const response = await callAuroraApi<SensorsListResponse>("/api/sensors/list", "GET", undefined, { clientId });
+      const response = await callAuroraApi<SensorsListResponse>(SENSORS.LIST, "GET", undefined, { clientId });
       return response.sensors || [];
     },
     enabled: hasAuroraSession(),
@@ -34,7 +52,7 @@ export function useRecentSensors(clientId?: string | null) {
   return useQuery({
     queryKey: ["aurora", "sensors", "recent", clientId],
     queryFn: async () => {
-      const response = await callAuroraApi<SensorsListResponse>("/api/sensors/recent", "GET", undefined, { clientId });
+      const response = await callAuroraApi<SensorsListResponse>(SENSORS.RECENT, "GET", undefined, { clientId });
       return response.sensors || [];
     },
     enabled: hasAuroraSession(),
@@ -45,7 +63,7 @@ export function useRecentSensors(clientId?: string | null) {
 export function useSensorById(sensorId: string) {
   return useQuery({
     queryKey: ["aurora", "sensors", sensorId],
-    queryFn: () => callAuroraApi<SensorData>(`/api/sensors/${sensorId}`),
+    queryFn: () => callAuroraApi<SensorData>(SENSORS.GET(sensorId)),
     enabled: hasAuroraSession() && !!sensorId,
     retry: 2,
   });
@@ -56,8 +74,7 @@ export function useLatestReadings(clientId?: string | null) {
     queryKey: ["aurora", "readings", "latest", clientId],
     queryFn: async () => {
       try {
-        // API may return { data: [...] } or { readings: [...] }
-        const response = await callAuroraApi<{ data?: LatestReading[]; readings?: LatestReading[]; count?: number }>("/api/readings/latest", "GET", undefined, { clientId });
+        const response = await callAuroraApi<LatestReadingsResponse>(READINGS.LATEST, "GET", undefined, { clientId });
         return response.data || response.readings || [];
       } catch (error) {
         console.warn("Failed to fetch latest readings, returning empty array:", error);
@@ -73,8 +90,11 @@ export function useLatestReadings(clientId?: string | null) {
 export function useSensorReadings(sensorType: string, hours: number = 24, clientId?: string | null) {
   return useQuery({
     queryKey: ["aurora", "readings", "sensor", sensorType, hours, clientId],
-    queryFn: () => callAuroraApi<{ count: number; readings: LatestReading[] }>(
-      `/api/readings/sensor/${sensorType}?hours=${hours}`, "GET", undefined, { clientId }
+    queryFn: () => callAuroraApi<SensorReadingsResponse>(
+      READINGS.BY_SENSOR_TYPE(sensorType), 
+      "GET", 
+      undefined, 
+      { clientId, params: { hours } }
     ),
     enabled: hasAuroraSession() && !!sensorType,
     ...defaultQueryOptions,
@@ -86,8 +106,7 @@ export function useAllSensorStats(clientId?: string | null) {
     queryKey: ["aurora", "stats", "sensors", clientId],
     queryFn: async () => {
       try {
-        const response = await callAuroraApi<{ sensor_types: SensorTypeStats[] }>("/api/stats/sensors", "GET", undefined, { clientId });
-        return response;
+        return await callAuroraApi<SensorStatsResponse>(STATS.SENSORS, "GET", undefined, { clientId });
       } catch {
         return { sensor_types: [] };
       }
@@ -102,21 +121,18 @@ export function useSensorTypeStats(sensorType: string, clientId?: string | null)
     queryKey: ["aurora", "stats", "sensors", sensorType, clientId],
     queryFn: async () => {
       try {
-        // Try the specific sensor type endpoint
-        const response = await callAuroraApi<SensorTypeStats>(`/api/stats/sensors/${sensorType}`, "GET", undefined, { clientId });
+        const response = await callAuroraApi<SensorTypeStats>(STATS.SENSOR_TYPE(sensorType), "GET", undefined, { clientId });
         if (response && Object.keys(response).length > 0) {
           return response;
         }
       } catch {
         // Endpoint may not exist for this sensor type
       }
-      
-      // Return null to indicate no stats available
       return null;
     },
     enabled: hasAuroraSession() && !!sensorType,
     ...defaultQueryOptions,
-    retry: 0, // Don't retry - endpoint may just not exist
+    retry: 0,
   });
 }
 
@@ -124,23 +140,26 @@ export function useSensorTypeStatsWithPeriod(sensorType: string, hours: number =
   return useQuery({
     queryKey: ["aurora", "stats", "sensors", sensorType, hours, clientId],
     queryFn: async () => {
-      // Skip if sensor type is empty
       if (!sensorType) return null;
       
       try {
-        const response = await callAuroraApi<SensorTypeStats>(`/api/stats/sensors/${sensorType}?hours=${hours}`, "GET", undefined, { clientId });
+        const response = await callAuroraApi<SensorTypeStats>(
+          STATS.SENSOR_TYPE(sensorType), 
+          "GET", 
+          undefined, 
+          { clientId, params: { hours } }
+        );
         if (response && Object.keys(response).length > 0) {
           return response;
         }
       } catch {
-        // Endpoint may not exist - that's okay
+        // Endpoint may not exist
       }
-      
       return null;
     },
     enabled: hasAuroraSession() && !!sensorType,
     ...defaultQueryOptions,
-    retry: 0, // Don't retry - endpoint may just not exist
+    retry: 0,
   });
 }
 
@@ -153,7 +172,7 @@ export function useAddSensor() {
   
   return useMutation({
     mutationFn: async (sensor: { sensor_id: string; sensor_type: string; name?: string }) => {
-      return callAuroraApi<{ success: boolean; sensor_id: string }>("/api/sensors/add", "POST", sensor);
+      return callAuroraApi<{ success: boolean; sensor_id: string }>(SENSORS.ADD, "POST", sensor);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["aurora", "sensors"] });
@@ -166,7 +185,7 @@ export function useUpdateSensor() {
   
   return useMutation({
     mutationFn: async ({ sensorId, data }: { sensorId: string; data: { name?: string; enabled?: boolean } }) => {
-      return callAuroraApi<{ success: boolean }>(`/api/sensors/${sensorId}`, "PUT", data);
+      return callAuroraApi<{ success: boolean }>(SENSORS.UPDATE(sensorId), "PUT", data);
     },
     onSuccess: (_, variables) => {
       queryClient.invalidateQueries({ queryKey: ["aurora", "sensors", variables.sensorId] });
@@ -180,7 +199,7 @@ export function useDeleteSensor() {
   
   return useMutation({
     mutationFn: async (sensorId: string) => {
-      return callAuroraApi<{ success: boolean }>(`/api/sensors/${sensorId}`, "DELETE");
+      return callAuroraApi<{ success: boolean }>(SENSORS.DELETE(sensorId), "DELETE");
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["aurora", "sensors"] });

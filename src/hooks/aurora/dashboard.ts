@@ -1,7 +1,7 @@
 // Aurora API - Dashboard domain hooks
-// Updated to use available endpoints with fallbacks
 import { useQuery } from "@tanstack/react-query";
-import { callAuroraApi, hasAuroraSession, AuroraApiOptions } from "./core";
+import { callAuroraApi, hasAuroraSession, type AuroraApiOptions } from "./core";
+import { STATS, DASHBOARD, SYSTEM } from "./endpoints";
 
 // =============================================
 // TYPES
@@ -79,10 +79,10 @@ export function useDashboardStats(clientId?: string | null) {
       const options: AuroraApiOptions = { clientId };
       // Try multiple endpoints in order of preference
       const endpoints = [
-        "/api/stats/overview",
-        "/api/stats/global", 
-        "/api/stats/summary",
-        "/api/dashboard/sensor-stats",
+        STATS.OVERVIEW,
+        STATS.GLOBAL, 
+        STATS.SUMMARY,
+        DASHBOARD.SENSOR_STATS,
       ];
       
       for (const endpoint of endpoints) {
@@ -96,7 +96,6 @@ export function useDashboardStats(clientId?: string | null) {
         }
       }
       
-      // Return empty stats if all fail
       return {
         avg_humidity: null,
         avg_power_w: null,
@@ -121,9 +120,13 @@ export function useDashboardTimeseries(hours: number = 24, clientId?: string | n
     queryKey: ["aurora", "dashboard", "timeseries", hours, clientId],
     queryFn: async () => {
       try {
-        return await callAuroraApi<DashboardTimeseries>(`/api/dashboard/sensor-timeseries?hours=${hours}`, "GET", undefined, { clientId });
+        return await callAuroraApi<DashboardTimeseries>(
+          DASHBOARD.SENSOR_TIMESERIES, 
+          "GET", 
+          undefined, 
+          { clientId, params: { hours } }
+        );
       } catch {
-        // Return empty timeseries
         return {
           humidity: [],
           power: [],
@@ -144,9 +147,9 @@ export function useDashboardSystemStats(clientId?: string | null) {
     queryKey: ["aurora", "dashboard", "system", clientId],
     queryFn: async () => {
       const options: AuroraApiOptions = { clientId };
-      // Try dashboard endpoint first, then aggregate from system endpoints
+      // Try dashboard endpoint first
       try {
-        const result = await callAuroraApi<DashboardSystemStats>("/api/dashboard/system-stats", "GET", undefined, options);
+        const result = await callAuroraApi<DashboardSystemStats>(DASHBOARD.SYSTEM_STATS, "GET", undefined, options);
         if (result && Object.keys(result).length > 0) {
           return result;
         }
@@ -156,10 +159,10 @@ export function useDashboardSystemStats(clientId?: string | null) {
       
       // Aggregate from individual system endpoints
       const [memory, disk, load, uptime] = await Promise.all([
-        callAuroraApi<{ total: number; used: number; percent: number }>("/api/system/memory", "GET", undefined, options).catch(() => null),
-        callAuroraApi<{ total: number; used: number; percent: number }>("/api/system/disk", "GET", undefined, options).catch(() => null),
-        callAuroraApi<{ load: number[] }>("/api/system/load", "GET", undefined, options).catch(() => null),
-        callAuroraApi<{ uptime_seconds: number }>("/api/system/uptime", "GET", undefined, options).catch(() => null),
+        callAuroraApi<{ total: number; used: number; percent: number }>(SYSTEM.MEMORY, "GET", undefined, options).catch(() => null),
+        callAuroraApi<{ total: number; used: number; percent: number }>(SYSTEM.DISK, "GET", undefined, options).catch(() => null),
+        callAuroraApi<{ load: number[] }>(SYSTEM.LOAD, "GET", undefined, options).catch(() => null),
+        callAuroraApi<{ uptime_seconds: number }>(SYSTEM.UPTIME, "GET", undefined, options).catch(() => null),
       ]);
       
       return {
@@ -181,11 +184,10 @@ export function useDashboardSensorStats(clientId?: string | null) {
     queryKey: ["aurora", "dashboard", "sensor-stats", clientId],
     queryFn: async () => {
       const options: AuroraApiOptions = { clientId };
-      // Try multiple endpoints
       const endpoints = [
-        "/api/stats/overview",
-        "/api/stats/global",
-        "/api/dashboard/sensor-stats",
+        STATS.OVERVIEW,
+        STATS.GLOBAL,
+        DASHBOARD.SENSOR_STATS,
       ];
       
       for (const endpoint of endpoints) {
@@ -213,7 +215,12 @@ export function useDashboardSensorTimeseries(hours: number = 24, clientId?: stri
     queryKey: ["aurora", "dashboard", "sensor-timeseries", hours, clientId],
     queryFn: async () => {
       try {
-        return await callAuroraApi<DashboardSensorTimeseries>(`/api/dashboard/sensor-timeseries?hours=${hours}`, "GET", undefined, { clientId });
+        return await callAuroraApi<DashboardSensorTimeseries>(
+          DASHBOARD.SENSOR_TIMESERIES, 
+          "GET", 
+          undefined, 
+          { clientId, params: { hours } }
+        );
       } catch {
         return {};
       }
