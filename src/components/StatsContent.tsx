@@ -62,6 +62,7 @@ function processClientSensorDataToGroups(
     }
     
     const sensorReading: SensorReading = {
+      sensor_type: reading.device_type,
       device_id: reading.device_id,
       device_type: reading.device_type,
       client_id: clientId,
