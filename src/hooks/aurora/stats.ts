@@ -28,55 +28,76 @@ export interface SensorTypeSummary {
   active_last_hour: boolean;
 }
 
-export interface ComprehensiveStats {
-  timestamp: string;
-  global: {
-    timestamp: string;
-    database: {
-      total_readings: number;
-      total_batches: number;
-      total_clients: number;
-      active_alerts: number;
-      total_alert_rules: number;
+// New API structure - flat global object
+export interface ComprehensiveStatsGlobal {
+  total_clients: number;
+  total_devices: number;
+  total_batches: number;
+  total_readings: number;
+  sensor_types_count: number;
+  active_clients_24h: number;
+  device_breakdown: Array<{
+    device_type: string;
+    count: number;
+  }>;
+  readings_by_day: Array<{
+    date: string;
+    count: number;
+  }>;
+  storage: {
+    batches_size: string;
+    readings_size: string;
+    total_db_size: string;
+  };
+  // Time ranges (may be provided)
+  time_ranges?: {
+    earliest_reading?: string;
+    latest_reading?: string;
+    data_span_seconds?: number;
+    data_span_days?: number;
+  };
+  // Legacy nested structure (backward compatibility)
+  database?: {
+    total_readings: number;
+    total_batches: number;
+    total_clients: number;
+    active_alerts: number;
+    total_alert_rules: number;
+  };
+  devices?: {
+    total_unique_devices: number;
+    total_device_types: number;
+  };
+  activity?: {
+    avg_readings_per_hour: number;
+    last_1_hour: {
+      readings_1h: number;
+      batches_1h: number;
+      active_devices_1h: number;
     };
-    devices: {
-      total_unique_devices: number;
-      total_device_types: number;
-    };
-    activity: {
-      avg_readings_per_hour: number;
-      last_1_hour: {
-        readings_1h: number;
-        batches_1h: number;
-        active_devices_1h: number;
-      };
-      last_24_hours: {
-        readings_24h: number;
-        batches_24h: number;
-        active_devices_24h: number;
-      };
-    };
-    time_ranges: {
-      earliest_reading: string;
-      latest_reading: string;
-      data_span_seconds: number;
-      data_span_days: number;
-    };
-    sensors: {
-      by_type: Array<{
-        device_type: string;
-        device_count: number;
-        reading_count: number;
-        first_seen: string;
-        last_seen: string;
-      }>;
+    last_24_hours: {
+      readings_24h: number;
+      batches_24h: number;
+      active_devices_24h: number;
     };
   };
-  devices_summary: {
+}
+
+export interface ComprehensiveStats {
+  status: string;
+  timestamp: string;
+  filters?: {
+    client_id: string | null;
+    device_id: string | null;
+    sensor_type: string | null;
+  };
+  global: ComprehensiveStatsGlobal;
+  // Legacy summaries (if still provided)
+  devices_summary?: {
     total_devices: number;
     devices: DeviceSummary[];
   };
-  sensors_summary: {
+  sensors_summary?: {
     total_sensor_types: number;
     sensor_types: SensorTypeSummary[];
   };
@@ -90,6 +111,12 @@ export interface GlobalStats {
   active_alerts?: number;
   readings_last_hour?: number;
   readings_last_24h?: number;
+  time_ranges?: {
+    earliest_reading?: string;
+    latest_reading?: string;
+    data_span_seconds?: number;
+    data_span_days?: number;
+  };
 }
 
 export interface DeviceStats {
