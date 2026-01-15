@@ -57,6 +57,9 @@ function extractGpsFromReadings(readings: Array<{ device_id: string; device_type
   readings.filter(r => r != null).forEach(reading => {
     const data = reading.data;
     
+    // Early return if data is undefined or null
+    if (!data) return;
+    
     // Check for GPS coordinates in the data
     let lat: number | null = null;
     let lng: number | null = null;
