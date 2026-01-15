@@ -59,6 +59,7 @@ import {
   useClientsByState, 
   useClientStatistics,
   useAdoptClient,
+  useAdoptClientDirect,
   useRegisterClient,
   useDisableClient,
   useEnableClient,
@@ -151,6 +152,7 @@ const ClientsContent = () => {
   const { data: statistics } = useClientStatistics();
   const { data: latestReadings } = useLatestReadings();
   const adoptClient = useAdoptClient();
+  const adoptClientDirect = useAdoptClientDirect();
   const registerClient = useRegisterClient();
   const disableClient = useDisableClient();
   const enableClient = useEnableClient();
@@ -208,7 +210,7 @@ const ClientsContent = () => {
 
   const handleStateTransition = (
     clientId: string, 
-    action: "adopt" | "register" | "disable" | "enable" | "suspend" | "delete" | "restore",
+    action: "adopt" | "adopt-direct" | "register" | "disable" | "enable" | "suspend" | "delete" | "restore",
     hostname?: string
   ) => {
     const successCallback = (label: string) => ({
@@ -226,6 +228,9 @@ const ClientsContent = () => {
     switch (action) {
       case "adopt":
         adoptClient.mutate(clientId, successCallback("adopted"));
+        break;
+      case "adopt-direct":
+        adoptClientDirect.mutate(clientId, successCallback("adopted (direct)"));
         break;
       case "register":
         registerClient.mutate(clientId, successCallback("registered"));
@@ -1089,7 +1094,7 @@ const ClientsContent = () => {
 interface ClientActionsProps {
   client: Client;
   clientState: ClientState;
-  onAction: (clientId: string, action: "adopt" | "register" | "disable" | "enable" | "suspend" | "delete" | "restore", hostname?: string) => void;
+  onAction: (clientId: string, action: "adopt" | "adopt-direct" | "register" | "disable" | "enable" | "suspend" | "delete" | "restore", hostname?: string) => void;
   onPermanentDelete: () => void;
   onViewHistory: () => void;
   onEdit: () => void;
@@ -1098,9 +1103,9 @@ interface ClientActionsProps {
 }
 
 const ClientActions = ({ client, clientState, onAction, onPermanentDelete, onViewHistory, onEdit, onDownloadBatch, isLoading }: ClientActionsProps) => {
-  const primaryActions: Record<ClientState, { action: "adopt" | "register" | "enable" | "restore"; label: string; icon: React.ElementType; variant: "default" | "outline" }[]> = {
+  const primaryActions: Record<ClientState, { action: "adopt" | "adopt-direct" | "register" | "enable" | "restore"; label: string; icon: React.ElementType; variant: "default" | "outline" }[]> = {
     pending: [
-      { action: "adopt", label: "Adopt", icon: CheckCircle, variant: "default" },
+      { action: "adopt-direct", label: "Adopt", icon: CheckCircle, variant: "default" },
     ],
     registered: [
       { action: "adopt", label: "Adopt", icon: CheckCircle, variant: "default" },
@@ -1171,10 +1176,16 @@ const ClientActions = ({ client, clientState, onAction, onPermanentDelete, onVie
           <DropdownMenuSeparator />
           
           {clientState === "pending" && (
-            <DropdownMenuItem onClick={() => onAction(client.client_id, "register", client.hostname)}>
-              <UserPlus className="w-4 h-4 mr-2" />
-              Register Only
-            </DropdownMenuItem>
+            <>
+              <DropdownMenuItem onClick={() => onAction(client.client_id, "register", client.hostname)}>
+                <UserPlus className="w-4 h-4 mr-2" />
+                Register Only
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => onAction(client.client_id, "adopt", client.hostname)}>
+                <CheckCircle className="w-4 h-4 mr-2" />
+                Register → Adopt
+              </DropdownMenuItem>
+            </>
           )}
           
           {clientState === "adopted" && (

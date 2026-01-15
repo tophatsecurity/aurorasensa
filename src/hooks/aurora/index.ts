@@ -55,6 +55,7 @@ export {
   useWifiClients,
   useWifiApiVersion,
   useAdoptClient,
+  useAdoptClientDirect,
   useRegisterClient,
   useDisableClient,
   useEnableClient,
