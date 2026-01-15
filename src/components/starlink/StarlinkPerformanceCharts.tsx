@@ -27,8 +27,8 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { 
   useStarlinkTimeseries,
   useStarlinkDeviceTimeseries,
-  StarlinkTimeseriesPoint 
-} from "@/hooks/useAuroraApi";
+  type StarlinkTimeseriesPoint 
+} from "@/hooks/aurora";
 
 interface ChartContainerProps {
   title: string;

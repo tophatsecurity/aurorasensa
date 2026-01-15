@@ -57,9 +57,9 @@ import {
   useCreateUpdateAssignment,
   useClientsByState,
   useClientUpdateHistory,
-  UpdatePackage,
-  UpdateAssignment,
-} from "@/hooks/useAuroraApi";
+  type UpdatePackage,
+  type UpdateAssignment,
+} from "@/hooks/aurora";
 import { formatDateTime, formatLastSeen } from "@/utils/dateUtils";
 import { toast } from "sonner";
 

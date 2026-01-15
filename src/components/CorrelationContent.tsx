@@ -45,7 +45,7 @@ import {
   useDashboardTimeseries,
   useThermalProbeTimeseries,
   useArduinoSensorTimeseries,
-} from "@/hooks/useAuroraApi";
+} from "@/hooks/aurora";
 
 interface CorrelationStats {
   avgX: number;

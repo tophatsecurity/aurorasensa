@@ -21,7 +21,7 @@ import {
   useStarlinkPerformance,
   useStarlinkPower,
   useStarlinkConnectivity,
-} from "@/hooks/useAuroraApi";
+} from "@/hooks/aurora";
 
 interface StatusIndicatorProps {
   status: 'good' | 'warning' | 'critical' | 'unknown';

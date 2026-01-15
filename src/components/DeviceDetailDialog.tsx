@@ -30,8 +30,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { Client, useClientSystemInfo, useBatchesByClient, useBatchReadings } from "@/hooks/useAuroraApi";
-import { useSensorReadings } from "@/hooks/aurora/sensors";
+import { type Client, useClientSystemInfo, useBatchesByClient, useBatchReadings, useSensorReadings } from "@/hooks/aurora";
 import { formatDateTime } from "@/utils/dateUtils";
 import { ClientSensorTab, ClientRawBatchTab } from "@/components/client";
 

@@ -45,7 +45,7 @@ import {
   useStarlinkPower,
   useDashboardTimeseries,
   useClients,
-} from "@/hooks/useAuroraApi";
+} from "@/hooks/aurora";
 import { useQueryClient } from "@tanstack/react-query";
 import { format } from "date-fns";
 

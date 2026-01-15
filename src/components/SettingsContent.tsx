@@ -10,7 +10,7 @@ import { Separator } from "@/components/ui/separator";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { useComprehensiveStats, useClients, useServiceStatus, useHealth, useSystemUptime, useSystemMemory, useSystemDisk, useSystemCpuLoad } from "@/hooks/useAuroraApi";
+import { useComprehensiveStats, useClients, useServiceStatus, useHealth, useSystemUptime, useSystemMemory, useSystemDisk, useSystemCpuLoad } from "@/hooks/aurora";
 import { useQueryClient } from "@tanstack/react-query";
 
 const AURORA_API_URL = "http://aurora.tophatsecurity.com:9151";
