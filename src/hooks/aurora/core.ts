@@ -384,9 +384,16 @@ export async function callAuroraApi<T>(
           throw new Error(errorStr);
         }
 
+        // Unwrap API responses that have a { data: ..., status: 'success' } structure
+        let result = data;
+        if (result && typeof result === 'object' && 'data' in result && 
+            (result as { status?: string }).status === 'success') {
+          result = (result as { data: unknown }).data;
+        }
+        
         // Cache successful GET responses
         if (method === 'GET' && !options?.skipCache) {
-          auroraRequestQueue.setCache(finalPath, method, data);
+          auroraRequestQueue.setCache(finalPath, method, result);
         }
 
         // Mark connection as healthy
@@ -396,7 +403,7 @@ export async function callAuroraApi<T>(
           updateConnectionState('connected');
         }
 
-        return data as T;
+        return result as T;
       } catch (err) {
         const error = err instanceof Error ? err : new Error(String(err));
         

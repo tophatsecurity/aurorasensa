@@ -108,11 +108,18 @@ async function safeAlertApiCall<T>(endpoint: string, defaultValue: T, options?: 
 export function useAlerts(limit: number = 100, clientId?: string | null) {
   return useQuery({
     queryKey: ["aurora", "alerts", limit, clientId],
-    queryFn: () => safeAlertApiCall<{ alerts: Alert[] }>(
-      ALERTS.LIST, 
-      { alerts: [] }, 
-      { clientId, params: { limit } }
-    ),
+    queryFn: async () => {
+      const result = await safeAlertApiCall<{ alerts: Alert[] } | Alert[]>(
+        ALERTS.LIST, 
+        { alerts: [] }, 
+        { clientId, params: { limit } }
+      );
+      // Handle array response (when auto-unwrapped)
+      if (Array.isArray(result)) {
+        return { alerts: result };
+      }
+      return result?.alerts ? result : { alerts: [] };
+    },
     enabled: hasAuroraSession(),
     staleTime: 30000,
     refetchInterval: 60000,
@@ -154,7 +161,12 @@ export function useAlertRules() {
     queryKey: ["aurora", "alerts", "rules"],
     queryFn: async () => {
       try {
-        return await callAuroraApi<{ rules: AlertRule[] }>(ALERTS.RULES);
+        const result = await callAuroraApi<{ rules: AlertRule[] } | AlertRule[]>(ALERTS.RULES);
+        // Handle array response (when auto-unwrapped)
+        if (Array.isArray(result)) {
+          return { rules: result };
+        }
+        return result?.rules ? result : { rules: [] };
       } catch (error) {
         console.warn("Alert rules endpoint unavailable, returning empty rules");
         return { rules: [] };

@@ -419,7 +419,8 @@ export function useComprehensiveStats(clientId?: string | null) {
   return useQuery({
     queryKey: ["aurora", "stats", "comprehensive", clientId],
     queryFn: async () => {
-      const raw = await callAuroraApi<ComprehensiveStats | ApiResponse<ComprehensiveStatsGlobal>>(
+      // Core now auto-unwraps { data: {...}, status: 'success' } responses
+      const raw = await callAuroraApi<ComprehensiveStats | ComprehensiveStatsGlobal>(
         STATS.COMPREHENSIVE, "GET", undefined, { clientId }
       );
       
@@ -428,27 +429,15 @@ export function useComprehensiveStats(clientId?: string | null) {
         return raw as ComprehensiveStats;
       }
       
-      // API might return { data: {...}, status: 'success' } structure
-      // or { daily: {...}, hourly: {...} } structure for comprehensive stats
-      if (raw && 'daily' in raw) {
-        // This is the new comprehensive stats format with time granularities
-        // We need to extract key metrics from it
+      // If raw is directly the global stats object
+      if (raw && typeof raw === 'object') {
         return {
           status: 'success',
           timestamp: new Date().toISOString(),
-          global: {} as ComprehensiveStatsGlobal, // Will be merged with global stats
+          global: raw as ComprehensiveStatsGlobal,
         } as ComprehensiveStats;
       }
       
-      // If it's wrapped in data, convert to expected structure
-      const unwrapped = unwrapApiResponse(raw);
-      if (unwrapped && typeof unwrapped === 'object') {
-        return {
-          status: 'success',
-          timestamp: new Date().toISOString(),
-          global: unwrapped as ComprehensiveStatsGlobal,
-        } as ComprehensiveStats;
-      }
       return raw as ComprehensiveStats;
     },
     enabled: hasAuroraSession(),
@@ -462,17 +451,17 @@ export function useDeviceStats(clientId?: string | null) {
   return useQuery({
     queryKey: ["aurora", "stats", "devices", clientId],
     queryFn: async () => {
-      const raw = await callAuroraApi<{ devices?: DeviceStats[]; data?: DeviceStats[] }>(
+      // Core now auto-unwraps { data: [...], status: 'success' } responses
+      const raw = await callAuroraApi<{ devices?: DeviceStats[] } | DeviceStats[]>(
         STATS.DEVICES, "GET", undefined, { clientId }
       );
+      // Handle array response (when auto-unwrapped)
+      if (Array.isArray(raw)) {
+        return { devices: raw };
+      }
+      // Handle object with devices array
       if (raw && 'devices' in raw && Array.isArray(raw.devices)) {
         return { devices: raw.devices };
-      }
-      if (raw && 'data' in raw && Array.isArray(raw.data)) {
-        return { devices: raw.data };
-      }
-      if (Array.isArray(raw)) {
-        return { devices: raw as unknown as DeviceStats[] };
       }
       return { devices: [] };
     },
@@ -487,13 +476,11 @@ export function useGlobalStats(clientId?: string | null) {
   return useQuery({
     queryKey: ["aurora", "stats", "global", clientId],
     queryFn: async () => {
-      const raw = await callAuroraApi<ApiResponse<GlobalStats> | GlobalStats>(
+      // Core now auto-unwraps { data: {...}, status: 'success' } responses
+      const result = await callAuroraApi<GlobalStats>(
         STATS.GLOBAL, "GET", undefined, { clientId }
       );
-      // API returns { data: { total_readings, total_devices, ... }, status, timestamp }
-      // We need to extract the data object
-      const unwrapped = unwrapApiResponse(raw);
-      return unwrapped;
+      return result || {};
     },
     enabled: hasAuroraSession(),
     staleTime: 60000,
@@ -632,7 +619,8 @@ export function useStatsByClient(options?: { clientId?: string | null; hours?: n
   return useQuery({
     queryKey: ["aurora", "stats", "by-client", options],
     queryFn: async () => {
-      const raw = await callAuroraApi<PaginatedApiResponse<ClientGroupedStats> | { clients: ClientGroupedStats[]; total: number }>(
+      // Core now auto-unwraps { data: [...], status: 'success' } responses
+      const raw = await callAuroraApi<ClientGroupedStats[] | { clients: ClientGroupedStats[]; total: number }>(
         STATS.BY_CLIENT, 
         "GET", 
         undefined, 
@@ -645,14 +633,11 @@ export function useStatsByClient(options?: { clientId?: string | null; hours?: n
           }
         }
       );
-      // Handle new API structure with data array
-      if (raw && 'data' in raw && Array.isArray(raw.data)) {
-        return { 
-          clients: raw.data, 
-          total: raw.pagination?.total ?? raw.data.length 
-        };
+      // Handle array response (when auto-unwrapped)
+      if (Array.isArray(raw)) {
+        return { clients: raw, total: raw.length };
       }
-      // Handle legacy structure with clients array
+      // Handle object with clients array
       if (raw && 'clients' in raw) {
         return raw;
       }
@@ -670,7 +655,8 @@ export function useStatsBySensor(options?: { clientId?: string | null; hours?: n
   return useQuery({
     queryKey: ["aurora", "stats", "by-sensor", options],
     queryFn: async () => {
-      const raw = await callAuroraApi<PaginatedApiResponse<SensorGroupedStats> | { sensors: SensorGroupedStats[]; total: number }>(
+      // Core now auto-unwraps { data: [...], status: 'success' } responses
+      const raw = await callAuroraApi<SensorGroupedStats[] | { sensors: SensorGroupedStats[]; total: number }>(
         STATS.BY_SENSOR, 
         "GET", 
         undefined, 
@@ -683,14 +669,11 @@ export function useStatsBySensor(options?: { clientId?: string | null; hours?: n
           }
         }
       );
-      // Handle new API structure with data array
-      if (raw && 'data' in raw && Array.isArray(raw.data)) {
-        return { 
-          sensors: raw.data, 
-          total: raw.pagination?.total ?? raw.data.length 
-        };
+      // Handle array response (when auto-unwrapped)
+      if (Array.isArray(raw)) {
+        return { sensors: raw, total: raw.length };
       }
-      // Handle legacy structure with sensors array
+      // Handle object with sensors array
       if (raw && 'sensors' in raw) {
         return raw;
       }

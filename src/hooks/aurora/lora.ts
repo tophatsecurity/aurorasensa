@@ -87,7 +87,14 @@ export interface LoRaSpectrumAnalysis {
 export function useLoraDevices() {
   return useQuery({
     queryKey: ["aurora", "lora", "devices"],
-    queryFn: () => callAuroraApi<{ devices: LoRaDevice[] }>(LORA.DEVICES),
+    queryFn: async () => {
+      // Core now auto-unwraps { data: [...], status: 'success' } responses
+      const result = await callAuroraApi<{ devices: LoRaDevice[] } | LoRaDevice[]>(LORA.DEVICES);
+      if (Array.isArray(result)) {
+        return { devices: result };
+      }
+      return result?.devices ? result : { devices: [] };
+    },
     enabled: hasAuroraSession(),
     staleTime: 60000,
     refetchInterval: 120000,
@@ -107,9 +114,15 @@ export function useLoraDevice(deviceId: string) {
 export function useLoraDetections(limit: number = 100) {
   return useQuery({
     queryKey: ["aurora", "lora", "detections", limit],
-    queryFn: () => callAuroraApi<{ detections: LoRaDetection[] }>(
-      withQuery(LORA.DETECTIONS, { limit })
-    ),
+    queryFn: async () => {
+      const result = await callAuroraApi<{ detections: LoRaDetection[] } | LoRaDetection[]>(
+        withQuery(LORA.DETECTIONS, { limit })
+      );
+      if (Array.isArray(result)) {
+        return { detections: result };
+      }
+      return result?.detections ? result : { detections: [] };
+    },
     enabled: hasAuroraSession(),
     staleTime: 30000,
     refetchInterval: 60000,
@@ -120,9 +133,15 @@ export function useLoraDetections(limit: number = 100) {
 export function useLoraRecentDetections(minutes: number = 60) {
   return useQuery({
     queryKey: ["aurora", "lora", "detections", "recent", minutes],
-    queryFn: () => callAuroraApi<{ detections: LoRaDetection[] }>(
-      withQuery(LORA.DETECTIONS_RECENT, { minutes })
-    ),
+    queryFn: async () => {
+      const result = await callAuroraApi<{ detections: LoRaDetection[] } | LoRaDetection[]>(
+        withQuery(LORA.DETECTIONS_RECENT, { minutes })
+      );
+      if (Array.isArray(result)) {
+        return { detections: result };
+      }
+      return result?.detections ? result : { detections: [] };
+    },
     enabled: hasAuroraSession(),
     staleTime: 30000,
     refetchInterval: 60000,
@@ -179,7 +198,13 @@ export function useLoraSpectrumAnalysis() {
 export function useLoraConfigDevices() {
   return useQuery({
     queryKey: ["aurora", "lora", "config", "devices"],
-    queryFn: () => callAuroraApi<{ devices: LoRaDeviceConfig[] }>(LORA.CONFIG_DEVICES),
+    queryFn: async () => {
+      const result = await callAuroraApi<{ devices: LoRaDeviceConfig[] } | LoRaDeviceConfig[]>(LORA.CONFIG_DEVICES);
+      if (Array.isArray(result)) {
+        return { devices: result };
+      }
+      return result?.devices ? result : { devices: [] };
+    },
     enabled: hasAuroraSession(),
     staleTime: 60000,
     refetchInterval: 120000,

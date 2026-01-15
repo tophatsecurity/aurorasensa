@@ -33,8 +33,12 @@ export function useClients() {
     queryKey: ["aurora", "clients"],
     queryFn: async () => {
       try {
-        const response = await callAuroraApi<ClientsListResponse>(CLIENTS.LIST);
-        return response.clients || [];
+        const response = await callAuroraApi<ClientsListResponse | Client[]>(CLIENTS.LIST);
+        // Handle both array response and wrapped response
+        if (Array.isArray(response)) {
+          return response;
+        }
+        return response?.clients || [];
       } catch {
         return [];
       }
@@ -51,11 +55,14 @@ export function useClientsWithHostnames() {
       try {
         // Fetch clients list and system info in parallel for efficiency
         const [clientsResponse, systemInfoResponse] = await Promise.all([
-          callAuroraApi<ClientsListResponse>(CLIENTS.LIST),
+          callAuroraApi<ClientsListResponse | Client[]>(CLIENTS.LIST),
           callAuroraApi<AllClientsSystemInfoResponse>(CLIENTS.SYSTEM_INFO_ALL).catch(() => null),
         ]);
         
-        const clients = clientsResponse.clients || [];
+        // Handle both array response and wrapped response
+        const clients = Array.isArray(clientsResponse) 
+          ? clientsResponse 
+          : (clientsResponse?.clients || []);
         
         if (clients.length === 0) {
           return [];

@@ -223,7 +223,12 @@ export function useStarlinkDevices() {
     queryKey: ["aurora", "starlink", "devices"],
     queryFn: async () => {
       try {
-        return await callAuroraApi<StarlinkDevice[]>(STARLINK.DEVICES);
+        // Core now auto-unwraps { data: [...], status: 'success' } responses
+        const result = await callAuroraApi<StarlinkDevice[] | { devices: StarlinkDevice[] }>(STARLINK.DEVICES);
+        if (Array.isArray(result)) {
+          return result;
+        }
+        return result?.devices || [];
       } catch (error) {
         console.warn("Failed to fetch Starlink devices:", error);
         return [];
