@@ -1,4 +1,5 @@
 // Aurora API - System domain hooks
+// Updated to match actual available endpoints on Aurora server
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { callAuroraApi, hasAuroraSession } from "./core";
 
@@ -19,6 +20,9 @@ export interface SystemInfo {
   disk_total?: number;
   disk_free?: number;
   version?: string;
+  load?: number[];
+  memory?: { total: number; used: number; percent: number };
+  disk?: { total: number; used: number; percent: number };
 }
 
 export interface ArpEntry {
@@ -79,10 +83,41 @@ export interface ServerConfig {
 // QUERY HOOKS
 // =============================================
 
+// Aggregate system info from individual endpoints since /api/system/all may not exist
 export function useSystemInfo() {
   return useQuery({
     queryKey: ["aurora", "system", "info"],
-    queryFn: () => callAuroraApi<SystemInfo>("/api/system/all"),
+    queryFn: async () => {
+      // Try /api/system/all first
+      try {
+        const allInfo = await callAuroraApi<SystemInfo>("/api/system/all");
+        if (allInfo && Object.keys(allInfo).length > 0) {
+          return allInfo;
+        }
+      } catch (e) {
+        // Fall through to aggregate individual endpoints
+      }
+      
+      // Aggregate from individual endpoints
+      const [hostname, ip, uptime, load, memory, disk] = await Promise.all([
+        callAuroraApi<{ hostname: string }>("/api/system/hostname").catch(() => ({ hostname: undefined })),
+        callAuroraApi<{ ip: string }>("/api/system/ip").catch(() => ({ ip: undefined })),
+        callAuroraApi<{ uptime: string; uptime_seconds: number }>("/api/system/uptime").catch(() => ({ uptime: undefined, uptime_seconds: undefined })),
+        callAuroraApi<{ load: number[] }>("/api/system/load").catch(() => ({ load: undefined })),
+        callAuroraApi<{ total: number; used: number; percent: number }>("/api/system/memory").catch(() => null),
+        callAuroraApi<{ total: number; used: number; percent: number }>("/api/system/disk").catch(() => null),
+      ]);
+      
+      return {
+        hostname: hostname.hostname,
+        ip: ip.ip,
+        uptime: uptime.uptime,
+        uptime_seconds: uptime.uptime_seconds,
+        load: load.load,
+        memory,
+        disk,
+      } as SystemInfo;
+    },
     enabled: hasAuroraSession(),
     staleTime: 120000,
     refetchInterval: 300000,
@@ -93,7 +128,18 @@ export function useSystemInfo() {
 export function useSystemArp() {
   return useQuery({
     queryKey: ["aurora", "system", "arp"],
-    queryFn: () => callAuroraApi<{ entries: ArpEntry[] }>("/api/system/arp"),
+    queryFn: async () => {
+      try {
+        const response = await callAuroraApi<{ entries: ArpEntry[] } | ArpEntry[]>("/api/system/arp");
+        // Handle both response formats
+        if (Array.isArray(response)) {
+          return { entries: response };
+        }
+        return response;
+      } catch {
+        return { entries: [] };
+      }
+    },
     enabled: hasAuroraSession(),
     staleTime: 60000,
     refetchInterval: 120000,
@@ -104,7 +150,17 @@ export function useSystemArp() {
 export function useSystemRouting() {
   return useQuery({
     queryKey: ["aurora", "system", "routing"],
-    queryFn: () => callAuroraApi<{ routes: RoutingEntry[] }>("/api/system/routing"),
+    queryFn: async () => {
+      try {
+        const response = await callAuroraApi<{ routes: RoutingEntry[] } | RoutingEntry[]>("/api/system/routing");
+        if (Array.isArray(response)) {
+          return { routes: response };
+        }
+        return response;
+      } catch {
+        return { routes: [] };
+      }
+    },
     enabled: hasAuroraSession(),
     staleTime: 60000,
     refetchInterval: 120000,
@@ -115,7 +171,17 @@ export function useSystemRouting() {
 export function useSystemInterfaces() {
   return useQuery({
     queryKey: ["aurora", "system", "interfaces"],
-    queryFn: () => callAuroraApi<{ interfaces: NetworkInterface[] }>("/api/system/interfaces"),
+    queryFn: async () => {
+      try {
+        const response = await callAuroraApi<{ interfaces: NetworkInterface[] } | NetworkInterface[]>("/api/system/interfaces");
+        if (Array.isArray(response)) {
+          return { interfaces: response };
+        }
+        return response;
+      } catch {
+        return { interfaces: [] };
+      }
+    },
     enabled: hasAuroraSession(),
     staleTime: 60000,
     refetchInterval: 120000,
@@ -126,7 +192,17 @@ export function useSystemInterfaces() {
 export function useSystemUsb() {
   return useQuery({
     queryKey: ["aurora", "system", "usb"],
-    queryFn: () => callAuroraApi<{ devices: UsbDevice[] }>("/api/system/usb"),
+    queryFn: async () => {
+      try {
+        const response = await callAuroraApi<{ devices: UsbDevice[] } | UsbDevice[]>("/api/system/usb");
+        if (Array.isArray(response)) {
+          return { devices: response };
+        }
+        return response;
+      } catch {
+        return { devices: [] };
+      }
+    },
     enabled: hasAuroraSession(),
     staleTime: 60000,
     refetchInterval: 120000,
@@ -137,7 +213,13 @@ export function useSystemUsb() {
 export function useExternalIp() {
   return useQuery({
     queryKey: ["aurora", "system", "external-ip"],
-    queryFn: () => callAuroraApi<{ ip: string }>("/api/system/external-ip"),
+    queryFn: async () => {
+      try {
+        return await callAuroraApi<{ ip: string }>("/api/system/external-ip");
+      } catch {
+        return { ip: '' };
+      }
+    },
     enabled: hasAuroraSession(),
     staleTime: 300000,
     refetchInterval: 600000,
@@ -148,7 +230,13 @@ export function useExternalIp() {
 export function useSystemHostname() {
   return useQuery({
     queryKey: ["aurora", "system", "hostname"],
-    queryFn: () => callAuroraApi<{ hostname: string }>("/api/system/hostname"),
+    queryFn: async () => {
+      try {
+        return await callAuroraApi<{ hostname: string }>("/api/system/hostname");
+      } catch {
+        return { hostname: '' };
+      }
+    },
     enabled: hasAuroraSession(),
     staleTime: 300000,
     refetchInterval: 600000,
@@ -159,7 +247,13 @@ export function useSystemHostname() {
 export function useSystemIp() {
   return useQuery({
     queryKey: ["aurora", "system", "ip"],
-    queryFn: () => callAuroraApi<{ ip: string }>("/api/system/ip"),
+    queryFn: async () => {
+      try {
+        return await callAuroraApi<{ ip: string }>("/api/system/ip");
+      } catch {
+        return { ip: '' };
+      }
+    },
     enabled: hasAuroraSession(),
     staleTime: 60000,
     refetchInterval: 120000,
@@ -170,7 +264,13 @@ export function useSystemIp() {
 export function useSystemUptime() {
   return useQuery({
     queryKey: ["aurora", "system", "uptime"],
-    queryFn: () => callAuroraApi<{ uptime: string; uptime_seconds: number }>("/api/system/uptime"),
+    queryFn: async () => {
+      try {
+        return await callAuroraApi<{ uptime: string; uptime_seconds: number }>("/api/system/uptime");
+      } catch {
+        return { uptime: '', uptime_seconds: 0 };
+      }
+    },
     enabled: hasAuroraSession(),
     staleTime: 60000,
     refetchInterval: 120000,
@@ -181,7 +281,13 @@ export function useSystemUptime() {
 export function useSystemCpuLoad() {
   return useQuery({
     queryKey: ["aurora", "system", "load"],
-    queryFn: () => callAuroraApi<{ load: number[] }>("/api/system/load"),
+    queryFn: async () => {
+      try {
+        return await callAuroraApi<{ load: number[] }>("/api/system/load");
+      } catch {
+        return { load: [] };
+      }
+    },
     enabled: hasAuroraSession(),
     staleTime: 60000,
     refetchInterval: 120000,
@@ -192,7 +298,13 @@ export function useSystemCpuLoad() {
 export function useSystemMemory() {
   return useQuery({
     queryKey: ["aurora", "system", "memory"],
-    queryFn: () => callAuroraApi<{ total: number; used: number; percent: number }>("/api/system/memory"),
+    queryFn: async () => {
+      try {
+        return await callAuroraApi<{ total: number; used: number; percent: number }>("/api/system/memory");
+      } catch {
+        return { total: 0, used: 0, percent: 0 };
+      }
+    },
     enabled: hasAuroraSession(),
     staleTime: 60000,
     refetchInterval: 120000,
@@ -203,7 +315,13 @@ export function useSystemMemory() {
 export function useSystemDisk() {
   return useQuery({
     queryKey: ["aurora", "system", "disk"],
-    queryFn: () => callAuroraApi<{ total: number; used: number; percent: number }>("/api/system/disk"),
+    queryFn: async () => {
+      try {
+        return await callAuroraApi<{ total: number; used: number; percent: number }>("/api/system/disk");
+      } catch {
+        return { total: 0, used: 0, percent: 0 };
+      }
+    },
     enabled: hasAuroraSession(),
     staleTime: 60000,
     refetchInterval: 120000,
@@ -214,7 +332,13 @@ export function useSystemDisk() {
 export function useServiceStatus(serviceName: string) {
   return useQuery({
     queryKey: ["aurora", "systemctl", serviceName],
-    queryFn: () => callAuroraApi<{ active: boolean; status: string }>(`/api/systemctl/${serviceName}`),
+    queryFn: async () => {
+      try {
+        return await callAuroraApi<{ active: boolean; status: string }>(`/api/systemctl/${serviceName}`);
+      } catch {
+        return { active: false, status: 'unknown' };
+      }
+    },
     enabled: !!serviceName && hasAuroraSession(),
     staleTime: 30000,
     refetchInterval: 60000,
@@ -248,7 +372,13 @@ export function useAuroraServices() {
 export function useServerConfig() {
   return useQuery({
     queryKey: ["aurora", "config"],
-    queryFn: () => callAuroraApi<ServerConfig>("/api/config"),
+    queryFn: async () => {
+      try {
+        return await callAuroraApi<ServerConfig>("/api/config");
+      } catch {
+        return {};
+      }
+    },
     enabled: hasAuroraSession(),
     staleTime: 120000,
     retry: 2,

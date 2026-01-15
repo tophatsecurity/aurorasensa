@@ -279,6 +279,90 @@ export async function callAuroraApi<T>(
 
 // Helper to return appropriate empty data based on endpoint path
 function getEmptyDataForPath(path: string): unknown {
+  // Specific endpoint patterns that return wrapped arrays
+  if (path.includes('/lora/devices')) {
+    return { devices: [] };
+  }
+  if (path.includes('/lora/detections')) {
+    return { detections: [] };
+  }
+  if (path.includes('/lora/channels')) {
+    return [];
+  }
+  if (path.includes('/lora/spectrum')) {
+    return { frequencies: [], power_levels: [], noise_floor: 0, channel_activity: [] };
+  }
+  if (path.includes('/adsb/aircraft')) {
+    return { aircraft: [] };
+  }
+  if (path.includes('/adsb/devices')) {
+    return { devices: [] };
+  }
+  if (path.includes('/starlink/devices')) {
+    return { devices: [] };
+  }
+  if (path.includes('/alerts/rules')) {
+    return { rules: [] };
+  }
+  if (path.includes('/alerts/list') || path.match(/\/alerts(\?|$)/)) {
+    return { alerts: [], count: 0 };
+  }
+  if (path.includes('/alerts/stats')) {
+    return { total: 0, active: 0, acknowledged: 0, resolved: 0, by_severity: {}, by_type: {}, last_24h: 0, last_hour: 0 };
+  }
+  if (path.includes('/clients/list') || path.includes('/clients/all-states')) {
+    return { clients: [], count: 0 };
+  }
+  if (path.includes('/clients/statistics')) {
+    return { total: 0, pending: 0, registered: 0, adopted: 0, disabled: 0, suspended: 0 };
+  }
+  if (path.includes('/batches/list')) {
+    return { batches: [], count: 0 };
+  }
+  if (path.includes('/batches/by-client')) {
+    return { batches: [], count: 0 };
+  }
+  if (path.includes('/batches/latest')) {
+    return null;
+  }
+  if (path.includes('/sensors/list') || path.includes('/sensors/recent')) {
+    return { sensors: [], count: 0 };
+  }
+  if (path.includes('/readings/latest')) {
+    return { readings: [], data: [] };
+  }
+  if (path.includes('/stats/history')) {
+    return [];
+  }
+  if (path.includes('/stats/devices')) {
+    return { devices: [] };
+  }
+  if (path.includes('/stats/sensors')) {
+    return { sensor_types: [] };
+  }
+  if (path.includes('/stats/endpoints')) {
+    return { endpoints: [] };
+  }
+  if (path.includes('/system/arp')) {
+    return { entries: [] };
+  }
+  if (path.includes('/system/routing')) {
+    return { routes: [] };
+  }
+  if (path.includes('/system/interfaces')) {
+    return { interfaces: [] };
+  }
+  if (path.includes('/system/usb')) {
+    return { devices: [] };
+  }
+  if (path.includes('/audit/logs')) {
+    return { logs: [], count: 0 };
+  }
+  if (path.includes('/activity')) {
+    return { activities: [] };
+  }
+  
+  // Generic patterns - check last as fallback
   if (path.includes('/list') || path.includes('/vessels') || path.includes('/stations') || 
       path.includes('/beacons') || path.includes('/aircraft') || path.includes('/devices') ||
       path.includes('/active') || path.includes('/readings') || path.includes('/rules') ||

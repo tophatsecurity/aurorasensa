@@ -84,7 +84,14 @@ export function useSensorReadings(sensorType: string, hours: number = 24) {
 export function useAllSensorStats() {
   return useQuery({
     queryKey: ["aurora", "stats", "sensors"],
-    queryFn: () => callAuroraApi<{ sensor_types: SensorTypeStats[] }>("/api/stats/sensors"),
+    queryFn: async () => {
+      try {
+        const response = await callAuroraApi<{ sensor_types: SensorTypeStats[] }>("/api/stats/sensors");
+        return response;
+      } catch {
+        return { sensor_types: [] };
+      }
+    },
     enabled: hasAuroraSession(),
     ...defaultQueryOptions,
   });
@@ -95,16 +102,21 @@ export function useSensorTypeStats(sensorType: string) {
     queryKey: ["aurora", "stats", "sensors", sensorType],
     queryFn: async () => {
       try {
+        // Try the specific sensor type endpoint
         const response = await callAuroraApi<SensorTypeStats>(`/api/stats/sensors/${sensorType}`);
-        return response;
-      } catch (error) {
-        console.warn(`Failed to fetch sensor type stats for ${sensorType}:`, error);
-        return null;
+        if (response && Object.keys(response).length > 0) {
+          return response;
+        }
+      } catch {
+        // Endpoint may not exist for this sensor type
       }
+      
+      // Return null to indicate no stats available
+      return null;
     },
     enabled: hasAuroraSession() && !!sensorType,
     ...defaultQueryOptions,
-    retry: 1,
+    retry: 0, // Don't retry - endpoint may just not exist
   });
 }
 
@@ -112,17 +124,23 @@ export function useSensorTypeStatsWithPeriod(sensorType: string, hours: number =
   return useQuery({
     queryKey: ["aurora", "stats", "sensors", sensorType, hours],
     queryFn: async () => {
+      // Skip if sensor type is empty
+      if (!sensorType) return null;
+      
       try {
         const response = await callAuroraApi<SensorTypeStats>(`/api/stats/sensors/${sensorType}?hours=${hours}`);
-        return response;
-      } catch (error) {
-        console.warn(`Period stats for ${sensorType} not available, using 24h default`);
-        return callAuroraApi<SensorTypeStats>(`/api/stats/sensors/${sensorType}`);
+        if (response && Object.keys(response).length > 0) {
+          return response;
+        }
+      } catch {
+        // Endpoint may not exist - that's okay
       }
+      
+      return null;
     },
     enabled: hasAuroraSession() && !!sensorType,
     ...defaultQueryOptions,
-    retry: 1,
+    retry: 0, // Don't retry - endpoint may just not exist
   });
 }
 
