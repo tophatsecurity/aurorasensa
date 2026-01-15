@@ -54,7 +54,7 @@ export interface AircraftTrailData {
 function extractGpsFromReadings(readings: Array<{ device_id: string; device_type: string; data: Record<string, unknown> }>) {
   const gpsData: Record<string, { lat: number; lng: number; altitude?: number; timestamp?: string }> = {};
   
-  readings.forEach(reading => {
+  readings.filter(r => r != null).forEach(reading => {
     const data = reading.data;
     
     // Check for GPS coordinates in the data
@@ -558,7 +558,7 @@ export function useMapData(options: UseMapDataOptions = {}) {
 
     // Try latest readings for starlink devices
     if (latestReadings) {
-      for (const reading of latestReadings) {
+      for (const reading of latestReadings.filter(r => r != null)) {
         if (reading.device_type?.toLowerCase().includes('starlink') || 
             reading.device_id?.toLowerCase().includes('starlink')) {
           const coords = extractCoords(reading.data);
@@ -640,7 +640,7 @@ export function useMapData(options: UseMapDataOptions = {}) {
       // Group by client_id + device_id and get the latest entry for each
       const readingsMap = new Map<string, { reading: typeof latestReadings[0]; coords: { lat: number; lng: number; altitude?: number } | null }>();
       
-      latestReadings.forEach(reading => {
+      latestReadings.filter(r => r != null).forEach(reading => {
         if (reading.device_type?.toLowerCase().includes('starlink') || 
             reading.device_id?.toLowerCase().includes('starlink')) {
           const compositeKey = makeCompositeKey(reading.client_id, reading.device_id);
@@ -719,7 +719,7 @@ export function useMapData(options: UseMapDataOptions = {}) {
     
     // Third, add devices from the dedicated API endpoint
     if (starlinkDevicesApi && starlinkDevicesApi.length > 0) {
-      starlinkDevicesApi.forEach(device => {
+      starlinkDevicesApi.filter(d => d != null).forEach(device => {
         const compositeKey = makeCompositeKey(device.client_id, device.device_id);
         if (addedIds.has(compositeKey)) return;
         
@@ -773,7 +773,7 @@ export function useMapData(options: UseMapDataOptions = {}) {
       // Group by client_id + device_id and get the latest entry for each
       const deviceMap = new Map<string, typeof starlinkStatusData[0]>();
       
-      starlinkStatusData.forEach(entry => {
+      starlinkStatusData.filter(e => e != null).forEach(entry => {
         const deviceId = entry.device_id || 'starlink_dish_1';
         const clientId = typeof entry.client_id === 'string' ? entry.client_id : undefined;
         const compositeKey = makeCompositeKey(clientId, deviceId);
@@ -840,7 +840,7 @@ export function useMapData(options: UseMapDataOptions = {}) {
       // Group by client_id + unique device_id and get the latest entry for each
       const sensorMap = new Map<string, { reading: typeof starlinkReadingsArr[0]; uniqueId: string; coords: { lat: number; lng: number; altitude?: number } | null }>();
       
-      starlinkReadingsArr.forEach(reading => {
+      starlinkReadingsArr.filter(r => r != null).forEach(reading => {
         // StarlinkTimeseriesPoint has metrics at top level, not nested in .data
         const data = reading as unknown as Record<string, unknown>;
         const result = extractStarlinkCoordsWithId(data, reading.device_id || 'unknown');
