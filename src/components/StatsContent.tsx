@@ -18,6 +18,7 @@ import {
   use1hrStats,
   use24hrStats,
 } from "@/hooks/aurora";
+import { useClientContext } from "@/contexts/ClientContext";
 
 import {
   type DeviceGroup,
@@ -32,9 +33,6 @@ import {
 import GlobalStatsCards from "@/components/stats/GlobalStatsCards";
 import GlobalReadingsTrendChart from "@/components/stats/GlobalReadingsTrendChart";
 import ClientTrendChart from "@/components/stats/ClientTrendChart";
-
-// Constants
-const GLOBAL_CLIENT_ID = "__global__";
 
 // Helper to convert client sensor readings to device groups
 function processClientSensorDataToGroups(
@@ -108,9 +106,14 @@ function formatNumber(num?: number): string {
 }
 
 export default function StatsContent() {
-  const [selectedClient, setSelectedClient] = useState<string>(GLOBAL_CLIENT_ID);
+  // Use global client context
+  const { selectedClientId, setSelectedClientId, isAllClients } = useClientContext();
   const [activeTab, setActiveTab] = useState<string>("overview");
   const [isRetrying, setIsRetrying] = useState(false);
+
+  // Map context values - "all" in context means global view
+  const isGlobalView = isAllClients;
+  const actualClientId = isAllClients ? "" : selectedClientId;
 
   // Global stats hooks
   const { data: globalStats, isLoading: globalStatsLoading } = useGlobalStats();
@@ -128,7 +131,6 @@ export default function StatsContent() {
   } = useClientsWithHostnames();
   
   // Fetch client-specific sensor data (from batches) - only when a specific client is selected
-  const actualClientId = selectedClient === GLOBAL_CLIENT_ID ? "" : selectedClient;
   const { 
     data: clientSensorData, 
     isLoading: sensorsLoading, 
@@ -172,7 +174,6 @@ export default function StatsContent() {
   const sensorsAreLoading = sensorsLoading && actualClientId;
   const hasData = (clientSensorData?.readings && clientSensorData.readings.length > 0) || (clients && clients.length > 0) || globalStats;
   const hasCriticalError = apiErrors.length > 0 && !hasData && !isLoading;
-  const isGlobalView = selectedClient === GLOBAL_CLIENT_ID;
 
   const handleRefresh = async () => {
     setIsRetrying(true);
@@ -181,7 +182,7 @@ export default function StatsContent() {
   };
 
   const handleClientChange = (clientId: string) => {
-    setSelectedClient(clientId);
+    setSelectedClientId(clientId);
     // Reset to overview tab when switching contexts
     setActiveTab("overview");
   };
@@ -221,7 +222,7 @@ export default function StatsContent() {
           {/* Context Selector - Global or Client ID */}
           <div className="flex items-center gap-2 bg-muted/50 rounded-lg p-1">
             <button
-              onClick={() => handleClientChange(GLOBAL_CLIENT_ID)}
+              onClick={() => handleClientChange("all")}
               className={`flex items-center gap-2 px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${
                 isGlobalView 
                   ? 'bg-primary text-primary-foreground' 
@@ -233,7 +234,7 @@ export default function StatsContent() {
             </button>
             <div className="w-px h-6 bg-border" />
             <select
-              value={isGlobalView ? "" : selectedClient}
+              value={isGlobalView ? "" : selectedClientId}
               onChange={(e) => e.target.value && handleClientChange(e.target.value)}
               className={`bg-transparent border-0 text-sm font-medium focus:outline-none focus:ring-0 cursor-pointer px-2 py-1.5 rounded-md transition-colors ${
                 !isGlobalView

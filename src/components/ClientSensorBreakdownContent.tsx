@@ -33,6 +33,7 @@ import {
   type SensorGroupedStats,
 } from "@/hooks/aurora";
 import { useQueryClient } from "@tanstack/react-query";
+import { useClientContext } from "@/contexts/ClientContext";
 import {
   BarChart,
   Bar,
@@ -341,8 +342,13 @@ const SensorBreakdownCard = ({ sensor, onClick, isSelected }: SensorCardProps) =
 const ClientSensorBreakdownContent = () => {
   const [activeTab, setActiveTab] = useState<"overview" | "clients" | "sensors">("overview");
   const [timeRange, setTimeRange] = useState<number>(24);
-  const [selectedClientId, setSelectedClientId] = useState<string>("");
   const [selectedSensor, setSelectedSensor] = useState<string | null>(null);
+  
+  // Use global client context
+  const { selectedClientId, setSelectedClientId, isAllClients } = useClientContext();
+  
+  // For this component, we need a specific client - use first client if "all" is selected
+  const effectiveClientId = isAllClients ? "" : selectedClientId;
   
   const queryClient = useQueryClient();
   
@@ -353,31 +359,31 @@ const ClientSensorBreakdownContent = () => {
   const { data: clientStats, isLoading: clientsLoading } = useStatsByClient({ hours: timeRange });
   const { data: sensorStats, isLoading: sensorsLoading } = useStatsBySensor({ 
     hours: timeRange, 
-    clientId: selectedClientId || undefined 
+    clientId: effectiveClientId || undefined 
   });
   
   // Fetch detailed stats for selected client
   const { data: clientDetailStats, isLoading: detailLoading } = useClientDetailStats(
-    selectedClientId || null, 
+    effectiveClientId || null, 
     timeRange
   );
   
   // Fetch system info for selected client
-  const { data: systemInfo } = useClientSystemInfo(selectedClientId || "");
+  const { data: systemInfo } = useClientSystemInfo(effectiveClientId || "");
   
   // Fetch period stats for selected client
-  const { data: stats1hr } = use1hrStats(selectedClientId || null);
-  const { data: stats24hr } = use24hrStats(selectedClientId || null);
+  const { data: stats1hr } = use1hrStats(effectiveClientId || null);
+  const { data: stats24hr } = use24hrStats(effectiveClientId || null);
 
   const clients = clientStats?.clients || [];
   const sensors = sensorStats?.sensors || [];
   
-  // Auto-select first client when data loads
+  // Auto-select first client when data loads and no client is selected
   useEffect(() => {
-    if (clients.length > 0 && !selectedClientId) {
+    if (clients.length > 0 && isAllClients) {
       setSelectedClientId(clients[0].client_id);
     }
-  }, [clients, selectedClientId]);
+  }, [clients, isAllClients, setSelectedClientId]);
   
   const isLoading = clientsLoading || sensorsLoading;
   

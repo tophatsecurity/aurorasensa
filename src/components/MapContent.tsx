@@ -12,6 +12,7 @@ import { spreadOverlappingPoints, COVERAGE_RANGES, ONE_MILE_METERS } from "@/uti
 import { useMapData, AircraftTrailData } from "@/hooks/useMapData";
 import { useGpsHistory } from "@/hooks/useGpsHistory";
 import { useAdsbHistory, AircraftTrail } from "@/hooks/useAdsbHistory";
+import { useClientContext } from "@/contexts/ClientContext";
 
 
 // Map components (non-leaflet)
@@ -30,7 +31,6 @@ import { ClientSelector } from "@/components/ui/context-selectors";
 import { Badge } from "@/components/ui/badge";
 
 const STORAGE_KEY_AUTO_REFRESH = 'map-auto-refresh-interval';
-const STORAGE_KEY_CLIENT = 'map-selected-client';
 
 // Animate marker to new position
 const animateMarker = (marker: L.Marker, targetLat: number, targetLng: number, duration: number = 1000) => {
@@ -78,14 +78,11 @@ const MapContent = () => {
   const [countdown, setCountdown] = useState<number>(0);
   const lastRefreshTimeRef = useRef<number>(Date.now());
   
+  // Use global client context
+  const { selectedClientId, setSelectedClientId } = useClientContext();
   
-  
-  // Load selected client from localStorage first (moved up so SSE hooks can use it)
-  const [selectedClient, setSelectedClient] = useState<string>(() => {
-    return localStorage.getItem(STORAGE_KEY_CLIENT) || 'all';
-  });
-  
-  
+  // Map "all" from context to internal usage
+  const selectedClient = selectedClientId;
   
   // Load auto-refresh interval from localStorage, default to 5 minutes
   const [autoRefreshInterval, setAutoRefreshInterval] = useState<AutoRefreshInterval>(() => {
@@ -96,10 +93,9 @@ const MapContent = () => {
     return '5m';
   });
   
-  // Save selected client to localStorage
+  // Handle client change - update context
   const handleClientChange = (value: string) => {
-    setSelectedClient(value);
-    localStorage.setItem(STORAGE_KEY_CLIENT, value);
+    setSelectedClientId(value);
     setHasInitialFit(false); // Re-fit map bounds when client changes
   };
   
