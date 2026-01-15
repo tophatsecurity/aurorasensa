@@ -427,7 +427,17 @@ export interface ClientsListResponse {
 
 /** Response for clients grouped by state */
 export interface ClientsByStateResponse {
-  clients_by_state: {
+  status?: string;
+  // API returns "states" but we normalize to "clients_by_state" in the hook
+  states?: {
+    pending: Client[];
+    registered: Client[];
+    adopted: Client[];
+    disabled: Client[];
+    suspended: Client[];
+    deleted: Client[];
+  };
+  clients_by_state?: {
     pending: Client[];
     registered: Client[];
     adopted: Client[];
