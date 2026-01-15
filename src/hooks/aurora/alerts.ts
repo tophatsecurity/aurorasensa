@@ -1,6 +1,7 @@
 // Aurora API - Alerts domain hooks
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { callAuroraApi, hasAuroraSession, AuroraApiOptions } from "./core";
+import { callAuroraApi, hasAuroraSession, type AuroraApiOptions } from "./core";
+import { ALERTS } from "./endpoints";
 
 // =============================================
 // TYPES
@@ -22,7 +23,6 @@ export interface Alert {
   resolved_at?: string | null;
   rule_name?: string;
   details?: Record<string, unknown>;
-  // Legacy compatibility fields
   type?: string;
   device_id?: string;
   timestamp?: string;
@@ -82,40 +82,33 @@ export interface CreateAlertRulePayload {
   cooldown_minutes?: number;
 }
 
-export interface UpdateAlertRulePayload {
-  name?: string;
-  description?: string;
-  enabled?: boolean;
-  severity?: string;
-  sensor_type_filter?: string;
-  conditions?: {
-    field: string;
-    operator?: string | null;
-    value?: number | string | null;
-  }[];
-  notification_channels?: string[];
-  cooldown_minutes?: number;
+export interface UpdateAlertRulePayload extends Partial<CreateAlertRulePayload> {}
+
+// =============================================
+// HELPERS
+// =============================================
+
+async function safeAlertApiCall<T>(endpoint: string, defaultValue: T, options?: AuroraApiOptions): Promise<T> {
+  try {
+    return await callAuroraApi<T>(endpoint, "GET", undefined, options);
+  } catch (error) {
+    console.warn(`Alert API endpoint ${endpoint} not available, using defaults`);
+    return defaultValue;
+  }
 }
 
 // =============================================
 // QUERY HOOKS
 // =============================================
 
-// Safe wrapper that returns default empty data on API errors (404, etc.)
-async function safeAlertApiCall<T>(endpoint: string, defaultValue: T, options?: AuroraApiOptions): Promise<T> {
-  try {
-    return await callAuroraApi<T>(endpoint, "GET", undefined, options);
-  } catch (error) {
-    // Return default value for 404s or other API errors
-    console.warn(`Alert API endpoint ${endpoint} not available, using defaults`);
-    return defaultValue;
-  }
-}
-
 export function useAlerts(limit: number = 100, clientId?: string | null) {
   return useQuery({
     queryKey: ["aurora", "alerts", limit, clientId],
-    queryFn: () => safeAlertApiCall<{ alerts: Alert[] }>(`/api/alerts?limit=${limit}`, { alerts: [] }, { clientId }),
+    queryFn: () => safeAlertApiCall<{ alerts: Alert[] }>(
+      ALERTS.LIST, 
+      { alerts: [] }, 
+      { clientId, params: { limit } }
+    ),
     enabled: hasAuroraSession(),
     staleTime: 30000,
     refetchInterval: 60000,
@@ -123,16 +116,28 @@ export function useAlerts(limit: number = 100, clientId?: string | null) {
   });
 }
 
-export function useAlertsList(params?: { severity?: string; acknowledged?: boolean; resolved?: boolean; limit?: number; clientId?: string | null }) {
-  const queryParams = new URLSearchParams();
-  if (params?.severity) queryParams.append("severity", params.severity);
-  if (params?.acknowledged !== undefined) queryParams.append("acknowledged", String(params.acknowledged));
-  if (params?.resolved !== undefined) queryParams.append("resolved", String(params.resolved));
-  if (params?.limit) queryParams.append("limit", String(params.limit));
-  
+export function useAlertsList(params?: { 
+  severity?: string; 
+  acknowledged?: boolean; 
+  resolved?: boolean; 
+  limit?: number; 
+  clientId?: string | null;
+}) {
   return useQuery({
     queryKey: ["aurora", "alerts", "list", params],
-    queryFn: () => safeAlertApiCall<{ alerts: Alert[]; count: number }>(`/api/alerts/list?${queryParams}`, { alerts: [], count: 0 }, { clientId: params?.clientId }),
+    queryFn: () => safeAlertApiCall<{ alerts: Alert[]; count: number }>(
+      ALERTS.LIST_FILTERED, 
+      { alerts: [], count: 0 }, 
+      { 
+        clientId: params?.clientId, 
+        params: {
+          severity: params?.severity,
+          acknowledged: params?.acknowledged,
+          resolved: params?.resolved,
+          limit: params?.limit,
+        }
+      }
+    ),
     enabled: hasAuroraSession(),
     staleTime: 30000,
     refetchInterval: 60000,
@@ -145,10 +150,8 @@ export function useAlertRules() {
     queryKey: ["aurora", "alerts", "rules"],
     queryFn: async () => {
       try {
-        return await callAuroraApi<{ rules: AlertRule[] }>("/api/alerts/rules");
+        return await callAuroraApi<{ rules: AlertRule[] }>(ALERTS.RULES);
       } catch (error) {
-        // The /api/alerts/rules endpoint may not exist on the Aurora backend
-        // Return empty rules to prevent UI errors
         console.warn("Alert rules endpoint unavailable, returning empty rules");
         return { rules: [] };
       }
@@ -164,20 +167,23 @@ export function useAlertStats(clientId?: string | null) {
   return useQuery({
     queryKey: ["aurora", "alerts", "stats", clientId],
     queryFn: async () => {
-      const options: AuroraApiOptions = { clientId };
       try {
-        return await callAuroraApi<AlertStats>("/api/alerts/stats", "GET", undefined, options);
+        return await callAuroraApi<AlertStats>(ALERTS.STATS, "GET", undefined, { clientId });
       } catch (error) {
-        // Fallback: compute stats from alerts list if /api/alerts/stats endpoint fails
         console.warn("Alert stats endpoint unavailable, computing from alerts list");
         try {
-          const response = await callAuroraApi<{ alerts: Alert[] }>("/api/alerts/list?limit=1000", "GET", undefined, options);
+          const response = await callAuroraApi<{ alerts: Alert[] }>(
+            ALERTS.LIST_FILTERED, 
+            "GET", 
+            undefined, 
+            { clientId, params: { limit: 1000 } }
+          );
           const alerts = response.alerts || [];
           const now = new Date();
           const last24h = new Date(now.getTime() - 24 * 60 * 60 * 1000);
           const lastHour = new Date(now.getTime() - 60 * 60 * 1000);
           
-          const stats: AlertStats = {
+          return {
             total: alerts.length,
             active: alerts.filter(a => a.status === 'active' && !a.resolved_at).length,
             acknowledged: alerts.filter(a => a.acknowledged_at).length,
@@ -194,9 +200,7 @@ export function useAlertStats(clientId?: string | null) {
             last_24h: alerts.filter(a => new Date(a.triggered_at) >= last24h).length,
             last_hour: alerts.filter(a => new Date(a.triggered_at) >= lastHour).length,
           };
-          return stats;
         } catch {
-          // Return empty stats if both fail
           return {
             total: 0,
             active: 0,
@@ -220,7 +224,7 @@ export function useAlertStats(clientId?: string | null) {
 export function useAlertSettings() {
   return useQuery({
     queryKey: ["aurora", "alerts", "settings"],
-    queryFn: () => safeAlertApiCall<AlertSettings>("/api/alerts/settings", {}),
+    queryFn: () => safeAlertApiCall<AlertSettings>(ALERTS.SETTINGS, {}),
     enabled: hasAuroraSession(),
     staleTime: 120000,
     retry: 0,
@@ -230,7 +234,11 @@ export function useAlertSettings() {
 export function useDeviceAlerts(deviceId: string) {
   return useQuery({
     queryKey: ["aurora", "alerts", "device", deviceId],
-    queryFn: () => safeAlertApiCall<{ alerts: Alert[] }>(`/api/device-alerts?device_id=${deviceId}`, { alerts: [] }),
+    queryFn: () => safeAlertApiCall<{ alerts: Alert[] }>(
+      ALERTS.DEVICE_ALERTS, 
+      { alerts: [] },
+      { params: { device_id: deviceId } }
+    ),
     enabled: !!deviceId && hasAuroraSession(),
     staleTime: 30000,
     refetchInterval: 60000,
@@ -247,7 +255,7 @@ export function useCreateAlertRule() {
   
   return useMutation({
     mutationFn: async (rule: CreateAlertRulePayload) => {
-      return callAuroraApi<{ success: boolean; id?: number }>("/api/alerts/rules", "POST", rule);
+      return callAuroraApi<{ success: boolean; id?: number }>(ALERTS.RULES, "POST", rule);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["aurora", "alerts", "rules"] });
@@ -260,7 +268,7 @@ export function useUpdateAlertRule() {
   
   return useMutation({
     mutationFn: async ({ ruleId, updates }: { ruleId: number; updates: UpdateAlertRulePayload }) => {
-      return callAuroraApi<{ success: boolean }>(`/api/alerts/rules/${ruleId}`, "PUT", updates);
+      return callAuroraApi<{ success: boolean }>(ALERTS.RULE(ruleId), "PUT", updates);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["aurora", "alerts", "rules"] });
@@ -273,7 +281,7 @@ export function useDeleteAlertRule() {
   
   return useMutation({
     mutationFn: async (ruleId: number) => {
-      return callAuroraApi<{ success: boolean }>(`/api/alerts/rules/${ruleId}`, "DELETE");
+      return callAuroraApi<{ success: boolean }>(ALERTS.RULE(ruleId), "DELETE");
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["aurora", "alerts", "rules"] });
@@ -289,7 +297,7 @@ export function useAcknowledgeAlert() {
       if (alertId === undefined || alertId === null || isNaN(alertId)) {
         throw new Error("Invalid alert ID");
       }
-      return callAuroraApi<{ success: boolean }>(`/api/alerts/${alertId}/acknowledge`, "POST");
+      return callAuroraApi<{ success: boolean }>(ALERTS.ACKNOWLEDGE(alertId), "POST");
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["aurora", "alerts"] });
@@ -305,7 +313,7 @@ export function useResolveAlert() {
       if (alertId === undefined || alertId === null || isNaN(alertId)) {
         throw new Error("Invalid alert ID");
       }
-      return callAuroraApi<{ success: boolean }>(`/api/alerts/${alertId}/resolve`, "POST");
+      return callAuroraApi<{ success: boolean }>(ALERTS.RESOLVE(alertId), "POST");
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["aurora", "alerts"] });
@@ -321,7 +329,7 @@ export function useDeleteAlert() {
       if (alertId === undefined || alertId === null || isNaN(alertId)) {
         throw new Error("Invalid alert ID");
       }
-      return callAuroraApi<{ success: boolean }>(`/api/alerts/${alertId}`, "DELETE");
+      return callAuroraApi<{ success: boolean }>(ALERTS.DELETE(alertId), "DELETE");
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["aurora", "alerts"] });
@@ -334,7 +342,7 @@ export function useUpdateAlertSettings() {
   
   return useMutation({
     mutationFn: async (settings: AlertSettings) => {
-      return callAuroraApi<{ success: boolean }>("/api/alerts/settings", "PUT", settings);
+      return callAuroraApi<{ success: boolean }>(ALERTS.SETTINGS, "PUT", settings);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["aurora", "alerts", "settings"] });
@@ -345,7 +353,7 @@ export function useUpdateAlertSettings() {
 export function useTestAlert() {
   return useMutation({
     mutationFn: async () => {
-      return callAuroraApi<{ success: boolean; message: string }>("/api/alerts/test", "POST");
+      return callAuroraApi<{ success: boolean; message: string }>(ALERTS.TEST, "POST");
     },
   });
 }

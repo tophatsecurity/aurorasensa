@@ -2,44 +2,69 @@
 import { supabase } from "@/integrations/supabase/client";
 import { auroraRequestQueue } from "./requestQueue";
 import { updateConnectionState } from "../useConnectionStatus";
+import { withQuery } from "./endpoints";
 
 // Enhanced retry configuration for edge function cold starts
-const MAX_RETRIES = 8; // More retries for cold starts
-const COLD_START_RETRIES = 6; // More quick retries specifically for boot errors
-const INITIAL_BACKOFF_MS = 150; // Start very short for cold starts
-const COLD_START_BACKOFF_MS = 100; // Even shorter for boot errors
+const MAX_RETRIES = 8;
+const COLD_START_RETRIES = 6;
+const INITIAL_BACKOFF_MS = 150;
+const COLD_START_BACKOFF_MS = 100;
 const MAX_BACKOFF_MS = 6000;
 
 // Track connection state globally
 let connectionHealthy = false;
 let consecutiveBootErrors = 0;
 
-// Helper to check if user has a valid Supabase session
+// =============================================
+// SESSION HELPERS
+// =============================================
+
 export function hasAuroraSession(): boolean {
-  // Check for Supabase session in local storage
   const storageKey = `sb-hewwtgcrupegpcwfujln-auth-token`;
   const stored = localStorage.getItem(storageKey);
   return !!stored;
 }
 
-// Helper to get current session token for API calls
 async function getSessionToken(): Promise<string | null> {
   const { data: { session } } = await supabase.auth.getSession();
   return session?.access_token || null;
 }
 
-// Helper to clear session on auth failure
 export function clearAuroraSession(): void {
-  // Supabase handles session clearing through signOut
   supabase.auth.signOut();
 }
 
-// Sleep helper
+// =============================================
+// API OPTIONS & TYPES
+// =============================================
+
+export interface AuroraApiOptions {
+  /** Filter by client ID */
+  clientId?: string | null;
+  /** Additional query parameters */
+  params?: Record<string, string | number | boolean | undefined | null>;
+  /** Skip caching for this request */
+  skipCache?: boolean;
+  /** Custom timeout in ms */
+  timeout?: number;
+}
+
+export type HttpMethod = 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE';
+
+interface AuroraProxyResponse {
+  error?: string;
+  detail?: string;
+  retryable?: boolean;
+}
+
+// =============================================
+// ERROR HANDLING
+// =============================================
+
 async function sleep(ms: number): Promise<void> {
   return new Promise(resolve => setTimeout(resolve, ms));
 }
 
-// Check if error is a cold-start/boot error
 function isBootError(error: Error | { code?: string; message?: string; context?: string }): boolean {
   const message = ('message' in error ? error.message : '').toLowerCase();
   const code = ('code' in error ? error.code : '').toLowerCase();
@@ -52,11 +77,9 @@ function isBootError(error: Error | { code?: string; message?: string; context?:
          (message.includes('503') && (message.includes('function') || message.includes('edge')));
 }
 
-// Check if error is retryable (includes edge function cold start errors)
 function isRetryableError(error: Error | { code?: string; message?: string }): boolean {
   const message = ('message' in error ? error.message : '').toLowerCase();
   
-  // Boot errors are always retryable
   if (isBootError(error)) return true;
   
   return message.includes('503') || 
@@ -76,45 +99,123 @@ function isRetryableError(error: Error | { code?: string; message?: string }): b
          message.includes('econnreset');
 }
 
-// Calculate backoff with jitter - shorter for cold starts
 function calculateBackoff(attempt: number, isColdStart: boolean = false): number {
   const initialDelay = isColdStart ? COLD_START_BACKOFF_MS : INITIAL_BACKOFF_MS;
-  const baseBackoff = initialDelay * Math.pow(1.8, attempt); // Gentler curve
-  const jitter = Math.random() * (isColdStart ? 100 : 300); // Less jitter for cold starts
+  const baseBackoff = initialDelay * Math.pow(1.8, attempt);
+  const jitter = Math.random() * (isColdStart ? 100 : 300);
   return Math.min(baseBackoff + jitter, MAX_BACKOFF_MS);
 }
 
-interface AuroraProxyResponse {
-  error?: string;
-}
+// =============================================
+// PATH BUILDING
+// =============================================
 
-// Options for API calls
-export interface AuroraApiOptions {
-  clientId?: string | null;
-}
-
-// Helper to append client_id to path if provided
-function appendClientIdToPath(path: string, clientId?: string | null): string {
-  if (!clientId || clientId === "all") return path;
+function buildFinalPath(path: string, options?: AuroraApiOptions): string {
+  const params: Record<string, string | number | boolean | undefined | null> = {
+    ...options?.params,
+  };
   
-  const separator = path.includes("?") ? "&" : "?";
-  return `${path}${separator}client_id=${encodeURIComponent(clientId)}`;
+  // Add client_id if provided and not "all"
+  if (options?.clientId && options.clientId !== 'all') {
+    params.client_id = options.clientId;
+  }
+  
+  // If path already has query params, merge them
+  if (path.includes('?')) {
+    const [basePath, existingQuery] = path.split('?');
+    const existingParams = new URLSearchParams(existingQuery);
+    existingParams.forEach((value, key) => {
+      if (params[key] === undefined) {
+        params[key] = value;
+      }
+    });
+    return withQuery(basePath, params);
+  }
+  
+  return withQuery(path, params);
 }
 
-// Core API call function with retry logic and request queuing
+// =============================================
+// EMPTY DATA FALLBACKS
+// =============================================
+
+function getEmptyDataForPath(path: string): unknown {
+  // Specific endpoint patterns that return wrapped objects
+  const wrappedPatterns: Record<string, unknown> = {
+    '/lora/devices': { devices: [] },
+    '/lora/detections': { detections: [] },
+    '/lora/spectrum': { frequencies: [], power_levels: [], noise_floor: 0, channel_activity: [] },
+    '/adsb/aircraft': { aircraft: [] },
+    '/adsb/devices': { devices: [] },
+    '/starlink/devices': { devices: [] },
+    '/alerts/rules': { rules: [] },
+    '/alerts/stats': { total: 0, active: 0, acknowledged: 0, resolved: 0, by_severity: {}, by_type: {}, last_24h: 0, last_hour: 0 },
+    '/clients/list': { clients: [], count: 0 },
+    '/clients/all-states': { clients_by_state: { pending: [], registered: [], adopted: [], disabled: [], suspended: [], deleted: [] }, statistics: { total: 0, by_state: {}, summary: { active: 0, needs_attention: 0, inactive: 0 } } },
+    '/clients/statistics': { total: 0, pending: 0, registered: 0, adopted: 0, disabled: 0, suspended: 0 },
+    '/batches/list': { batches: [], count: 0 },
+    '/batches/by-client': { batches: [], count: 0 },
+    '/batches/latest': null,
+    '/sensors/list': { sensors: [], count: 0 },
+    '/sensors/recent': { sensors: [], count: 0 },
+    '/readings/latest': { readings: [], data: [] },
+    '/stats/history': [],
+    '/stats/devices': { devices: [] },
+    '/stats/sensors': { sensor_types: [] },
+    '/stats/endpoints': { endpoints: [] },
+    '/system/arp': { entries: [] },
+    '/system/routing': { routes: [] },
+    '/system/interfaces': { interfaces: [] },
+    '/system/usb': { devices: [] },
+    '/audit/logs': { logs: [], count: 0 },
+    '/activity': { activities: [] },
+  };
+  
+  // Check specific patterns first
+  for (const [pattern, value] of Object.entries(wrappedPatterns)) {
+    if (path.includes(pattern)) {
+      return value;
+    }
+  }
+  
+  // Check for list-type patterns
+  if (path.includes('/alerts/list') || path.match(/\/alerts(\?|$)/)) {
+    return { alerts: [], count: 0 };
+  }
+  
+  // Generic patterns
+  const listPatterns = ['/list', '/vessels', '/stations', '/beacons', '/aircraft', 
+    '/devices', '/active', '/readings', '/rules', '/profiles', '/violations', 
+    '/baselines', '/clients', '/sensors', '/alerts', '/channels'];
+  
+  for (const pattern of listPatterns) {
+    if (path.includes(pattern)) {
+      return [];
+    }
+  }
+  
+  if (path.includes('/stats') || path.includes('/statistics') || path.includes('/overview')) {
+    return {};
+  }
+  
+  return null;
+}
+
+// =============================================
+// CORE API CALL
+// =============================================
+
 export async function callAuroraApi<T>(
   path: string, 
-  method: string = "GET", 
+  method: HttpMethod = 'GET', 
   body?: unknown,
   options?: AuroraApiOptions
 ): Promise<T> {
-  // Append client_id to path if provided
-  const finalPath = appendClientIdToPath(path, options?.clientId);
-  // Get the current Supabase session token
+  const finalPath = buildFinalPath(path, options);
   const sessionToken = await getSessionToken();
   
   // Check cache first for GET requests
-  if (method === 'GET') {
+  if (method === 'GET' && !options?.skipCache) {
     const cached = auroraRequestQueue.getCached<T>(finalPath, method);
     if (cached !== null) {
       return cached;
@@ -139,21 +240,18 @@ export async function callAuroraApi<T>(
 
         if (error) {
           const errorMessage = error.message?.toLowerCase() || '';
-          const errorContext = (error as any).context?.toLowerCase?.() || '';
+          const errorContext = (error as { context?: string }).context?.toLowerCase?.() || '';
           const fullError = `${error.message} ${errorContext}`;
           
-          // Check for BOOT_ERROR specifically (cold start failures)
           const isColdStartError = isBootError(error);
           
           if (isColdStartError) {
             coldStartRetries++;
             consecutiveBootErrors++;
             
-            // Update global connection state to warming up
             updateConnectionState('warming_up', coldStartRetries, COLD_START_RETRIES);
             
             if (coldStartRetries <= COLD_START_RETRIES) {
-              // Use shorter backoff for cold starts - function just needs time to boot
               const backoffMs = calculateBackoff(coldStartRetries - 1, true);
               console.log(`⏳ Edge function warming up for ${path}, retry ${coldStartRetries}/${COLD_START_RETRIES} in ${backoffMs}ms`);
               await sleep(backoffMs);
@@ -161,16 +259,13 @@ export async function callAuroraApi<T>(
               continue;
             }
             
-            // If we've exhausted boot retries, return empty data gracefully instead of throwing
             console.warn(`⚠️ Edge function failed to boot after ${COLD_START_RETRIES} retries for ${path}, returning empty data`);
             updateConnectionState('degraded');
             return getEmptyDataForPath(path) as T;
           }
           
-          // Reset boot error counter on non-boot errors
           consecutiveBootErrors = 0;
           
-          // Check if error message indicates a 500/503 from edge function or Aurora
           if (errorMessage.includes('500') || errorMessage.includes('503') || 
               errorMessage.includes('internal server error') || errorMessage.includes('boot_error')) {
             console.warn(`Server error for ${path}, returning empty data`);
@@ -186,16 +281,15 @@ export async function callAuroraApi<T>(
             continue;
           }
           
-          // For final failure, return empty data instead of throwing to prevent UI crashes
           console.error(`Aurora API error for ${path} after retries:`, error.message);
           return getEmptyDataForPath(path) as T;
         }
 
+        // Handle detail errors from Aurora
         if (data && typeof data === 'object' && 'detail' in data) {
           const detailStr = String(data.detail);
           const detailLower = detailStr.toLowerCase();
           
-          // Check for transient Aurora backend errors - return empty data instead of throwing
           const isTransientServerError = 
             detailLower.includes('sanic') ||
             detailLower.includes('blueprint') ||
@@ -215,32 +309,28 @@ export async function callAuroraApi<T>(
                              detailLower.includes('aurora api authentication');
           
           if (isAuthError) {
-            // Aurora 401 errors mean the Aurora API needs auth, but our Supabase session is still valid
-            // Return empty data instead of clearing the session
             console.warn(`Aurora API auth error for ${path}: ${detailStr}, returning empty data`);
             return getEmptyDataForPath(path) as T;
           }
           
           const isNotFoundError = detailLower.includes('not found') || 
-                                  detailLower.includes('no ') && detailLower.includes('found');
+                                  (detailLower.includes('no ') && detailLower.includes('found'));
           if (!isNotFoundError) {
             console.error(`Aurora backend error for ${path}:`, data.detail);
           }
           const error = new Error(detailStr);
-          (error as any).status = isNotFoundError ? 404 : 400;
+          (error as { status?: number }).status = isNotFoundError ? 404 : 400;
           throw error;
         }
 
         if ((data as AuroraProxyResponse)?.error) {
-          // Handle retryable errors gracefully - return empty data instead of throwing
-          if ((data as any).retryable) {
+          if ((data as AuroraProxyResponse).retryable) {
             console.warn(`Retryable error for ${path}: ${(data as AuroraProxyResponse).error}, returning empty data`);
             return getEmptyDataForPath(path) as T;
           }
-          // Handle server errors gracefully - return empty data to prevent blank screens
-          if ((data as any).error?.includes('temporarily unavailable') || 
-              (data as any).error?.includes('timeout') ||
-              (data as any).error?.includes('Internal Server Error')) {
+          if ((data as AuroraProxyResponse).error?.includes('temporarily unavailable') || 
+              (data as AuroraProxyResponse).error?.includes('timeout') ||
+              (data as AuroraProxyResponse).error?.includes('Internal Server Error')) {
             console.warn(`Server error for ${path}, returning empty data`);
             return getEmptyDataForPath(path) as T;
           }
@@ -249,11 +339,11 @@ export async function callAuroraApi<T>(
         }
 
         // Cache successful GET responses
-        if (method === 'GET') {
+        if (method === 'GET' && !options?.skipCache) {
           auroraRequestQueue.setCache(finalPath, method, data);
         }
 
-        // Mark connection as healthy on success and reset boot error counter
+        // Mark connection as healthy
         consecutiveBootErrors = 0;
         if (!connectionHealthy) {
           connectionHealthy = true;
@@ -264,7 +354,6 @@ export async function callAuroraApi<T>(
       } catch (err) {
         const error = err instanceof Error ? err : new Error(String(err));
         
-        // If it's a timeout error, return empty data instead of throwing
         if (error.message.includes('timeout')) {
           console.warn(`Timeout for ${path}, returning empty data`);
           return getEmptyDataForPath(path) as T;
@@ -278,145 +367,41 @@ export async function callAuroraApi<T>(
           continue;
         }
         
-        // Return empty data instead of throwing to prevent UI crashes
         console.error(`Failed request for ${path}:`, error.message);
         return getEmptyDataForPath(path) as T;
       }
     }
     
-    // Return empty data instead of throwing after all retries exhausted
     console.warn(`All ${MAX_RETRIES} retries exhausted for ${path}, returning empty data`);
     return getEmptyDataForPath(path) as T;
   };
   
-  // Use request queue to limit concurrent requests
   return auroraRequestQueue.enqueue(finalPath, method, body, executor);
 }
 
-// Helper to return appropriate empty data based on endpoint path
-function getEmptyDataForPath(path: string): unknown {
-  // Specific endpoint patterns that return wrapped arrays
-  if (path.includes('/lora/devices')) {
-    return { devices: [] };
-  }
-  if (path.includes('/lora/detections')) {
-    return { detections: [] };
-  }
-  if (path.includes('/lora/channels')) {
-    return [];
-  }
-  if (path.includes('/lora/spectrum')) {
-    return { frequencies: [], power_levels: [], noise_floor: 0, channel_activity: [] };
-  }
-  if (path.includes('/adsb/aircraft')) {
-    return { aircraft: [] };
-  }
-  if (path.includes('/adsb/devices')) {
-    return { devices: [] };
-  }
-  if (path.includes('/starlink/devices')) {
-    return { devices: [] };
-  }
-  if (path.includes('/alerts/rules')) {
-    return { rules: [] };
-  }
-  if (path.includes('/alerts/list') || path.match(/\/alerts(\?|$)/)) {
-    return { alerts: [], count: 0 };
-  }
-  if (path.includes('/alerts/stats')) {
-    return { total: 0, active: 0, acknowledged: 0, resolved: 0, by_severity: {}, by_type: {}, last_24h: 0, last_hour: 0 };
-  }
-  if (path.includes('/clients/list') || path.includes('/clients/all-states')) {
-    return { clients: [], count: 0 };
-  }
-  if (path.includes('/clients/statistics')) {
-    return { total: 0, pending: 0, registered: 0, adopted: 0, disabled: 0, suspended: 0 };
-  }
-  if (path.includes('/batches/list')) {
-    return { batches: [], count: 0 };
-  }
-  if (path.includes('/batches/by-client')) {
-    return { batches: [], count: 0 };
-  }
-  if (path.includes('/batches/latest')) {
-    return null;
-  }
-  if (path.includes('/sensors/list') || path.includes('/sensors/recent')) {
-    return { sensors: [], count: 0 };
-  }
-  if (path.includes('/readings/latest')) {
-    return { readings: [], data: [] };
-  }
-  if (path.includes('/stats/history')) {
-    return [];
-  }
-  if (path.includes('/stats/devices')) {
-    return { devices: [] };
-  }
-  if (path.includes('/stats/sensors')) {
-    return { sensor_types: [] };
-  }
-  if (path.includes('/stats/endpoints')) {
-    return { endpoints: [] };
-  }
-  if (path.includes('/system/arp')) {
-    return { entries: [] };
-  }
-  if (path.includes('/system/routing')) {
-    return { routes: [] };
-  }
-  if (path.includes('/system/interfaces')) {
-    return { interfaces: [] };
-  }
-  if (path.includes('/system/usb')) {
-    return { devices: [] };
-  }
-  if (path.includes('/audit/logs')) {
-    return { logs: [], count: 0 };
-  }
-  if (path.includes('/activity')) {
-    return { activities: [] };
-  }
-  
-  // Generic patterns - check last as fallback
-  if (path.includes('/list') || path.includes('/vessels') || path.includes('/stations') || 
-      path.includes('/beacons') || path.includes('/aircraft') || path.includes('/devices') ||
-      path.includes('/active') || path.includes('/readings') || path.includes('/rules') ||
-      path.includes('/profiles') || path.includes('/violations') || path.includes('/baselines') ||
-      path.includes('/clients') || path.includes('/sensors') || path.includes('/alerts')) {
-    return [];
-  }
-  if (path.includes('/stats') || path.includes('/statistics') || path.includes('/overview')) {
-    return {};
-  }
-  return null;
-}
+// =============================================
+// QUERY OPTIONS PRESETS
+// =============================================
 
-// Retry delay function for react-query with exponential backoff
-// Uses shorter delays for initial retries (likely cold starts)
 const retryDelay = (attemptIndex: number) => {
-  // First 2 retries are quick (cold start recovery)
   if (attemptIndex < 2) {
     return 200 + Math.random() * 100;
   }
-  // Then exponential backoff
   const baseDelay = 500 * Math.pow(1.8, attemptIndex - 2);
   const jitter = Math.random() * 300;
   return Math.min(baseDelay + jitter, 10000);
 };
 
-// Default query options - with enhanced retry for cold starts
 export const defaultQueryOptions = {
   enabled: true,
-  staleTime: 120000, // 2 minutes - data stays fresh longer
-  refetchInterval: 180000, // 3 minutes - less frequent refetching
-  retry: 8, // More retries for cold starts
+  staleTime: 120000, // 2 minutes
+  refetchInterval: 180000, // 3 minutes
+  retry: 8,
   retryDelay,
   refetchOnWindowFocus: false,
-  throwOnError: false, // Don't throw errors - we handle them gracefully
+  throwOnError: false,
 };
 
-// Fast polling options (for real-time data)
 export const fastQueryOptions = {
   enabled: true,
   staleTime: 60000, // 1 minute
@@ -427,7 +412,6 @@ export const fastQueryOptions = {
   throwOnError: false,
 };
 
-// Slow polling options (for rarely changing data)
 export const slowQueryOptions = {
   enabled: true,
   staleTime: 300000, // 5 minutes
@@ -438,12 +422,14 @@ export const slowQueryOptions = {
   throwOnError: false,
 };
 
-// Export cache invalidation for manual cache clearing
+// =============================================
+// CACHE UTILITIES
+// =============================================
+
 export function invalidateAuroraCache(pathPattern?: string): void {
   auroraRequestQueue.invalidateCache(pathPattern);
 }
 
-// Export queue stats for debugging
 export function getAuroraQueueStats() {
   return auroraRequestQueue.getStats();
 }
