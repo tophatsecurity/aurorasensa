@@ -174,12 +174,8 @@ export function useClientsByState() {
         // Fetch clients by state
         const response = await callAuroraApi<ClientsByStateResponse>(CLIENTS.ALL_STATES);
         
-        // Helper to enrich client array with hostnames
-        const enrichClients = (clients: Client[]) => 
-          clients.map(client => ({
-            ...client,
-            hostname: client.hostname || client.client_id,
-          }));
+        // API returns "states" but we normalize to "clients_by_state"
+        const statesData = response.states || response.clients_by_state;
         
         // Try to fetch batches to get hostnames - this is optional
         let hostnameMap = new Map<string, string>();
@@ -224,23 +220,22 @@ export function useClientsByState() {
           // Batches endpoint not available - continue without hostname enrichment
         }
         
-        // Updated enrichClients to use hostnameMap
+        // Enrich clients with hostnames
         const enrichClientsWithMap = (clients: Client[]) => 
           clients.map(client => ({
             ...client,
             hostname: hostnameMap.get(client.client_id) || client.hostname || client.client_id,
           }));
         
-        // Enrich all client arrays
+        // Normalize to clients_by_state structure
         return {
-          ...response,
           clients_by_state: {
-            pending: enrichClientsWithMap(response.clients_by_state?.pending || []),
-            registered: enrichClientsWithMap(response.clients_by_state?.registered || []),
-            adopted: enrichClientsWithMap(response.clients_by_state?.adopted || []),
-            disabled: enrichClientsWithMap(response.clients_by_state?.disabled || []),
-            suspended: enrichClientsWithMap(response.clients_by_state?.suspended || []),
-            deleted: enrichClientsWithMap(response.clients_by_state?.deleted || []),
+            pending: enrichClientsWithMap(statesData?.pending || []),
+            registered: enrichClientsWithMap(statesData?.registered || []),
+            adopted: enrichClientsWithMap(statesData?.adopted || []),
+            disabled: enrichClientsWithMap(statesData?.disabled || []),
+            suspended: enrichClientsWithMap(statesData?.suspended || []),
+            deleted: enrichClientsWithMap(statesData?.deleted || []),
           },
         };
       } catch {
