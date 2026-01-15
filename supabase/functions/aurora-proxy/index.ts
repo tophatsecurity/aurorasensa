@@ -70,6 +70,75 @@ function getEmptyDataForPath(apiPath: string): unknown {
   return null;
 }
 
+// OAuth2 login endpoints to try in order
+const LOGIN_ENDPOINTS = ['/token', '/api/token', '/api/auth/login', '/api/login'];
+
+async function tryLoginEndpoints(
+  username: string, 
+  password: string
+): Promise<{ data?: unknown; error?: string; status: number }> {
+  // Try OAuth2 form-urlencoded format (FastAPI standard)
+  const formBody = new URLSearchParams();
+  formBody.append('username', username);
+  formBody.append('password', password);
+  formBody.append('grant_type', 'password');
+  
+  for (const endpoint of LOGIN_ENDPOINTS) {
+    const url = `${AURORA_ENDPOINT}${endpoint}`;
+    console.log(`Trying login endpoint: ${url}`);
+    
+    try {
+      const response = await fetchWithTimeout(url, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/x-www-form-urlencoded',
+        },
+        body: formBody.toString(),
+      });
+      
+      if (response.ok) {
+        const data = await response.json();
+        console.log(`Login successful via ${endpoint}`);
+        return { data, status: response.status };
+      }
+      
+      if (response.status === 401 || response.status === 403) {
+        const text = await response.text();
+        console.log(`Auth failed at ${endpoint}: ${text}`);
+        return { error: 'Invalid credentials', status: response.status };
+      }
+      
+      if (response.status === 422) {
+        // Validation error - try JSON format instead
+        console.log(`${endpoint} returned 422, trying JSON format...`);
+        const jsonResponse = await fetchWithTimeout(url, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ username, password }),
+        });
+        
+        if (jsonResponse.ok) {
+          const data = await jsonResponse.json();
+          console.log(`Login successful via ${endpoint} (JSON format)`);
+          return { data, status: jsonResponse.status };
+        }
+        
+        if (jsonResponse.status === 401 || jsonResponse.status === 403) {
+          const text = await jsonResponse.text();
+          console.log(`Auth failed at ${endpoint} (JSON): ${text}`);
+          return { error: 'Invalid credentials', status: jsonResponse.status };
+        }
+      }
+      
+      console.log(`${endpoint} returned ${response.status}, trying next...`);
+    } catch (err) {
+      console.log(`${endpoint} failed: ${err instanceof Error ? err.message : String(err)}`);
+    }
+  }
+  
+  return { error: 'Login endpoint not available. Please check server configuration.', status: 503 };
+}
+
 Deno.serve(async (req) => {
   // Handle CORS preflight
   if (req.method === 'OPTIONS') {
@@ -87,12 +156,42 @@ Deno.serve(async (req) => {
       });
     }
     
-    const url = `${AURORA_ENDPOINT}${path}`;
-    const isLoginEndpoint = path === '/api/login' || path === '/api/auth/login';
+    const isLoginEndpoint = path === '/api/login' || path === '/api/auth/login' || path === '/token' || path === '/api/token';
     const isLogoutEndpoint = path === '/api/logout' || path === '/api/auth/logout';
     const isHealthEndpoint = path === '/api/health' || path === '/health';
-    const isPublicEndpoint = isLoginEndpoint || isLogoutEndpoint || isHealthEndpoint;
     
+    // Special handling for login - try multiple endpoints with OAuth2 format
+    if (isLoginEndpoint && method === 'POST' && requestBody) {
+      const username = requestBody.username || requestBody.email || requestBody.identifier;
+      const password = requestBody.password;
+      
+      if (!username || !password) {
+        return new Response(JSON.stringify({ error: 'Username and password required' }), {
+          status: 400,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
+      
+      const result = await tryLoginEndpoints(username, password);
+      
+      if (result.data) {
+        console.log('Login successful, returning token data');
+        return new Response(JSON.stringify(result.data), {
+          status: 200,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
+      
+      return new Response(JSON.stringify({ 
+        detail: result.error || 'Login failed',
+        error: result.error || 'Login failed'
+      }), {
+        status: result.status === 401 || result.status === 403 ? 401 : 503,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+    
+    const url = `${AURORA_ENDPOINT}${path}`;
     console.log(`Proxy ${method}: ${url}${auroraToken ? ' (with Aurora token)' : ' (no token)'}`);
 
     // Prepare headers for Aurora API
@@ -109,9 +208,6 @@ Deno.serve(async (req) => {
     let bodyContent: string | undefined;
     if (requestBody && method !== 'GET') {
       bodyContent = JSON.stringify(requestBody);
-      if (isLoginEndpoint) {
-        console.log('Login request using JSON format');
-      }
     }
 
     let response: Response;
@@ -150,7 +246,7 @@ Deno.serve(async (req) => {
       const responseText = await response.text();
       console.error(`Aurora server error (500) for ${path}: ${responseText}`);
       
-      if (!isLoginEndpoint && method === 'GET') {
+      if (method === 'GET') {
         const emptyData = getEmptyDataForPath(path);
         if (emptyData !== null) {
           console.log(`Returning empty data for ${path} due to server error`);
@@ -172,12 +268,20 @@ Deno.serve(async (req) => {
       });
     }
     
-    // Handle 404 errors gracefully
+    // Handle 404 errors gracefully - return empty data for GET requests
     if (response.status === 404) {
-      console.log(`Endpoint not found (404): ${path} - returning empty data`);
-      const emptyData = getEmptyDataForPath(path);
-      return new Response(JSON.stringify(emptyData), {
-        status: 200,
+      console.log(`Endpoint not found (404): ${path}`);
+      if (method === 'GET') {
+        const emptyData = getEmptyDataForPath(path);
+        console.log(`Returning empty data for ${path}`);
+        return new Response(JSON.stringify(emptyData), {
+          status: 200,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
+      // For non-GET, return the 404
+      return new Response(JSON.stringify({ error: 'Endpoint not found', path }), {
+        status: 404,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
     }
@@ -196,7 +300,7 @@ Deno.serve(async (req) => {
     
     // Handle 501 Not Implemented
     if (response.status === 501) {
-      console.log(`Endpoint not implemented (501): ${path} - returning empty data`);
+      console.log(`Endpoint not implemented (501): ${path}`);
       const emptyData = getEmptyDataForPath(path);
       return new Response(JSON.stringify(emptyData), {
         status: 200,
@@ -228,21 +332,7 @@ Deno.serve(async (req) => {
     }
     
     // Get response text
-    let responseText = await response.text();
-    
-    // Handle login response - capture access_token
-    if (isLoginEndpoint && response.ok) {
-      console.log('Login response received, status:', response.status);
-      try {
-        const parsed = JSON.parse(responseText);
-        if (parsed.access_token) {
-          console.log('OAuth2 access_token captured for Aurora auth');
-        }
-        responseText = JSON.stringify(parsed);
-      } catch {
-        console.log('Login response not JSON, keeping original');
-      }
-    }
+    const responseText = await response.text();
     
     return new Response(responseText, {
       status: response.status,
