@@ -4,7 +4,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
 import { Button } from "@/components/ui/button";
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, AreaChart, Area, BarChart, Bar, Legend, PieChart, Pie, Cell } from "recharts";
-import { useDashboardTimeseries, useComprehensiveStats, useStarlinkPower, useAllSensorStats, useSensorStatsHistory, useDeviceStatsHistory, useSensorTypeStats, StarlinkPowerDeviceSummary } from "@/hooks/useAuroraApi";
+import { useDashboardTimeseries, useComprehensiveStats, useStarlinkPower, useAllSensorStats, useSensorStatsHistory, useDeviceStatsHistory, useSensorTypeStatsById, StarlinkPowerDeviceSummary } from "@/hooks/aurora";
 import { useQueryClient } from "@tanstack/react-query";
 import { format } from "date-fns";
 import { ContextFilters } from "@/components/ui/context-selectors";
@@ -63,7 +63,7 @@ const PowerContent = () => {
   const { data: allSensorStats, isLoading: sensorStatsLoading } = useAllSensorStats();
   const { data: sensorHistory, isLoading: sensorHistoryLoading } = useSensorStatsHistory(periodHours);
   const { data: deviceHistory, isLoading: deviceHistoryLoading } = useDeviceStatsHistory(periodHours);
-  const { data: systemMonitorStats } = useSensorTypeStats("system_monitor");
+  const { data: systemMonitorStats } = useSensorTypeStatsById("system_monitor");
 
   const isLoading = statsLoading || timeseriesLoading || starlinkPowerLoading || sensorStatsLoading || sensorHistoryLoading || deviceHistoryLoading;
 

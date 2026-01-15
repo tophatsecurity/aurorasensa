@@ -333,6 +333,45 @@ export function useWeeklyStats(clientId?: string | null) {
   });
 }
 
+export interface TimePeriodStats {
+  period?: string;
+  readings?: number;
+  devices?: number;
+  clients?: number;
+  start_time?: string;
+  end_time?: string;
+  averages?: {
+    temperature_c?: number;
+    humidity?: number;
+    power_w?: number;
+    signal_dbm?: number;
+  };
+  totals?: {
+    readings?: number;
+    devices?: number;
+    alerts?: number;
+  };
+}
+
+export interface SensorTypeStats {
+  device_type: string;
+  count: number;
+  device_count: number;
+  total_readings: number;
+  readings_last_hour?: number;
+  readings_last_24h?: number;
+  numeric_field_stats_24h: Record<string, {
+    min?: number;
+    max?: number;
+    avg?: number;
+    count?: number;
+    sample_count?: number;
+  }>;
+  first_seen?: string;
+  last_seen?: string;
+  avg_value?: number;
+}
+
 export function usePeriodStats(period: string, clientId?: string | null) {
   return useQuery({
     queryKey: ["aurora", "stats", "period", period, clientId],
@@ -341,6 +380,77 @@ export function usePeriodStats(period: string, clientId?: string | null) {
     staleTime: 60000,
     refetchInterval: 120000,
     retry: 1,
+  });
+}
+
+// Dynamic period stats hook based on hours
+export function usePeriodStatsByHours(hours: number, clientId?: string | null) {
+  const periodKey = hours <= 1 ? '1hr' : hours <= 6 ? '6hr' : hours <= 24 ? '24hr' : 'weekly';
+  
+  return useQuery({
+    queryKey: ["aurora", "stats", "period", periodKey, clientId],
+    queryFn: () => callAuroraApi<TimePeriodStats>(`/api/stats/${periodKey}`, "GET", undefined, { clientId }),
+    enabled: hasAuroraSession(),
+    staleTime: 60000,
+    refetchInterval: hours <= 1 ? 30000 : hours <= 6 ? 60000 : 120000,
+    retry: 1,
+  });
+}
+
+export function useSensorTypeStatsById(sensorType: string, clientId?: string | null) {
+  return useQuery({
+    queryKey: ["aurora", "stats", "sensors", sensorType, clientId],
+    queryFn: async () => {
+      try {
+        return await callAuroraApi<SensorTypeStats>(STATS.SENSOR_TYPE(sensorType), "GET", undefined, { clientId });
+      } catch {
+        return {
+          device_type: sensorType,
+          count: 0,
+          device_count: 0,
+          total_readings: 0,
+          numeric_field_stats_24h: {},
+        } as SensorTypeStats;
+      }
+    },
+    enabled: hasAuroraSession() && !!sensorType,
+    staleTime: 60000,
+    refetchInterval: 120000,
+    retry: 0,
+  });
+}
+
+export function useSensorTypeStatsWithPeriod(sensorType: string, hours: number = 24, clientId?: string | null) {
+  return useQuery({
+    queryKey: ["aurora", "stats", "sensors", sensorType, hours, clientId],
+    queryFn: async () => {
+      try {
+        // Try with hours parameter first
+        return await callAuroraApi<SensorTypeStats>(
+          STATS.SENSOR_TYPE(sensorType), 
+          "GET", 
+          undefined, 
+          { clientId, params: { hours } }
+        );
+      } catch {
+        // Fallback without hours
+        try {
+          return await callAuroraApi<SensorTypeStats>(STATS.SENSOR_TYPE(sensorType), "GET", undefined, { clientId });
+        } catch {
+          return {
+            device_type: sensorType,
+            count: 0,
+            device_count: 0,
+            total_readings: 0,
+            numeric_field_stats_24h: {},
+          } as SensorTypeStats;
+        }
+      }
+    },
+    enabled: hasAuroraSession() && !!sensorType,
+    staleTime: 60000,
+    refetchInterval: 120000,
+    retry: 0,
   });
 }
 

@@ -18,8 +18,6 @@ export {
   useLatestReadings,
   useSensorReadings,
   useAllSensorStats,
-  useSensorTypeStats,
-  useSensorTypeStatsWithPeriod,
   useAddSensor,
   useUpdateSensor,
   useDeleteSensor,
@@ -264,6 +262,9 @@ export {
   use24hrStats,
   useWeeklyStats,
   usePeriodStats,
+  usePeriodStatsByHours,
+  useSensorTypeStatsById,
+  useSensorTypeStatsWithPeriod,
   useAircraftStats,
   useEndpointStats,
   usePowerStats,
@@ -276,6 +277,8 @@ export {
   useAlertStatsHistory,
   useSystemResourceStatsHistory,
   type ClientStats,
+  type TimePeriodStats,
+  type SensorTypeStats,
 } from "./stats";
 
 // Client-specific sensor data hooks
@@ -403,4 +406,10 @@ export {
   usePingStatsFile,
   // Analytics
   useMovingAverage,
+  // Radio timeseries
+  useWifiScannerTimeseries,
+  useBluetoothScannerTimeseries,
+  useLoraDetectorTimeseries,
+  // LoRa
+  useRecentLoraDetections,
 } from "../useAuroraApi";
