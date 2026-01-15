@@ -8,3 +8,4 @@ export { MaritimeSection } from './MaritimeSection';
 export { default as DashboardStatsHeader } from './DashboardStatsHeader';
 export { default as DashboardSensorSummary } from './DashboardSensorSummary';
 export { default as DashboardDeviceActivity } from './DashboardDeviceActivity';
+export { default as WeeklyTrendChart } from './WeeklyTrendChart';
