@@ -38,9 +38,6 @@ import { Loader2 } from "lucide-react";
 
 const Index = () => {
   const [activeItem, setActiveItem] = useState("dashboard");
-  
-  // Monitor EPIRB alerts and show toast notifications for new distress signals
-  useEpirbAlertNotifications();
   const { user, loading, signIn, signUp, serverStatus } = useAuroraAuthContext();
 
   // Show loading spinner while checking auth/session validity
@@ -73,6 +70,15 @@ const Index = () => {
       />
     );
   }
+
+  // Render authenticated dashboard
+  return <AuthenticatedDashboard activeItem={activeItem} onNavigate={setActiveItem} />;
+};
+
+// Separate component for authenticated users - hooks only run when logged in
+function AuthenticatedDashboard({ activeItem, onNavigate }: { activeItem: string; onNavigate: (item: string) => void }) {
+  // Monitor EPIRB alerts and show toast notifications for new distress signals
+  useEpirbAlertNotifications();
 
   const renderContent = () => {
     switch (activeItem) {
@@ -150,7 +156,7 @@ const Index = () => {
   return (
     <div className="h-screen flex relative overflow-hidden">
       <AuroraBackground />
-      <Sidebar activeItem={activeItem} onNavigate={setActiveItem} />
+      <Sidebar activeItem={activeItem} onNavigate={onNavigate} />
       <main className="flex-1 relative z-10 flex flex-col h-full overflow-hidden">
         {renderContent()}
       </main>
