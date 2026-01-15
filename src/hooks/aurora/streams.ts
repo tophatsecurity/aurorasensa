@@ -18,22 +18,8 @@
 // NOTE: These are SSE (Server-Sent Events) endpoints, not regular REST endpoints.
 // Use the useSSE hook from useSSE.ts for connecting to these streams.
 
-// Export stream endpoint constants for use with SSE hooks
-export const STREAM_ENDPOINTS = {
-  READINGS: '/api/stream/readings',
-  COMMAND_STATUS: (commandId: string) => `/api/stream/commands/${commandId}/status`,
-  CLIENTS: '/api/stream/clients',
-  ALERTS: '/api/stream/alerts',
-  DASHBOARD_STATS: '/api/stream/dashboard/stats',
-  STARLINK: '/api/stream/readings/starlink',
-  THERMAL_PROBE: '/api/stream/readings/thermal_probe',
-  ADSB: '/api/stream/readings/adsb',
-  ARDUINO: '/api/stream/readings/arduino',
-  GPS: '/api/stream/readings/gps',
-  POWER: '/api/stream/readings/power',
-  SYSTEM_MONITOR: '/api/stream/readings/system_monitor',
-  RADIO: '/api/stream/readings/radio',
-} as const;
+// Re-export STREAMS from centralized endpoints for backward compatibility
+export { STREAMS as STREAM_ENDPOINTS } from "./endpoints";
 
 // Type definitions for stream messages
 export interface StreamReadingMessage {

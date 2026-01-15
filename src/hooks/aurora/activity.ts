@@ -6,6 +6,7 @@
 
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { callAuroraApi, hasAuroraSession, defaultQueryOptions } from "./core";
+import { ACTIVITY, USERS, withQuery } from "./endpoints";
 
 // =============================================
 // TYPES
@@ -53,7 +54,9 @@ export interface ApiKey {
 export function useActivityFeed(limit: number = 50) {
   return useQuery({
     queryKey: ["aurora", "activity", limit],
-    queryFn: () => callAuroraApi<{ entries: ActivityEntry[] }>(`/api/activity?limit=${limit}`),
+    queryFn: () => callAuroraApi<{ entries: ActivityEntry[] }>(
+      withQuery(ACTIVITY.FEED, { limit })
+    ),
     enabled: hasAuroraSession(),
     ...defaultQueryOptions,
   });
@@ -62,7 +65,9 @@ export function useActivityFeed(limit: number = 50) {
 export function useUserActivity(userId: string, limit: number = 50) {
   return useQuery({
     queryKey: ["aurora", "users", userId, "activity", limit],
-    queryFn: () => callAuroraApi<{ entries: ActivityEntry[] }>(`/api/users/${userId}/activity?limit=${limit}`),
+    queryFn: () => callAuroraApi<{ entries: ActivityEntry[] }>(
+      withQuery(USERS.ACTIVITY(userId), { limit })
+    ),
     enabled: hasAuroraSession() && !!userId,
     ...defaultQueryOptions,
   });
@@ -75,7 +80,7 @@ export function useUserActivity(userId: string, limit: number = 50) {
 export function useUserSessions(userId: string) {
   return useQuery({
     queryKey: ["aurora", "users", userId, "sessions"],
-    queryFn: () => callAuroraApi<{ sessions: UserSession[] }>(`/api/users/${userId}/sessions`),
+    queryFn: () => callAuroraApi<{ sessions: UserSession[] }>(USERS.SESSIONS(userId)),
     enabled: hasAuroraSession() && !!userId,
     ...defaultQueryOptions,
   });
@@ -88,7 +93,7 @@ export function useUserSessions(userId: string) {
 export function useUserApiKeys(userId: string) {
   return useQuery({
     queryKey: ["aurora", "users", userId, "api-keys"],
-    queryFn: () => callAuroraApi<{ keys: ApiKey[] }>(`/api/users/${userId}/api-keys`),
+    queryFn: () => callAuroraApi<{ keys: ApiKey[] }>(USERS.API_KEYS(userId)),
     enabled: hasAuroraSession() && !!userId,
     ...defaultQueryOptions,
   });
@@ -105,7 +110,7 @@ export function useCreateApiKey() {
       expiresAt?: string;
       permissions?: string[];
     }) => {
-      return callAuroraApi<{ key: string; id: string }>(`/api/users/${userId}/api-keys`, "POST", {
+      return callAuroraApi<{ key: string; id: string }>(USERS.API_KEYS(userId), "POST", {
         name,
         description,
         expires_at: expiresAt,
@@ -123,7 +128,7 @@ export function useDeleteApiKey() {
   
   return useMutation({
     mutationFn: async ({ userId, keyId }: { userId: string; keyId: string }) => {
-      return callAuroraApi<{ success: boolean }>(`/api/users/${userId}/api-keys/${keyId}`, "DELETE");
+      return callAuroraApi<{ success: boolean }>(USERS.DELETE_API_KEY(userId, keyId), "DELETE");
     },
     onSuccess: (_, variables) => {
       queryClient.invalidateQueries({ queryKey: ["aurora", "users", variables.userId, "api-keys"] });
