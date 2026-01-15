@@ -11,6 +11,7 @@ import {
 
 interface DashboardDeviceActivityProps {
   periodHours?: number;
+  clientId?: string | null;
 }
 
 const formatNumber = (num: number | undefined | null): string => {
@@ -20,11 +21,16 @@ const formatNumber = (num: number | undefined | null): string => {
   return num.toLocaleString();
 };
 
-const DashboardDeviceActivity = ({ periodHours = 24 }: DashboardDeviceActivityProps) => {
-  const { data: stats, isLoading: statsLoading } = useComprehensiveStats();
-  const { data: clientStats, isLoading: clientStatsLoading } = useStatsByClient({ hours: periodHours });
-  const { data: stats1h, isLoading: stats1hLoading } = use1hrStats();
-  const { data: stats24h, isLoading: stats24hLoading } = use24hrStats();
+const DashboardDeviceActivity = ({ periodHours = 24, clientId }: DashboardDeviceActivityProps) => {
+  const effectiveClientId = clientId === "all" ? undefined : clientId;
+  
+  const { data: stats, isLoading: statsLoading } = useComprehensiveStats(effectiveClientId);
+  const { data: clientStats, isLoading: clientStatsLoading } = useStatsByClient({ 
+    hours: periodHours,
+    clientId: effectiveClientId 
+  });
+  const { data: stats1h, isLoading: stats1hLoading } = use1hrStats(effectiveClientId);
+  const { data: stats24h, isLoading: stats24hLoading } = use24hrStats(effectiveClientId);
   const { data: statsOverview, isLoading: overviewLoading } = useStatsOverview();
 
   const global = stats?.global;

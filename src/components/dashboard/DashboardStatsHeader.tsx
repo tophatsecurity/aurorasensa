@@ -1,5 +1,5 @@
 import { useMemo } from "react";
-import { Server, Database, Radio, Loader2, Users, Cpu } from "lucide-react";
+import { Server, Database, Radio } from "lucide-react";
 import StatCardWithChart from "../StatCardWithChart";
 import {
   useComprehensiveStats,
@@ -10,17 +10,29 @@ import {
   useClients,
   useClientsByState,
   type Client,
+  type ClientGroupedStats,
+  type SensorGroupedStats,
 } from "@/hooks/aurora";
 
 interface DashboardStatsHeaderProps {
   periodHours?: number;
+  clientId?: string | null;
 }
 
-const DashboardStatsHeader = ({ periodHours = 24 }: DashboardStatsHeaderProps) => {
-  const { data: stats, isLoading: statsLoading } = useComprehensiveStats();
+const DashboardStatsHeader = ({ periodHours = 24, clientId }: DashboardStatsHeaderProps) => {
+  // Pass clientId to API calls for filtering
+  const effectiveClientId = clientId === "all" ? undefined : clientId;
+  
+  const { data: stats, isLoading: statsLoading } = useComprehensiveStats(effectiveClientId);
   const { data: statsOverview, isLoading: overviewLoading } = useStatsOverview();
-  const { data: clientStats, isLoading: clientStatsLoading } = useStatsByClient({ hours: periodHours });
-  const { data: sensorStats, isLoading: sensorStatsLoading } = useStatsBySensor({ hours: periodHours });
+  const { data: clientStats, isLoading: clientStatsLoading } = useStatsByClient({ 
+    hours: periodHours,
+    clientId: effectiveClientId 
+  });
+  const { data: sensorStats, isLoading: sensorStatsLoading } = useStatsBySensor({ 
+    hours: periodHours,
+    clientId: effectiveClientId 
+  });
   const { data: deviceTree, isLoading: deviceTreeLoading } = useDeviceTree();
   const { data: clients, isLoading: clientsLoading } = useClients();
   const { data: clientsByState } = useClientsByState();
@@ -40,32 +52,35 @@ const DashboardStatsHeader = ({ periodHours = 24 }: DashboardStatsHeaderProps) =
   const activeClients = useMemo(() => {
     if (allClientsFromState.length > 0) {
       return allClientsFromState.filter((c: Client) => 
-        !['deleted', 'disabled', 'suspended'].includes(c.state || '')
+        !['deleted', 'disabled', 'suspended'].includes(c.state ?? '')
       );
     }
-    return (clients || []).filter((c: Client) => 
-      !['deleted', 'disabled', 'suspended'].includes(c.state || '')
+    return (clients ?? []).filter((c: Client) => 
+      !['deleted', 'disabled', 'suspended'].includes(c.state ?? '')
     );
   }, [allClientsFromState, clients]);
 
   // Total readings - use statsOverview, fallback to comprehensive stats
-  const totalReadings = statsOverview?.total_readings ?? global?.total_readings ?? global?.database?.total_readings ?? 0;
+  const totalReadings = statsOverview?.total_readings 
+    ?? global?.total_readings 
+    ?? global?.database?.total_readings 
+    ?? 0;
   
   // Client count - prefer new grouped stats
-  const totalClients = clientStats?.total ?? 
-    global?.total_clients ?? 
-    global?.database?.total_clients ?? 
-    activeClients.length;
+  const totalClients = clientStats?.total 
+    ?? global?.total_clients 
+    ?? global?.database?.total_clients 
+    ?? activeClients.length;
 
   // Sensor types count - prefer new grouped stats
   const sensorTypesFromStats = global?.sensor_types_count ?? (global?.device_breakdown?.length ?? 0);
-  const totalSensorTypes = sensorStats?.total ?? 
-    (sensorTypesFromStats > 0 ? sensorTypesFromStats : (sensorsSummary?.total_sensor_types ?? 0));
+  const totalSensorTypes = sensorStats?.total 
+    ?? (sensorTypesFromStats > 0 ? sensorTypesFromStats : (sensorsSummary?.total_sensor_types ?? 0));
 
   // Total devices
   const devicesFromTree = Array.isArray(deviceTree) ? deviceTree.length : 0;
-  const totalDevices = global?.total_devices ?? 
-    (devicesFromTree > 0 ? devicesFromTree : (devicesSummary?.total_devices ?? 0));
+  const totalDevices = global?.total_devices 
+    ?? (devicesFromTree > 0 ? devicesFromTree : (devicesSummary?.total_devices ?? 0));
 
   // Period-specific readings
   const activeDevices1h = global?.activity?.last_1_hour?.active_devices_1h ?? 0;
@@ -77,7 +92,7 @@ const DashboardStatsHeader = ({ periodHours = 24 }: DashboardStatsHeaderProps) =
     
     // Prefer new useStatsByClient data
     if (clientStats?.clients && clientStats.clients.length > 0) {
-      return clientStats.clients.slice(0, 6).map((c, idx) => ({
+      return clientStats.clients.slice(0, 6).map((c: ClientGroupedStats, idx: number) => ({
         device_id: c.client_id,
         device_type: 'client',
         color: colors[idx % colors.length],
@@ -87,12 +102,12 @@ const DashboardStatsHeader = ({ periodHours = 24 }: DashboardStatsHeaderProps) =
     }
     
     // Fallback to active clients
-    return activeClients.slice(0, 6).map((c, idx) => ({
+    return activeClients.slice(0, 6).map((c: Client, idx: number) => ({
       device_id: `${c.client_id}_${idx}`,
       device_type: 'client',
       color: colors[idx % colors.length],
       reading_count: (c.batches_received ?? 0) * 50,
-      status: c.status || 'active',
+      status: c.status ?? 'active',
     }));
   }, [clientStats?.clients, activeClients]);
 
@@ -102,7 +117,7 @@ const DashboardStatsHeader = ({ periodHours = 24 }: DashboardStatsHeaderProps) =
     
     // Prefer new useStatsBySensor data
     if (sensorStats?.sensors && sensorStats.sensors.length > 0) {
-      return sensorStats.sensors.slice(0, 6).map((s, idx) => ({
+      return sensorStats.sensors.slice(0, 6).map((s: SensorGroupedStats, idx: number) => ({
         device_id: s.sensor_type,
         device_type: s.sensor_type,
         color: colors[idx % colors.length],
@@ -112,7 +127,7 @@ const DashboardStatsHeader = ({ periodHours = 24 }: DashboardStatsHeaderProps) =
     }
     
     // Fallback to comprehensive stats sensor types
-    return (sensorsSummary?.sensor_types || []).slice(0, 6).map((s, idx) => ({
+    return (sensorsSummary?.sensor_types ?? []).slice(0, 6).map((s, idx: number) => ({
       device_id: s.device_type,
       device_type: s.device_type,
       color: colors[idx % colors.length],
@@ -124,7 +139,7 @@ const DashboardStatsHeader = ({ periodHours = 24 }: DashboardStatsHeaderProps) =
   // Prepare chart data for devices
   const deviceChartDevices = useMemo(() => {
     const colors = ['#8b5cf6', '#06b6d4', '#ef4444', '#84cc16', '#f59e0b', '#ec4899'];
-    return (devicesSummary?.devices || []).slice(0, 6).map((d, idx) => ({
+    return (devicesSummary?.devices ?? []).slice(0, 6).map((d, idx: number) => ({
       device_id: d.device_id,
       device_type: d.device_type,
       color: colors[idx % colors.length],

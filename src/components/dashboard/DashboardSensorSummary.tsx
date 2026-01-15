@@ -5,6 +5,7 @@ import { useStatsBySensor, useComprehensiveStats } from "@/hooks/aurora";
 
 interface DashboardSensorSummaryProps {
   periodHours?: number;
+  clientId?: string | null;
 }
 
 const SENSOR_COLORS: Record<string, string> = {
@@ -39,9 +40,14 @@ const formatSensorName = (sensorType: string): string => {
   return sensorType.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
 };
 
-const DashboardSensorSummary = ({ periodHours = 24 }: DashboardSensorSummaryProps) => {
-  const { data: sensorStats, isLoading: sensorStatsLoading } = useStatsBySensor({ hours: periodHours });
-  const { data: stats, isLoading: statsLoading } = useComprehensiveStats();
+const DashboardSensorSummary = ({ periodHours = 24, clientId }: DashboardSensorSummaryProps) => {
+  const effectiveClientId = clientId === "all" ? undefined : clientId;
+  
+  const { data: sensorStats, isLoading: sensorStatsLoading } = useStatsBySensor({ 
+    hours: periodHours,
+    clientId: effectiveClientId 
+  });
+  const { data: stats, isLoading: statsLoading } = useComprehensiveStats(effectiveClientId);
 
   const sensorsSummary = stats?.sensors_summary;
 

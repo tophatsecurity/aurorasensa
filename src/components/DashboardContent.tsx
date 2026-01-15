@@ -483,7 +483,7 @@ const DashboardContent = () => {
       </div>
 
       {/* Key Stats - Refactored Component */}
-      <DashboardStatsHeader periodHours={periodHours} />
+      <DashboardStatsHeader periodHours={periodHours} clientId={selectedClient} />
 
       {/* Power Consumption */}
       <div className="mb-8">
@@ -1205,7 +1205,7 @@ const DashboardContent = () => {
       </div>
 
       {/* Sensor Types Summary - Refactored Component */}
-      <DashboardSensorSummary periodHours={periodHours} />
+      <DashboardSensorSummary periodHours={periodHours} clientId={selectedClient} />
 
       {/* 24h Sensor Comparison */}
       <div className="mb-8">
@@ -1524,7 +1524,7 @@ const DashboardContent = () => {
       </div>
 
       {/* Device Activity - Refactored Component */}
-      <DashboardDeviceActivity periodHours={periodHours} />
+      <DashboardDeviceActivity periodHours={periodHours} clientId={selectedClient} />
 
       {/* Maritime & RF Tracking */}
       <div className="mb-8">
