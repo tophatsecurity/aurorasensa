@@ -35,8 +35,16 @@ import GlobalReadingsTrendChart from "@/components/stats/GlobalReadingsTrendChar
 import ClientTrendChart from "@/components/stats/ClientTrendChart";
 
 // Helper to convert client sensor readings to device groups
+// Handles both old format (device_id, device_type) and new format (sensor_type, client_id)
 function processClientSensorDataToGroups(
-  readings: Array<{ device_id: string; device_type: string; timestamp: string; data: Record<string, unknown>; client_id?: string }>,
+  readings: Array<{ 
+    device_id?: string; 
+    device_type?: string; 
+    sensor_type?: string;
+    timestamp: string; 
+    data?: Record<string, unknown>; 
+    client_id?: string;
+  }>,
   clientId: string
 ): DeviceGroup[] {
   if (!readings || readings.length === 0) return [];
@@ -44,7 +52,12 @@ function processClientSensorDataToGroups(
   const groups = new Map<string, DeviceGroup>();
   
   readings.forEach((reading) => {
-    const key = `${clientId}:${reading.device_id}`;
+    // Support both old (device_type) and new (sensor_type) formats
+    const sensorType = reading.sensor_type || reading.device_type || 'unknown';
+    const deviceId = reading.device_id || sensorType;
+    const readingClientId = reading.client_id || clientId;
+    
+    const key = `${readingClientId}:${sensorType}`;
     
     // Extract location if available
     const data = reading.data || {};
@@ -62,19 +75,19 @@ function processClientSensorDataToGroups(
     }
     
     const sensorReading: SensorReading = {
-      sensor_type: reading.device_type,
-      device_id: reading.device_id,
-      device_type: reading.device_type,
-      client_id: clientId,
+      sensor_type: sensorType,
+      device_id: deviceId,
+      device_type: sensorType,
+      client_id: readingClientId,
       timestamp: reading.timestamp,
       data: reading.data,
     };
     
     if (!groups.has(key)) {
       groups.set(key, {
-        device_id: reading.device_id,
-        device_type: reading.device_type,
-        client_id: clientId,
+        device_id: deviceId,
+        device_type: sensorType,
+        client_id: readingClientId,
         readings: [],
         latest: sensorReading,
         location
