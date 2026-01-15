@@ -69,9 +69,24 @@ async function callAuroraApi<T>(path: string, method: string = "GET", body?: unk
       });
 
       if (error) {
+        const errorMessage = error.message?.toLowerCase() || '';
+        
+        // Handle 401 auth errors - return empty data instead of throwing
+        if (errorMessage.includes('401') || errorMessage.includes('authentication') ||
+            errorMessage.includes('unauthorized') || errorMessage.includes('auth')) {
+          console.warn(`Auth error for ${path}: ${error.message}, returning empty data`);
+          return getEmptyDataForPath(path) as T;
+        }
+        
         // Check if error indicates a 500 from Aurora (transient server issue)
-        if (error.message?.includes('500') || error.message?.includes('Internal Server Error')) {
+        if (errorMessage.includes('500') || errorMessage.includes('internal server error')) {
           console.warn(`Aurora server error for ${path}, returning empty data`);
+          return getEmptyDataForPath(path) as T;
+        }
+        
+        // Handle 400 bad request errors for GET requests
+        if (errorMessage.includes('400') && method === 'GET') {
+          console.warn(`Bad request error for GET ${path}: ${error.message}, returning empty data`);
           return getEmptyDataForPath(path) as T;
         }
         
@@ -83,6 +98,13 @@ async function callAuroraApi<T>(path: string, method: string = "GET", body?: unk
           lastError = apiError;
           continue;
         }
+        
+        // For GET requests, return empty data instead of throwing
+        if (method === 'GET') {
+          console.warn(`API error for GET ${path}: ${error.message}, returning empty data`);
+          return getEmptyDataForPath(path) as T;
+        }
+        
         console.error(`Aurora API error for ${path}:`, error.message);
         throw apiError;
       }
