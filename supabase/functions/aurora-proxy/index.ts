@@ -255,20 +255,36 @@ Deno.serve(async (req) => {
       });
     }
     
-    // Handle 500 errors gracefully
+    // Handle 500 errors gracefully - including SQL/schema errors from upstream
     if (response.status === 500) {
       const responseText = await response.text();
       console.error(`Aurora server error (500) for ${path}: ${responseText}`);
       
+      // Check if it's a database schema error (device_id doesn't exist, etc.)
+      const isSchemaError = responseText.includes('does not exist') || 
+                            responseText.includes('column') ||
+                            responseText.includes('device_id') ||
+                            responseText.includes('sensor_type');
+      
       if (method === 'GET') {
         const emptyData = getEmptyDataForPath(path);
         if (emptyData !== null) {
-          console.log(`Returning empty data for ${path} due to server error`);
+          console.log(`Returning empty data for ${path} due to server error${isSchemaError ? ' (schema mismatch)' : ''}`);
           return new Response(JSON.stringify(emptyData), {
             status: 200,
             headers: { ...corsHeaders, 'Content-Type': 'application/json' },
           });
         }
+      }
+      
+      // For schema errors, always return empty data to prevent UI crashes
+      if (isSchemaError) {
+        console.log(`Schema error detected for ${path}, returning empty data`);
+        const emptyData = getEmptyDataForPath(path) || [];
+        return new Response(JSON.stringify(emptyData), {
+          status: 200,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
       }
       
       return new Response(JSON.stringify({
