@@ -5,8 +5,8 @@
 // AUTHENTICATION
 // =============================================
 export const AUTH = {
-  LOGIN: '/api/auth/login',
-  LOGOUT: '/api/auth/logout',
+  LOGIN: '/api/login',
+  LOGOUT: '/api/logout',
   VERIFY: '/api/auth/verify',
   ME: '/api/auth/me',
   CHANGE_PASSWORD: '/api/auth/change-password',

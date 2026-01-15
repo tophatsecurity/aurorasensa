@@ -221,12 +221,13 @@ export function useAuroraAuth(): AuroraAuthContextValue {
     setAuthState(prev => ({ ...prev, loading: true, error: null }));
 
     try {
-      // Aurora API uses OAuth2 password flow
-      // The login endpoint expects form data or JSON with username/password
-      // identifier can be either email or username
+      // Aurora API login - returns { success: true, username, token?, access_token? }
       const { data, error } = await callAuroraAuth<{ 
-        access_token: string; 
-        token_type: string;
+        success?: boolean;
+        access_token?: string; 
+        token?: string;
+        token_type?: string;
+        username?: string;
         user?: AuroraUser;
       }>(
         AUTH.LOGIN,
@@ -247,7 +248,10 @@ export function useAuroraAuth(): AuroraAuthContextValue {
         return { success: false, error };
       }
 
-      if (!data?.access_token) {
+      // Handle Aurora response format - may have 'token' or 'access_token'
+      const accessToken = data?.access_token || data?.token;
+      
+      if (!accessToken && !data?.success) {
         setAuthState(prev => ({
           ...prev,
           loading: false,
@@ -256,26 +260,39 @@ export function useAuroraAuth(): AuroraAuthContextValue {
         return { success: false, error: 'Invalid response from server' };
       }
 
-      // Get user info with the new token
-      const { data: userData, error: userError } = await callAuroraAuth<AuroraUser>(
-        AUTH.ME,
-        'GET',
-        undefined,
-        data.access_token
-      );
+      // If we have success but no token, create a session identifier
+      const finalToken = accessToken || `session_${Date.now()}`;
 
-      const user: AuroraUser = userData || data.user || {
-        id: identifier,
-        email: identifier.includes('@') ? identifier : '',
-        username: identifier.includes('@') ? identifier.split('@')[0] : identifier,
-        role: 'user',
-      };
+      // Try to get user info with the new token
+      let user: AuroraUser;
+      if (accessToken) {
+        const { data: userData } = await callAuroraAuth<AuroraUser>(
+          AUTH.ME,
+          'GET',
+          undefined,
+          accessToken
+        );
+        user = userData || data?.user || {
+          id: data?.username || identifier,
+          email: identifier.includes('@') ? identifier : '',
+          username: data?.username || (identifier.includes('@') ? identifier.split('@')[0] : identifier),
+          role: 'user',
+        };
+      } else {
+        // Fallback user from login response
+        user = data?.user || {
+          id: data?.username || identifier,
+          email: identifier.includes('@') ? identifier : '',
+          username: data?.username || (identifier.includes('@') ? identifier.split('@')[0] : identifier),
+          role: 'user',
+        };
+      }
 
-      storeAuth(data.access_token, user);
+      storeAuth(finalToken, user);
       
       setAuthState({
         user,
-        token: data.access_token,
+        token: finalToken,
         loading: false,
         error: null,
         serverStatus: 'online',
