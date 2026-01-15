@@ -7,17 +7,16 @@ import { formatDistanceToNow } from "date-fns";
 const EPIRB_ALERTS_ENABLED = false;
 
 export function useEpirbAlertNotifications() {
-  // Return empty data when EPIRB alerts are disabled
-  if (!EPIRB_ALERTS_ENABLED) {
-    return { activeAlerts: [] as EpirbBeacon[] };
-  }
-
-  const { data: activeAlerts } = useEpirbActiveAlerts();
+  // Always call hooks unconditionally to follow React's rules of hooks
+  const { data: activeAlerts } = useEpirbActiveAlerts({ 
+    enabled: EPIRB_ALERTS_ENABLED 
+  });
   const previousAlertsRef = useRef<Set<string>>(new Set());
   const initialLoadRef = useRef(true);
 
   useEffect(() => {
-    if (!activeAlerts) return;
+    // Skip if EPIRB alerts are disabled or no data
+    if (!EPIRB_ALERTS_ENABLED || !activeAlerts) return;
 
     const currentAlertIds = new Set(activeAlerts.map(a => a.beacon_id));
     
@@ -68,5 +67,5 @@ export function useEpirbAlertNotifications() {
     previousAlertsRef.current = currentAlertIds;
   }, [activeAlerts]);
 
-  return { activeAlerts };
+  return { activeAlerts: EPIRB_ALERTS_ENABLED ? activeAlerts : [] as EpirbBeacon[] };
 }
