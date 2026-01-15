@@ -1,5 +1,6 @@
 import { useState } from "react";
 import AuroraBackground from "@/components/AuroraBackground";
+import { ErrorBoundary } from "@/components/ui/error-boundary";
 import Sidebar from "@/components/Sidebar";
 import DashboardContent from "@/components/DashboardContent";
 import CorrelationContent from "@/components/CorrelationContent";
@@ -158,10 +159,12 @@ function AuthenticatedDashboard({ activeItem, onNavigate }: { activeItem: string
       <AuroraBackground />
       <Sidebar activeItem={activeItem} onNavigate={onNavigate} />
       <main className="flex-1 relative z-10 flex flex-col h-full overflow-hidden">
-        {renderContent()}
+        <ErrorBoundary>
+          {renderContent()}
+        </ErrorBoundary>
       </main>
     </div>
   );
-};
+}
 
 export default Index;
