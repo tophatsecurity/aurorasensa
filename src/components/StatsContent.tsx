@@ -192,16 +192,9 @@ export default function StatsContent() {
         </ComponentErrorBoundary>
       )}
 
-      {/* Main Content Tabs */}
-      <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4">
-        <TabsList>
-          <TabsTrigger value="sensors">Sensors</TabsTrigger>
-          <TabsTrigger value="map">Location</TabsTrigger>
-          <TabsTrigger value="raw">Raw Data</TabsTrigger>
-        </TabsList>
-
-        {/* Sensors Tab - Shows all sensors with their data */}
-        <TabsContent value="sensors" className="space-y-4">
+      {/* Sensor Data Tabs - Primary content showing each sensor type */}
+      {selectedClient && (
+        <div className="space-y-4">
           {sensorsAreLoading ? (
             <div className="text-center py-12 text-muted-foreground">
               <p>Loading sensor data...</p>
@@ -211,9 +204,48 @@ export default function StatsContent() {
               <SensorTabs devices={filteredDevices} isLoading={false} clientId={selectedClient} />
             </ComponentErrorBoundary>
           ) : (
-            <div className="text-center py-12 text-muted-foreground">
-              <p>No sensors found for this client</p>
+            <div className="text-center py-12 text-muted-foreground border border-dashed border-border rounded-lg">
+              <p className="text-lg font-medium">No readings found for this sensor type</p>
               <p className="text-xs mt-2">Sensor data is extracted from batch submissions</p>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Additional Views - Location Map & Raw Data */}
+      <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4">
+        <TabsList>
+          <TabsTrigger value="sensors">Overview</TabsTrigger>
+          <TabsTrigger value="map">Location</TabsTrigger>
+          <TabsTrigger value="raw">Raw Data</TabsTrigger>
+        </TabsList>
+
+        {/* Overview Tab - Summary stats */}
+        <TabsContent value="sensors" className="space-y-4">
+          {selectedClient && filteredDevices.length > 0 && (
+            <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-3">
+              {/* Summary stats cards */}
+              <SummaryStatCard 
+                label="Total Readings" 
+                value={clientSensorData?.readings?.length || 0} 
+                icon="📊"
+              />
+              <SummaryStatCard 
+                label="Device Types" 
+                value={[...new Set(filteredDevices.map(d => d.device_type))].length} 
+                icon="📡"
+              />
+              <SummaryStatCard 
+                label="Active Devices" 
+                value={filteredDevices.length} 
+                icon="🔌"
+              />
+              <SummaryStatCard 
+                label="Latest Batch" 
+                value={filteredDevices[0]?.latest?.timestamp ? new Date(filteredDevices[0].latest.timestamp).toLocaleDateString() : 'N/A'} 
+                icon="📦"
+                isText
+              />
             </div>
           )}
         </TabsContent>
@@ -236,6 +268,21 @@ export default function StatsContent() {
           </ComponentErrorBoundary>
         </TabsContent>
       </Tabs>
+    </div>
+  );
+}
+
+// Summary stat card component
+function SummaryStatCard({ label, value, icon, isText = false }: { label: string; value: string | number; icon: string; isText?: boolean }) {
+  return (
+    <div className="p-4 rounded-lg bg-card border border-border/50">
+      <div className="flex items-center gap-2 mb-1">
+        <span className="text-lg">{icon}</span>
+        <span className="text-xs text-muted-foreground">{label}</span>
+      </div>
+      <p className={isText ? "text-sm font-medium truncate" : "text-xl font-bold"}>
+        {typeof value === 'number' ? value.toLocaleString() : value}
+      </p>
     </div>
   );
 }
