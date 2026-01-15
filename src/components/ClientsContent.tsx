@@ -58,6 +58,7 @@ import {
 import { 
   useClientsByState, 
   useClientStatistics,
+  useAdoptClient,
   useRegisterClient,
   useDisableClient,
   useEnableClient,
@@ -73,7 +74,6 @@ import {
   type ClientState,
   callAuroraApi,
 } from "@/hooks/aurora";
-import { useAdoptClientDirect } from "@/hooks/useAuroraApi";
 import { formatLastSeen, formatDateTime, getDeviceStatusFromLastSeen } from "@/utils/dateUtils";
 import { toast } from "sonner";
 import DeviceDetailDialog from "./DeviceDetailDialog";
@@ -150,7 +150,7 @@ const ClientsContent = () => {
   const { data: clientsData, isLoading, isError, refetch } = useClientsByState();
   const { data: statistics } = useClientStatistics();
   const { data: latestReadings } = useLatestReadings();
-  const adoptClient = useAdoptClientDirect();
+  const adoptClient = useAdoptClient();
   const registerClient = useRegisterClient();
   const disableClient = useDisableClient();
   const enableClient = useEnableClient();
@@ -211,43 +211,41 @@ const ClientsContent = () => {
     action: "adopt" | "register" | "disable" | "enable" | "suspend" | "delete" | "restore",
     hostname?: string
   ) => {
-    const actionMap = {
-      register: { fn: registerClient, label: "registered" },
-      disable: { fn: disableClient, label: "disabled" },
-      enable: { fn: enableClient, label: "enabled" },
-      suspend: { fn: suspendClient, label: "suspended" },
-      delete: { fn: softDeleteClient, label: "deleted" },
-      restore: { fn: restoreClient, label: "restored" },
-    };
+    const successCallback = (label: string) => ({
+      onSuccess: () => {
+        toast.success(`Successfully ${label} ${hostname || clientId}`);
+        refetch();
+      },
+      onError: (error: Error) => {
+        toast.error(`Failed to ${action}: ${error.message}`);
+      },
+    });
 
-    // Handle adopt separately due to different signature
-    if (action === "adopt") {
-      adoptClient.mutate(clientId, {
-        onSuccess: () => {
-          toast.success(`Successfully adopted ${hostname || clientId}`);
-          refetch();
-        },
-        onError: (error: Error) => {
-          toast.error(`Failed to adopt: ${error.message}`);
-        },
-      });
-      return;
+    const reason = `Manual ${action} from dashboard`;
+
+    switch (action) {
+      case "adopt":
+        adoptClient.mutate(clientId, successCallback("adopted"));
+        break;
+      case "register":
+        registerClient.mutate(clientId, successCallback("registered"));
+        break;
+      case "enable":
+        enableClient.mutate(clientId, successCallback("enabled"));
+        break;
+      case "restore":
+        restoreClient.mutate(clientId, successCallback("restored"));
+        break;
+      case "disable":
+        disableClient.mutate({ clientId, reason }, successCallback("disabled"));
+        break;
+      case "suspend":
+        suspendClient.mutate({ clientId, reason }, successCallback("suspended"));
+        break;
+      case "delete":
+        softDeleteClient.mutate({ clientId, reason }, successCallback("deleted"));
+        break;
     }
-
-    const { fn, label } = actionMap[action as keyof typeof actionMap];
-    fn.mutate(
-      { clientId, reason: `Manual ${action} from dashboard` },
-      {
-        onSuccess: () => {
-          toast.success(`Successfully ${label} ${hostname || clientId}`);
-          // Force refetch to ensure UI updates immediately
-          refetch();
-        },
-        onError: (error) => {
-          toast.error(`Failed to ${action} client: ${error.message}`);
-        },
-      }
-    );
   };
 
   const handlePermanentDelete = (client: Client) => {
