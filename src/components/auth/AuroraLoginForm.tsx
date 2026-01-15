@@ -7,14 +7,14 @@ import { Label } from "@/components/ui/label";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 
 interface AuroraLoginFormProps {
-  onLogin: (email: string, password: string) => Promise<{ success: boolean; error?: string }>;
+  onLogin: (identifier: string, password: string) => Promise<{ success: boolean; error?: string }>;
   isLoading?: boolean;
   serverStatus?: 'online' | 'offline' | 'checking';
   onSwitchToSignUp?: () => void;
 }
 
 export function AuroraLoginForm({ onLogin, isLoading, serverStatus, onSwitchToSignUp }: AuroraLoginFormProps) {
-  const [email, setEmail] = useState("");
+  const [identifier, setIdentifier] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState("");
@@ -24,13 +24,13 @@ export function AuroraLoginForm({ onLogin, isLoading, serverStatus, onSwitchToSi
     e.preventDefault();
     setError("");
 
-    if (!email || !password) {
-      setError("Email and password are required");
+    if (!identifier || !password) {
+      setError("Email/username and password are required");
       return;
     }
 
     setLoading(true);
-    const result = await onLogin(email, password);
+    const result = await onLogin(identifier, password);
     setLoading(false);
 
     if (!result.success) {
@@ -71,14 +71,14 @@ export function AuroraLoginForm({ onLogin, isLoading, serverStatus, onSwitchToSi
           )}
 
           <div className="space-y-2">
-            <Label htmlFor="email">Email</Label>
+            <Label htmlFor="identifier">Email or Username</Label>
             <Input
-              id="email"
-              type="email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              placeholder="Enter your email"
-              autoComplete="email"
+              id="identifier"
+              type="text"
+              value={identifier}
+              onChange={(e) => setIdentifier(e.target.value)}
+              placeholder="Enter your email or username"
+              autoComplete="username"
               disabled={isPending}
             />
           </div>
