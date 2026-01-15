@@ -77,7 +77,7 @@ import {
 } from "@/hooks/aurora";
 import { formatLastSeen, formatDateTime, getDeviceStatusFromLastSeen } from "@/utils/dateUtils";
 import { toast } from "sonner";
-import DeviceDetailDialog from "./DeviceDetailDialog";
+import { ClientDetailsPanel } from "@/components/client";
 
 const STATE_CONFIG: Record<ClientState, { label: string; color: string; icon: React.ElementType; description: string }> = {
   pending: { 
@@ -957,8 +957,8 @@ const ClientsContent = () => {
         onClose={() => setHistoryDialogClient(null)} 
       />
 
-      {/* Device Detail Dialog */}
-      <DeviceDetailDialog 
+      {/* Client Details Panel */}
+      <ClientDetailsPanel 
         client={detailClient}
         open={detailsOpen}
         onOpenChange={setDetailsOpen}
