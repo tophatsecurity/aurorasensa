@@ -1,5 +1,12 @@
-// Aurora API - Main barrel export
-// Re-exports all hooks from modular files for backward compatibility
+/**
+ * Aurora API - Main barrel export
+ * 
+ * This module re-exports all hooks and types from modular files.
+ * Import from "@/hooks/aurora" for consistent API access.
+ * 
+ * @example
+ * import { useClients, useAlerts, type Client, type Alert } from "@/hooks/aurora";
+ */
 
 // Core utilities
 export { callAuroraApi, hasAuroraSession, clearAuroraSession, invalidateAuroraCache, getAuroraQueueStats, type AuroraApiOptions, type HttpMethod } from "./core";
