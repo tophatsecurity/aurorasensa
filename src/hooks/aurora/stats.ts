@@ -1,7 +1,7 @@
 // Aurora API - Stats domain hooks
 import { useQuery } from "@tanstack/react-query";
 import { callAuroraApi, hasAuroraSession, type AuroraApiOptions } from "./core";
-import { STATS, CLIENTS } from "./endpoints";
+import { STATS, CLIENTS, DEVICES, TIMESERIES } from "./endpoints";
 
 // =============================================
 // TYPES
@@ -276,6 +276,80 @@ export interface ClientStats {
   };
 }
 
+// New API types for grouped stats
+export interface ClientGroupedStats {
+  client_id: string;
+  hostname?: string;
+  reading_count: number;
+  device_count: number;
+  sensor_type_count: number;
+  sensor_types: string[];
+  first_reading?: string;
+  last_reading?: string;
+}
+
+export interface SensorGroupedStats {
+  sensor_type: string;
+  reading_count: number;
+  client_count: number;
+  device_count: number;
+  avg_data_size?: number;
+  first_reading?: string;
+  last_reading?: string;
+}
+
+export interface ClientDetailedStats {
+  client_id: string;
+  overall: {
+    total_readings: number;
+    total_devices: number;
+    sensor_types_count: number;
+  };
+  by_sensor_type: Array<{
+    sensor_type: string;
+    reading_count: number;
+    device_count: number;
+    last_reading?: string;
+  }>;
+  recent_devices: Array<{
+    device_id: string;
+    device_type: string;
+    last_activity?: string;
+  }>;
+}
+
+export interface DeviceReadings {
+  device_id: string;
+  readings: Array<{
+    timestamp: string;
+    sensor_type: string;
+    data: Record<string, unknown>;
+  }>;
+  count: number;
+}
+
+export interface DeviceDetailedStats {
+  device_id: string;
+  device_type: string;
+  client_id?: string;
+  total_readings: number;
+  first_seen?: string;
+  last_seen?: string;
+  reading_rate?: {
+    per_hour?: number;
+    per_day?: number;
+  };
+  sensor_types?: string[];
+}
+
+export interface StatsAllResponse {
+  hourly: PeriodStats[];
+  six_hour: PeriodStats[];
+  twelve_hour: PeriodStats[];
+  daily: PeriodStats[];
+  weekly: PeriodStats[];
+}
+
 // =============================================
 // HELPER
 // =============================================
@@ -371,6 +445,153 @@ export function useWeeklyStats(clientId?: string | null) {
     enabled: hasAuroraSession(),
     staleTime: 60000,
     refetchInterval: 600000,
+    retry: 1,
+  });
+}
+
+// NEW: 12-hour stats
+export function use12hrStats(clientId?: string | null) {
+  return useQuery({
+    queryKey: ["aurora", "stats", "12hr", clientId],
+    queryFn: () => callAuroraApi<PeriodStats>(STATS.HOUR_12, "GET", undefined, { clientId }),
+    enabled: hasAuroraSession(),
+    staleTime: 60000,
+    refetchInterval: 180000,
+    retry: 1,
+  });
+}
+
+// NEW: Comprehensive stats with all granularities
+export function useStatsAll(options?: { 
+  clientId?: string | null;
+  deviceId?: string;
+  sensorType?: string;
+  limitHourly?: number;
+  limitSixHour?: number;
+  limitTwelveHour?: number;
+  limitDaily?: number;
+  limitWeekly?: number;
+}) {
+  return useQuery({
+    queryKey: ["aurora", "stats", "all", options],
+    queryFn: () => callAuroraApi<StatsAllResponse>(STATS.ALL, "GET", undefined, { 
+      clientId: options?.clientId,
+      params: {
+        device_id: options?.deviceId,
+        sensor_type: options?.sensorType,
+        limit_hourly: options?.limitHourly,
+        limit_sixhour: options?.limitSixHour,
+        limit_twelvehour: options?.limitTwelveHour,
+        limit_daily: options?.limitDaily,
+        limit_weekly: options?.limitWeekly,
+      }
+    }),
+    enabled: hasAuroraSession(),
+    staleTime: 60000,
+    refetchInterval: 180000,
+    retry: 1,
+  });
+}
+
+// NEW: Stats grouped by client
+export function useStatsByClient(options?: { clientId?: string | null; hours?: number; limit?: number; offset?: number }) {
+  return useQuery({
+    queryKey: ["aurora", "stats", "by-client", options],
+    queryFn: () => callAuroraApi<{ clients: ClientGroupedStats[]; total: number }>(
+      STATS.BY_CLIENT, 
+      "GET", 
+      undefined, 
+      { 
+        clientId: options?.clientId,
+        params: { 
+          hours: options?.hours ?? 24,
+          limit: options?.limit ?? 100,
+          offset: options?.offset ?? 0,
+        }
+      }
+    ),
+    enabled: hasAuroraSession(),
+    staleTime: 60000,
+    refetchInterval: 120000,
+    retry: 1,
+  });
+}
+
+// NEW: Stats grouped by sensor type
+export function useStatsBySensor(options?: { clientId?: string | null; hours?: number; limit?: number; offset?: number }) {
+  return useQuery({
+    queryKey: ["aurora", "stats", "by-sensor", options],
+    queryFn: () => callAuroraApi<{ sensors: SensorGroupedStats[]; total: number }>(
+      STATS.BY_SENSOR, 
+      "GET", 
+      undefined, 
+      { 
+        clientId: options?.clientId,
+        params: { 
+          hours: options?.hours ?? 24,
+          limit: options?.limit ?? 100,
+          offset: options?.offset ?? 0,
+        }
+      }
+    ),
+    enabled: hasAuroraSession(),
+    staleTime: 60000,
+    refetchInterval: 120000,
+    retry: 1,
+  });
+}
+
+// NEW: Detailed client statistics
+export function useClientDetailStats(clientId: string | null, hours: number = 24) {
+  return useQuery({
+    queryKey: ["aurora", "stats", "client-detail", clientId, hours],
+    queryFn: () => {
+      if (!clientId || clientId === "all") return null;
+      return callAuroraApi<ClientDetailedStats>(
+        STATS.CLIENT(clientId), 
+        "GET", 
+        undefined, 
+        { params: { hours } }
+      );
+    },
+    enabled: hasAuroraSession() && !!clientId && clientId !== "all",
+    staleTime: 30000,
+    refetchInterval: 60000,
+    retry: 1,
+  });
+}
+
+// NEW: Device readings
+export function useDeviceReadings(deviceId: string | null, hours: number = 24) {
+  return useQuery({
+    queryKey: ["aurora", "devices", deviceId, "readings", hours],
+    queryFn: () => {
+      if (!deviceId) return null;
+      return callAuroraApi<DeviceReadings>(
+        DEVICES.READINGS(deviceId), 
+        "GET", 
+        undefined, 
+        { params: { hours } }
+      );
+    },
+    enabled: hasAuroraSession() && !!deviceId,
+    staleTime: 30000,
+    refetchInterval: 60000,
+    retry: 1,
+  });
+}
+
+// NEW: Device detailed stats
+export function useDeviceDetailStats(deviceId: string | null) {
+  return useQuery({
+    queryKey: ["aurora", "devices", deviceId, "stats"],
+    queryFn: () => {
+      if (!deviceId) return null;
+      return callAuroraApi<DeviceDetailedStats>(DEVICES.STATS(deviceId));
+    },
+    enabled: hasAuroraSession() && !!deviceId,
+    staleTime: 30000,
+    refetchInterval: 60000,
     retry: 1,
   });
 }

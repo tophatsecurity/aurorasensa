@@ -110,7 +110,10 @@ export const READINGS = {
 export const DEVICES = {
   TREE: '/api/devices/tree',
   STATUS: '/api/devices/status',
+  GET: (deviceId: string) => `/api/devices/${deviceId}`,
   LATEST: (deviceId: string) => `/api/devices/${deviceId}/latest`,
+  READINGS: (deviceId: string) => `/api/devices/${deviceId}/readings`,
+  STATS: (deviceId: string) => `/api/devices/${deviceId}/stats`,
 } as const;
 
 // =============================================
@@ -286,15 +289,23 @@ export const HEALTH = {
 // STATS
 // =============================================
 export const STATS = {
+  // Comprehensive stats - all granularities at once
   ALL: '/api/stats',
   COMPREHENSIVE: '/api/stats/comprehensive',
   SUMMARY: '/api/stats/summary',
   GLOBAL: '/api/stats/global',
   OVERVIEW: '/api/stats/overview',
+  // Time-based granularities
   HOUR_1: '/api/stats/1hr',
   HOUR_6: '/api/stats/6hr',
+  HOUR_12: '/api/stats/12hr',
   HOUR_24: '/api/stats/24hr',
   WEEKLY: '/api/stats/weekly',
+  // Grouped stats
+  BY_CLIENT: '/api/stats/by-client',
+  BY_SENSOR: '/api/stats/by-sensor',
+  // Entity-specific stats
+  CLIENT: (clientId: string) => `/api/stats/client/${clientId}`,
   DEVICES: '/api/stats/devices',
   DEVICE: (deviceId: string) => `/api/stats/devices/${deviceId}`,
   SENSORS: '/api/stats/sensors',
@@ -304,7 +315,7 @@ export const STATS = {
   ENDPOINTS_HISTORY: '/api/stats/endpoints/history',
   PERFORMANCE: '/api/performance/stats',
   POWER: '/api/power/stats',
-  // Historical
+  // Historical timeseries
   HISTORY_GLOBAL: '/api/stats/history/global',
   HISTORY_SENSORS: '/api/stats/history/sensors',
   HISTORY_DEVICES: '/api/stats/history/devices',
@@ -335,6 +346,10 @@ export const CONFIG = {
 export const TIMESERIES = {
   GET: '/api/timeseries',
   MOVING_AVERAGE: '/api/v1/data/moving_average',
+  // Sensor-specific timeseries
+  SENSOR: (sensorType: string) => `/api/timeseries/sensor/${sensorType}`,
+  DEVICE: (deviceId: string) => `/api/timeseries/device/${deviceId}`,
+  CLIENT: (clientId: string) => `/api/timeseries/client/${clientId}`,
 } as const;
 
 // =============================================
