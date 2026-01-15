@@ -239,14 +239,16 @@ export function useAuroraAuth(): AuroraAuthContextValue {
     setAuthState(prev => ({ ...prev, loading: true, error: null }));
 
     try {
-      // Aurora API login - returns { success: true, username, token?, access_token? }
+      // Aurora API login - returns { success: true, username, session_token?, token?, access_token? }
       const { data, error } = await callAuroraAuth<{ 
         success?: boolean;
         access_token?: string; 
         token?: string;
+        session_token?: string;
         token_type?: string;
         username?: string;
         user?: AuroraUser;
+        message?: string;
       }>(
         AUTH.LOGIN,
         'POST',
@@ -266,8 +268,8 @@ export function useAuroraAuth(): AuroraAuthContextValue {
         return { success: false, error };
       }
 
-      // Handle Aurora response format - may have 'token' or 'access_token'
-      const accessToken = data?.access_token || data?.token;
+      // Handle Aurora response format - may have 'session_token', 'token', or 'access_token'
+      const accessToken = data?.session_token || data?.access_token || data?.token;
       
       if (!accessToken && !data?.success) {
         setAuthState(prev => ({
