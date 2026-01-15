@@ -40,8 +40,12 @@ export function useSensors(clientId?: string | null) {
   return useQuery({
     queryKey: ["aurora", "sensors", clientId],
     queryFn: async () => {
-      const response = await callAuroraApi<SensorsListResponse>(SENSORS.LIST, "GET", undefined, { clientId });
-      return response.sensors || [];
+      // Core now auto-unwraps { data: [...], status: 'success' } responses
+      const response = await callAuroraApi<SensorsListResponse | SensorData[]>(SENSORS.LIST, "GET", undefined, { clientId });
+      if (Array.isArray(response)) {
+        return response;
+      }
+      return response?.sensors || [];
     },
     enabled: hasAuroraSession(),
     ...fastQueryOptions,
@@ -52,8 +56,12 @@ export function useRecentSensors(clientId?: string | null) {
   return useQuery({
     queryKey: ["aurora", "sensors", "recent", clientId],
     queryFn: async () => {
-      const response = await callAuroraApi<SensorsListResponse>(SENSORS.RECENT, "GET", undefined, { clientId });
-      return response.sensors || [];
+      // Core now auto-unwraps { data: [...], status: 'success' } responses
+      const response = await callAuroraApi<SensorsListResponse | SensorData[]>(SENSORS.RECENT, "GET", undefined, { clientId });
+      if (Array.isArray(response)) {
+        return response;
+      }
+      return response?.sensors || [];
     },
     enabled: hasAuroraSession(),
     ...fastQueryOptions,
@@ -74,8 +82,12 @@ export function useLatestReadings(clientId?: string | null) {
     queryKey: ["aurora", "readings", "latest", clientId],
     queryFn: async () => {
       try {
-        const response = await callAuroraApi<LatestReadingsResponse>(READINGS.LATEST, "GET", undefined, { clientId });
-        return response.data || response.readings || [];
+        // Core now auto-unwraps { data: [...], status: 'success' } responses
+        const response = await callAuroraApi<LatestReadingsResponse | LatestReading[]>(READINGS.LATEST, "GET", undefined, { clientId });
+        if (Array.isArray(response)) {
+          return response;
+        }
+        return response?.data || response?.readings || [];
       } catch (error) {
         console.warn("Failed to fetch latest readings, returning empty array:", error);
         return [];
@@ -106,7 +118,12 @@ export function useAllSensorStats(clientId?: string | null) {
     queryKey: ["aurora", "stats", "sensors", clientId],
     queryFn: async () => {
       try {
-        return await callAuroraApi<SensorStatsResponse>(STATS.SENSORS, "GET", undefined, { clientId });
+        // Core now auto-unwraps { data: {...}, status: 'success' } responses
+        const result = await callAuroraApi<SensorStatsResponse | SensorTypeStats[]>(STATS.SENSORS, "GET", undefined, { clientId });
+        if (Array.isArray(result)) {
+          return { sensor_types: result };
+        }
+        return result?.sensor_types ? result : { sensor_types: [] };
       } catch {
         return { sensor_types: [] };
       }
