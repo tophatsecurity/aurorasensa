@@ -19,3 +19,5 @@ export { RawJsonPanel } from "./RawJsonPanel";
 export { default as DeviceDetailsModal } from "./DeviceDetailsModal";
 export { default as DeviceMetricsCharts } from "./DeviceMetricsCharts";
 export { default as GlobalStatsCards } from "./GlobalStatsCards";
+export { default as GlobalReadingsTrendChart } from "./GlobalReadingsTrendChart";
+export { default as ClientTrendChart } from "./ClientTrendChart";

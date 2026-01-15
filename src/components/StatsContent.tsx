@@ -30,6 +30,8 @@ import {
   enrichDevicesWithLocations,
 } from "@/components/stats";
 import GlobalStatsCards from "@/components/stats/GlobalStatsCards";
+import GlobalReadingsTrendChart from "@/components/stats/GlobalReadingsTrendChart";
+import ClientTrendChart from "@/components/stats/ClientTrendChart";
 
 // Constants
 const GLOBAL_CLIENT_ID = "__global__";
@@ -268,6 +270,18 @@ export default function StatsContent() {
             stats1hr={stats1hr} 
             stats24hr={stats24hr} 
           />
+
+          {/* Charts Row - Readings Trend & Client Breakdown */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+            <GlobalReadingsTrendChart 
+              readingsByDay={comprehensiveStats?.global?.readings_by_day}
+              isLoading={comprehensiveLoading}
+            />
+            <ClientTrendChart 
+              clientStats={clientStatsList}
+              isLoading={statsByClientLoading}
+            />
+          </div>
 
           {/* Client Breakdown Table */}
           <Card className="border-border/50">
