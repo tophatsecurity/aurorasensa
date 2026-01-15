@@ -1578,6 +1578,13 @@ const DashboardContent = () => {
                       <span>{formatLastSeen(client.last_seen)}</span>
                     </div>
                   </div>
+                  <a 
+                    href={`/client/${client.client_id}`}
+                    className="mt-3 w-full inline-flex items-center justify-center gap-2 text-xs px-3 py-2 rounded-md border border-border/50 hover:bg-primary/10 hover:border-primary/50 transition-colors"
+                  >
+                    <ExternalLink className="w-3 h-3" />
+                    Details
+                  </a>
                 </div>
               );
             })}
