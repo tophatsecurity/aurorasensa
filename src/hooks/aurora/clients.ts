@@ -1,6 +1,7 @@
 // Aurora API - Client Hooks
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { callAuroraApi, hasAuroraSession, defaultQueryOptions, fastQueryOptions } from "./core";
+import { CLIENTS, BATCHES, withQuery } from "./endpoints";
 import type { 
   Client, 
   ClientsListResponse, 
@@ -57,7 +58,7 @@ export function useClients() {
     queryKey: ["aurora", "clients"],
     queryFn: async () => {
       try {
-        const response = await callAuroraApi<ClientsListResponse>("/api/clients/list");
+        const response = await callAuroraApi<ClientsListResponse>(CLIENTS.LIST);
         return response.clients || [];
       } catch {
         return [];
@@ -75,7 +76,7 @@ export function useClientsWithHostnames() {
     queryFn: async () => {
       try {
         // Fetch clients list
-        const clientsResponse = await callAuroraApi<ClientsListResponse>("/api/clients/list");
+        const clientsResponse = await callAuroraApi<ClientsListResponse>(CLIENTS.LIST);
         const clients = clientsResponse.clients || [];
         
         if (clients.length === 0) {
@@ -85,7 +86,9 @@ export function useClientsWithHostnames() {
         // Try to fetch batches to get hostnames - this endpoint may not exist
         let batches: Array<{ batch_id: string; client_id: string }> = [];
         try {
-          const batchesResponse = await callAuroraApi<{ batches: Array<{ batch_id: string; client_id: string }> }>("/api/batches/list?limit=100");
+          const batchesResponse = await callAuroraApi<{ batches: Array<{ batch_id: string; client_id: string }> }>(
+            withQuery(BATCHES.LIST, { limit: 100 })
+          );
           batches = batchesResponse.batches || [];
         } catch {
           // Batches endpoint not available - just return clients with their existing hostnames
@@ -126,7 +129,7 @@ export function useClientsWithHostnames() {
         await Promise.all(
           Array.from(clientBatchMap.entries()).map(async ([clientId, batchId]) => {
             try {
-              const batchData = await callAuroraApi<BatchWithReadings>(`/api/batches/${batchId}`);
+              const batchData = await callAuroraApi<BatchWithReadings>(BATCHES.GET(batchId));
               const hostname = extractHostnameFromBatch(batchData);
               if (hostname) {
                 hostnameMap.set(clientId, hostname);
@@ -157,7 +160,7 @@ export function useClientsWithHostnames() {
 export function useClient(clientId: string) {
   return useQuery({
     queryKey: ["aurora", "clients", clientId],
-    queryFn: () => callAuroraApi<Client>(`/api/clients/${clientId}`),
+    queryFn: () => callAuroraApi<Client>(CLIENTS.GET(clientId)),
     enabled: hasAuroraSession() && !!clientId,
     retry: 2,
   });
@@ -169,7 +172,7 @@ export function useClientsByState() {
     queryFn: async () => {
       try {
         // Fetch clients by state
-        const response = await callAuroraApi<ClientsByStateResponse>("/api/clients/all-states");
+        const response = await callAuroraApi<ClientsByStateResponse>(CLIENTS.ALL_STATES);
         
         // Helper to enrich client array with hostnames
         const enrichClients = (clients: Client[]) => 
@@ -181,7 +184,9 @@ export function useClientsByState() {
         // Try to fetch batches to get hostnames - this is optional
         let hostnameMap = new Map<string, string>();
         try {
-          const batchesResponse = await callAuroraApi<{ batches: Array<{ batch_id: string; client_id: string }> }>("/api/batches/list?limit=100");
+          const batchesResponse = await callAuroraApi<{ batches: Array<{ batch_id: string; client_id: string }> }>(
+            withQuery(BATCHES.LIST, { limit: 100 })
+          );
           const batches = batchesResponse.batches || [];
           
           if (batches.length > 0) {
@@ -204,7 +209,7 @@ export function useClientsByState() {
             await Promise.all(
               Array.from(clientBatchMap.entries()).map(async ([clientId, batchId]) => {
                 try {
-                  const batchData = await callAuroraApi<BatchWithReadings>(`/api/batches/${batchId}`);
+                  const batchData = await callAuroraApi<BatchWithReadings>(BATCHES.GET(batchId));
                   const hostname = extractHostnameFromBatch(batchData);
                   if (hostname) {
                     hostnameMap.set(clientId, hostname);
@@ -262,7 +267,7 @@ export function useClientsByState() {
 export function useClientStatistics() {
   return useQuery({
     queryKey: ["aurora", "clients", "statistics"],
-    queryFn: () => callAuroraApi<ClientStatisticsResponse>("/api/clients/statistics"),
+    queryFn: () => callAuroraApi<ClientStatisticsResponse>(CLIENTS.STATISTICS),
     enabled: hasAuroraSession(),
     ...defaultQueryOptions,
   });
@@ -272,7 +277,7 @@ export function usePendingClients() {
   return useQuery({
     queryKey: ["aurora", "clients", "pending"],
     queryFn: async () => {
-      const response = await callAuroraApi<ClientStateResponse>("/api/clients/pending");
+      const response = await callAuroraApi<ClientStateResponse>(CLIENTS.PENDING);
       return response.clients || [];
     },
     enabled: hasAuroraSession(),
@@ -284,7 +289,7 @@ export function useAdoptedClients() {
   return useQuery({
     queryKey: ["aurora", "clients", "adopted"],
     queryFn: async () => {
-      const response = await callAuroraApi<ClientStateResponse>("/api/clients/adopted");
+      const response = await callAuroraApi<ClientStateResponse>(CLIENTS.ADOPTED);
       return response.clients || [];
     },
     enabled: hasAuroraSession(),
@@ -296,7 +301,7 @@ export function useRegisteredClients() {
   return useQuery({
     queryKey: ["aurora", "clients", "registered"],
     queryFn: async () => {
-      const response = await callAuroraApi<ClientStateResponse>("/api/clients/registered");
+      const response = await callAuroraApi<ClientStateResponse>(CLIENTS.REGISTERED);
       return response.clients || [];
     },
     enabled: hasAuroraSession(),
@@ -308,7 +313,7 @@ export function useDisabledClients() {
   return useQuery({
     queryKey: ["aurora", "clients", "disabled"],
     queryFn: async () => {
-      const response = await callAuroraApi<ClientStateResponse>("/api/clients/disabled");
+      const response = await callAuroraApi<ClientStateResponse>(CLIENTS.DISABLED);
       return response.clients || [];
     },
     enabled: hasAuroraSession(),
@@ -320,7 +325,7 @@ export function useSuspendedClients() {
   return useQuery({
     queryKey: ["aurora", "clients", "suspended"],
     queryFn: async () => {
-      const response = await callAuroraApi<ClientStateResponse>("/api/clients/suspended");
+      const response = await callAuroraApi<ClientStateResponse>(CLIENTS.SUSPENDED);
       return response.clients || [];
     },
     enabled: hasAuroraSession(),
@@ -332,7 +337,7 @@ export function useDeletedClients() {
   return useQuery({
     queryKey: ["aurora", "clients", "deleted"],
     queryFn: async () => {
-      const response = await callAuroraApi<ClientStateResponse>("/api/clients/deleted");
+      const response = await callAuroraApi<ClientStateResponse>(CLIENTS.DELETED);
       return response.clients || [];
     },
     enabled: hasAuroraSession(),
@@ -343,7 +348,7 @@ export function useDeletedClients() {
 export function useClientStateHistory(clientId: string) {
   return useQuery({
     queryKey: ["aurora", "clients", clientId, "state-history"],
-    queryFn: () => callAuroraApi<ClientStateHistoryResponse>(`/api/clients/${clientId}/state-history`),
+    queryFn: () => callAuroraApi<ClientStateHistoryResponse>(CLIENTS.STATE_HISTORY(clientId)),
     enabled: hasAuroraSession() && !!clientId,
     retry: 2,
   });
@@ -354,7 +359,7 @@ export function useClientSystemInfo(clientId: string) {
     queryKey: ["aurora", "clients", clientId, "system-info"],
     queryFn: async () => {
       try {
-        return await callAuroraApi<SystemInfo>(`/api/clients/${clientId}/system-info`);
+        return await callAuroraApi<SystemInfo>(CLIENTS.SYSTEM_INFO(clientId));
       } catch (error: any) {
         const isNotFound = error?.status === 404 || 
                           (error instanceof Error && (
@@ -384,7 +389,7 @@ export function useClientSystemInfo(clientId: string) {
 export function useAllClientsSystemInfo() {
   return useQuery({
     queryKey: ["aurora", "clients", "system-info", "all"],
-    queryFn: () => callAuroraApi<{ clients: Record<string, SystemInfo> }>("/api/clients/system-info/all"),
+    queryFn: () => callAuroraApi<{ clients: Record<string, SystemInfo> }>(CLIENTS.SYSTEM_INFO_ALL),
     enabled: hasAuroraSession(),
     ...defaultQueryOptions,
   });
@@ -393,7 +398,7 @@ export function useAllClientsSystemInfo() {
 export function useClientConfig(clientId: string) {
   return useQuery({
     queryKey: ["aurora", "clients", clientId, "config"],
-    queryFn: () => callAuroraApi<ServerConfig>(`/api/clients/${clientId}/config`),
+    queryFn: () => callAuroraApi<ServerConfig>(CLIENTS.CONFIG(clientId)),
     enabled: hasAuroraSession() && !!clientId,
     retry: 2,
   });
@@ -402,7 +407,7 @@ export function useClientConfig(clientId: string) {
 export function useClientConfigVersion(clientId: string) {
   return useQuery({
     queryKey: ["aurora", "clients", clientId, "config", "version"],
-    queryFn: () => callAuroraApi<{ version: string }>(`/api/clients/${clientId}/config/version`),
+    queryFn: () => callAuroraApi<{ version: string }>(CLIENTS.CONFIG_VERSION(clientId)),
     enabled: hasAuroraSession() && !!clientId,
     retry: 2,
   });
@@ -411,7 +416,7 @@ export function useClientConfigVersion(clientId: string) {
 export function useAllClientConfigs() {
   return useQuery({
     queryKey: ["aurora", "clients", "configs", "all"],
-    queryFn: () => callAuroraApi<{ configs: Record<string, ServerConfig> }>("/api/clients/configs/all"),
+    queryFn: () => callAuroraApi<{ configs: Record<string, ServerConfig> }>(CLIENTS.CONFIGS_ALL),
     enabled: hasAuroraSession(),
     ...defaultQueryOptions,
   });
@@ -424,7 +429,7 @@ export function useAllClientConfigs() {
 export function useWifiMode(clientId: string) {
   return useQuery({
     queryKey: ["aurora", "clients", clientId, "wifi", "mode"],
-    queryFn: () => callAuroraApi<WifiMode>(`/api/clients/${clientId}/wifi/mode`),
+    queryFn: () => callAuroraApi<WifiMode>(CLIENTS.WIFI_MODE(clientId)),
     enabled: hasAuroraSession() && !!clientId,
     retry: 2,
   });
@@ -433,7 +438,7 @@ export function useWifiMode(clientId: string) {
 export function useWifiConfig(clientId: string) {
   return useQuery({
     queryKey: ["aurora", "clients", clientId, "wifi", "config"],
-    queryFn: () => callAuroraApi<WifiConfig>(`/api/clients/${clientId}/wifi/config`),
+    queryFn: () => callAuroraApi<WifiConfig>(CLIENTS.WIFI_CONFIG(clientId)),
     enabled: hasAuroraSession() && !!clientId,
     retry: 2,
   });
@@ -442,7 +447,7 @@ export function useWifiConfig(clientId: string) {
 export function useWifiStatus(clientId: string) {
   return useQuery({
     queryKey: ["aurora", "clients", clientId, "wifi", "status"],
-    queryFn: () => callAuroraApi<WifiStatus>(`/api/clients/${clientId}/wifi/status`),
+    queryFn: () => callAuroraApi<WifiStatus>(CLIENTS.WIFI_STATUS(clientId)),
     enabled: hasAuroraSession() && !!clientId,
     ...fastQueryOptions,
   });
@@ -451,7 +456,7 @@ export function useWifiStatus(clientId: string) {
 export function useWifiScan(clientId: string) {
   return useQuery({
     queryKey: ["aurora", "clients", clientId, "wifi", "scan"],
-    queryFn: () => callAuroraApi<{ networks: WifiNetwork[] }>(`/api/clients/${clientId}/wifi/scan`),
+    queryFn: () => callAuroraApi<{ networks: WifiNetwork[] }>(CLIENTS.WIFI_SCAN(clientId)),
     enabled: hasAuroraSession() && !!clientId,
     staleTime: 30000,
     retry: 2,
@@ -461,7 +466,7 @@ export function useWifiScan(clientId: string) {
 export function useWifiClients(clientId: string) {
   return useQuery({
     queryKey: ["aurora", "clients", clientId, "wifi", "clients"],
-    queryFn: () => callAuroraApi<{ clients: WifiClient[] }>(`/api/clients/${clientId}/wifi/clients`),
+    queryFn: () => callAuroraApi<{ clients: WifiClient[] }>(CLIENTS.WIFI_CLIENTS(clientId)),
     enabled: hasAuroraSession() && !!clientId,
     ...fastQueryOptions,
   });
@@ -470,7 +475,7 @@ export function useWifiClients(clientId: string) {
 export function useWifiApiVersion(clientId: string) {
   return useQuery({
     queryKey: ["aurora", "clients", clientId, "wifi", "version"],
-    queryFn: () => callAuroraApi<{ version: string }>(`/api/clients/${clientId}/wifi/version`),
+    queryFn: () => callAuroraApi<{ version: string }>(CLIENTS.WIFI_VERSION(clientId)),
     enabled: hasAuroraSession() && !!clientId,
     staleTime: 300000,
     retry: 2,
@@ -486,7 +491,7 @@ export function useAdoptClient() {
   
   return useMutation({
     mutationFn: async (clientId: string) => {
-      return callAuroraApi<StateTransitionResponse>(`/api/clients/${clientId}/adopt`, "POST");
+      return callAuroraApi<StateTransitionResponse>(CLIENTS.ADOPT(clientId), "POST");
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["aurora", "clients"] });
@@ -499,7 +504,7 @@ export function useRegisterClient() {
   
   return useMutation({
     mutationFn: async (clientId: string) => {
-      return callAuroraApi<StateTransitionResponse>(`/api/clients/${clientId}/register`, "POST");
+      return callAuroraApi<StateTransitionResponse>(CLIENTS.REGISTER(clientId), "POST");
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["aurora", "clients"] });
@@ -512,7 +517,7 @@ export function useDisableClient() {
   
   return useMutation({
     mutationFn: async ({ clientId, reason }: { clientId: string; reason?: string }) => {
-      return callAuroraApi<StateTransitionResponse>(`/api/clients/${clientId}/disable`, "POST", { reason });
+      return callAuroraApi<StateTransitionResponse>(CLIENTS.DISABLE(clientId), "POST", { reason });
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["aurora", "clients"] });
@@ -525,7 +530,7 @@ export function useEnableClient() {
   
   return useMutation({
     mutationFn: async (clientId: string) => {
-      return callAuroraApi<StateTransitionResponse>(`/api/clients/${clientId}/enable`, "POST");
+      return callAuroraApi<StateTransitionResponse>(CLIENTS.ENABLE(clientId), "POST");
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["aurora", "clients"] });
@@ -538,7 +543,7 @@ export function useSuspendClient() {
   
   return useMutation({
     mutationFn: async ({ clientId, reason }: { clientId: string; reason?: string }) => {
-      return callAuroraApi<StateTransitionResponse>(`/api/clients/${clientId}/suspend`, "POST", { reason });
+      return callAuroraApi<StateTransitionResponse>(CLIENTS.SUSPEND(clientId), "POST", { reason });
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["aurora", "clients"] });
@@ -551,7 +556,7 @@ export function useSoftDeleteClient() {
   
   return useMutation({
     mutationFn: async ({ clientId, reason }: { clientId: string; reason?: string }) => {
-      return callAuroraApi<StateTransitionResponse>(`/api/clients/${clientId}/delete-soft`, "POST", { reason });
+      return callAuroraApi<StateTransitionResponse>(CLIENTS.SOFT_DELETE(clientId), "POST", { reason });
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["aurora", "clients"] });
@@ -564,7 +569,7 @@ export function useRestoreClient() {
   
   return useMutation({
     mutationFn: async (clientId: string) => {
-      return callAuroraApi<StateTransitionResponse>(`/api/clients/${clientId}/restore`, "POST");
+      return callAuroraApi<StateTransitionResponse>(CLIENTS.RESTORE(clientId), "POST");
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["aurora", "clients"] });
@@ -577,7 +582,7 @@ export function useDeleteClient() {
   
   return useMutation({
     mutationFn: async (clientId: string) => {
-      return callAuroraApi<{ success: boolean }>(`/api/clients/${clientId}`, "DELETE");
+      return callAuroraApi<{ success: boolean }>(CLIENTS.DELETE(clientId), "DELETE");
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["aurora", "clients"] });
@@ -590,7 +595,7 @@ export function useUpdateClientConfig() {
   
   return useMutation({
     mutationFn: async ({ clientId, config }: { clientId: string; config: ServerConfig }) => {
-      return callAuroraApi<{ success: boolean }>(`/api/clients/${clientId}/config`, "PUT", config);
+      return callAuroraApi<{ success: boolean }>(CLIENTS.CONFIG(clientId), "PUT", config);
     },
     onSuccess: (_, variables) => {
       queryClient.invalidateQueries({ queryKey: ["aurora", "clients", variables.clientId, "config"] });
@@ -603,7 +608,7 @@ export function useSetWifiMode() {
   
   return useMutation({
     mutationFn: async ({ clientId, mode }: { clientId: string; mode: string }) => {
-      return callAuroraApi<{ success: boolean }>(`/api/clients/${clientId}/wifi/mode`, "POST", { mode });
+      return callAuroraApi<{ success: boolean }>(CLIENTS.WIFI_MODE(clientId), "POST", { mode });
     },
     onSuccess: (_, variables) => {
       queryClient.invalidateQueries({ queryKey: ["aurora", "clients", variables.clientId, "wifi"] });
@@ -616,7 +621,7 @@ export function useUpdateWifiConfig() {
   
   return useMutation({
     mutationFn: async ({ clientId, config }: { clientId: string; config: WifiConfig }) => {
-      return callAuroraApi<{ success: boolean }>(`/api/clients/${clientId}/wifi/config`, "POST", config);
+      return callAuroraApi<{ success: boolean }>(CLIENTS.WIFI_CONFIG(clientId), "POST", config);
     },
     onSuccess: (_, variables) => {
       queryClient.invalidateQueries({ queryKey: ["aurora", "clients", variables.clientId, "wifi"] });
@@ -629,7 +634,7 @@ export function useDisconnectWifiClient() {
   
   return useMutation({
     mutationFn: async ({ clientId, mac }: { clientId: string; mac: string }) => {
-      return callAuroraApi<{ success: boolean }>(`/api/clients/${clientId}/wifi/clients/${mac}/disconnect`, "POST");
+      return callAuroraApi<{ success: boolean }>(CLIENTS.WIFI_DISCONNECT(clientId, mac), "POST");
     },
     onSuccess: (_, variables) => {
       queryClient.invalidateQueries({ queryKey: ["aurora", "clients", variables.clientId, "wifi", "clients"] });

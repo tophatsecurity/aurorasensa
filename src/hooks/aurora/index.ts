@@ -91,7 +91,7 @@ export {
   useStarlinkDeviceTimeseries,
   useStarlinkReadings,
   useStarlinkTimeseries,
-  useStarlinkSensorReadings,
+  useStarlinkDashboard,
   useStarlinkDevicesFromReadings,
   useStarlinkDeviceMetrics,
   type StarlinkDeviceWithMetrics,
