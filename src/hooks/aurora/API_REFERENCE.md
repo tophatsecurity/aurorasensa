@@ -249,15 +249,23 @@ Based on the official API documentation at http://aurora.tophatsecurity.com:9151
 - `POST /api/config` - Update Config
 
 ## Statistics
-- `GET /api/stats` - Get All Statistics
+- `GET /api/stats` - Get All Statistics (all granularities)
+  - Query params: `client_id`, `device_id`, `sensor_type`, `limit_hourly`, `limit_sixhour`, `limit_twelvehour`, `limit_daily`, `limit_weekly`
 - `GET /api/stats/comprehensive` - Get Comprehensive Stats
 - `GET /api/stats/summary` - Get Stats Summary
 - `GET /api/stats/global` - Get Global Stats
 - `GET /api/stats/overview` - Get General Stats
-- `GET /api/stats/1hr` - Get 1Hr Sensor Stats
-- `GET /api/stats/6hr` - Get 6Hr Sensor Stats
-- `GET /api/stats/24hr` - Get 24Hr Sensor Stats
-- `GET /api/stats/weekly` - Get Weekly Sensor Stats
+- `GET /api/stats/1hr` - Get 1Hr Sensor Stats (last 24 hours)
+- `GET /api/stats/6hr` - Get 6Hr Sensor Stats (last 48 hours)
+- `GET /api/stats/12hr` - Get 12Hr Sensor Stats (last 7 days)
+- `GET /api/stats/24hr` - Get 24Hr Sensor Stats (last 30 days)
+- `GET /api/stats/weekly` - Get Weekly Sensor Stats (last 12 weeks)
+- `GET /api/stats/by-client` - Get Statistics Grouped by Client
+  - Query params: `client_id`, `hours` (default: 24), `limit` (default: 100), `offset` (default: 0)
+- `GET /api/stats/by-sensor` - Get Statistics Grouped by Sensor Type
+  - Query params: `client_id`, `hours` (default: 24), `limit` (default: 100), `offset` (default: 0)
+- `GET /api/stats/client/{client_id}` - Get Detailed Client Statistics
+  - Query params: `hours` (default: 24)
 - `GET /api/stats/devices` - Get All Devices Stats
 - `GET /api/stats/devices/{device_id}` - Get Device Stats
 - `GET /api/stats/sensors` - Get All Sensor Stats
@@ -266,6 +274,14 @@ Based on the official API documentation at http://aurora.tophatsecurity.com:9151
 - `GET /api/stats/endpoints` - Get Endpoint Stats Summary
 - `GET /api/stats/endpoints/history` - Get Endpoint Stats History
 - `GET /api/performance/stats` - Get Performance Stats
+
+## Device Data
+- `GET /api/devices/{device_id}` - Get Device Details
+- `GET /api/devices/{device_id}/readings` - Get Device Readings
+  - Query params: `hours` (default: 24)
+- `GET /api/devices/{device_id}/stats` - Get Aggregated Device Stats
+- `GET /api/devices/tree` - Get Device Tree
+- `GET /api/devices/status` - Get Device Status
 
 ## Historical Stats
 - `GET /api/stats/history/global` - Get Global Stats History

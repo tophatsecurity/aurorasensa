@@ -267,8 +267,15 @@ export {
   useGlobalStats,
   use1hrStats,
   use6hrStats,
+  use12hrStats,
   use24hrStats,
   useWeeklyStats,
+  useStatsAll,
+  useStatsByClient,
+  useStatsBySensor,
+  useClientDetailStats,
+  useDeviceReadings,
+  useDeviceDetailStats,
   usePeriodStats,
   usePeriodStatsByHours,
   useSensorTypeStatsById,
@@ -284,6 +291,7 @@ export {
   useDeviceStatsHistory,
   useAlertStatsHistory,
   useSystemResourceStatsHistory,
+  // Types
   type ClientStats,
   type TimePeriodStats,
   type SensorTypeStats,
@@ -294,6 +302,12 @@ export {
   type SystemResourceStatsHistoryPoint,
   type PeriodStats,
   type PerformanceStats,
+  type ClientGroupedStats,
+  type SensorGroupedStats,
+  type ClientDetailedStats,
+  type DeviceReadings,
+  type DeviceDetailedStats,
+  type StatsAllResponse,
 } from "./stats";
 
 // Client-specific sensor data hooks
