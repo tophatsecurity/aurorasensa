@@ -5,7 +5,7 @@ import {
   LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, 
   AreaChart, Area, Legend 
 } from "recharts";
-import { useClients, useComprehensiveStats, useSensorTypeStats } from "@/hooks/useAuroraApi";
+import { useClients, useComprehensiveStats, useSensorTypeStatsById } from "@/hooks/aurora";
 import { useMetricsHistory } from "@/hooks/useMetricsHistory";
 import { Skeleton } from "@/components/ui/skeleton";
 
@@ -15,7 +15,7 @@ const PerformanceContent = () => {
   const { history: metricsHistory, isLoading: historyLoading } = useMetricsHistory(30000);
   
   // System monitor sensor stats from API
-  const { data: systemMonitorStats, isLoading: sysMonitorLoading } = useSensorTypeStats("system_monitor");
+  const { data: systemMonitorStats, isLoading: sysMonitorLoading } = useSensorTypeStatsById("system_monitor");
 
   // Aggregate system metrics from all clients
   const systemMetrics = clients?.reduce(

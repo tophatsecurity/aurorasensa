@@ -47,7 +47,7 @@ import {
 import { 
   useStarlinkStats, 
   useStarlinkTimeseries, 
-  useSensorTypeStats, 
+  useSensorTypeStatsById, 
   useStarlinkDevices,
   useStarlinkDeviceStats,
   useStarlinkDeviceTimeseries,
@@ -57,12 +57,10 @@ import {
   useStarlinkConnectivity,
   useStarlinkGlobalStats,
   useClients,
-  StarlinkTimeseriesPoint 
-} from "@/hooks/useAuroraApi";
-import { 
   useStarlinkDevicesFromReadings,
   useStarlinkDeviceMetrics,
-} from "@/hooks/aurora/starlink";
+  StarlinkTimeseriesPoint 
+} from "@/hooks/aurora";
 import { StarlinkMonitoringPanel, StarlinkPerformanceCharts, StarlinkSignalChart } from "@/components/starlink";
 
 
@@ -135,7 +133,7 @@ const StarlinkContent = () => {
   const activeClientFilter = selectedClients.length > 0 ? selectedClients[0] : undefined;
   const { data: starlinkStats, isLoading: statsLoading } = useStarlinkStats();
   const { data: starlinkTimeseries, isLoading: timeseriesLoading } = useStarlinkTimeseries(24, activeClientFilter);
-  const { data: sensorStats, isLoading: sensorLoading } = useSensorTypeStats("starlink");
+  const { data: sensorStats, isLoading: sensorLoading } = useSensorTypeStatsById("starlink");
   
   // New dedicated API endpoints for detailed metrics
   const { data: signalStrength } = useStarlinkSignalStrength();

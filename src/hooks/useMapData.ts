@@ -6,7 +6,7 @@ import {
   useLatestReadings,
   useGeoLocations,
   useDeviceLatest,
-  useSensorTypeStats,
+  useSensorTypeStatsById,
   useAdsbAircraftWithHistory,
   useAdsbHistorical,
   useGpsdStatus,
@@ -237,7 +237,7 @@ export function useMapData(options: UseMapDataOptions = {}) {
   } = useGeoLocations();
 
   // Get Starlink sensor stats which contains GPS coordinates
-  const { data: starlinkStats } = useSensorTypeStats('starlink');
+  const { data: starlinkStats } = useSensorTypeStatsById('starlink');
 
   // Get the Starlink device latest reading for real-time GPS
   const { data: starlinkLatest } = useDeviceLatest('starlink_dish_1');

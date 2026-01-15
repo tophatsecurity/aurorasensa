@@ -62,7 +62,7 @@ import {
 } from "recharts";
 import { TimePeriodSelector } from "@/components/ui/context-selectors";
 import { useClientContext } from "@/contexts/ClientContext";
-import { useClients, useLatestReadings, useSensorTypeStats, useAllSensorStats, useWifiScannerTimeseries, useBluetoothScannerTimeseries, useLoraDetectorTimeseries, useAdsbAircraftWithHistory, useLoraDevices, useLoraGlobalStats, useRecentLoraDetections } from "@/hooks/useAuroraApi";
+import { useClients, useLatestReadings, useSensorTypeStatsById, useAllSensorStats, useWifiScannerTimeseries, useBluetoothScannerTimeseries, useLoraDetectorTimeseries, useAdsbAircraftWithHistory, useLoraDevices, useLoraGlobalStats, useRecentLoraDetections } from "@/hooks/aurora";
 import { formatDistanceToNow } from "date-fns";
 
 // Helper function to format signal strength
@@ -175,8 +175,8 @@ const RadioContent = () => {
   const { data: clients, isLoading: clientsLoading } = useClients();
   const { data: latestReadings, isLoading: readingsLoading, refetch: refetchReadings } = useLatestReadings();
   const { data: allSensorStats, isLoading: statsLoading } = useAllSensorStats();
-  const { data: wifiStats } = useSensorTypeStats("wifi_scanner");
-  const { data: bluetoothStats } = useSensorTypeStats("bluetooth_scanner");
+  const { data: wifiStats } = useSensorTypeStatsById("wifi_scanner");
+  const { data: bluetoothStats } = useSensorTypeStatsById("bluetooth_scanner");
   
   // Fetch timeseries data
   const { data: wifiTimeseries, isLoading: wifiTimeseriesLoading } = useWifiScannerTimeseries(hoursForTimeRange);

@@ -3,8 +3,8 @@ import { Radio, Activity, Signal, Loader2 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { 
   useLoraDevices,
-  useSensorTypeStats,
-} from "@/hooks/useAuroraApi";
+  useSensorTypeStatsById,
+} from "@/hooks/aurora";
 import { formatLastSeen } from "@/utils/dateUtils";
 import {
   ResponsiveContainer,
@@ -21,14 +21,16 @@ interface LoRaSectionProps {
 }
 
 export const LoRaSection = memo(function LoRaSection({ hours = 24 }: LoRaSectionProps) {
-  const { data: stats, isLoading: statsLoading } = useSensorTypeStats("lora");
-  const { data: devices } = useLoraDevices();
+  const { data: stats, isLoading: statsLoading } = useSensorTypeStatsById("lora");
+  const { data: devicesData } = useLoraDevices();
+  const devices = devicesData?.devices ?? [];
 
   const chartData: { time: string; rssi: number }[] = [];
 
   const totalPackets = stats?.total_readings ?? 0;
-  const activeDevices = devices?.length ?? stats?.device_count ?? 0;
-  const avgRssi = stats?.avg_value ?? null;
+  const activeDevices = devices.length ?? stats?.device_count ?? 0;
+  // SensorTypeStats doesn't have avg_value, use numeric_field_stats_24h if available
+  const avgRssi = stats?.numeric_field_stats_24h?.rssi?.avg ?? null;
 
   return (
     <div className="mb-8">

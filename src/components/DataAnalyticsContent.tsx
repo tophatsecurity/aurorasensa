@@ -35,12 +35,12 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { 
   useComprehensiveStats, 
   useDashboardTimeseries,
-  useSensorTypeStats,
+  useSensorTypeStatsById,
   useClients,
   useDeviceTree,
   type SensorTypeSummary,
   type DeviceSummary
-} from "@/hooks/useAuroraApi";
+} from "@/hooks/aurora";
 import { useQueryClient } from "@tanstack/react-query";
 import {
   AreaChart,
@@ -186,7 +186,7 @@ interface SensorDetailPanelProps {
 }
 
 const SensorDetailPanel = ({ sensorType, timeseries }: SensorDetailPanelProps) => {
-  const { data: sensorStats, isLoading } = useSensorTypeStats(sensorType);
+  const { data: sensorStats, isLoading } = useSensorTypeStatsById(sensorType);
   const color = getSensorColor(sensorType);
   
   const formatChartData = (data: any[] | undefined) => {
