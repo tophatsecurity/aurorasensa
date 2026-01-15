@@ -1,7 +1,7 @@
 // Aurora API - Client Hooks
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { callAuroraApi, hasAuroraSession, defaultQueryOptions, fastQueryOptions } from "./core";
-import { CLIENTS, BATCHES, withQuery } from "./endpoints";
+import { CLIENTS } from "./endpoints";
 import type { 
   Client, 
   ClientsListResponse, 
@@ -23,34 +23,9 @@ import type {
 // CLIENT QUERY HOOKS
 // =============================================
 
-// Interface for batch with readings containing hostname
-interface BatchWithReadings {
-  batch_id: string;
-  client_id: string;
-  readings?: Array<{
-    sensors?: Record<string, {
-      device_type?: string;
-      system?: {
-        hostname?: string;
-      };
-    }>;
-  }>;
-}
-
-// Helper to extract hostname from batch readings
-function extractHostnameFromBatch(batch: BatchWithReadings | null): string | null {
-  if (!batch?.readings?.[0]?.sensors) return null;
-  
-  const sensors = batch.readings[0].sensors;
-  
-  // Look for system_monitor sensor which contains the system hostname
-  for (const [sensorId, sensorData] of Object.entries(sensors)) {
-    if (sensorData?.device_type === 'system_monitor' && sensorData?.system?.hostname) {
-      return sensorData.system.hostname;
-    }
-  }
-  
-  return null;
+// Response type for all clients system info
+interface AllClientsSystemInfoResponse {
+  clients: Record<string, SystemInfo>;
 }
 
 export function useClients() {
@@ -69,79 +44,37 @@ export function useClients() {
   });
 }
 
-// Fetch clients with enriched hostname from their latest batch
 export function useClientsWithHostnames() {
   return useQuery({
     queryKey: ["aurora", "clients", "with-hostnames"],
     queryFn: async () => {
       try {
-        // Fetch clients list
-        const clientsResponse = await callAuroraApi<ClientsListResponse>(CLIENTS.LIST);
+        // Fetch clients list and system info in parallel for efficiency
+        const [clientsResponse, systemInfoResponse] = await Promise.all([
+          callAuroraApi<ClientsListResponse>(CLIENTS.LIST),
+          callAuroraApi<AllClientsSystemInfoResponse>(CLIENTS.SYSTEM_INFO_ALL).catch(() => null),
+        ]);
+        
         const clients = clientsResponse.clients || [];
         
         if (clients.length === 0) {
           return [];
         }
         
-        // Try to fetch batches to get hostnames - this endpoint may not exist
-        let batches: Array<{ batch_id: string; client_id: string }> = [];
-        try {
-          const batchesResponse = await callAuroraApi<{ batches: Array<{ batch_id: string; client_id: string }> }>(
-            withQuery(BATCHES.LIST, { limit: 100 })
-          );
-          batches = batchesResponse.batches || [];
-        } catch {
-          // Batches endpoint not available - just return clients with their existing hostnames
-          return clients.map(client => ({
-            ...client,
-            hostname: client.hostname || client.client_id,
-          }));
-        }
-        
-        if (batches.length === 0) {
-          return clients.map(client => ({
-            ...client,
-            hostname: client.hostname || client.client_id,
-          }));
-        }
-        
-        // Group batches by client_id and get the latest for each
-        const clientBatchMap = new Map<string, string>();
-        for (const batch of batches) {
-          // Extract client_id from batch_id if client_id is "unknown"
-          let clientId = batch.client_id;
-          if (clientId === "unknown" && batch.batch_id.includes("client_")) {
-            const match = batch.batch_id.match(/client_([a-f0-9]+)/);
-            if (match) {
-              clientId = `client_${match[1]}`;
-            }
-          }
-          
-          // Only keep the first (most recent) batch per client
-          if (!clientBatchMap.has(clientId)) {
-            clientBatchMap.set(clientId, batch.batch_id);
-          }
-        }
-        
-        // Fetch batch details to get hostnames
+        // Build hostname map from system info (properly typed)
         const hostnameMap = new Map<string, string>();
         
-        await Promise.all(
-          Array.from(clientBatchMap.entries()).map(async ([clientId, batchId]) => {
-            try {
-              const batchData = await callAuroraApi<BatchWithReadings>(BATCHES.GET(batchId));
-              const hostname = extractHostnameFromBatch(batchData);
-              if (hostname) {
-                hostnameMap.set(clientId, hostname);
-              }
-            } catch (e) {
-              // Ignore errors fetching individual batches
-              console.debug(`Failed to fetch batch ${batchId} for hostname:`, e);
+        if (systemInfoResponse?.clients) {
+          const clientsRecord = systemInfoResponse.clients as Record<string, SystemInfo>;
+          for (const clientId of Object.keys(clientsRecord)) {
+            const systemInfo = clientsRecord[clientId];
+            if (systemInfo?.hostname && systemInfo.hostname !== 'unknown') {
+              hostnameMap.set(clientId, systemInfo.hostname);
             }
-          })
-        );
+          }
+        }
         
-        // Enrich clients with batch hostnames
+        // Enrich clients with system info hostnames
         return clients.map(client => ({
           ...client,
           hostname: hostnameMap.get(client.client_id) || client.hostname || client.client_id,
@@ -152,7 +85,7 @@ export function useClientsWithHostnames() {
     },
     enabled: hasAuroraSession(),
     ...fastQueryOptions,
-    staleTime: 60000, // Cache for 1 minute since this is an expensive operation
+    staleTime: 60000, // Cache for 1 minute
     refetchInterval: 120000, // Refetch every 2 minutes
   });
 }
@@ -171,56 +104,28 @@ export function useClientsByState() {
     queryKey: ["aurora", "clients", "all-states"],
     queryFn: async () => {
       try {
-        // Fetch clients by state
-        const response = await callAuroraApi<ClientsByStateResponse>(CLIENTS.ALL_STATES);
+        // Fetch clients by state and system info in parallel
+        const [response, systemInfoResponse] = await Promise.all([
+          callAuroraApi<ClientsByStateResponse>(CLIENTS.ALL_STATES),
+          callAuroraApi<AllClientsSystemInfoResponse>(CLIENTS.SYSTEM_INFO_ALL).catch(() => null),
+        ]);
         
         // API returns "states" but we normalize to "clients_by_state"
         const statesData = response.states || response.clients_by_state;
         
-        // Try to fetch batches to get hostnames - this is optional
-        let hostnameMap = new Map<string, string>();
-        try {
-          const batchesResponse = await callAuroraApi<{ batches: Array<{ batch_id: string; client_id: string }> }>(
-            withQuery(BATCHES.LIST, { limit: 100 })
-          );
-          const batches = batchesResponse.batches || [];
-          
-          if (batches.length > 0) {
-            // Group batches by client_id and get the latest for each
-            const clientBatchMap = new Map<string, string>();
-            for (const batch of batches) {
-              let clientId = batch.client_id;
-              if (clientId === "unknown" && batch.batch_id.includes("client_")) {
-                const match = batch.batch_id.match(/client_([a-f0-9]+)/);
-                if (match) {
-                  clientId = `client_${match[1]}`;
-                }
-              }
-              if (!clientBatchMap.has(clientId)) {
-                clientBatchMap.set(clientId, batch.batch_id);
-              }
+        // Build hostname map from system info
+        const hostnameMap = new Map<string, string>();
+        if (systemInfoResponse?.clients) {
+          const clientsRecord = systemInfoResponse.clients as Record<string, SystemInfo>;
+          for (const clientId of Object.keys(clientsRecord)) {
+            const systemInfo = clientsRecord[clientId];
+            if (systemInfo?.hostname && systemInfo.hostname !== 'unknown') {
+              hostnameMap.set(clientId, systemInfo.hostname);
             }
-            
-            // Fetch batch details to get hostnames
-            await Promise.all(
-              Array.from(clientBatchMap.entries()).map(async ([clientId, batchId]) => {
-                try {
-                  const batchData = await callAuroraApi<BatchWithReadings>(BATCHES.GET(batchId));
-                  const hostname = extractHostnameFromBatch(batchData);
-                  if (hostname) {
-                    hostnameMap.set(clientId, hostname);
-                  }
-                } catch (e) {
-                  console.debug(`Failed to fetch batch ${batchId} for hostname:`, e);
-                }
-              })
-            );
           }
-        } catch {
-          // Batches endpoint not available - continue without hostname enrichment
         }
         
-        // Enrich clients with hostnames
+        // Enrich clients with hostnames from system info
         const enrichClientsWithMap = (clients: Client[]) => 
           clients.map(client => ({
             ...client,
