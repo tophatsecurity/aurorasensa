@@ -1,8 +1,8 @@
-import { Server, Bell, Settings, Shield, User } from "lucide-react";
+import { Server, Bell, Settings } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
 import { useAuroraAuthContext } from "@/hooks/useAuroraAuth";
 import ConnectionStatusIndicator from "./ConnectionStatusIndicator";
+import { UserMenu } from "./UserMenu";
 
 const Header = () => {
   const { user, isAdmin } = useAuroraAuthContext();
@@ -54,39 +54,8 @@ const Header = () => {
               <Settings className="w-5 h-5" />
             </Button>
             
-            {/* User Info with Role Badge */}
-            {user && (
-              <div className="flex items-center gap-2">
-                <div className="flex flex-col items-end">
-                  <span className="text-sm font-medium">{user.username}</span>
-                  <Badge 
-                    variant={isAdmin ? "default" : "secondary"}
-                    className={`text-xs px-1.5 py-0 h-4 ${
-                      isAdmin 
-                        ? "bg-gradient-to-r from-amber-500 to-orange-500 text-white border-0" 
-                        : "bg-muted text-muted-foreground"
-                    }`}
-                  >
-                    {isAdmin ? (
-                      <><Shield className="w-2.5 h-2.5 mr-0.5" /> Admin</>
-                    ) : (
-                      <><User className="w-2.5 h-2.5 mr-0.5" /> User</>
-                    )}
-                  </Badge>
-                </div>
-                <div className={`w-8 h-8 rounded-full flex items-center justify-center ${
-                  isAdmin 
-                    ? "bg-gradient-to-br from-amber-500 to-orange-500" 
-                    : "bg-gradient-to-br from-aurora-cyan to-aurora-green"
-                }`}>
-                  {isAdmin ? (
-                    <Shield className="w-4 h-4 text-white" />
-                  ) : (
-                    <User className="w-4 h-4 text-white" />
-                  )}
-                </div>
-              </div>
-            )}
+            {/* User Menu with Logout */}
+            {user && <UserMenu />}
           </div>
         </div>
       </div>
