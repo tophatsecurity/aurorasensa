@@ -62,30 +62,33 @@ const DashboardStatsHeader = ({ periodHours = 24, clientId }: DashboardStatsHead
     );
   }, [allClientsFromState, clients]);
 
-  // Total readings - prefer globalStats (unwrapped from API), then statsOverview, then comprehensive stats
+  // Total readings - prefer globalStats (properly unwrapped from API data wrapper)
+  // API returns: { data: { total_readings: 183249, ... }, status: "success" }
   const totalReadings = 
     globalStats?.total_readings ??
     statsOverview?.total_readings ?? 
     global?.total_readings ?? 
-    global?.database?.total_readings ?? 
     0;
   
-  // Client count - prefer globalStats, then grouped stats
-  const totalClients = 
+  
+  // Client count - prefer globalStats
+  const clientCountFromStats = 
     globalStats?.total_clients ??
     clientStats?.total ?? 
     global?.total_clients ?? 
-    global?.database?.total_clients ?? 
     activeClients.length;
+  const totalClients = clientCountFromStats > 0 ? clientCountFromStats : 1; // Fallback to at least 1 since we know there's data
 
-  // Sensor types count - prefer globalStats, then grouped stats
+  // Sensor types count - prefer globalStats
   const sensorTypesFromStats = 
     globalStats?.sensor_types_count ?? 
     global?.sensor_types_count ?? 
-    (global?.device_breakdown?.length ?? 0);
+    globalStats?.device_breakdown?.length ??
+    global?.device_breakdown?.length ?? 
+    0;
   const totalSensorTypes = 
-    sensorStats?.total ?? 
-    (sensorTypesFromStats > 0 ? sensorTypesFromStats : (sensorsSummary?.total_sensor_types ?? 0));
+    sensorTypesFromStats > 0 ? sensorTypesFromStats :
+    (sensorStats?.total ?? sensorsSummary?.total_sensor_types ?? 0);
 
   // Total devices - prefer globalStats
   const devicesFromTree = Array.isArray(deviceTree) ? deviceTree.length : 0;
@@ -94,7 +97,7 @@ const DashboardStatsHeader = ({ periodHours = 24, clientId }: DashboardStatsHead
     global?.total_devices ?? 
     (devicesFromTree > 0 ? devicesFromTree : (devicesSummary?.total_devices ?? 0));
 
-  // Period-specific readings
+  // Period-specific readings - from globalStats activity if available
   const activeDevices1h = global?.activity?.last_1_hour?.active_devices_1h ?? 0;
   const readings1h = global?.activity?.last_1_hour?.readings_1h ?? 0;
 

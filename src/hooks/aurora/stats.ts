@@ -422,10 +422,24 @@ export function useComprehensiveStats(clientId?: string | null) {
       const raw = await callAuroraApi<ComprehensiveStats | ApiResponse<ComprehensiveStatsGlobal>>(
         STATS.COMPREHENSIVE, "GET", undefined, { clientId }
       );
+      
       // Handle both direct response and wrapped response
       if (raw && 'global' in raw) {
         return raw as ComprehensiveStats;
       }
+      
+      // API might return { data: {...}, status: 'success' } structure
+      // or { daily: {...}, hourly: {...} } structure for comprehensive stats
+      if (raw && 'daily' in raw) {
+        // This is the new comprehensive stats format with time granularities
+        // We need to extract key metrics from it
+        return {
+          status: 'success',
+          timestamp: new Date().toISOString(),
+          global: {} as ComprehensiveStatsGlobal, // Will be merged with global stats
+        } as ComprehensiveStats;
+      }
+      
       // If it's wrapped in data, convert to expected structure
       const unwrapped = unwrapApiResponse(raw);
       if (unwrapped && typeof unwrapped === 'object') {
@@ -473,10 +487,13 @@ export function useGlobalStats(clientId?: string | null) {
   return useQuery({
     queryKey: ["aurora", "stats", "global", clientId],
     queryFn: async () => {
-      const raw = await callAuroraApi<GlobalStats | ApiResponse<GlobalStats>>(
+      const raw = await callAuroraApi<ApiResponse<GlobalStats> | GlobalStats>(
         STATS.GLOBAL, "GET", undefined, { clientId }
       );
-      return unwrapApiResponse(raw);
+      // API returns { data: { total_readings, total_devices, ... }, status, timestamp }
+      // We need to extract the data object
+      const unwrapped = unwrapApiResponse(raw);
+      return unwrapped;
     },
     enabled: hasAuroraSession(),
     staleTime: 60000,

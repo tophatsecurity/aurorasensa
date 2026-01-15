@@ -222,18 +222,18 @@ const DashboardContent = () => {
     return [...pending, ...registered, ...adopted, ...disabled, ...suspended];
   }, [clientsByState]);
 
-  // Use statsOverview for accurate total readings, fallback to comprehensive stats (new flat structure)
-  const totalReadings = statsOverview?.total_readings ?? global?.total_readings ?? global?.database?.total_readings ?? 0;
+  // Use globalStats (from /api/stats/global) as primary source, fallback to comprehensive stats
+  // API returns { data: { total_readings: 183249, ... }, status: "success" }
+  const totalReadings = globalStats?.total_readings ?? statsOverview?.total_readings ?? global?.total_readings ?? global?.database?.total_readings ?? 0;
   
-  // Get client counts - prefer comprehensive stats, then clientStatistics
-  // Comprehensive stats now has flat structure: global.total_clients
-  const comprehensiveClientCount = global?.total_clients ?? global?.database?.total_clients ?? 0;
+  // Get client counts - prefer globalStats, then comprehensive stats
+  const comprehensiveClientCount = globalStats?.total_clients ?? global?.total_clients ?? global?.database?.total_clients ?? 0;
   // API returns { status, statistics: { total, by_state, summary } }
   const clientStatsTotal = clientStatistics?.statistics?.total ?? clientStatistics?.total ?? 0;
   const aggregatedClientCount = allClientsFromState.length;
   const clientsArrayCount = clients?.length ?? 0;
   
-  // Use the best available client count (prefer comprehensive stats, then clientStatistics)
+  // Use the best available client count (prefer globalStats, then comprehensive stats)
   const effectiveClients = comprehensiveClientCount > 0 ? comprehensiveClientCount :
                           clientStatsTotal > 0 ? clientStatsTotal : 
                           aggregatedClientCount > 0 ? aggregatedClientCount : 
@@ -257,9 +257,17 @@ const DashboardContent = () => {
   const activeDevices1h = global?.activity?.last_1_hour?.active_devices_1h ?? 0;
   const readings1h = global?.activity?.last_1_hour?.readings_1h ?? 0;
   
-  // Get sensor types count from comprehensive stats or device tree
+  // Get sensor types count from globalStats or comprehensive stats or device tree
   const deviceTypes = useMemo(() => {
-    // Prefer comprehensive stats sensor_types_count
+    // Prefer globalStats sensor_types_count
+    if (globalStats?.sensor_types_count && globalStats.sensor_types_count > 0) {
+      return globalStats.sensor_types_count;
+    }
+    // Fallback to globalStats device_breakdown
+    if (globalStats?.device_breakdown && globalStats.device_breakdown.length > 0) {
+      return globalStats.device_breakdown.length;
+    }
+    // Fallback to comprehensive stats
     if (global?.sensor_types_count && global.sensor_types_count > 0) {
       return global.sensor_types_count;
     }
@@ -275,11 +283,11 @@ const DashboardContent = () => {
       return types.size;
     }
     return sensorsSummary?.total_sensor_types ?? 0;
-  }, [global, deviceTree, sensorsSummary]);
+  }, [globalStats, global, deviceTree, sensorsSummary]);
   
   const totalSensorTypes = deviceTypes;
-  const totalDevices = global?.total_devices ?? (Array.isArray(deviceTree) ? deviceTree.length : (devicesSummary?.total_devices ?? 0));
-  const totalBatches = global?.total_batches ?? 0;
+  const totalDevices = globalStats?.total_devices ?? global?.total_devices ?? (Array.isArray(deviceTree) ? deviceTree.length : (devicesSummary?.total_devices ?? 0));
+  const totalBatches = globalStats?.total_batches ?? global?.total_batches ?? 0;
   const activeAlerts = alertStats?.active ?? global?.database?.active_alerts ?? 0;
 
   // Extract real sensor data from numeric_field_stats_24h
