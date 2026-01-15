@@ -5,6 +5,7 @@
 
 import { useQuery } from "@tanstack/react-query";
 import { callAuroraApi, hasAuroraSession, fastQueryOptions, defaultQueryOptions } from "./core";
+import { STARLINK, READINGS, STATS, DEVICES, withQuery } from "./endpoints";
 import type { 
   StarlinkDevice,
   StarlinkDeviceStats,
@@ -64,7 +65,7 @@ export function useStarlinkDevicesFromReadings() {
     queryKey: ["aurora", "starlink", "devices-from-readings"],
     queryFn: async () => {
       try {
-        const response = await callAuroraApi<{ count: number; readings: LatestReading[] }>("/api/readings/latest");
+        const response = await callAuroraApi<{ count: number; readings: LatestReading[] }>(READINGS.LATEST);
         const readings = response?.readings || [];
         
         // Filter for starlink readings and extract device info
@@ -148,11 +149,6 @@ export function useStarlinkDeviceMetrics(clientId: string | null, deviceId: stri
       if (!clientId || !deviceId) return { count: 0, readings: [] };
       
       try {
-        const params = new URLSearchParams();
-        params.append('hours', hours.toString());
-        params.append('client_id', clientId);
-        params.append('device_id', deviceId);
-        
         interface RawReading {
           timestamp: string;
           device_id?: string;
@@ -180,7 +176,9 @@ export function useStarlinkDeviceMetrics(clientId: string | null, deviceId: stri
           readings?: RawReading[];
         }
         
-        const response = await callAuroraApi<RawResponse>(`/api/readings/sensor/starlink?${params.toString()}`);
+        const response = await callAuroraApi<RawResponse>(
+          withQuery(READINGS.BY_SENSOR_TYPE('starlink'), { hours, client_id: clientId, device_id: deviceId })
+        );
         
         const transformedReadings: StarlinkTimeseriesPoint[] = (response.readings || []).map(r => {
           const starlinkData = r.data?.starlink;
@@ -225,7 +223,7 @@ export function useStarlinkDevices() {
     queryKey: ["aurora", "starlink", "devices"],
     queryFn: async () => {
       try {
-        return await callAuroraApi<StarlinkDevice[]>("/api/starlink/devices");
+        return await callAuroraApi<StarlinkDevice[]>(STARLINK.DEVICES);
       } catch (error) {
         console.warn("Failed to fetch Starlink devices:", error);
         return [];
@@ -239,7 +237,9 @@ export function useStarlinkDevices() {
 export function useStarlinkDevice(deviceId: string) {
   return useQuery({
     queryKey: ["aurora", "starlink", "devices", deviceId],
-    queryFn: () => callAuroraApi<{ device_id: string; status?: string; last_seen?: string }>(`/api/starlink/devices/${deviceId}`),
+    queryFn: () => callAuroraApi<{ device_id: string; status?: string; last_seen?: string }>(
+      STARLINK.DEVICE(deviceId)
+    ),
     enabled: STARLINK_EXTENDED_API_ENABLED && hasAuroraSession() && !!deviceId,
     retry: 2,
   });
@@ -248,7 +248,7 @@ export function useStarlinkDevice(deviceId: string) {
 export function useStarlinkStats() {
   return useQuery({
     queryKey: ["aurora", "starlink", "stats"],
-    queryFn: () => callAuroraApi<StarlinkStats>("/api/starlink/stats"),
+    queryFn: () => callAuroraApi<StarlinkStats>(STARLINK.STATS),
     enabled: STARLINK_EXTENDED_API_ENABLED && hasAuroraSession(),
     staleTime: 15000,
     refetchInterval: 30000,
@@ -259,7 +259,7 @@ export function useStarlinkStats() {
 export function useStarlinkGlobalStats() {
   return useQuery({
     queryKey: ["aurora", "starlink", "stats", "global"],
-    queryFn: () => callAuroraApi<StarlinkStats>("/api/starlink/stats/global"),
+    queryFn: () => callAuroraApi<StarlinkStats>(STARLINK.STATS_GLOBAL),
     enabled: STARLINK_EXTENDED_API_ENABLED && hasAuroraSession(),
     ...defaultQueryOptions,
   });
@@ -268,7 +268,7 @@ export function useStarlinkGlobalStats() {
 export function useStarlinkDeviceStatsById(deviceId: string) {
   return useQuery({
     queryKey: ["aurora", "starlink", "stats", "device", deviceId],
-    queryFn: () => callAuroraApi<Record<string, unknown>>(`/api/starlink/stats/device/${deviceId}`),
+    queryFn: () => callAuroraApi<Record<string, unknown>>(STARLINK.STATS_DEVICE(deviceId)),
     enabled: STARLINK_EXTENDED_API_ENABLED && hasAuroraSession() && !!deviceId,
     retry: 2,
   });
@@ -277,7 +277,7 @@ export function useStarlinkDeviceStatsById(deviceId: string) {
 export function useStarlinkSignalStrength() {
   return useQuery({
     queryKey: ["aurora", "starlink", "signal-strength"],
-    queryFn: () => callAuroraApi<StarlinkSignalStrength>("/api/starlink/signal-strength"),
+    queryFn: () => callAuroraApi<StarlinkSignalStrength>(STARLINK.SIGNAL_STRENGTH),
     enabled: STARLINK_EXTENDED_API_ENABLED && hasAuroraSession(),
     staleTime: 15000,
     refetchInterval: 30000,
@@ -288,7 +288,7 @@ export function useStarlinkSignalStrength() {
 export function useStarlinkPerformance() {
   return useQuery({
     queryKey: ["aurora", "starlink", "performance"],
-    queryFn: () => callAuroraApi<StarlinkPerformance>("/api/starlink/performance"),
+    queryFn: () => callAuroraApi<StarlinkPerformance>(STARLINK.PERFORMANCE),
     enabled: STARLINK_EXTENDED_API_ENABLED && hasAuroraSession(),
     staleTime: 15000,
     refetchInterval: 30000,
@@ -299,7 +299,7 @@ export function useStarlinkPerformance() {
 export function useStarlinkPower() {
   return useQuery({
     queryKey: ["aurora", "starlink", "power"],
-    queryFn: () => callAuroraApi<StarlinkPower>("/api/starlink/power"),
+    queryFn: () => callAuroraApi<StarlinkPower>(STARLINK.POWER),
     enabled: STARLINK_EXTENDED_API_ENABLED && hasAuroraSession(),
     staleTime: 15000,
     refetchInterval: 30000,
@@ -310,7 +310,7 @@ export function useStarlinkPower() {
 export function useStarlinkConnectivity() {
   return useQuery({
     queryKey: ["aurora", "starlink", "connectivity"],
-    queryFn: () => callAuroraApi<StarlinkConnectivity>("/api/starlink/connectivity"),
+    queryFn: () => callAuroraApi<StarlinkConnectivity>(STARLINK.CONNECTIVITY),
     enabled: STARLINK_EXTENDED_API_ENABLED && hasAuroraSession(),
     staleTime: 15000,
     refetchInterval: 30000,
@@ -324,7 +324,7 @@ export function useStarlinkDeviceStats(deviceId: string | null) {
     queryFn: async () => {
       if (!deviceId) return null;
       try {
-        const response = await callAuroraApi<StarlinkDeviceStats>(`/api/stats/devices/${deviceId}`);
+        const response = await callAuroraApi<StarlinkDeviceStats>(STATS.DEVICE(deviceId));
         return response;
       } catch (error) {
         console.warn(`Failed to fetch stats for device ${deviceId}:`, error);
@@ -344,11 +344,13 @@ export function useStarlinkDeviceTimeseries(deviceId: string | null, hours: numb
     queryFn: async () => {
       if (!deviceId) return { count: 0, readings: [] };
       try {
-        const response = await callAuroraApi<StarlinkTimeseriesResponse>(`/api/readings/sensor/starlink?device_id=${deviceId}&hours=${hours}`);
+        const response = await callAuroraApi<StarlinkTimeseriesResponse>(
+          withQuery(READINGS.BY_SENSOR_TYPE('starlink'), { device_id: deviceId, hours })
+        );
         return response;
       } catch {
         try {
-          const latest = await callAuroraApi<LatestReading>(`/api/devices/${deviceId}/latest`);
+          const latest = await callAuroraApi<LatestReading>(DEVICES.LATEST(deviceId));
           if (latest?.data) {
             return {
               count: 1,
@@ -376,7 +378,7 @@ export function useStarlinkReadings(hours: number = 24) {
     queryKey: ["aurora", "starlink", "readings", hours],
     queryFn: async () => {
       try {
-        const response = await callAuroraApi<StarlinkReadingsResponse>(`/api/stats/sensors/starlink`);
+        const response = await callAuroraApi<StarlinkReadingsResponse>(STATS.SENSOR_TYPE('starlink'));
         return response;
       } catch (error) {
         console.warn("Failed to fetch starlink readings:", error);
@@ -439,16 +441,17 @@ export function useStarlinkTimeseries(hours: number = 24, clientId?: string, dev
           sensor_type?: string;
         }
         
-        const params = new URLSearchParams();
-        params.append('hours', hours.toString());
+        const params: Record<string, string | number | undefined> = { hours };
         if (clientId && clientId !== 'all') {
-          params.append('client_id', clientId);
+          params.client_id = clientId;
         }
         if (deviceId) {
-          params.append('device_id', deviceId);
+          params.device_id = deviceId;
         }
         
-        const response = await callAuroraApi<RawResponse>(`/api/readings/sensor/starlink?${params.toString()}`);
+        const response = await callAuroraApi<RawResponse>(
+          withQuery(READINGS.BY_SENSOR_TYPE('starlink'), params)
+        );
         
         const transformedReadings: StarlinkTimeseriesPoint[] = (response.readings || []).map(r => {
           const starlinkData = r.data?.starlink;
@@ -476,58 +479,33 @@ export function useStarlinkTimeseries(hours: number = 24, clientId?: string, dev
           count: transformedReadings.length, 
           readings: transformedReadings 
         };
-      } catch {
-        try {
-          const fallback = await callAuroraApi<StarlinkTimeseriesResponse>(`/api/stats/sensors/starlink`);
-          return fallback;
-        } catch (error) {
-          console.warn("Failed to fetch starlink timeseries:", error);
-          return { count: 0, readings: [] };
-        }
-      }
-    },
-    enabled: hasAuroraSession(),
-    ...fastQueryOptions,
-    retry: 1,
-  });
-}
-
-// Hook to fetch Starlink sensor readings with GPS data
-export interface StarlinkSensorReading {
-  device_id: string;
-  timestamp: string;
-  client_id?: string;
-  data: {
-    latitude?: number;
-    longitude?: number;
-    altitude?: number;
-    gps_latitude?: number;
-    gps_longitude?: number;
-    gps_altitude?: number;
-    [key: string]: unknown;
-  };
-}
-
-export function useStarlinkSensorReadings() {
-  return useQuery({
-    queryKey: ["aurora", "readings", "sensor", "starlink"],
-    queryFn: async () => {
-      try {
-        // API returns { count: number, readings: [...] } or array directly
-        const response = await callAuroraApi<{ count?: number; readings?: StarlinkSensorReading[] } | StarlinkSensorReading[]>("/api/readings/sensor/starlink?hours=24");
-        
-        // Handle both array and object response formats
-        if (Array.isArray(response)) {
-          return response;
-        }
-        return response?.readings || [];
       } catch (error) {
-        console.warn("Failed to fetch Starlink sensor readings:", error);
-        return [];
+        console.warn("Failed to fetch Starlink timeseries:", error);
+        return { count: 0, readings: [] };
       }
     },
     enabled: hasAuroraSession(),
     ...fastQueryOptions,
     retry: 1,
   });
+}
+
+// Combined hook for dashboard usage
+export function useStarlinkDashboard() {
+  const devicesFromReadings = useStarlinkDevicesFromReadings();
+  const timeseries = useStarlinkTimeseries(24);
+  const stats = useStarlinkStats();
+  
+  return {
+    devices: devicesFromReadings.data || [],
+    timeseries: timeseries.data?.readings || [],
+    stats: stats.data,
+    isLoading: devicesFromReadings.isLoading || timeseries.isLoading || stats.isLoading,
+    isError: devicesFromReadings.isError && timeseries.isError && stats.isError,
+    refetch: () => {
+      devicesFromReadings.refetch();
+      timeseries.refetch();
+      stats.refetch();
+    },
+  };
 }

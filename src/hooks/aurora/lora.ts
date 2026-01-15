@@ -1,6 +1,7 @@
 // Aurora API - LoRa domain hooks
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { callAuroraApi, hasAuroraSession, AuroraApiOptions } from "./core";
+import { callAuroraApi, hasAuroraSession } from "./core";
+import { LORA, withQuery } from "./endpoints";
 
 // =============================================
 // TYPES
@@ -86,7 +87,7 @@ export interface LoRaSpectrumAnalysis {
 export function useLoraDevices() {
   return useQuery({
     queryKey: ["aurora", "lora", "devices"],
-    queryFn: () => callAuroraApi<{ devices: LoRaDevice[] }>("/api/lora/devices"),
+    queryFn: () => callAuroraApi<{ devices: LoRaDevice[] }>(LORA.DEVICES),
     enabled: hasAuroraSession(),
     staleTime: 60000,
     refetchInterval: 120000,
@@ -97,7 +98,7 @@ export function useLoraDevices() {
 export function useLoraDevice(deviceId: string) {
   return useQuery({
     queryKey: ["aurora", "lora", "devices", deviceId],
-    queryFn: () => callAuroraApi<LoRaDevice>(`/api/lora/devices/${deviceId}`),
+    queryFn: () => callAuroraApi<LoRaDevice>(LORA.DEVICE(deviceId)),
     enabled: !!deviceId && hasAuroraSession(),
     retry: 2,
   });
@@ -106,7 +107,9 @@ export function useLoraDevice(deviceId: string) {
 export function useLoraDetections(limit: number = 100) {
   return useQuery({
     queryKey: ["aurora", "lora", "detections", limit],
-    queryFn: () => callAuroraApi<{ detections: LoRaDetection[] }>(`/api/lora/detections?limit=${limit}`),
+    queryFn: () => callAuroraApi<{ detections: LoRaDetection[] }>(
+      withQuery(LORA.DETECTIONS, { limit })
+    ),
     enabled: hasAuroraSession(),
     staleTime: 30000,
     refetchInterval: 60000,
@@ -117,7 +120,9 @@ export function useLoraDetections(limit: number = 100) {
 export function useLoraRecentDetections(minutes: number = 60) {
   return useQuery({
     queryKey: ["aurora", "lora", "detections", "recent", minutes],
-    queryFn: () => callAuroraApi<{ detections: LoRaDetection[] }>(`/api/lora/detections/recent?minutes=${minutes}`),
+    queryFn: () => callAuroraApi<{ detections: LoRaDetection[] }>(
+      withQuery(LORA.DETECTIONS_RECENT, { minutes })
+    ),
     enabled: hasAuroraSession(),
     staleTime: 30000,
     refetchInterval: 60000,
@@ -128,7 +133,7 @@ export function useLoraRecentDetections(minutes: number = 60) {
 export function useLoraGlobalStats() {
   return useQuery({
     queryKey: ["aurora", "lora", "stats", "global"],
-    queryFn: () => callAuroraApi<LoRaStats>("/api/lora/stats/global"),
+    queryFn: () => callAuroraApi<LoRaStats>(LORA.STATS_GLOBAL),
     enabled: hasAuroraSession(),
     staleTime: 60000,
     refetchInterval: 120000,
@@ -139,7 +144,7 @@ export function useLoraGlobalStats() {
 export function useLoraDeviceStats(deviceId: string) {
   return useQuery({
     queryKey: ["aurora", "lora", "stats", "device", deviceId],
-    queryFn: () => callAuroraApi<LoRaStats>(`/api/lora/stats/device/${deviceId}`),
+    queryFn: () => callAuroraApi<LoRaStats>(LORA.STATS_DEVICE(deviceId)),
     enabled: !!deviceId && hasAuroraSession(),
     retry: 2,
   });
@@ -148,7 +153,7 @@ export function useLoraDeviceStats(deviceId: string) {
 export function useLoraChannelStats() {
   return useQuery({
     queryKey: ["aurora", "lora", "channels"],
-    queryFn: () => callAuroraApi<LoRaChannelStats[]>("/api/lora/channels"),
+    queryFn: () => callAuroraApi<LoRaChannelStats[]>(LORA.CHANNELS),
     enabled: hasAuroraSession(),
     staleTime: 30000,
     refetchInterval: 60000,
@@ -159,7 +164,7 @@ export function useLoraChannelStats() {
 export function useLoraSpectrumAnalysis() {
   return useQuery({
     queryKey: ["aurora", "lora", "spectrum"],
-    queryFn: () => callAuroraApi<LoRaSpectrumAnalysis>("/api/lora/spectrum"),
+    queryFn: () => callAuroraApi<LoRaSpectrumAnalysis>(LORA.SPECTRUM),
     enabled: hasAuroraSession(),
     staleTime: 30000,
     refetchInterval: 60000,
@@ -174,7 +179,7 @@ export function useLoraSpectrumAnalysis() {
 export function useLoraConfigDevices() {
   return useQuery({
     queryKey: ["aurora", "lora", "config", "devices"],
-    queryFn: () => callAuroraApi<{ devices: LoRaDeviceConfig[] }>("/api/lora/config/devices"),
+    queryFn: () => callAuroraApi<{ devices: LoRaDeviceConfig[] }>(LORA.CONFIG_DEVICES),
     enabled: hasAuroraSession(),
     staleTime: 60000,
     refetchInterval: 120000,
@@ -185,7 +190,7 @@ export function useLoraConfigDevices() {
 export function useLoraConfigDevice(deviceId: string) {
   return useQuery({
     queryKey: ["aurora", "lora", "config", "devices", deviceId],
-    queryFn: () => callAuroraApi<LoRaDeviceConfig>(`/api/lora/config/devices/${deviceId}`),
+    queryFn: () => callAuroraApi<LoRaDeviceConfig>(LORA.CONFIG_DEVICE(deviceId)),
     enabled: !!deviceId && hasAuroraSession(),
     retry: 2,
   });
@@ -209,7 +214,7 @@ export function useCreateLoraDevice() {
       location?: string;
       metadata?: Record<string, unknown>;
     }) => {
-      return callAuroraApi<{ success: boolean; device_id: string }>("/api/lora/devices", "POST", device);
+      return callAuroraApi<{ success: boolean; device_id: string }>(LORA.DEVICES, "POST", device);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["aurora", "lora", "devices"] });
@@ -226,7 +231,7 @@ export function useUpdateLoraDevice() {
       deviceId: string; 
       data: Partial<LoRaDeviceConfig>;
     }) => {
-      return callAuroraApi<{ success: boolean }>(`/api/lora/devices/${deviceId}`, "PUT", data);
+      return callAuroraApi<{ success: boolean }>(LORA.DEVICE(deviceId), "PUT", data);
     },
     onSuccess: (_, variables) => {
       queryClient.invalidateQueries({ queryKey: ["aurora", "lora", "devices", variables.deviceId] });
@@ -245,7 +250,7 @@ export function usePatchLoraDevice() {
       deviceId: string; 
       data: Partial<LoRaDeviceConfig>;
     }) => {
-      return callAuroraApi<{ success: boolean }>(`/api/lora/devices/${deviceId}`, "PATCH", data);
+      return callAuroraApi<{ success: boolean }>(LORA.DEVICE(deviceId), "PATCH", data);
     },
     onSuccess: (_, variables) => {
       queryClient.invalidateQueries({ queryKey: ["aurora", "lora", "devices", variables.deviceId] });
@@ -261,7 +266,7 @@ export function useDeleteLoraDevice() {
   
   return useMutation({
     mutationFn: async (deviceId: string) => {
-      return callAuroraApi<{ success: boolean }>(`/api/lora/devices/${deviceId}`, "DELETE");
+      return callAuroraApi<{ success: boolean }>(LORA.DEVICE(deviceId), "DELETE");
     },
     onSuccess: (_, deviceId) => {
       queryClient.invalidateQueries({ queryKey: ["aurora", "lora", "devices", deviceId] });
@@ -277,7 +282,7 @@ export function useActivateLoraDevice() {
   
   return useMutation({
     mutationFn: async (deviceId: string) => {
-      return callAuroraApi<{ success: boolean; message: string }>(`/api/lora/devices/${deviceId}/activate`, "POST");
+      return callAuroraApi<{ success: boolean; message: string }>(LORA.ACTIVATE(deviceId), "POST");
     },
     onSuccess: (_, deviceId) => {
       queryClient.invalidateQueries({ queryKey: ["aurora", "lora", "devices", deviceId] });
@@ -293,7 +298,7 @@ export function useDeactivateLoraDevice() {
   
   return useMutation({
     mutationFn: async (deviceId: string) => {
-      return callAuroraApi<{ success: boolean; message: string }>(`/api/lora/devices/${deviceId}/deactivate`, "POST");
+      return callAuroraApi<{ success: boolean; message: string }>(LORA.DEACTIVATE(deviceId), "POST");
     },
     onSuccess: (_, deviceId) => {
       queryClient.invalidateQueries({ queryKey: ["aurora", "lora", "devices", deviceId] });

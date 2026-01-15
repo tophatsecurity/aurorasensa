@@ -2,6 +2,7 @@
 // Updated to match actual available endpoints on Aurora server
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { callAuroraApi, hasAuroraSession } from "./core";
+import { SYSTEM, CONFIG } from "./endpoints";
 
 // =============================================
 // TYPES
@@ -90,7 +91,7 @@ export function useSystemInfo() {
     queryFn: async () => {
       // Try /api/system/all first
       try {
-        const allInfo = await callAuroraApi<SystemInfo>("/api/system/all");
+        const allInfo = await callAuroraApi<SystemInfo>(SYSTEM.ALL);
         if (allInfo && Object.keys(allInfo).length > 0) {
           return allInfo;
         }
@@ -100,12 +101,12 @@ export function useSystemInfo() {
       
       // Aggregate from individual endpoints
       const [hostname, ip, uptime, load, memory, disk] = await Promise.all([
-        callAuroraApi<{ hostname: string }>("/api/system/hostname").catch(() => ({ hostname: undefined })),
-        callAuroraApi<{ ip: string }>("/api/system/ip").catch(() => ({ ip: undefined })),
-        callAuroraApi<{ uptime: string; uptime_seconds: number }>("/api/system/uptime").catch(() => ({ uptime: undefined, uptime_seconds: undefined })),
-        callAuroraApi<{ load: number[] }>("/api/system/load").catch(() => ({ load: undefined })),
-        callAuroraApi<{ total: number; used: number; percent: number }>("/api/system/memory").catch(() => null),
-        callAuroraApi<{ total: number; used: number; percent: number }>("/api/system/disk").catch(() => null),
+        callAuroraApi<{ hostname: string }>(SYSTEM.HOSTNAME).catch(() => ({ hostname: undefined })),
+        callAuroraApi<{ ip: string }>(SYSTEM.IP).catch(() => ({ ip: undefined })),
+        callAuroraApi<{ uptime: string; uptime_seconds: number }>(SYSTEM.UPTIME).catch(() => ({ uptime: undefined, uptime_seconds: undefined })),
+        callAuroraApi<{ load: number[] }>(SYSTEM.LOAD).catch(() => ({ load: undefined })),
+        callAuroraApi<{ total: number; used: number; percent: number }>(SYSTEM.MEMORY).catch(() => null),
+        callAuroraApi<{ total: number; used: number; percent: number }>(SYSTEM.DISK).catch(() => null),
       ]);
       
       return {
@@ -130,7 +131,7 @@ export function useSystemArp() {
     queryKey: ["aurora", "system", "arp"],
     queryFn: async () => {
       try {
-        const response = await callAuroraApi<{ entries: ArpEntry[] } | ArpEntry[]>("/api/system/arp");
+        const response = await callAuroraApi<{ entries: ArpEntry[] } | ArpEntry[]>(SYSTEM.ARP);
         // Handle both response formats
         if (Array.isArray(response)) {
           return { entries: response };
@@ -152,7 +153,7 @@ export function useSystemRouting() {
     queryKey: ["aurora", "system", "routing"],
     queryFn: async () => {
       try {
-        const response = await callAuroraApi<{ routes: RoutingEntry[] } | RoutingEntry[]>("/api/system/routing");
+        const response = await callAuroraApi<{ routes: RoutingEntry[] } | RoutingEntry[]>(SYSTEM.ROUTING);
         if (Array.isArray(response)) {
           return { routes: response };
         }
@@ -173,7 +174,7 @@ export function useSystemInterfaces() {
     queryKey: ["aurora", "system", "interfaces"],
     queryFn: async () => {
       try {
-        const response = await callAuroraApi<{ interfaces: NetworkInterface[] } | NetworkInterface[]>("/api/system/interfaces");
+        const response = await callAuroraApi<{ interfaces: NetworkInterface[] } | NetworkInterface[]>(SYSTEM.INTERFACES);
         if (Array.isArray(response)) {
           return { interfaces: response };
         }
@@ -194,7 +195,7 @@ export function useSystemUsb() {
     queryKey: ["aurora", "system", "usb"],
     queryFn: async () => {
       try {
-        const response = await callAuroraApi<{ devices: UsbDevice[] } | UsbDevice[]>("/api/system/usb");
+        const response = await callAuroraApi<{ devices: UsbDevice[] } | UsbDevice[]>(SYSTEM.USB);
         if (Array.isArray(response)) {
           return { devices: response };
         }
@@ -215,7 +216,7 @@ export function useExternalIp() {
     queryKey: ["aurora", "system", "external-ip"],
     queryFn: async () => {
       try {
-        return await callAuroraApi<{ ip: string }>("/api/system/external-ip");
+        return await callAuroraApi<{ ip: string }>(SYSTEM.EXTERNAL_IP);
       } catch {
         return { ip: '' };
       }
@@ -232,7 +233,7 @@ export function useSystemHostname() {
     queryKey: ["aurora", "system", "hostname"],
     queryFn: async () => {
       try {
-        return await callAuroraApi<{ hostname: string }>("/api/system/hostname");
+        return await callAuroraApi<{ hostname: string }>(SYSTEM.HOSTNAME);
       } catch {
         return { hostname: '' };
       }
@@ -249,7 +250,7 @@ export function useSystemIp() {
     queryKey: ["aurora", "system", "ip"],
     queryFn: async () => {
       try {
-        return await callAuroraApi<{ ip: string }>("/api/system/ip");
+        return await callAuroraApi<{ ip: string }>(SYSTEM.IP);
       } catch {
         return { ip: '' };
       }
@@ -266,7 +267,7 @@ export function useSystemUptime() {
     queryKey: ["aurora", "system", "uptime"],
     queryFn: async () => {
       try {
-        return await callAuroraApi<{ uptime: string; uptime_seconds: number }>("/api/system/uptime");
+        return await callAuroraApi<{ uptime: string; uptime_seconds: number }>(SYSTEM.UPTIME);
       } catch {
         return { uptime: '', uptime_seconds: 0 };
       }
@@ -283,7 +284,7 @@ export function useSystemCpuLoad() {
     queryKey: ["aurora", "system", "load"],
     queryFn: async () => {
       try {
-        return await callAuroraApi<{ load: number[] }>("/api/system/load");
+        return await callAuroraApi<{ load: number[] }>(SYSTEM.LOAD);
       } catch {
         return { load: [] };
       }
@@ -300,7 +301,7 @@ export function useSystemMemory() {
     queryKey: ["aurora", "system", "memory"],
     queryFn: async () => {
       try {
-        return await callAuroraApi<{ total: number; used: number; percent: number }>("/api/system/memory");
+        return await callAuroraApi<{ total: number; used: number; percent: number }>(SYSTEM.MEMORY);
       } catch {
         return { total: 0, used: 0, percent: 0 };
       }
@@ -317,7 +318,7 @@ export function useSystemDisk() {
     queryKey: ["aurora", "system", "disk"],
     queryFn: async () => {
       try {
-        return await callAuroraApi<{ total: number; used: number; percent: number }>("/api/system/disk");
+        return await callAuroraApi<{ total: number; used: number; percent: number }>(SYSTEM.DISK);
       } catch {
         return { total: 0, used: 0, percent: 0 };
       }
@@ -334,7 +335,7 @@ export function useServiceStatus(serviceName: string) {
     queryKey: ["aurora", "systemctl", serviceName],
     queryFn: async () => {
       try {
-        return await callAuroraApi<{ active: boolean; status: string }>(`/api/systemctl/${serviceName}`);
+        return await callAuroraApi<{ active: boolean; status: string }>(SYSTEM.SERVICE(serviceName));
       } catch {
         return { active: false, status: 'unknown' };
       }
@@ -354,7 +355,7 @@ export function useAuroraServices() {
       const results: ServiceStatus[] = [];
       for (const service of coreServices) {
         try {
-          const status = await callAuroraApi<{ active: boolean; status: string }>(`/api/systemctl/${service}`);
+          const status = await callAuroraApi<{ active: boolean; status: string }>(SYSTEM.SERVICE(service));
           results.push({ ...status, name: service });
         } catch {
           results.push({ active: false, status: 'unknown', name: service });
@@ -374,7 +375,7 @@ export function useServerConfig() {
     queryKey: ["aurora", "config"],
     queryFn: async () => {
       try {
-        return await callAuroraApi<ServerConfig>("/api/config");
+        return await callAuroraApi<ServerConfig>(CONFIG.GET);
       } catch {
         return {};
       }
@@ -394,7 +395,7 @@ export function useUpdateServerConfig() {
   
   return useMutation({
     mutationFn: async (config: ServerConfig) => {
-      return callAuroraApi<{ success: boolean }>("/api/config", "POST", config);
+      return callAuroraApi<{ success: boolean }>(CONFIG.UPDATE, "POST", config);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["aurora", "config"] });

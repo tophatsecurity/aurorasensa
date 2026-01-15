@@ -1,7 +1,8 @@
 // Aurora API - ADS-B Hooks
 import { useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { callAuroraApi, hasAuroraSession, fastQueryOptions, defaultQueryOptions, AuroraApiOptions } from "./core";
+import { callAuroraApi, hasAuroraSession, fastQueryOptions, defaultQueryOptions } from "./core";
+import { ADSB, READINGS, withQuery } from "./endpoints";
 import type { 
   AdsbAircraft, 
   AdsbStats, 
@@ -18,7 +19,7 @@ import type {
 export function useAdsbAircraft() {
   return useQuery({
     queryKey: ["aurora", "adsb", "aircraft"],
-    queryFn: () => callAuroraApi<AdsbAircraft[]>("/api/adsb/aircraft"),
+    queryFn: () => callAuroraApi<AdsbAircraft[]>(ADSB.AIRCRAFT),
     enabled: hasAuroraSession(),
     ...fastQueryOptions,
   });
@@ -27,7 +28,7 @@ export function useAdsbAircraft() {
 export function useAdsbAircraftByIcao(icao: string) {
   return useQuery({
     queryKey: ["aurora", "adsb", "aircraft", icao],
-    queryFn: () => callAuroraApi<AdsbAircraft>(`/api/adsb/aircraft/${icao}`),
+    queryFn: () => callAuroraApi<AdsbAircraft>(ADSB.AIRCRAFT_BY_ICAO(icao)),
     enabled: hasAuroraSession() && !!icao,
     retry: 2,
   });
@@ -36,7 +37,7 @@ export function useAdsbAircraftByIcao(icao: string) {
 export function useAdsbStats() {
   return useQuery({
     queryKey: ["aurora", "adsb", "stats"],
-    queryFn: () => callAuroraApi<AdsbStats>("/api/adsb/stats"),
+    queryFn: () => callAuroraApi<AdsbStats>(ADSB.STATS),
     enabled: hasAuroraSession(),
     ...defaultQueryOptions,
   });
@@ -45,7 +46,7 @@ export function useAdsbStats() {
 export function useAdsbEmergencies() {
   return useQuery({
     queryKey: ["aurora", "adsb", "emergencies"],
-    queryFn: () => callAuroraApi<AdsbEmergency[]>("/api/adsb/emergencies"),
+    queryFn: () => callAuroraApi<AdsbEmergency[]>(ADSB.EMERGENCIES),
     enabled: hasAuroraSession(),
     ...fastQueryOptions,
   });
@@ -54,7 +55,9 @@ export function useAdsbEmergencies() {
 export function useAdsbNearby(lat?: number, lon?: number, radiusKm: number = 50) {
   return useQuery({
     queryKey: ["aurora", "adsb", "nearby", lat, lon, radiusKm],
-    queryFn: () => callAuroraApi<AdsbAircraft[]>(`/api/adsb/nearby?lat=${lat}&lon=${lon}&radius_km=${radiusKm}`),
+    queryFn: () => callAuroraApi<AdsbAircraft[]>(
+      withQuery(ADSB.NEARBY, { lat, lon, radius_km: radiusKm })
+    ),
     enabled: hasAuroraSession() && lat !== undefined && lon !== undefined,
     ...fastQueryOptions,
   });
@@ -63,7 +66,7 @@ export function useAdsbNearby(lat?: number, lon?: number, radiusKm: number = 50)
 export function useAdsbLowAltitude() {
   return useQuery({
     queryKey: ["aurora", "adsb", "low-altitude"],
-    queryFn: () => callAuroraApi<AdsbAircraft[]>("/api/adsb/low-altitude"),
+    queryFn: () => callAuroraApi<AdsbAircraft[]>(ADSB.LOW_ALTITUDE),
     enabled: hasAuroraSession(),
     ...fastQueryOptions,
   });
@@ -75,7 +78,9 @@ export function useAdsbCoverage(deviceId?: string) {
   
   return useQuery({
     queryKey: ["aurora", "adsb", "coverage", effectiveDeviceId],
-    queryFn: () => callAuroraApi<AdsbCoverage>(`/api/adsb/coverage?device_id=${effectiveDeviceId}`),
+    queryFn: () => callAuroraApi<AdsbCoverage>(
+      withQuery(ADSB.COVERAGE, { device_id: effectiveDeviceId })
+    ),
     enabled: hasAuroraSession() && !!effectiveDeviceId,
     ...defaultQueryOptions,
   });
@@ -84,7 +89,9 @@ export function useAdsbCoverage(deviceId?: string) {
 export function useAdsbAircraftHistory(icao: string) {
   return useQuery({
     queryKey: ["aurora", "adsb", "history", icao],
-    queryFn: () => callAuroraApi<Array<{ lat: number; lon: number; alt: number; timestamp: string }>>(`/api/adsb/history/${icao}`),
+    queryFn: () => callAuroraApi<Array<{ lat: number; lon: number; alt: number; timestamp: string }>>(
+      ADSB.HISTORY(icao)
+    ),
     enabled: hasAuroraSession() && !!icao,
     retry: 2,
   });
@@ -93,7 +100,7 @@ export function useAdsbAircraftHistory(icao: string) {
 export function useAdsbDevices() {
   return useQuery({
     queryKey: ["aurora", "adsb", "devices"],
-    queryFn: () => callAuroraApi<AdsbDevice[]>("/api/adsb/devices"),
+    queryFn: () => callAuroraApi<AdsbDevice[]>(ADSB.DEVICES),
     enabled: hasAuroraSession(),
     ...defaultQueryOptions,
   });
@@ -105,7 +112,7 @@ export function useAdsbHistorical(minutes: number = 60) {
     queryKey: ["aurora", "adsb", "historical", minutes],
     queryFn: async () => {
       const response = await callAuroraApi<AdsbHistoricalResponse>(
-        `/api/readings/sensor/adsb?hours=${Math.ceil(minutes / 60)}`
+        withQuery(READINGS.BY_SENSOR_TYPE('adsb'), { hours: Math.ceil(minutes / 60) })
       );
       return response;
     },

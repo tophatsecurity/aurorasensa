@@ -5,6 +5,7 @@
 
 import { useQuery } from "@tanstack/react-query";
 import { callAuroraApi, hasAuroraSession, fastQueryOptions, defaultQueryOptions } from "./core";
+import { AIS, APRS, EPIRB, READINGS, withQuery } from "./endpoints";
 
 // Flag to enable/disable maritime API calls (set to true when Aurora adds these endpoints)
 const MARITIME_API_ENABLED = false;
@@ -126,7 +127,7 @@ export interface EpirbStats {
 export function useAisVessels() {
   return useQuery({
     queryKey: ["aurora", "ais", "vessels"],
-    queryFn: () => callAuroraApi<AisVessel[]>("/api/ais/vessels"),
+    queryFn: () => callAuroraApi<AisVessel[]>(AIS.VESSELS),
     enabled: MARITIME_API_ENABLED && hasAuroraSession(),
     ...fastQueryOptions,
   });
@@ -135,7 +136,7 @@ export function useAisVessels() {
 export function useAisVessel(mmsi: string) {
   return useQuery({
     queryKey: ["aurora", "ais", "vessel", mmsi],
-    queryFn: () => callAuroraApi<AisVessel>(`/api/ais/vessels/${mmsi}`),
+    queryFn: () => callAuroraApi<AisVessel>(AIS.VESSEL(mmsi)),
     enabled: MARITIME_API_ENABLED && hasAuroraSession() && !!mmsi,
     retry: 2,
   });
@@ -144,7 +145,7 @@ export function useAisVessel(mmsi: string) {
 export function useAisStats() {
   return useQuery({
     queryKey: ["aurora", "ais", "stats"],
-    queryFn: () => callAuroraApi<AisStats>("/api/ais/stats"),
+    queryFn: () => callAuroraApi<AisStats>(AIS.STATS),
     enabled: MARITIME_API_ENABLED && hasAuroraSession(),
     ...defaultQueryOptions,
   });
@@ -153,7 +154,9 @@ export function useAisStats() {
 export function useAisNearby(lat?: number, lon?: number, radiusNm: number = 25) {
   return useQuery({
     queryKey: ["aurora", "ais", "nearby", lat, lon, radiusNm],
-    queryFn: () => callAuroraApi<AisVessel[]>(`/api/ais/nearby?lat=${lat}&lon=${lon}&radius_nm=${radiusNm}`),
+    queryFn: () => callAuroraApi<AisVessel[]>(
+      withQuery(AIS.NEARBY, { lat, lon, radius_nm: radiusNm })
+    ),
     enabled: MARITIME_API_ENABLED && hasAuroraSession() && lat !== undefined && lon !== undefined,
     ...fastQueryOptions,
   });
@@ -162,7 +165,9 @@ export function useAisNearby(lat?: number, lon?: number, radiusNm: number = 25) 
 export function useAisVesselHistory(mmsi: string, hours: number = 24) {
   return useQuery({
     queryKey: ["aurora", "ais", "history", mmsi, hours],
-    queryFn: () => callAuroraApi<Array<{ lat: number; lon: number; course?: number; speed?: number; timestamp: string }>>(`/api/ais/history/${mmsi}?hours=${hours}`),
+    queryFn: () => callAuroraApi<Array<{ lat: number; lon: number; course?: number; speed?: number; timestamp: string }>>(
+      withQuery(AIS.HISTORY(mmsi), { hours })
+    ),
     enabled: MARITIME_API_ENABLED && hasAuroraSession() && !!mmsi,
     retry: 2,
   });
@@ -172,7 +177,7 @@ export function useAisHistorical(minutes: number = 60) {
   return useQuery({
     queryKey: ["aurora", "ais", "historical", minutes],
     queryFn: () => callAuroraApi<{ readings: Array<{ device_id: string; timestamp: string; data: Record<string, unknown> }>; count: number }>(
-      `/api/readings/sensor/ais?hours=${Math.ceil(minutes / 60)}`
+      withQuery(READINGS.BY_SENSOR_TYPE('ais'), { hours: Math.ceil(minutes / 60) })
     ),
     enabled: MARITIME_API_ENABLED && hasAuroraSession(),
     ...fastQueryOptions,
@@ -186,7 +191,7 @@ export function useAisHistorical(minutes: number = 60) {
 export function useAprsStations() {
   return useQuery({
     queryKey: ["aurora", "aprs", "stations"],
-    queryFn: () => callAuroraApi<AprsStation[]>("/api/aprs/stations"),
+    queryFn: () => callAuroraApi<AprsStation[]>(APRS.STATIONS),
     enabled: MARITIME_API_ENABLED && hasAuroraSession(),
     ...fastQueryOptions,
   });
@@ -195,7 +200,7 @@ export function useAprsStations() {
 export function useAprsStation(callsign: string) {
   return useQuery({
     queryKey: ["aurora", "aprs", "station", callsign],
-    queryFn: () => callAuroraApi<AprsStation>(`/api/aprs/stations/${callsign}`),
+    queryFn: () => callAuroraApi<AprsStation>(APRS.STATION(callsign)),
     enabled: MARITIME_API_ENABLED && hasAuroraSession() && !!callsign,
     retry: 2,
   });
@@ -204,7 +209,7 @@ export function useAprsStation(callsign: string) {
 export function useAprsStats() {
   return useQuery({
     queryKey: ["aurora", "aprs", "stats"],
-    queryFn: () => callAuroraApi<AprsStats>("/api/aprs/stats"),
+    queryFn: () => callAuroraApi<AprsStats>(APRS.STATS),
     enabled: MARITIME_API_ENABLED && hasAuroraSession(),
     ...defaultQueryOptions,
   });
@@ -213,7 +218,9 @@ export function useAprsStats() {
 export function useAprsPackets(limit: number = 100) {
   return useQuery({
     queryKey: ["aurora", "aprs", "packets", limit],
-    queryFn: () => callAuroraApi<AprsPacket[]>(`/api/aprs/packets?limit=${limit}`),
+    queryFn: () => callAuroraApi<AprsPacket[]>(
+      withQuery(APRS.PACKETS, { limit })
+    ),
     enabled: MARITIME_API_ENABLED && hasAuroraSession(),
     ...fastQueryOptions,
   });
@@ -222,7 +229,9 @@ export function useAprsPackets(limit: number = 100) {
 export function useAprsNearby(lat?: number, lon?: number, radiusKm: number = 50) {
   return useQuery({
     queryKey: ["aurora", "aprs", "nearby", lat, lon, radiusKm],
-    queryFn: () => callAuroraApi<AprsStation[]>(`/api/aprs/nearby?lat=${lat}&lon=${lon}&radius_km=${radiusKm}`),
+    queryFn: () => callAuroraApi<AprsStation[]>(
+      withQuery(APRS.NEARBY, { lat, lon, radius_km: radiusKm })
+    ),
     enabled: MARITIME_API_ENABLED && hasAuroraSession() && lat !== undefined && lon !== undefined,
     ...fastQueryOptions,
   });
@@ -231,7 +240,9 @@ export function useAprsNearby(lat?: number, lon?: number, radiusKm: number = 50)
 export function useAprsStationHistory(callsign: string, hours: number = 24) {
   return useQuery({
     queryKey: ["aurora", "aprs", "history", callsign, hours],
-    queryFn: () => callAuroraApi<Array<{ lat: number; lon: number; altitude?: number; timestamp: string }>>(`/api/aprs/history/${callsign}?hours=${hours}`),
+    queryFn: () => callAuroraApi<Array<{ lat: number; lon: number; altitude?: number; timestamp: string }>>(
+      withQuery(APRS.HISTORY(callsign), { hours })
+    ),
     enabled: MARITIME_API_ENABLED && hasAuroraSession() && !!callsign,
     retry: 2,
   });
@@ -241,7 +252,7 @@ export function useAprsHistorical(minutes: number = 60) {
   return useQuery({
     queryKey: ["aurora", "aprs", "historical", minutes],
     queryFn: () => callAuroraApi<{ readings: Array<{ device_id: string; timestamp: string; data: Record<string, unknown> }>; count: number }>(
-      `/api/readings/sensor/aprs?hours=${Math.ceil(minutes / 60)}`
+      withQuery(READINGS.BY_SENSOR_TYPE('aprs'), { hours: Math.ceil(minutes / 60) })
     ),
     enabled: MARITIME_API_ENABLED && hasAuroraSession(),
     ...fastQueryOptions,
@@ -251,7 +262,7 @@ export function useAprsHistorical(minutes: number = 60) {
 export function useAprsWeatherStations() {
   return useQuery({
     queryKey: ["aurora", "aprs", "weather"],
-    queryFn: () => callAuroraApi<AprsStation[]>("/api/aprs/weather"),
+    queryFn: () => callAuroraApi<AprsStation[]>(APRS.WEATHER),
     enabled: MARITIME_API_ENABLED && hasAuroraSession(),
     ...defaultQueryOptions,
   });
@@ -264,7 +275,7 @@ export function useAprsWeatherStations() {
 export function useEpirbBeacons() {
   return useQuery({
     queryKey: ["aurora", "epirb", "beacons"],
-    queryFn: () => callAuroraApi<EpirbBeacon[]>("/api/epirb/beacons"),
+    queryFn: () => callAuroraApi<EpirbBeacon[]>(EPIRB.BEACONS),
     enabled: MARITIME_API_ENABLED && hasAuroraSession(),
     ...fastQueryOptions,
   });
@@ -273,7 +284,7 @@ export function useEpirbBeacons() {
 export function useEpirbBeacon(beaconId: string) {
   return useQuery({
     queryKey: ["aurora", "epirb", "beacon", beaconId],
-    queryFn: () => callAuroraApi<EpirbBeacon>(`/api/epirb/beacons/${beaconId}`),
+    queryFn: () => callAuroraApi<EpirbBeacon>(EPIRB.BEACON(beaconId)),
     enabled: MARITIME_API_ENABLED && hasAuroraSession() && !!beaconId,
     retry: 2,
   });
@@ -282,7 +293,7 @@ export function useEpirbBeacon(beaconId: string) {
 export function useEpirbStats() {
   return useQuery({
     queryKey: ["aurora", "epirb", "stats"],
-    queryFn: () => callAuroraApi<EpirbStats>("/api/epirb/stats"),
+    queryFn: () => callAuroraApi<EpirbStats>(EPIRB.STATS),
     enabled: MARITIME_API_ENABLED && hasAuroraSession(),
     ...defaultQueryOptions,
   });
@@ -291,7 +302,7 @@ export function useEpirbStats() {
 export function useEpirbActiveAlerts() {
   return useQuery({
     queryKey: ["aurora", "epirb", "active"],
-    queryFn: () => callAuroraApi<EpirbBeacon[]>("/api/epirb/active"),
+    queryFn: () => callAuroraApi<EpirbBeacon[]>(EPIRB.ACTIVE),
     enabled: MARITIME_API_ENABLED && hasAuroraSession(),
     ...fastQueryOptions,
   });
@@ -300,7 +311,9 @@ export function useEpirbActiveAlerts() {
 export function useEpirbHistory(beaconId: string, hours: number = 24) {
   return useQuery({
     queryKey: ["aurora", "epirb", "history", beaconId, hours],
-    queryFn: () => callAuroraApi<Array<{ lat: number; lon: number; signal_strength?: number; timestamp: string }>>(`/api/epirb/history/${beaconId}?hours=${hours}`),
+    queryFn: () => callAuroraApi<Array<{ lat: number; lon: number; signal_strength?: number; timestamp: string }>>(
+      withQuery(EPIRB.HISTORY(beaconId), { hours })
+    ),
     enabled: MARITIME_API_ENABLED && hasAuroraSession() && !!beaconId,
     retry: 2,
   });
@@ -310,7 +323,7 @@ export function useEpirbHistorical(minutes: number = 60) {
   return useQuery({
     queryKey: ["aurora", "epirb", "historical", minutes],
     queryFn: () => callAuroraApi<{ readings: Array<{ device_id: string; timestamp: string; data: Record<string, unknown> }>; count: number }>(
-      `/api/readings/sensor/epirb?hours=${Math.ceil(minutes / 60)}`
+      withQuery(READINGS.BY_SENSOR_TYPE('epirb'), { hours: Math.ceil(minutes / 60) })
     ),
     enabled: MARITIME_API_ENABLED && hasAuroraSession(),
     ...fastQueryOptions,
