@@ -8,7 +8,7 @@ import {
   Radio 
 } from "lucide-react";
 import L from "leaflet";
-import type { SensorReading, DeviceGroup } from "./types";
+import type { SensorReading, SensorGroup, Measurement, DeviceGroup } from "./types";
 
 // Custom marker icon creator
 export const createMarkerIcon = (color: string) => L.divIcon({
@@ -18,21 +18,27 @@ export const createMarkerIcon = (color: string) => L.divIcon({
   iconAnchor: [6, 6],
 });
 
-export function getDeviceIcon(type: string) {
+export function getSensorIcon(type: string) {
   switch (type.toLowerCase()) {
     case 'starlink':
+    case 'starlink_dish_comprehensive':
       return Satellite;
     case 'thermal_probe':
     case 'temperature':
+    case 'arduino_sensor_kit':
       return Thermometer;
     case 'gps':
       return Navigation;
     case 'power':
+    case 'system_monitor':
       return Zap;
     case 'wifi':
+    case 'wifi_scanner':
     case 'bluetooth':
+    case 'bluetooth_scanner':
       return Wifi;
     case 'lora':
+    case 'lora_detector':
     case 'radio':
       return Radio;
     default:
@@ -40,21 +46,30 @@ export function getDeviceIcon(type: string) {
   }
 }
 
-export function getDeviceColor(type: string): string {
+// Alias for backward compatibility
+export const getDeviceIcon = getSensorIcon;
+
+export function getSensorColor(type: string): string {
   switch (type.toLowerCase()) {
     case 'starlink':
+    case 'starlink_dish_comprehensive':
       return 'bg-violet-500/20 text-violet-400';
     case 'thermal_probe':
     case 'temperature':
+    case 'arduino_sensor_kit':
       return 'bg-orange-500/20 text-orange-400';
     case 'gps':
       return 'bg-emerald-500/20 text-emerald-400';
     case 'power':
+    case 'system_monitor':
       return 'bg-yellow-500/20 text-yellow-400';
     case 'wifi':
+    case 'wifi_scanner':
     case 'bluetooth':
+    case 'bluetooth_scanner':
       return 'bg-blue-500/20 text-blue-400';
     case 'lora':
+    case 'lora_detector':
     case 'radio':
       return 'bg-pink-500/20 text-pink-400';
     default:
@@ -62,15 +77,34 @@ export function getDeviceColor(type: string): string {
   }
 }
 
+// Alias for backward compatibility
+export const getDeviceColor = getSensorColor;
+
 export function getMarkerColor(type: string): string {
   switch (type.toLowerCase()) {
-    case 'starlink': return '#8b5cf6';
-    case 'thermal_probe': case 'temperature': return '#f97316';
-    case 'gps': return '#10b981';
-    case 'power': return '#eab308';
-    case 'wifi': case 'bluetooth': return '#3b82f6';
-    case 'lora': case 'radio': return '#ec4899';
-    default: return '#06b6d4';
+    case 'starlink': 
+    case 'starlink_dish_comprehensive': 
+      return '#8b5cf6';
+    case 'thermal_probe': 
+    case 'temperature': 
+    case 'arduino_sensor_kit':
+      return '#f97316';
+    case 'gps': 
+      return '#10b981';
+    case 'power': 
+    case 'system_monitor':
+      return '#eab308';
+    case 'wifi': 
+    case 'wifi_scanner':
+    case 'bluetooth': 
+    case 'bluetooth_scanner':
+      return '#3b82f6';
+    case 'lora': 
+    case 'lora_detector':
+    case 'radio': 
+      return '#ec4899';
+    default: 
+      return '#06b6d4';
   }
 }
 
@@ -84,8 +118,8 @@ export function formatUptime(seconds: number): string {
   return `${mins}m`;
 }
 
-export function extractMeasurements(reading: SensorReading): { key: string; value: string; unit: string }[] {
-  const measurements: { key: string; value: string; unit: string }[] = [];
+export function extractMeasurements(reading: SensorReading): Measurement[] {
+  const measurements: Measurement[] = [];
   const data = reading.data || {};
   
   // Flatten nested data
@@ -200,21 +234,72 @@ function extractLocationFromReading(reading: SensorReading): { lat: number; lng:
   return undefined;
 }
 
-// Process readings into device groups
+// Process readings into sensor groups (new model: client_id → sensor → measurements)
+export function processReadingsToSensorGroups(readings: SensorReading[]): SensorGroup[] {
+  if (!readings) return [];
+  
+  const groups = new Map<string, SensorGroup>();
+  
+  readings.forEach((reading: SensorReading) => {
+    // Key by client_id and sensor_type (not device_id)
+    const sensorType = (reading as unknown as { device_type?: string }).device_type || reading.sensor_type || 'unknown';
+    const clientId = reading.client_id || 'unknown';
+    const key = `${clientId}:${sensorType}`;
+    const location = extractLocationFromReading(reading);
+    
+    if (!groups.has(key)) {
+      groups.set(key, {
+        sensor_type: sensorType,
+        client_id: clientId,
+        readings: [],
+        latest: reading,
+        location,
+        measurements: [],
+      });
+    }
+    
+    const group = groups.get(key)!;
+    group.readings.push(reading);
+    
+    // Update latest if this reading is newer
+    if (new Date(reading.timestamp) > new Date(group.latest.timestamp)) {
+      group.latest = reading;
+    }
+    
+    // Update location if available (prefer newer readings with location)
+    if (location) {
+      group.location = location;
+    }
+  });
+  
+  // Extract measurements from latest reading for each group
+  groups.forEach(group => {
+    group.measurements = extractMeasurements(group.latest);
+  });
+  
+  return Array.from(groups.values());
+}
+
+// Legacy function - converts to DeviceGroup for backward compatibility
 export function processReadingsToGroups(readings: SensorReading[]): DeviceGroup[] {
   if (!readings) return [];
   
   const groups = new Map<string, DeviceGroup>();
   
   readings.forEach((reading: SensorReading) => {
-    const key = `${reading.client_id || 'unknown'}:${reading.device_id}`;
+    // Handle both old format (device_id/device_type) and new format (sensor_type)
+    const legacyReading = reading as unknown as { device_id?: string; device_type?: string };
+    const deviceId = legacyReading.device_id || reading.sensor_type || 'unknown';
+    const deviceType = legacyReading.device_type || reading.sensor_type || 'unknown';
+    const clientId = reading.client_id || 'unknown';
+    const key = `${clientId}:${deviceType}`;
     const location = extractLocationFromReading(reading);
     
     if (!groups.has(key)) {
       groups.set(key, {
-        device_id: reading.device_id,
-        device_type: reading.device_type,
-        client_id: reading.client_id || 'unknown',
+        device_id: deviceId,
+        device_type: deviceType,
+        client_id: clientId,
         readings: [],
         latest: reading,
         location
@@ -238,13 +323,23 @@ export function processReadingsToGroups(readings: SensorReading[]): DeviceGroup[
   return Array.from(groups.values());
 }
 
-// Calculate map center from devices
-export function calculateMapCenter(devicesWithLocation: DeviceGroup[]): { lat: number; lng: number } {
-  if (devicesWithLocation.length === 0) return { lat: 0, lng: 0 };
-  const lats = devicesWithLocation.map(d => d.location!.lat);
-  const lngs = devicesWithLocation.map(d => d.location!.lng);
+// Calculate map center from sensor groups
+export function calculateMapCenter(sensorsWithLocation: Array<{ location?: { lat: number; lng: number } }>): { lat: number; lng: number } {
+  const withLocation = sensorsWithLocation.filter(s => s.location);
+  if (withLocation.length === 0) return { lat: 0, lng: 0 };
+  const lats = withLocation.map(s => s.location!.lat);
+  const lngs = withLocation.map(s => s.location!.lng);
   return {
     lat: lats.reduce((a, b) => a + b, 0) / lats.length,
     lng: lngs.reduce((a, b) => a + b, 0) / lngs.length
   };
+}
+
+// Helper to format sensor type for display
+export function formatSensorType(type: string): string {
+  return type
+    .replace(/_/g, ' ')
+    .replace(/([A-Z])/g, ' $1')
+    .replace(/^./, str => str.toUpperCase())
+    .trim();
 }

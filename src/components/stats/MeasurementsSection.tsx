@@ -13,11 +13,11 @@ import {
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import type { DeviceGroup } from "./types";
-import { extractMeasurements, getDeviceColor } from "./utils";
+import type { SensorGroup } from "./types";
+import { getSensorColor, formatSensorType } from "./utils";
 
 interface MeasurementsSectionProps {
-  devices: DeviceGroup[];
+  sensors: SensorGroup[];
 }
 
 interface CategoryConfig {
@@ -37,13 +37,13 @@ const CATEGORIES: CategoryConfig[] = [
   {
     title: "Arduino / Probe",
     icon: Cpu,
-    types: ["arduino", "thermal_probe", "thermal", "temperature", "probe", "sensor"],
+    types: ["arduino", "thermal_probe", "thermal", "temperature", "probe", "sensor", "arduino_sensor_kit"],
     color: "text-orange-400",
   },
   {
     title: "BLE / WiFi",
     icon: Wifi,
-    types: ["wifi", "bluetooth", "ble", "wireless"],
+    types: ["wifi", "bluetooth", "ble", "wireless", "wifi_scanner", "bluetooth_scanner"],
     color: "text-blue-400",
   },
   {
@@ -66,9 +66,10 @@ function getCategoryIcon(type: string): React.ElementType {
   return Activity;
 }
 
-function formatMeasurementValue(value: string, unit: string): string {
-  if (!unit) return value;
-  return `${value} ${unit}`;
+function formatMeasurementValue(value: string | number | boolean, unit?: string): string {
+  const strValue = String(value);
+  if (!unit) return strValue;
+  return `${strValue} ${unit}`;
 }
 
 function formatKey(key: string): string {
@@ -79,30 +80,30 @@ function formatKey(key: string): string {
     .trim();
 }
 
-export function MeasurementsSection({ devices }: MeasurementsSectionProps) {
-  // Group devices by category
-  const categorizedDevices = useMemo(() => {
-    const result: Record<string, DeviceGroup[]> = {};
+export function MeasurementsSection({ sensors }: MeasurementsSectionProps) {
+  // Group sensors by category
+  const categorizedSensors = useMemo(() => {
+    const result: Record<string, SensorGroup[]> = {};
     
     CATEGORIES.forEach(cat => {
-      result[cat.title] = devices.filter(d => 
-        cat.types.some(t => d.device_type.toLowerCase().includes(t))
+      result[cat.title] = sensors.filter(s => 
+        cat.types.some(t => s.sensor_type.toLowerCase().includes(t))
       );
     });
     
-    // Add "Other" category for unmatched devices
-    const matchedDeviceIds = new Set(
-      Object.values(result).flat().map(d => d.device_id)
+    // Add "Other" category for unmatched sensors
+    const matchedSensorKeys = new Set(
+      Object.values(result).flat().map(s => `${s.client_id}:${s.sensor_type}`)
     );
-    const otherDevices = devices.filter(d => !matchedDeviceIds.has(d.device_id));
-    if (otherDevices.length > 0) {
-      result["Other"] = otherDevices;
+    const otherSensors = sensors.filter(s => !matchedSensorKeys.has(`${s.client_id}:${s.sensor_type}`));
+    if (otherSensors.length > 0) {
+      result["Other"] = otherSensors;
     }
     
     return result;
-  }, [devices]);
+  }, [sensors]);
 
-  const hasAnyData = Object.values(categorizedDevices).some(arr => arr.length > 0);
+  const hasAnyData = Object.values(categorizedSensors).some(arr => arr.length > 0);
 
   if (!hasAnyData) {
     return (
@@ -118,7 +119,7 @@ export function MeasurementsSection({ devices }: MeasurementsSectionProps) {
   return (
     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
       {CATEGORIES.map(category => {
-        const categoryDevices = categorizedDevices[category.title] || [];
+        const categorySensors = categorizedSensors[category.title] || [];
         const Icon = category.icon;
         
         return (
@@ -130,20 +131,20 @@ export function MeasurementsSection({ devices }: MeasurementsSectionProps) {
                   <span>{category.title}</span>
                 </div>
                 <Badge variant="secondary" className="text-xs">
-                  {categoryDevices.length}
+                  {categorySensors.length}
                 </Badge>
               </CardTitle>
             </CardHeader>
             <CardContent className="p-3">
-              {categoryDevices.length === 0 ? (
+              {categorySensors.length === 0 ? (
                 <div className="text-center py-6 text-muted-foreground text-xs">
-                  No devices
+                  No sensors
                 </div>
               ) : (
                 <ScrollArea className="h-[280px]">
                   <div className="space-y-3 pr-2">
-                    {categoryDevices.map(device => (
-                      <DeviceMeasurementItem key={device.device_id} device={device} />
+                    {categorySensors.map(sensor => (
+                      <SensorMeasurementItem key={`${sensor.client_id}:${sensor.sensor_type}`} sensor={sensor} />
                     ))}
                   </div>
                 </ScrollArea>
@@ -156,10 +157,9 @@ export function MeasurementsSection({ devices }: MeasurementsSectionProps) {
   );
 }
 
-function DeviceMeasurementItem({ device }: { device: DeviceGroup }) {
-  const Icon = getCategoryIcon(device.device_type);
-  const measurements = extractMeasurements(device.latest);
-  const colorClass = getDeviceColor(device.device_type);
+function SensorMeasurementItem({ sensor }: { sensor: SensorGroup }) {
+  const Icon = getCategoryIcon(sensor.sensor_type);
+  const colorClass = getSensorColor(sensor.sensor_type);
   
   return (
     <div className="p-2 rounded-lg bg-muted/20 border border-border/30">
@@ -168,19 +168,19 @@ function DeviceMeasurementItem({ device }: { device: DeviceGroup }) {
           <Icon className="w-3 h-3" />
         </div>
         <div className="flex-1 min-w-0">
-          <p className="text-xs font-medium truncate">{device.device_id}</p>
-          <p className="text-[10px] text-muted-foreground capitalize">
-            {device.device_type.replace(/_/g, ' ')}
+          <p className="text-xs font-medium truncate">{formatSensorType(sensor.sensor_type)}</p>
+          <p className="text-[10px] text-muted-foreground">
+            {sensor.client_id}
           </p>
         </div>
         <Badge variant="outline" className="text-[9px] px-1.5 py-0">
-          {device.readings.length}
+          {sensor.readings.length}
         </Badge>
       </div>
       
-      {measurements.length > 0 ? (
+      {sensor.measurements.length > 0 ? (
         <div className="grid grid-cols-2 gap-1.5">
-          {measurements.slice(0, 6).map(({ key, value, unit }) => (
+          {sensor.measurements.slice(0, 6).map(({ key, value, unit }) => (
             <div key={key} className="text-[10px] bg-background/50 rounded px-1.5 py-1">
               <span className="text-muted-foreground truncate block">
                 {formatKey(key)}
