@@ -9,6 +9,7 @@ import {
   useDeviceTree,
   useClients,
   useClientsByState,
+  useGlobalStats,
   type Client,
   type ClientGroupedStats,
   type SensorGroupedStats,
@@ -24,6 +25,7 @@ const DashboardStatsHeader = ({ periodHours = 24, clientId }: DashboardStatsHead
   const effectiveClientId = clientId === "all" ? undefined : clientId;
   
   const { data: stats, isLoading: statsLoading } = useComprehensiveStats(effectiveClientId);
+  const { data: globalStats, isLoading: globalStatsLoading } = useGlobalStats(effectiveClientId);
   const { data: statsOverview, isLoading: overviewLoading } = useStatsOverview();
   const { data: clientStats, isLoading: clientStatsLoading } = useStatsByClient({ 
     hours: periodHours,
@@ -60,27 +62,37 @@ const DashboardStatsHeader = ({ periodHours = 24, clientId }: DashboardStatsHead
     );
   }, [allClientsFromState, clients]);
 
-  // Total readings - use statsOverview, fallback to comprehensive stats
-  const totalReadings = statsOverview?.total_readings 
-    ?? global?.total_readings 
-    ?? global?.database?.total_readings 
-    ?? 0;
+  // Total readings - prefer globalStats (unwrapped from API), then statsOverview, then comprehensive stats
+  const totalReadings = 
+    globalStats?.total_readings ??
+    statsOverview?.total_readings ?? 
+    global?.total_readings ?? 
+    global?.database?.total_readings ?? 
+    0;
   
-  // Client count - prefer new grouped stats
-  const totalClients = clientStats?.total 
-    ?? global?.total_clients 
-    ?? global?.database?.total_clients 
-    ?? activeClients.length;
+  // Client count - prefer globalStats, then grouped stats
+  const totalClients = 
+    globalStats?.total_clients ??
+    clientStats?.total ?? 
+    global?.total_clients ?? 
+    global?.database?.total_clients ?? 
+    activeClients.length;
 
-  // Sensor types count - prefer new grouped stats
-  const sensorTypesFromStats = global?.sensor_types_count ?? (global?.device_breakdown?.length ?? 0);
-  const totalSensorTypes = sensorStats?.total 
-    ?? (sensorTypesFromStats > 0 ? sensorTypesFromStats : (sensorsSummary?.total_sensor_types ?? 0));
+  // Sensor types count - prefer globalStats, then grouped stats
+  const sensorTypesFromStats = 
+    globalStats?.sensor_types_count ?? 
+    global?.sensor_types_count ?? 
+    (global?.device_breakdown?.length ?? 0);
+  const totalSensorTypes = 
+    sensorStats?.total ?? 
+    (sensorTypesFromStats > 0 ? sensorTypesFromStats : (sensorsSummary?.total_sensor_types ?? 0));
 
-  // Total devices
+  // Total devices - prefer globalStats
   const devicesFromTree = Array.isArray(deviceTree) ? deviceTree.length : 0;
-  const totalDevices = global?.total_devices 
-    ?? (devicesFromTree > 0 ? devicesFromTree : (devicesSummary?.total_devices ?? 0));
+  const totalDevices = 
+    globalStats?.total_devices ??
+    global?.total_devices ?? 
+    (devicesFromTree > 0 ? devicesFromTree : (devicesSummary?.total_devices ?? 0));
 
   // Period-specific readings
   const activeDevices1h = global?.activity?.last_1_hour?.active_devices_1h ?? 0;
@@ -148,7 +160,7 @@ const DashboardStatsHeader = ({ periodHours = 24, clientId }: DashboardStatsHead
     }));
   }, [devicesSummary?.devices]);
 
-  const isLoading = statsLoading || overviewLoading || clientStatsLoading || sensorStatsLoading;
+  const isLoading = statsLoading || globalStatsLoading || overviewLoading || clientStatsLoading || sensorStatsLoading;
 
   return (
     <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
