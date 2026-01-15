@@ -130,7 +130,17 @@ function extractGpsFromReadings(readings: Array<{ device_id: string; device_type
 // Helper to convert geoLocations to array format (API may return object or array)
 function normalizeGeoLocations(geoLocations: unknown): GeoLocation[] {
   if (!geoLocations) return [];
-  if (Array.isArray(geoLocations)) return geoLocations;
+  if (Array.isArray(geoLocations)) {
+    // Filter out null/undefined entries and ensure valid geo data
+    return geoLocations.filter((g): g is GeoLocation => 
+      g !== null && 
+      g !== undefined && 
+      typeof g === 'object' &&
+      typeof g.device_id === 'string' &&
+      typeof g.lat === 'number' && 
+      typeof g.lng === 'number'
+    );
+  }
   if (typeof geoLocations === 'object') {
     // Handle object format where keys are device_ids
     return Object.entries(geoLocations as Record<string, unknown>).map(([key, value]) => {
