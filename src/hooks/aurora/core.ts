@@ -268,9 +268,22 @@ export async function callAuroraApi<T>(
           
           consecutiveBootErrors = 0;
           
+          // Handle 401 auth errors - return empty data instead of throwing
+          if (errorMessage.includes('401') || errorMessage.includes('authentication') ||
+              errorMessage.includes('unauthorized') || errorMessage.includes('auth')) {
+            console.warn(`Auth error for ${path}: ${error.message}, returning empty data`);
+            return getEmptyDataForPath(path) as T;
+          }
+          
           if (errorMessage.includes('500') || errorMessage.includes('503') || 
               errorMessage.includes('internal server error') || errorMessage.includes('boot_error')) {
             console.warn(`Server error for ${path}, returning empty data`);
+            return getEmptyDataForPath(path) as T;
+          }
+          
+          // Handle 400 bad request errors for GET requests
+          if (errorMessage.includes('400') && method === 'GET') {
+            console.warn(`Bad request error for GET ${path}: ${error.message}, returning empty data`);
             return getEmptyDataForPath(path) as T;
           }
           
