@@ -1,7 +1,7 @@
 // Aurora API - ADS-B Hooks
 import { useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { callAuroraApi, hasAuroraSession, fastQueryOptions, defaultQueryOptions } from "./core";
+import { callAuroraApi, hasAuroraSession, fastQueryOptions, defaultQueryOptions, AuroraApiOptions } from "./core";
 import type { 
   AdsbAircraft, 
   AdsbStats, 

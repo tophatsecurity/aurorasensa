@@ -88,18 +88,34 @@ interface AuroraProxyResponse {
   error?: string;
 }
 
+// Options for API calls
+export interface AuroraApiOptions {
+  clientId?: string | null;
+}
+
+// Helper to append client_id to path if provided
+function appendClientIdToPath(path: string, clientId?: string | null): string {
+  if (!clientId || clientId === "all") return path;
+  
+  const separator = path.includes("?") ? "&" : "?";
+  return `${path}${separator}client_id=${encodeURIComponent(clientId)}`;
+}
+
 // Core API call function with retry logic and request queuing
 export async function callAuroraApi<T>(
   path: string, 
   method: string = "GET", 
-  body?: unknown
+  body?: unknown,
+  options?: AuroraApiOptions
 ): Promise<T> {
+  // Append client_id to path if provided
+  const finalPath = appendClientIdToPath(path, options?.clientId);
   // Get the current Supabase session token
   const sessionToken = await getSessionToken();
   
   // Check cache first for GET requests
   if (method === 'GET') {
-    const cached = auroraRequestQueue.getCached<T>(path, method);
+    const cached = auroraRequestQueue.getCached<T>(finalPath, method);
     if (cached !== null) {
       return cached;
     }
@@ -118,7 +134,7 @@ export async function callAuroraApi<T>(
     for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
       try {
         const { data, error } = await supabase.functions.invoke("aurora-proxy", {
-          body: { path, method, body, sessionToken },
+          body: { path: finalPath, method, body, sessionToken },
         });
 
         if (error) {
@@ -234,7 +250,7 @@ export async function callAuroraApi<T>(
 
         // Cache successful GET responses
         if (method === 'GET') {
-          auroraRequestQueue.setCache(path, method, data);
+          auroraRequestQueue.setCache(finalPath, method, data);
         }
 
         // Mark connection as healthy on success and reset boot error counter
@@ -274,7 +290,7 @@ export async function callAuroraApi<T>(
   };
   
   // Use request queue to limit concurrent requests
-  return auroraRequestQueue.enqueue(path, method, body, executor);
+  return auroraRequestQueue.enqueue(finalPath, method, body, executor);
 }
 
 // Helper to return appropriate empty data based on endpoint path

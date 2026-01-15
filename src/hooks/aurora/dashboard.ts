@@ -1,7 +1,7 @@
 // Aurora API - Dashboard domain hooks
 // Updated to use available endpoints with fallbacks
 import { useQuery } from "@tanstack/react-query";
-import { callAuroraApi, hasAuroraSession } from "./core";
+import { callAuroraApi, hasAuroraSession, AuroraApiOptions } from "./core";
 
 // =============================================
 // TYPES
@@ -72,10 +72,11 @@ export interface DashboardSensorTimeseries {
 // QUERY HOOKS
 // =============================================
 
-export function useDashboardStats() {
+export function useDashboardStats(clientId?: string | null) {
   return useQuery({
-    queryKey: ["aurora", "dashboard", "stats"],
+    queryKey: ["aurora", "dashboard", "stats", clientId],
     queryFn: async () => {
+      const options: AuroraApiOptions = { clientId };
       // Try multiple endpoints in order of preference
       const endpoints = [
         "/api/stats/overview",
@@ -86,7 +87,7 @@ export function useDashboardStats() {
       
       for (const endpoint of endpoints) {
         try {
-          const result = await callAuroraApi<DashboardStats>(endpoint);
+          const result = await callAuroraApi<DashboardStats>(endpoint, "GET", undefined, options);
           if (result && Object.keys(result).length > 0) {
             return result;
           }
@@ -115,12 +116,12 @@ export function useDashboardStats() {
   });
 }
 
-export function useDashboardTimeseries(hours: number = 24) {
+export function useDashboardTimeseries(hours: number = 24, clientId?: string | null) {
   return useQuery({
-    queryKey: ["aurora", "dashboard", "timeseries", hours],
+    queryKey: ["aurora", "dashboard", "timeseries", hours, clientId],
     queryFn: async () => {
       try {
-        return await callAuroraApi<DashboardTimeseries>(`/api/dashboard/sensor-timeseries?hours=${hours}`);
+        return await callAuroraApi<DashboardTimeseries>(`/api/dashboard/sensor-timeseries?hours=${hours}`, "GET", undefined, { clientId });
       } catch {
         // Return empty timeseries
         return {
@@ -138,13 +139,14 @@ export function useDashboardTimeseries(hours: number = 24) {
   });
 }
 
-export function useDashboardSystemStats() {
+export function useDashboardSystemStats(clientId?: string | null) {
   return useQuery({
-    queryKey: ["aurora", "dashboard", "system"],
+    queryKey: ["aurora", "dashboard", "system", clientId],
     queryFn: async () => {
+      const options: AuroraApiOptions = { clientId };
       // Try dashboard endpoint first, then aggregate from system endpoints
       try {
-        const result = await callAuroraApi<DashboardSystemStats>("/api/dashboard/system-stats");
+        const result = await callAuroraApi<DashboardSystemStats>("/api/dashboard/system-stats", "GET", undefined, options);
         if (result && Object.keys(result).length > 0) {
           return result;
         }
@@ -154,10 +156,10 @@ export function useDashboardSystemStats() {
       
       // Aggregate from individual system endpoints
       const [memory, disk, load, uptime] = await Promise.all([
-        callAuroraApi<{ total: number; used: number; percent: number }>("/api/system/memory").catch(() => null),
-        callAuroraApi<{ total: number; used: number; percent: number }>("/api/system/disk").catch(() => null),
-        callAuroraApi<{ load: number[] }>("/api/system/load").catch(() => null),
-        callAuroraApi<{ uptime_seconds: number }>("/api/system/uptime").catch(() => null),
+        callAuroraApi<{ total: number; used: number; percent: number }>("/api/system/memory", "GET", undefined, options).catch(() => null),
+        callAuroraApi<{ total: number; used: number; percent: number }>("/api/system/disk", "GET", undefined, options).catch(() => null),
+        callAuroraApi<{ load: number[] }>("/api/system/load", "GET", undefined, options).catch(() => null),
+        callAuroraApi<{ uptime_seconds: number }>("/api/system/uptime", "GET", undefined, options).catch(() => null),
       ]);
       
       return {
@@ -174,10 +176,11 @@ export function useDashboardSystemStats() {
   });
 }
 
-export function useDashboardSensorStats() {
+export function useDashboardSensorStats(clientId?: string | null) {
   return useQuery({
-    queryKey: ["aurora", "dashboard", "sensor-stats"],
+    queryKey: ["aurora", "dashboard", "sensor-stats", clientId],
     queryFn: async () => {
+      const options: AuroraApiOptions = { clientId };
       // Try multiple endpoints
       const endpoints = [
         "/api/stats/overview",
@@ -187,7 +190,7 @@ export function useDashboardSensorStats() {
       
       for (const endpoint of endpoints) {
         try {
-          const result = await callAuroraApi<DashboardSensorStats>(endpoint);
+          const result = await callAuroraApi<DashboardSensorStats>(endpoint, "GET", undefined, options);
           if (result && Object.keys(result).length > 0) {
             return result;
           }
@@ -205,12 +208,12 @@ export function useDashboardSensorStats() {
   });
 }
 
-export function useDashboardSensorTimeseries(hours: number = 24) {
+export function useDashboardSensorTimeseries(hours: number = 24, clientId?: string | null) {
   return useQuery({
-    queryKey: ["aurora", "dashboard", "sensor-timeseries", hours],
+    queryKey: ["aurora", "dashboard", "sensor-timeseries", hours, clientId],
     queryFn: async () => {
       try {
-        return await callAuroraApi<DashboardSensorTimeseries>(`/api/dashboard/sensor-timeseries?hours=${hours}`);
+        return await callAuroraApi<DashboardSensorTimeseries>(`/api/dashboard/sensor-timeseries?hours=${hours}`, "GET", undefined, { clientId });
       } catch {
         return {};
       }
