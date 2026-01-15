@@ -108,12 +108,20 @@ async function callAuroraApi<T>(path: string, method: string = "GET", body?: unk
         const isAuthError = detailLower.includes('not authenticated') || 
                            detailLower.includes('invalid session') ||
                            detailLower.includes('provide x-api-key') ||
-                           detailLower.includes('aurora api authentication');
+                           detailLower.includes('aurora api authentication') ||
+                           detailLower.includes('authentication required') ||
+                           detailLower.includes('please log in');
         
         if (isAuthError) {
           // Aurora 401 errors mean the Aurora API needs auth, but our Supabase session is still valid
           // Return empty data instead of throwing
           console.warn(`Aurora API auth error for ${path}: ${detailStr}, returning empty data`);
+          return getEmptyDataForPath(path) as T;
+        }
+
+        // Check for requiresAuth flag
+        if ((data as { requiresAuth?: boolean }).requiresAuth) {
+          console.warn(`Aurora API requires auth for ${path}, returning empty data`);
           return getEmptyDataForPath(path) as T;
         }
         
@@ -124,18 +132,41 @@ async function callAuroraApi<T>(path: string, method: string = "GET", body?: unk
           console.error(`Aurora backend error for ${path}:`, data.detail);
         }
         const error = new Error(detailStr);
-        (error as any).status = isNotFoundError ? 404 : 400;
+        (error as { status?: number }).status = isNotFoundError ? 404 : 400;
         throw error;
       }
 
-      if ((data as AuroraProxyResponse)?.error) {
-        // Handle retryable errors gracefully - return empty data instead of throwing
-        if ((data as any).retryable) {
-          console.warn(`Retryable error for ${path}: ${(data as AuroraProxyResponse).error}, returning empty data`);
+      // Handle error responses (status: "error" or error property)
+      const responseError = (data as AuroraProxyResponse)?.error || 
+                            ((data as { status?: string; message?: string })?.status === 'error' && 
+                             (data as { message?: string })?.message);
+      
+      if (responseError) {
+        const errorStr = String(responseError);
+        const errorLower = errorStr.toLowerCase();
+        
+        // Check for parameter errors - return empty data
+        if (errorLower.includes('required parameter') || 
+            errorLower.includes('is required') ||
+            errorLower.includes('missing')) {
+          console.warn(`Parameter error for ${path}: ${errorStr}, returning empty data`);
           return getEmptyDataForPath(path) as T;
         }
-        console.error(`Aurora API response error for ${path}:`, (data as AuroraProxyResponse).error);
-        throw new Error((data as AuroraProxyResponse).error);
+        
+        // Handle retryable errors gracefully - return empty data instead of throwing
+        if ((data as { retryable?: boolean }).retryable) {
+          console.warn(`Retryable error for ${path}: ${errorStr}, returning empty data`);
+          return getEmptyDataForPath(path) as T;
+        }
+
+        // For GET requests, return empty data instead of throwing
+        if (method === 'GET') {
+          console.warn(`API error for GET ${path}: ${errorStr}, returning empty data`);
+          return getEmptyDataForPath(path) as T;
+        }
+        
+        console.error(`Aurora API response error for ${path}:`, errorStr);
+        throw new Error(errorStr);
       }
 
       return data as T;
