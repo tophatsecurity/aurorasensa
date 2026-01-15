@@ -447,14 +447,20 @@ const DashboardContent = () => {
     const starlinkTypes = ['starlink', 'starlink_dish', 'starlink_dish_comprehensive'];
     
     return latestReadings
-      .filter(reading => starlinkTypes.some(t => reading.device_type.toLowerCase().includes(t.toLowerCase())) || 
-                         reading.device_type.toLowerCase().includes('starlink'))
+      .filter(reading => {
+        // Support both device_type and sensor_type formats (sensor_type may come from newer API)
+        const readingAny = reading as unknown as { sensor_type?: string };
+        const deviceType = (reading.device_type || readingAny.sensor_type || '').toLowerCase();
+        return starlinkTypes.some(t => deviceType.includes(t.toLowerCase())) || 
+               deviceType.includes('starlink');
+      })
       .map(reading => {
         const data = reading.data as Record<string, number | undefined>;
+        const readingAny = reading as unknown as { sensor_type?: string };
         
         return {
-          device_id: reading.device_id,
-          device_type: reading.device_type,
+          device_id: reading.device_id || readingAny.sensor_type,
+          device_type: reading.device_type || readingAny.sensor_type,
           client_id: reading.client_id,
           timestamp: reading.timestamp,
           power_w: data.power_watts ?? data.power_w ?? data.power,

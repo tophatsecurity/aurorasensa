@@ -246,7 +246,9 @@ export function useClientSensorData(clientId: string) {
         const byType: SensorDataByType = {};
         
         for (const reading of allReadings) {
-          const type = reading.device_type.toLowerCase();
+          // Support both device_type and sensor_type formats (sensor_type may come from newer API)
+          const readingAny = reading as unknown as { sensor_type?: string };
+          const type = (reading.device_type || readingAny.sensor_type || 'unknown').toLowerCase();
           const key = type.includes('starlink') ? 'starlink' :
                      type.includes('system') || type.includes('monitor') ? 'system_monitor' :
                      type.includes('wifi') ? 'wifi_scanner' :

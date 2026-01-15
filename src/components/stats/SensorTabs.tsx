@@ -1709,7 +1709,7 @@ export function SensorTabs({ devices, isLoading, clientId }: SensorTabsProps) {
   const defaultTab = sortedDevices[0]?.device_id || '';
 
   const getPanelComponent = (device: DeviceGroup) => {
-    const type = device.device_type.toLowerCase();
+    const type = (device.device_type || device.device_id || 'unknown').toLowerCase();
     if (type.includes('starlink')) return <StarlinkPanel device={device} clientId={clientId} />;
     if (type.includes('system') || type.includes('monitor')) return <SystemMonitorPanel device={device} />;
     if (type.includes('wifi')) return <WifiScannerPanel device={device} clientId={clientId} />;
