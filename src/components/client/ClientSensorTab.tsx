@@ -182,7 +182,7 @@ export function ClientSensorTab({ sensorType, readings, isLoading }: ClientSenso
       <Card className="p-4">
         <h4 className="text-sm font-medium text-muted-foreground mb-3">Latest Values</h4>
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-          {Object.entries(latestReading.data || {})
+          {Object.entries((latestReading?.data || {}) as Record<string, unknown>)
             .filter(([k, v]) => v !== null && v !== undefined && !k.includes('_id'))
             .slice(0, 12)
             .map(([key, value]) => (
@@ -246,7 +246,7 @@ export function ClientSensorTab({ sensorType, readings, isLoading }: ClientSenso
               <tr className="border-b border-border">
                 <th className="text-left py-2 px-2 font-medium text-muted-foreground">Timestamp</th>
                 <th className="text-left py-2 px-2 font-medium text-muted-foreground">Device</th>
-                {Object.keys(latestReading.data || {})
+                {Object.keys((latestReading?.data || {}) as Record<string, unknown>)
                   .filter(k => !k.includes('_id'))
                   .slice(0, 4)
                   .map(k => (
@@ -261,7 +261,7 @@ export function ClientSensorTab({ sensorType, readings, isLoading }: ClientSenso
                 <tr key={idx} className="border-b border-border/50 hover:bg-muted/30">
                   <td className="py-2 px-2 font-mono">{new Date(reading.timestamp).toLocaleString()}</td>
                   <td className="py-2 px-2">{reading.device_id}</td>
-                  {Object.entries(reading.data || {})
+                  {Object.entries((reading?.data || {}) as Record<string, unknown>)
                     .filter(([k]) => !k.includes('_id'))
                     .slice(0, 4)
                     .map(([k, v]) => (

@@ -85,17 +85,17 @@ export function useArduinoDevicesFromReadings() {
           const deviceId = reading.device_id || 'unknown';
           const compositeKey = `${clientId}:${deviceId}`;
           
-          // Extract metrics from the reading data
-          const data = reading.data || {};
-          const arduinoData = (data.arduino as Record<string, unknown>) || data;
+          // Extract metrics from the reading data with null safety
+          const data = (reading.data || {}) as Record<string, unknown>;
+          const arduinoData = ((data?.arduino as Record<string, unknown>) || data || {}) as Record<string, unknown>;
           
-          // Extract coordinates from data
+          // Extract coordinates from data with null safety
           let lat: number | undefined;
           let lng: number | undefined;
           
-          if (typeof data.latitude === 'number') {
+          if (data && typeof data.latitude === 'number') {
             lat = data.latitude as number;
-            lng = data.longitude as number;
+            lng = typeof data.longitude === 'number' ? data.longitude as number : undefined;
           }
           
           const device: ArduinoDeviceWithMetrics = {

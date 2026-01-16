@@ -273,31 +273,34 @@ function StarlinkPanel({ device, clientId }: { device: DeviceGroup; clientId?: s
   const { data: starlinkApiData, isLoading } = useClientStarlinkData(clientId || '');
   
   const latestReading = device.latest;
-  const data = latestReading?.data as Record<string, unknown> || {};
-  const starlinkData = (data.starlink as Record<string, unknown>) || data;
-  const apiLatest = starlinkApiData?.latest?.data as Record<string, unknown> | undefined;
-  const mergedData = apiLatest ? { ...starlinkData, ...apiLatest } : starlinkData;
+  const data = (latestReading?.data || {}) as Record<string, unknown>;
+  const starlinkData = ((data?.starlink as Record<string, unknown>) || data || {}) as Record<string, unknown>;
+  const apiLatest = (starlinkApiData?.latest?.data || {}) as Record<string, unknown>;
+  const mergedData = { ...starlinkData, ...apiLatest };
   
-  const uptime = mergedData.uptime_seconds as number | undefined;
-  const downlink = mergedData.downlink_throughput_bps as number | undefined;
-  const uplink = mergedData.uplink_throughput_bps as number | undefined;
-  const latency = mergedData.pop_ping_latency_ms as number | undefined;
-  const obstruction = mergedData.obstruction_percent as number | undefined;
-  const snr = mergedData.snr as number | undefined;
-  const power = mergedData.power_watts as number | undefined;
-  const state = mergedData.state as string | undefined;
-  const lat = mergedData.latitude as number | undefined;
-  const lng = mergedData.longitude as number | undefined;
+  const uptime = typeof mergedData?.uptime_seconds === 'number' ? mergedData.uptime_seconds : undefined;
+  const downlink = typeof mergedData?.downlink_throughput_bps === 'number' ? mergedData.downlink_throughput_bps : undefined;
+  const uplink = typeof mergedData?.uplink_throughput_bps === 'number' ? mergedData.uplink_throughput_bps : undefined;
+  const latency = typeof mergedData?.pop_ping_latency_ms === 'number' ? mergedData.pop_ping_latency_ms : undefined;
+  const obstruction = typeof mergedData?.obstruction_percent === 'number' ? mergedData.obstruction_percent : undefined;
+  const snr = typeof mergedData?.snr === 'number' ? mergedData.snr : undefined;
+  const power = typeof mergedData?.power_watts === 'number' ? mergedData.power_watts : undefined;
+  const state = typeof mergedData?.state === 'string' ? mergedData.state : undefined;
+  const lat = typeof mergedData?.latitude === 'number' ? mergedData.latitude : undefined;
+  const lng = typeof mergedData?.longitude === 'number' ? mergedData.longitude : undefined;
   
   const chartReadings = starlinkApiData?.readings || device.readings || [];
   const chartData = useMemo(() => {
     return chartReadings.slice(-30).map((r: any) => {
-      const d = r.data as Record<string, unknown> || {};
-      const sl = (d.starlink as Record<string, unknown>) || d;
+      if (!r) return null;
+      const d = (r.data || {}) as Record<string, unknown>;
+      const sl = ((d?.starlink as Record<string, unknown>) || d || {}) as Record<string, unknown>;
+      const dlVal = typeof sl?.downlink_throughput_bps === 'number' ? sl.downlink_throughput_bps / 1e6 : null;
+      const ulVal = typeof sl?.uplink_throughput_bps === 'number' ? sl.uplink_throughput_bps / 1e6 : null;
       return {
         time: new Date(r.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-        downlink: (sl.downlink_throughput_bps as number) ? (sl.downlink_throughput_bps as number) / 1e6 : null,
-        uplink: (sl.uplink_throughput_bps as number) ? (sl.uplink_throughput_bps as number) / 1e6 : null,
+        downlink: dlVal,
+        uplink: ulVal,
         latency: sl.pop_ping_latency_ms as number,
       };
     }).filter(d => d.downlink !== null || d.latency !== null);
@@ -382,25 +385,26 @@ function StarlinkPanel({ device, clientId }: { device: DeviceGroup; clientId?: s
 // =============================================
 function SystemMonitorPanel({ device }: { device: DeviceGroup }) {
   const latestReading = device.latest;
-  const data = latestReading?.data as Record<string, unknown> || {};
-  const systemData = (data.system_monitor as Record<string, unknown>) || (data.system as Record<string, unknown>) || data;
+  const data = (latestReading?.data || {}) as Record<string, unknown>;
+  const systemData = ((data?.system_monitor as Record<string, unknown>) || (data?.system as Record<string, unknown>) || data || {}) as Record<string, unknown>;
   
-  const cpu = systemData.cpu_percent as number | undefined;
-  const memory = systemData.memory_percent as number | undefined;
-  const disk = systemData.disk_percent as number | undefined;
-  const uptime = systemData.uptime_seconds as number | undefined;
+  const cpu = typeof systemData?.cpu_percent === 'number' ? systemData.cpu_percent : undefined;
+  const memory = typeof systemData?.memory_percent === 'number' ? systemData.memory_percent : undefined;
+  const disk = typeof systemData?.disk_percent === 'number' ? systemData.disk_percent : undefined;
+  const uptime = typeof systemData?.uptime_seconds === 'number' ? systemData.uptime_seconds : undefined;
   
   const chartData = useMemo(() => {
-    return device.readings.slice(-30).map(r => {
-      const d = r.data as Record<string, unknown> || {};
-      const sys = (d.system_monitor as Record<string, unknown>) || (d.system as Record<string, unknown>) || d;
+    return (device.readings || []).slice(-30).map(r => {
+      if (!r) return null;
+      const d = (r.data || {}) as Record<string, unknown>;
+      const sys = ((d?.system_monitor as Record<string, unknown>) || (d?.system as Record<string, unknown>) || d || {}) as Record<string, unknown>;
       return {
         time: new Date(r.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-        cpu: sys.cpu_percent as number,
-        memory: sys.memory_percent as number,
-        disk: sys.disk_percent as number,
+        cpu: typeof sys?.cpu_percent === 'number' ? sys.cpu_percent : null,
+        memory: typeof sys?.memory_percent === 'number' ? sys.memory_percent : null,
+        disk: typeof sys?.disk_percent === 'number' ? sys.disk_percent : null,
       };
-    });
+    }).filter(Boolean);
   }, [device.readings]);
   
   return (
@@ -1141,21 +1145,21 @@ function GpsPanel({ device, clientId }: { device: DeviceGroup; clientId?: string
   const { data: gpsApiData, isLoading } = useClientGpsData(clientId || '');
   
   const latestReading = device.latest;
-  const data = latestReading?.data as Record<string, unknown> || {};
-  const gpsData = (data.gps as Record<string, unknown>) || (data.gnss as Record<string, unknown>) || data;
+  const data = (latestReading?.data || {}) as Record<string, unknown>;
+  const gpsData = ((data?.gps as Record<string, unknown>) || (data?.gnss as Record<string, unknown>) || data || {}) as Record<string, unknown>;
   
-  // Merge API data
-  const apiGps = gpsApiData?.gpsData || {};
+  // Merge API data with null safety
+  const apiGps = (gpsApiData?.gpsData || {}) as Record<string, unknown>;
   const mergedGps = { ...gpsData, ...apiGps };
   
-  const lat = mergedGps.latitude as number | undefined;
-  const lng = mergedGps.longitude as number | undefined;
-  const alt = mergedGps.altitude as number | undefined;
-  const speed = mergedGps.speed as number | undefined;
-  const heading = mergedGps.heading as number | undefined;
-  const satellites = mergedGps.satellites as number | undefined;
-  const fixQuality = mergedGps.fix_quality as number | undefined;
-  const hdop = mergedGps.hdop as number | undefined;
+  const lat = typeof mergedGps?.latitude === 'number' ? mergedGps.latitude : undefined;
+  const lng = typeof mergedGps?.longitude === 'number' ? mergedGps.longitude : undefined;
+  const alt = typeof mergedGps?.altitude === 'number' ? mergedGps.altitude : undefined;
+  const speed = typeof mergedGps?.speed === 'number' ? mergedGps.speed : undefined;
+  const heading = typeof mergedGps?.heading === 'number' ? mergedGps.heading : undefined;
+  const satellites = typeof mergedGps?.satellites === 'number' ? mergedGps.satellites : undefined;
+  const fixQuality = typeof mergedGps?.fix_quality === 'number' ? mergedGps.fix_quality : undefined;
+  const hdop = typeof mergedGps?.hdop === 'number' ? mergedGps.hdop : undefined;
   
   return (
     <div className="space-y-4">
@@ -1222,26 +1226,28 @@ function ThermalProbePanel({ device, clientId }: { device: DeviceGroup; clientId
   const [selectedMetric, setSelectedMetric] = useState<string>('temperature_c');
   
   const latestReading = device.latest;
-  const data = latestReading?.data as Record<string, unknown> || {};
-  const thermalData = (data.thermal_probe as Record<string, unknown>) || (data.thermal as Record<string, unknown>) || data;
+  const data = (latestReading?.data || {}) as Record<string, unknown>;
+  const thermalData = ((data?.thermal_probe as Record<string, unknown>) || (data?.thermal as Record<string, unknown>) || data || {}) as Record<string, unknown>;
   
-  const temperature = thermalData.temperature_c as number || thermalData.temp_c as number;
-  const humidity = thermalData.humidity as number;
-  const pressure = thermalData.pressure as number;
+  const temperature = typeof thermalData?.temperature_c === 'number' ? thermalData.temperature_c : 
+                     (typeof thermalData?.temp_c === 'number' ? thermalData.temp_c : undefined);
+  const humidity = typeof thermalData?.humidity === 'number' ? thermalData.humidity : undefined;
+  const pressure = typeof thermalData?.pressure === 'number' ? thermalData.pressure : undefined;
   
   const readings = thermalApiData?.readings || device.readings || [];
   
   const chartData = useMemo(() => {
     return readings.slice(-50).map((r: any) => {
-      const d = r.data as Record<string, unknown> || {};
-      const th = (d.thermal_probe as Record<string, unknown>) || (d.thermal as Record<string, unknown>) || d;
+      if (!r) return null;
+      const d = (r.data || {}) as Record<string, unknown>;
+      const th = ((d?.thermal_probe as Record<string, unknown>) || (d?.thermal as Record<string, unknown>) || d || {}) as Record<string, unknown>;
       return {
         time: new Date(r.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-        temperature_c: (th.temperature_c as number) || (th.temp_c as number),
-        humidity: th.humidity as number,
-        pressure: th.pressure as number,
+        temperature_c: typeof th?.temperature_c === 'number' ? th.temperature_c : (typeof th?.temp_c === 'number' ? th.temp_c : null),
+        humidity: typeof th?.humidity === 'number' ? th.humidity : null,
+        pressure: typeof th?.pressure === 'number' ? th.pressure : null,
       };
-    });
+    }).filter(Boolean);
   }, [readings]);
   
   const availableMetrics = [

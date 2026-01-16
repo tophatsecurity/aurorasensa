@@ -255,10 +255,13 @@ const RadioContent = () => {
     }> = [];
 
     wifiReadings.forEach(reading => {
-      const data = reading.data as Record<string, unknown>;
+      const data = (reading.data || {}) as Record<string, unknown>;
+      if (!data || typeof data !== 'object') return;
+      
       // Handle different data structures
       if (data.networks && Array.isArray(data.networks)) {
         (data.networks as Array<Record<string, unknown>>).forEach(network => {
+          if (!network || typeof network !== 'object') return;
           networks.push({
             ssid: String(network.ssid || 'Unknown'),
             bssid: String(network.bssid || network.mac || ''),
@@ -309,10 +312,13 @@ const RadioContent = () => {
     }> = [];
 
     bluetoothReadings.forEach(reading => {
-      const data = reading.data as Record<string, unknown>;
+      const data = (reading.data || {}) as Record<string, unknown>;
+      if (!data || typeof data !== 'object') return;
+      
       // Handle different data structures
       if (data.devices && Array.isArray(data.devices)) {
         (data.devices as Array<Record<string, unknown>>).forEach(device => {
+          if (!device || typeof device !== 'object') return;
           devices.push({
             name: String(device.name || device.local_name || 'Unknown Device'),
             mac: String(device.mac || device.address || ''),

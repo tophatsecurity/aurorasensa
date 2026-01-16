@@ -82,25 +82,25 @@ export function useStarlinkDevicesFromReadings() {
           const deviceId = reading.device_id || 'unknown';
           const compositeKey = `${clientId}:${deviceId}`;
           
-          // Extract metrics from the reading data
-          const data = reading.data || {};
-          const starlinkData = (data.starlink as Record<string, unknown>) || {};
-          const pingLatency = (starlinkData.ping_latency as Record<string, number>) || {};
+          // Extract metrics from the reading data with null safety
+          const data = (reading.data || {}) as Record<string, unknown>;
+          const starlinkData = ((data?.starlink as Record<string, unknown>) || data || {}) as Record<string, unknown>;
+          const pingLatency = ((starlinkData?.ping_latency as Record<string, number>) || {}) as Record<string, number>;
           
-          // Extract coordinates
+          // Extract coordinates with null safety
           let lat: number | undefined;
           let lng: number | undefined;
           let alt: number | undefined;
           
-          if (typeof starlinkData.latitude === 'number') {
+          if (starlinkData && typeof starlinkData.latitude === 'number') {
             lat = starlinkData.latitude as number;
-            lng = starlinkData.longitude as number;
-            alt = starlinkData.altitude as number | undefined;
-          } else if (starlinkData.location_detail && typeof starlinkData.location_detail === 'object') {
+            lng = typeof starlinkData.longitude === 'number' ? starlinkData.longitude as number : undefined;
+            alt = typeof starlinkData.altitude === 'number' ? starlinkData.altitude as number : undefined;
+          } else if (starlinkData?.location_detail && typeof starlinkData.location_detail === 'object') {
             const loc = starlinkData.location_detail as Record<string, number>;
-            lat = loc.latitude;
-            lng = loc.longitude;
-            alt = loc.altitude;
+            lat = typeof loc?.latitude === 'number' ? loc.latitude : undefined;
+            lng = typeof loc?.longitude === 'number' ? loc.longitude : undefined;
+            alt = typeof loc?.altitude === 'number' ? loc.altitude : undefined;
           }
           
           const device: StarlinkDeviceWithMetrics = {
