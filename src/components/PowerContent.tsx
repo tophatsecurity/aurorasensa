@@ -93,12 +93,15 @@ const PowerContent = () => {
     const timeMap = new Map<string, Record<string, string | number>>();
     
     starlinkPower.power_data.forEach(point => {
+      // Skip undefined or null entries
+      if (!point || point.power_watts === undefined || point.power_watts === null) return;
+      
       const time = format(new Date(point.timestamp), "HH:mm");
       if (!timeMap.has(time)) {
         timeMap.set(time, { time });
       }
       const entry = timeMap.get(time)!;
-      entry[point.device_id] = point.power_watts;
+      entry[point.device_id || 'unknown'] = point.power_watts;
     });
     
     return Array.from(timeMap.values()).sort((a, b) => 
