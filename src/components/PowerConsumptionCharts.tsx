@@ -78,17 +78,19 @@ const PowerConsumptionCharts = ({ hours = 24, clientId = 'all' }: PowerConsumpti
     // First, try to use power_data from the dedicated power endpoint (most accurate)
     const powerData = starlinkPower?.power_data;
     if (powerData && powerData.length > 0) {
-      const data = powerData.map(r => ({
-        time: new Date(r.timestamp).toLocaleTimeString('en-US', { 
-          hour12: false, 
-          hour: '2-digit', 
-          minute: '2-digit'
-        }),
-        value: Number(r.power_watts.toFixed(2)),
-        isPeak: false,
-        isAboveWarning: r.power_watts >= thresholdConfig.warningThreshold && r.power_watts < thresholdConfig.criticalThreshold,
-        isAboveCritical: r.power_watts >= thresholdConfig.criticalThreshold,
-      }));
+      const data = powerData
+        .filter(r => r && r.power_watts !== undefined && r.power_watts !== null)
+        .map(r => ({
+          time: new Date(r.timestamp).toLocaleTimeString('en-US', { 
+            hour12: false, 
+            hour: '2-digit', 
+            minute: '2-digit'
+          }),
+          value: Number(r.power_watts.toFixed(2)),
+          isPeak: false,
+          isAboveWarning: r.power_watts >= thresholdConfig.warningThreshold && r.power_watts < thresholdConfig.criticalThreshold,
+          isAboveCritical: r.power_watts >= thresholdConfig.criticalThreshold,
+        }));
       
       if (data.length > 0) {
         const maxValue = Math.max(...data.map(d => d.value));
