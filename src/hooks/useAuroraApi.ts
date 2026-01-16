@@ -1519,57 +1519,62 @@ export function useAdsbAircraftWithHistory(historyMinutes: number = 60) {
       const aircraftMap = new Map<string, AdsbAircraft>();
       
       historicalQuery.data.readings.forEach(reading => {
-        const data = reading.data;
+        const data = reading.data as Record<string, unknown> | undefined;
+        if (!data || typeof data !== 'object') return;
         
         // Check if aircraft_list exists (new format)
-        const aircraftList = (data as { aircraft_list?: Array<Record<string, unknown>> }).aircraft_list;
+        const aircraftList = data.aircraft_list;
         
         if (aircraftList && Array.isArray(aircraftList)) {
           // Process aircraft from aircraft_list
           aircraftList.forEach(ac => {
-            const hex = String(ac.icao || ac.hex || '');
+            if (!ac || typeof ac !== 'object') return;
+            const acData = ac as Record<string, unknown>;
+            const hex = String(acData.icao || acData.hex || '');
             if (!hex) return;
             
             const existing = aircraftMap.get(hex);
             if (!existing) {
               aircraftMap.set(hex, {
                 hex,
-                flight: ac.callsign as string || ac.flight as string,
-                alt_baro: ac.altitude_ft as number || ac.alt_baro as number,
-                alt_geom: ac.alt_geom as number,
-                gs: ac.groundspeed_knots as number || ac.gs as number,
-                track: ac.track as number,
-                lat: ac.latitude as number || ac.lat as number,
-                lon: ac.longitude as number || ac.lon as number,
-                squawk: ac.squawk as string,
-                category: ac.category as string,
-                rssi: ac.rssi as number,
-                seen: ac.last_seen ? Math.floor((Date.now() - new Date(ac.last_seen as string).getTime()) / 1000) : 0,
+                flight: typeof acData.callsign === 'string' ? acData.callsign : (typeof acData.flight === 'string' ? acData.flight : undefined),
+                alt_baro: typeof acData.altitude_ft === 'number' ? acData.altitude_ft : (typeof acData.alt_baro === 'number' ? acData.alt_baro : undefined),
+                alt_geom: typeof acData.alt_geom === 'number' ? acData.alt_geom : undefined,
+                gs: typeof acData.groundspeed_knots === 'number' ? acData.groundspeed_knots : (typeof acData.gs === 'number' ? acData.gs : undefined),
+                track: typeof acData.track === 'number' ? acData.track : undefined,
+                lat: typeof acData.latitude === 'number' ? acData.latitude : (typeof acData.lat === 'number' ? acData.lat : undefined),
+                lon: typeof acData.longitude === 'number' ? acData.longitude : (typeof acData.lon === 'number' ? acData.lon : undefined),
+                squawk: typeof acData.squawk === 'string' ? acData.squawk : undefined,
+                category: typeof acData.category === 'string' ? acData.category : undefined,
+                rssi: typeof acData.rssi === 'number' ? acData.rssi : undefined,
+                seen: typeof acData.last_seen === 'string' ? Math.floor((Date.now() - new Date(acData.last_seen).getTime()) / 1000) : 0,
               });
             }
           });
         } else {
           // Old format: aircraft data directly in data object
-          const key = data.hex || data.flight || reading.device_id;
+          const key = (typeof data.hex === 'string' ? data.hex : undefined) || 
+                     (typeof data.flight === 'string' ? data.flight : undefined) || 
+                     reading.device_id;
           
-          if (key && data.lat !== undefined && data.lon !== undefined) {
+          if (key && typeof data.lat === 'number' && typeof data.lon === 'number') {
             const existing = aircraftMap.get(key);
             const readingTime = new Date(reading.timestamp).getTime();
             const existingTime = existing ? new Date(existing.seen ? Date.now() - existing.seen * 1000 : 0).getTime() : 0;
             
             if (!existing || readingTime > existingTime) {
               aircraftMap.set(key, {
-                hex: data.hex || key,
-                flight: data.flight,
-                alt_baro: data.alt_baro,
-                alt_geom: data.alt_geom,
-                gs: data.gs,
-                track: data.track,
-                lat: data.lat,
-                lon: data.lon,
-                squawk: data.squawk,
-                category: data.category,
-                rssi: data.rssi,
+                hex: typeof data.hex === 'string' ? data.hex : key,
+                flight: typeof data.flight === 'string' ? data.flight : undefined,
+                alt_baro: typeof data.alt_baro === 'number' ? data.alt_baro : undefined,
+                alt_geom: typeof data.alt_geom === 'number' ? data.alt_geom : undefined,
+                gs: typeof data.gs === 'number' ? data.gs : undefined,
+                track: typeof data.track === 'number' ? data.track : undefined,
+                lat: typeof data.lat === 'number' ? data.lat : undefined,
+                lon: typeof data.lon === 'number' ? data.lon : undefined,
+                squawk: typeof data.squawk === 'string' ? data.squawk : undefined,
+                category: typeof data.category === 'string' ? data.category : undefined,
+                rssi: typeof data.rssi === 'number' ? data.rssi : undefined,
                 seen: Math.floor((Date.now() - new Date(reading.timestamp).getTime()) / 1000),
               });
             }

@@ -120,15 +120,23 @@ export function formatUptime(seconds: number): string {
 
 export function extractMeasurements(reading: SensorReading): Measurement[] {
   const measurements: Measurement[] = [];
-  const data = reading.data || {};
+  const data = reading?.data;
+  
+  // Early return if no data
+  if (!data || typeof data !== 'object') {
+    return measurements;
+  }
   
   // Flatten nested data
   const flatData: Record<string, unknown> = {};
   
   Object.entries(data).forEach(([key, value]) => {
-    if (typeof value === 'object' && value !== null && !Array.isArray(value)) {
+    if (value === null || value === undefined) return;
+    if (typeof value === 'object' && !Array.isArray(value)) {
       Object.entries(value as Record<string, unknown>).forEach(([subKey, subValue]) => {
-        flatData[`${key}_${subKey}`] = subValue;
+        if (subValue !== null && subValue !== undefined) {
+          flatData[`${key}_${subKey}`] = subValue;
+        }
       });
     } else {
       flatData[key] = value;
