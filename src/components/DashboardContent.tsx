@@ -411,22 +411,22 @@ const DashboardContent = () => {
     return latestReadings
       .filter(reading => thermalTypes.includes(reading.device_type))
       .map(reading => {
-        const data = reading.data as Record<string, number | undefined>;
+        const data = (reading.data || {}) as Record<string, number | undefined>;
         // Try to extract temperature from various possible field names
         const temperature = 
-          data.temperature_c ?? 
-          data.temp_c ?? 
-          data.aht_temp_c ?? 
-          data.bmp_temp_c ?? 
-          data.th_temp_c ??
-          data.probe_c ??
-          data.ambient_c;
+          data?.temperature_c ?? 
+          data?.temp_c ?? 
+          data?.aht_temp_c ?? 
+          data?.bmp_temp_c ?? 
+          data?.th_temp_c ??
+          data?.probe_c ??
+          data?.ambient_c;
         
         const humidity = 
-          data.humidity ?? 
-          data.aht_humidity ?? 
-          data.th_humidity ??
-          data.bme280_humidity;
+          data?.humidity ?? 
+          data?.aht_humidity ?? 
+          data?.th_humidity ??
+          data?.bme280_humidity;
           
         return {
           device_id: reading.device_id,
@@ -455,7 +455,7 @@ const DashboardContent = () => {
                deviceType.includes('starlink');
       })
       .map(reading => {
-        const data = reading.data as Record<string, number | undefined>;
+        const data = (reading.data || {}) as Record<string, number | undefined>;
         const readingAny = reading as unknown as { sensor_type?: string };
         
         return {
@@ -463,13 +463,13 @@ const DashboardContent = () => {
           device_type: reading.device_type || readingAny.sensor_type,
           client_id: reading.client_id,
           timestamp: reading.timestamp,
-          power_w: data.power_watts ?? data.power_w ?? data.power,
-          latency_ms: data.pop_ping_latency_ms ?? data.latency_ms ?? data.ping_ms,
-          downlink_bps: data.downlink_throughput_bps ?? data.downlink_bps,
-          uplink_bps: data.uplink_throughput_bps ?? data.uplink_bps,
-          obstruction: data.obstruction_percent ?? data.obstruction_percent_time,
-          snr: data.snr,
-          uptime: data.uptime_seconds ?? data.uptime,
+          power_w: data?.power_watts ?? data?.power_w ?? data?.power,
+          latency_ms: data?.pop_ping_latency_ms ?? data?.latency_ms ?? data?.ping_ms,
+          downlink_bps: data?.downlink_throughput_bps ?? data?.downlink_bps,
+          uplink_bps: data?.uplink_throughput_bps ?? data?.uplink_bps,
+          obstruction: data?.obstruction_percent ?? data?.obstruction_percent_time,
+          snr: data?.snr,
+          uptime: data?.uptime_seconds ?? data?.uptime,
         };
       });
   }, [latestReadings]);
