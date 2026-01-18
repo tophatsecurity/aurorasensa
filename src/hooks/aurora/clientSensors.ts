@@ -709,21 +709,29 @@ export function useClientGpsData(clientId: string) {
         // Sort by timestamp descending
         clientReadings.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
         
-        // Extract GPS data from latest reading
+        // Extract GPS data from latest reading with null safety
         let latestGps: GpsData | null = null;
-        if (clientReadings.length > 0) {
-          const data = clientReadings[0]?.data || {};
-          const gpsData = (data.gps as GpsData) || (data.gnss as GpsData) || data;
-          latestGps = {
-            latitude: gpsData.latitude as number,
-            longitude: gpsData.longitude as number,
-            altitude: gpsData.altitude as number,
-            speed: gpsData.speed as number,
-            heading: gpsData.heading as number,
-            satellites: gpsData.satellites as number,
-            fix_quality: gpsData.fix_quality as number,
-            hdop: gpsData.hdop as number,
-          };
+        if (clientReadings.length > 0 && clientReadings[0]) {
+          const data = clientReadings[0].data || {};
+          const gpsSource = (data.gps as Record<string, unknown>) || (data.gnss as Record<string, unknown>) || data;
+          
+          // Only create GPS data if we have valid latitude/longitude
+          if (gpsSource && 
+              typeof gpsSource.latitude === 'number' && 
+              typeof gpsSource.longitude === 'number' &&
+              !isNaN(gpsSource.latitude) && 
+              !isNaN(gpsSource.longitude)) {
+            latestGps = {
+              latitude: gpsSource.latitude,
+              longitude: gpsSource.longitude,
+              altitude: typeof gpsSource.altitude === 'number' ? gpsSource.altitude : undefined,
+              speed: typeof gpsSource.speed === 'number' ? gpsSource.speed : undefined,
+              heading: typeof gpsSource.heading === 'number' ? gpsSource.heading : undefined,
+              satellites: typeof gpsSource.satellites === 'number' ? gpsSource.satellites : undefined,
+              fix_quality: typeof gpsSource.fix_quality === 'number' ? gpsSource.fix_quality : undefined,
+              hdop: typeof gpsSource.hdop === 'number' ? gpsSource.hdop : undefined,
+            };
+          }
         }
         
         return {

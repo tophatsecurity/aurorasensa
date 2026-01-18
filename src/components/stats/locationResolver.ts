@@ -316,8 +316,12 @@ function getDeviceCategory(deviceType: string): LocationSource {
 function extractDeviceLocation(device: DeviceGroup): ResolvedLocation | null {
   const category = getDeviceCategory(device.device_type);
   
-  // First check pre-extracted location
-  if (device.location?.lat && device.location?.lng) {
+  // First check pre-extracted location with type safety
+  if (device.location && 
+      typeof device.location.lat === 'number' && 
+      typeof device.location.lng === 'number' &&
+      !isNaN(device.location.lat) && 
+      !isNaN(device.location.lng)) {
     const data = device.latest?.data || {};
     return {
       latitude: device.location.lat,
@@ -325,8 +329,8 @@ function extractDeviceLocation(device: DeviceGroup): ResolvedLocation | null {
       source: category,
       deviceId: device.device_id,
       timestamp: device.latest?.timestamp,
-      city: data.city as string | undefined,
-      country: data.country as string | undefined,
+      city: (data as Record<string, unknown>).city as string | undefined,
+      country: (data as Record<string, unknown>).country as string | undefined,
     };
   }
 
@@ -383,10 +387,15 @@ export function resolveClientLocation(
 ): ResolvedLocation {
   const candidateLocations: ResolvedLocation[] = [];
 
-  // Extract locations from all devices
+  // Extract locations from all devices with validation
   for (const device of devices) {
+    if (!device) continue;
     const location = extractDeviceLocation(device);
-    if (location && location.latitude && location.longitude) {
+    if (location && 
+        typeof location.latitude === 'number' && 
+        typeof location.longitude === 'number' &&
+        !isNaN(location.latitude) && 
+        !isNaN(location.longitude)) {
       candidateLocations.push(location);
     }
   }

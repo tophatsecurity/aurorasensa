@@ -21,7 +21,13 @@ export function SensorLocationMap({
   zoom = 10 
 }: SensorLocationMapProps) {
   const sensorsWithLocation = useMemo(() => {
-    return sensors.filter(s => s.location);
+    return sensors.filter(s => 
+      s.location && 
+      typeof s.location.lat === 'number' && 
+      typeof s.location.lng === 'number' &&
+      !isNaN(s.location.lat) && 
+      !isNaN(s.location.lng)
+    );
   }, [sensors]);
 
   const mapCenter = useMemo(() => {
@@ -52,7 +58,7 @@ export function SensorLocationMap({
                 <p><span className="font-medium">Client:</span> {sensor.client_id}</p>
                 <p><span className="font-medium">Readings:</span> {sensor.readings.length}</p>
                 <p><span className="font-medium">Last seen:</span> {format(new Date(sensor.latest.timestamp), 'PPp')}</p>
-                <p><span className="font-medium">Location:</span> {sensor.location!.lat.toFixed(4)}, {sensor.location!.lng.toFixed(4)}</p>
+                <p><span className="font-medium">Location:</span> {sensor.location?.lat?.toFixed(4) ?? '—'}, {sensor.location?.lng?.toFixed(4) ?? '—'}</p>
               </div>
             </div>
           </Popup>

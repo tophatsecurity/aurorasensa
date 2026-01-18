@@ -485,11 +485,11 @@ function WifiScannerPanel({ device, clientId }: { device: DeviceGroup; clientId?
     }
     // Try to extract from readings
     const readings = wifiApiData?.readings || device.readings || [];
-    if (readings.length > 0) {
+    if (readings.length > 0 && readings[0]) {
       const latestData = (readings[0] as any)?.data || {};
-      const wifiPart = latestData.wifi_scanner || latestData.wifi || latestData;
-      if (Array.isArray(wifiPart.networks)) return wifiPart.networks;
-      if (Array.isArray(wifiPart.access_points)) return wifiPart.access_points;
+      const wifiPart = latestData.wifi_scanner || latestData.wifi || latestData || {};
+      if (wifiPart && Array.isArray(wifiPart.networks)) return wifiPart.networks;
+      if (wifiPart && Array.isArray(wifiPart.access_points)) return wifiPart.access_points;
     }
     return [];
   };
@@ -693,11 +693,11 @@ function BluetoothScannerPanel({ device, clientId }: { device: DeviceGroup; clie
     }
     // Try to extract from readings
     const readings = btApiData?.readings || device.readings || [];
-    if (readings.length > 0) {
+    if (readings.length > 0 && readings[0]) {
       const latestData = (readings[0] as any)?.data || {};
-      const btPart = latestData.bluetooth_scanner || latestData.bluetooth || latestData.ble || latestData;
-      if (Array.isArray(btPart.devices)) return btPart.devices;
-      if (Array.isArray(btPart.discovered)) return btPart.discovered;
+      const btPart = latestData.bluetooth_scanner || latestData.bluetooth || latestData.ble || latestData || {};
+      if (btPart && Array.isArray(btPart.devices)) return btPart.devices;
+      if (btPart && Array.isArray(btPart.discovered)) return btPart.discovered;
     }
     return [];
   };

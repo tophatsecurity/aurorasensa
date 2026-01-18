@@ -197,46 +197,57 @@ function formatValue(value: number, key: string): string {
 
 // Extract location from reading data (handles nested Starlink location)
 function extractLocationFromReading(reading: SensorReading): { lat: number; lng: number } | undefined {
-  // First check top-level latitude/longitude
-  if (reading.latitude && reading.longitude) {
+  // Safety check for reading itself
+  if (!reading) return undefined;
+  
+  // First check top-level latitude/longitude with type safety
+  if (typeof reading.latitude === 'number' && typeof reading.longitude === 'number' &&
+      !isNaN(reading.latitude) && !isNaN(reading.longitude)) {
     return { lat: reading.latitude, lng: reading.longitude };
   }
   
   const data = reading.data as Record<string, unknown> | undefined;
-  if (!data) return undefined;
+  if (!data || typeof data !== 'object') return undefined;
   
   // Check for Starlink location (nested in starlink object)
   const starlinkData = data.starlink as Record<string, unknown> | undefined;
-  if (starlinkData) {
+  if (starlinkData && typeof starlinkData === 'object') {
     // Check starlink.latitude/longitude directly
-    if (typeof starlinkData.latitude === 'number' && typeof starlinkData.longitude === 'number') {
+    if (typeof starlinkData.latitude === 'number' && typeof starlinkData.longitude === 'number' &&
+        !isNaN(starlinkData.latitude) && !isNaN(starlinkData.longitude)) {
       return { lat: starlinkData.latitude, lng: starlinkData.longitude };
     }
     
     // Check starlink.location_detail
-    const locationDetail = starlinkData.location_detail as Record<string, number> | undefined;
-    if (locationDetail?.latitude && locationDetail?.longitude) {
+    const locationDetail = starlinkData.location_detail as Record<string, unknown> | undefined;
+    if (locationDetail && typeof locationDetail === 'object' &&
+        typeof locationDetail.latitude === 'number' && typeof locationDetail.longitude === 'number' &&
+        !isNaN(locationDetail.latitude) && !isNaN(locationDetail.longitude)) {
       return { lat: locationDetail.latitude, lng: locationDetail.longitude };
     }
     
     // Check starlink.gps_location
-    const gpsLocation = starlinkData.gps_location as Record<string, number> | undefined;
-    if (gpsLocation?.latitude && gpsLocation?.longitude) {
+    const gpsLocation = starlinkData.gps_location as Record<string, unknown> | undefined;
+    if (gpsLocation && typeof gpsLocation === 'object' &&
+        typeof gpsLocation.latitude === 'number' && typeof gpsLocation.longitude === 'number' &&
+        !isNaN(gpsLocation.latitude) && !isNaN(gpsLocation.longitude)) {
       return { lat: gpsLocation.latitude, lng: gpsLocation.longitude };
     }
   }
   
   // Check for GPS data
   const gpsData = data.gps as Record<string, unknown> | undefined;
-  if (gpsData) {
-    if (typeof gpsData.latitude === 'number' && typeof gpsData.longitude === 'number') {
+  if (gpsData && typeof gpsData === 'object') {
+    if (typeof gpsData.latitude === 'number' && typeof gpsData.longitude === 'number' &&
+        !isNaN(gpsData.latitude) && !isNaN(gpsData.longitude)) {
       return { lat: gpsData.latitude, lng: gpsData.longitude };
     }
   }
   
   // Check top-level data for lat/lng
-  if (typeof data.latitude === 'number' && typeof data.longitude === 'number') {
-    return { lat: data.latitude as number, lng: data.longitude as number };
+  if (typeof data.latitude === 'number' && typeof data.longitude === 'number' &&
+      !isNaN(data.latitude) && !isNaN(data.longitude)) {
+    return { lat: data.latitude, lng: data.longitude };
   }
   
   return undefined;
@@ -244,11 +255,16 @@ function extractLocationFromReading(reading: SensorReading): { lat: number; lng:
 
 // Process readings into sensor groups (new model: client_id → sensor → measurements)
 export function processReadingsToSensorGroups(readings: SensorReading[]): SensorGroup[] {
-  if (!readings) return [];
+  if (!readings || !Array.isArray(readings)) return [];
   
   const groups = new Map<string, SensorGroup>();
   
-  readings.forEach((reading: SensorReading) => {
+  // Filter out null/undefined readings before processing
+  const validReadings = readings.filter((reading): reading is SensorReading => 
+    reading != null && typeof reading === 'object'
+  );
+  
+  validReadings.forEach((reading: SensorReading) => {
     // Key by client_id and sensor_type (not device_id)
     const sensorType = (reading as unknown as { device_type?: string }).device_type || reading.sensor_type || 'unknown';
     const clientId = reading.client_id || 'unknown';
@@ -331,12 +347,26 @@ export function processReadingsToGroups(readings: SensorReading[]): DeviceGroup[
   return Array.from(groups.values());
 }
 
-// Calculate map center from sensor groups
+// Calculate map center from sensor groups with comprehensive null safety
 export function calculateMapCenter(sensorsWithLocation: Array<{ location?: { lat: number; lng: number } }>): { lat: number; lng: number } {
-  const withLocation = sensorsWithLocation.filter(s => s.location);
-  if (withLocation.length === 0) return { lat: 0, lng: 0 };
-  const lats = withLocation.map(s => s.location!.lat);
-  const lngs = withLocation.map(s => s.location!.lng);
+  if (!sensorsWithLocation || !Array.isArray(sensorsWithLocation)) return { lat: 0, lng: 0 };
+  
+  const withValidLocation = sensorsWithLocation.filter(s => 
+    s && 
+    s.location && 
+    typeof s.location.lat === 'number' && 
+    typeof s.location.lng === 'number' &&
+    !isNaN(s.location.lat) && 
+    !isNaN(s.location.lng)
+  );
+  
+  if (withValidLocation.length === 0) return { lat: 0, lng: 0 };
+  
+  const lats = withValidLocation.map(s => s.location!.lat).filter(lat => typeof lat === 'number' && !isNaN(lat));
+  const lngs = withValidLocation.map(s => s.location!.lng).filter(lng => typeof lng === 'number' && !isNaN(lng));
+  
+  if (lats.length === 0 || lngs.length === 0) return { lat: 0, lng: 0 };
+  
   return {
     lat: lats.reduce((a, b) => a + b, 0) / lats.length,
     lng: lngs.reduce((a, b) => a + b, 0) / lngs.length
