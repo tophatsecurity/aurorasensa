@@ -21,7 +21,13 @@ export function DeviceLocationMap({
   zoom = 10 
 }: DeviceLocationMapProps) {
   const devicesWithLocation = useMemo(() => {
-    return devices.filter(d => d.location);
+    return devices.filter(d => 
+      d.location && 
+      typeof d.location.lat === 'number' && 
+      typeof d.location.lng === 'number' &&
+      !isNaN(d.location.lat) && 
+      !isNaN(d.location.lng)
+    );
   }, [devices]);
 
   const mapCenter = useMemo(() => {
@@ -52,7 +58,7 @@ export function DeviceLocationMap({
                 <p><span className="font-medium">Type:</span> {device.device_type}</p>
                 <p><span className="font-medium">Client:</span> {device.client_id}</p>
                 <p><span className="font-medium">Last seen:</span> {format(new Date(device.latest.timestamp), 'PPp')}</p>
-                <p><span className="font-medium">Location:</span> {device.location!.lat.toFixed(4)}, {device.location!.lng.toFixed(4)}</p>
+                <p><span className="font-medium">Location:</span> {device.location?.lat?.toFixed(4) ?? '—'}, {device.location?.lng?.toFixed(4) ?? '—'}</p>
               </div>
             </div>
           </Popup>

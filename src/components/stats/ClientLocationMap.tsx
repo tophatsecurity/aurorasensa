@@ -135,7 +135,7 @@ export function ClientLocationMap({
                         )}
                         <p className="text-xs">
                           <strong>Coords:</strong>{' '}
-                          {client.location.latitude?.toFixed(4)}, {client.location.longitude?.toFixed(4)}
+                          {typeof client.location.latitude === 'number' ? client.location.latitude.toFixed(4) : '—'}, {typeof client.location.longitude === 'number' ? client.location.longitude.toFixed(4) : '—'}
                         </p>
                       </div>
                     </Popup>
@@ -161,7 +161,7 @@ export function ClientLocationMap({
                       </p>
                       <p className="text-xs">
                         <strong>Location:</strong>{' '}
-                        {device.location!.lat.toFixed(4)}, {device.location!.lng.toFixed(4)}
+                        {device.location?.lat?.toFixed(4) ?? '—'}, {device.location?.lng?.toFixed(4) ?? '—'}
                       </p>
                     </div>
                   </Popup>

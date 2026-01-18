@@ -212,7 +212,7 @@ const AisSection = () => {
                     </Badge>
                   </TableCell>
                   <TableCell className="font-mono text-xs">
-                    {vessel.lat?.toFixed(4)}, {vessel.lon?.toFixed(4)}
+                    {typeof vessel.lat === 'number' ? vessel.lat.toFixed(4) : '—'}, {typeof vessel.lon === 'number' ? vessel.lon.toFixed(4) : '—'}
                   </TableCell>
                   <TableCell>{vessel.speed?.toFixed(1) ?? "—"} kn</TableCell>
                   <TableCell>{vessel.course?.toFixed(0) ?? "—"}°</TableCell>
@@ -252,7 +252,7 @@ const AisSection = () => {
                 </div>
                 <div className="flex justify-between">
                   <span className="text-muted-foreground">Position</span>
-                  <span className="font-mono text-xs">{vessel.lat?.toFixed(4)}, {vessel.lon?.toFixed(4)}</span>
+                  <span className="font-mono text-xs">{typeof vessel.lat === 'number' ? vessel.lat.toFixed(4) : '—'}, {typeof vessel.lon === 'number' ? vessel.lon.toFixed(4) : '—'}</span>
                 </div>
                 <div className="flex justify-between">
                   <span className="text-muted-foreground">Speed/Course</span>
@@ -406,7 +406,7 @@ const AprsSection = () => {
                     {station.callsign}{station.ssid ? `-${station.ssid}` : ""}
                   </TableCell>
                   <TableCell className="font-mono text-xs">
-                    {station.lat?.toFixed(4)}, {station.lon?.toFixed(4)}
+                    {typeof station.lat === 'number' ? station.lat.toFixed(4) : '—'}, {typeof station.lon === 'number' ? station.lon.toFixed(4) : '—'}
                   </TableCell>
                   <TableCell>{station.altitude ? `${station.altitude.toFixed(0)} m` : "—"}</TableCell>
                   <TableCell>{station.speed?.toFixed(1) ?? "—"} km/h</TableCell>
