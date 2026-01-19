@@ -22,33 +22,37 @@ interface DashboardStatsHeaderProps {
 }
 
 const DashboardStatsHeader = ({ periodHours = 24, clientId }: DashboardStatsHeaderProps) => {
-  // Pass clientId to API calls for filtering
-  const effectiveClientId = clientId === "all" ? undefined : clientId;
+  // Normalize clientId - "all" or empty means global view (no filter)
+  const effectiveClientId = clientId && clientId !== "all" ? clientId : undefined;
   
+  // Core stats hooks with client filtering
   const { data: stats, isLoading: statsLoading } = useComprehensiveStats(effectiveClientId);
   const { data: globalStats, isLoading: globalStatsLoading } = useGlobalStats(effectiveClientId);
   const { data: statsOverview, isLoading: overviewLoading } = useStatsOverview();
   
-  // NEW: Use the dedicated dashboard client stats hook (uses /api/stats/by-client)
+  // Dashboard client stats (uses /api/stats/by-client) - most accurate for reading counts
   const { data: dashboardClientStats, isLoading: dashboardClientStatsLoading } = useDashboardClientStats(
     effectiveClientId, 
     periodHours
   );
   
-  // NEW: Use the dedicated dashboard sensor stats hook (uses /api/dashboard/sensor-stats)
+  // Dashboard sensor stats (uses /api/dashboard/sensor-stats)
   const { data: dashboardSensorStats, isLoading: dashboardSensorStatsLoading } = useDashboardSensorStats(
     effectiveClientId
   );
   
+  // Sensor stats by type with period filtering
   const { data: sensorStats, isLoading: sensorStatsLoading } = useStatsBySensor({ 
     hours: periodHours,
     clientId: effectiveClientId 
   });
+  
+  // Device and client lists for fallback data
   const { data: deviceTree, isLoading: deviceTreeLoading } = useDeviceTree();
   const { data: clients, isLoading: clientsLoading } = useClients();
   const { data: clientsByState } = useClientsByState();
   
-  // Fetch real timeseries data for sparkline charts
+  // Timeseries data for sparkline charts
   const { data: timeseries, isLoading: timeseriesLoading } = useDashboardTimeseries(periodHours, effectiveClientId);
 
   const global = stats?.global;

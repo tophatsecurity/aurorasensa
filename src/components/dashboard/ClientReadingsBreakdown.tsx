@@ -19,8 +19,10 @@ interface ClientReadingsBreakdownProps {
 const COLORS = ['#22c55e', '#3b82f6', '#f59e0b', '#ec4899', '#8b5cf6', '#06b6d4', '#ef4444', '#84cc16'];
 
 const ClientReadingsBreakdown = ({ periodHours = 24, clientId }: ClientReadingsBreakdownProps) => {
-  const effectiveClientId = clientId === "all" ? undefined : clientId;
+  // Normalize clientId - "all" or empty means global view (no filter)
+  const effectiveClientId = clientId && clientId !== "all" ? clientId : undefined;
   
+  // Fetch client stats for the specified period and client filter
   const { data: clientStats, isLoading } = useDashboardClientStats(effectiveClientId, periodHours);
   const { data: clientsWithHostnames } = useClientsWithHostnames();
 

@@ -17,7 +17,9 @@ const formatNumber = (num: number): string => {
 };
 
 export default function WeeklyTrendChart({ clientId }: WeeklyTrendChartProps) {
-  const { data: weeklyStats, isLoading, isError } = useWeeklyStats(clientId);
+  // Normalize clientId - "all" or empty means global view (no filter)
+  const effectiveClientId = clientId && clientId !== "all" ? clientId : undefined;
+  const { data: weeklyStats, isLoading, isError } = useWeeklyStats(effectiveClientId);
 
   // Process weekly data for chart display
   const chartData = useMemo(() => {
