@@ -133,11 +133,13 @@ const DashboardContent = () => {
     periodHours 
   } = useClientContext();
   
+  // Normalize client ID - "all" or empty means global view (no filter)
+  const effectiveClientId = selectedClient && selectedClient !== "all" ? selectedClient : undefined;
   
-  
-  const { data: stats, isLoading: statsLoading } = useComprehensiveStats();
-  const { data: dashboardStats, isLoading: dashboardStatsLoading } = useDashboardStats();
-  const { data: timeseries, isLoading: timeseriesLoading } = useDashboardTimeseries(periodHours, selectedClient);
+  // Core stats with client filtering
+  const { data: stats, isLoading: statsLoading } = useComprehensiveStats(effectiveClientId);
+  const { data: dashboardStats, isLoading: dashboardStatsLoading } = useDashboardStats(effectiveClientId);
+  const { data: timeseries, isLoading: timeseriesLoading } = useDashboardTimeseries(periodHours, effectiveClientId);
   const { data: alerts } = useAlerts();
   
   // Use both useClients and useClientsByState for better data coverage
@@ -172,12 +174,13 @@ const DashboardContent = () => {
   const { data: batchesData, isLoading: batchesLoading } = useBatchesList(10);
   const { data: deviceStatus, isLoading: deviceStatusLoading } = useDeviceStatus();
   const { data: performanceStats, isLoading: performanceLoading } = usePerformanceStats();
-  const { data: globalStats, isLoading: globalStatsLoading } = useGlobalStats();
-  // Real timeseries data for sparklines - now using context filters
-  const { data: starlinkTimeseries, isLoading: starlinkTimeseriesLoading } = useStarlinkTimeseries(periodHours, selectedClient);
-  const { data: thermalTimeseries, isLoading: thermalTimeseriesLoading } = useThermalProbeTimeseries(periodHours, selectedClient);
-  const { data: ahtTimeseries, isLoading: ahtTimeseriesLoading } = useAhtSensorTimeseries(periodHours, selectedClient);
-  const { data: arduinoTimeseries, isLoading: arduinoTimeseriesLoading } = useArduinoSensorTimeseries(periodHours, selectedClient);
+  const { data: globalStats, isLoading: globalStatsLoading } = useGlobalStats(effectiveClientId);
+  
+  // Real timeseries data for sparklines - now using context filters with normalized client ID
+  const { data: starlinkTimeseries, isLoading: starlinkTimeseriesLoading } = useStarlinkTimeseries(periodHours, effectiveClientId);
+  const { data: thermalTimeseries, isLoading: thermalTimeseriesLoading } = useThermalProbeTimeseries(periodHours, effectiveClientId);
+  const { data: ahtTimeseries, isLoading: ahtTimeseriesLoading } = useAhtSensorTimeseries(periodHours, effectiveClientId);
+  const { data: arduinoTimeseries, isLoading: arduinoTimeseriesLoading } = useArduinoSensorTimeseries(periodHours, effectiveClientId);
   
   // Dedicated Starlink power endpoint for accurate power data
   const { data: starlinkPowerData, isLoading: starlinkPowerLoading } = useStarlinkPower();
