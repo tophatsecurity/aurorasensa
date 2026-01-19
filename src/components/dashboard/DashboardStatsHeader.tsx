@@ -1,7 +1,6 @@
 import { useMemo } from "react";
-import { Server, Database, Radio, Globe, Cpu } from "lucide-react";
+import { Server, Database, Radio } from "lucide-react";
 import StatCardWithChart from "../StatCardWithChart";
-import { Badge } from "@/components/ui/badge";
 import {
   useComprehensiveStats,
   useStatsOverview,
@@ -11,6 +10,7 @@ import {
   useClients,
   useClientsByState,
   useGlobalStats,
+  useDashboardTimeseries,
   type Client,
   type ClientGroupedStats,
   type SensorGroupedStats,
@@ -39,6 +39,9 @@ const DashboardStatsHeader = ({ periodHours = 24, clientId }: DashboardStatsHead
   const { data: deviceTree, isLoading: deviceTreeLoading } = useDeviceTree();
   const { data: clients, isLoading: clientsLoading } = useClients();
   const { data: clientsByState } = useClientsByState();
+  
+  // Fetch real timeseries data for sparkline charts
+  const { data: timeseries, isLoading: timeseriesLoading } = useDashboardTimeseries(periodHours, effectiveClientId);
 
   const global = stats?.global;
   const devicesSummary = stats?.devices_summary;
@@ -69,7 +72,6 @@ const DashboardStatsHeader = ({ periodHours = 24, clientId }: DashboardStatsHead
     statsOverview?.total_readings ?? 
     global?.total_readings ?? 
     0;
-  
   
   // Client count - prioritize clientsByState data which is most reliable
   const clientsFromStates = allClientsFromState.length;
@@ -103,7 +105,7 @@ const DashboardStatsHeader = ({ periodHours = 24, clientId }: DashboardStatsHead
   const activeDevices1h = global?.activity?.last_1_hour?.active_devices_1h ?? 0;
   const readings1h = global?.activity?.last_1_hour?.readings_1h ?? 0;
 
-  // Prepare chart data for clients - USE REAL CLIENT DATA from clientsByState
+  // Prepare chart data for clients with real timeseries
   const clientChartDevices = useMemo(() => {
     const colors = ['#22c55e', '#3b82f6', '#f59e0b', '#ec4899', '#8b5cf6', '#06b6d4'];
     
@@ -119,11 +121,6 @@ const DashboardStatsHeader = ({ periodHours = 24, clientId }: DashboardStatsHead
           color: colors[idx % colors.length],
           reading_count: (c.batches_received ?? sensorCount * 100) || 1,
           status: c.state === 'adopted' ? 'active' : (c.state || 'active'),
-          // Additional real data
-          hostname: c.hostname,
-          ip_address: c.ip_address,
-          mac_address: c.mac_address,
-          sensors: c.sensors,
         };
       });
     }
@@ -207,14 +204,58 @@ const DashboardStatsHeader = ({ periodHours = 24, clientId }: DashboardStatsHead
     }));
   }, [devicesSummary?.devices]);
 
+  // Convert timeseries data for sparklines
+  const clientTimeseries = useMemo(() => {
+    // Use temperature timeseries as a proxy for client activity (most common reading type)
+    return (timeseries?.temperature || []).map(t => ({
+      timestamp: t.timestamp,
+      value: t.value,
+    }));
+  }, [timeseries?.temperature]);
+
+  const readingsTimeseries = useMemo(() => {
+    // Combine all timeseries for total readings visualization
+    const combined: { timestamp: string; value: number }[] = [];
+    const allSeries = [
+      timeseries?.temperature || [],
+      timeseries?.humidity || [],
+      timeseries?.power || [],
+      timeseries?.signal || [],
+    ];
+    
+    // Aggregate by timestamp
+    const byTime: Record<string, number> = {};
+    allSeries.forEach(series => {
+      series.forEach(point => {
+        byTime[point.timestamp] = (byTime[point.timestamp] || 0) + 1;
+      });
+    });
+    
+    Object.entries(byTime)
+      .sort((a, b) => a[0].localeCompare(b[0]))
+      .forEach(([timestamp, count]) => {
+        combined.push({ timestamp, value: count });
+      });
+    
+    return combined;
+  }, [timeseries]);
+
+  const sensorTimeseries = useMemo(() => {
+    // Use power timeseries for sensor activity visualization
+    return (timeseries?.power || timeseries?.humidity || []).map(t => ({
+      timestamp: t.timestamp,
+      value: t.value,
+    }));
+  }, [timeseries?.power, timeseries?.humidity]);
+
   const isLoading = statsLoading || globalStatsLoading || overviewLoading || clientStatsLoading || sensorStatsLoading;
 
   // Get the primary client for display (first adopted client)
   const primaryClient = activeClients[0];
 
   return (
-    <div className="space-y-4 mb-8">
-      {/* Main Stats Row */}
+    <div className="mb-8">
+      {/* Main Stats Row with Real Timeseries Data */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         <StatCardWithChart
           title="CONNECTED CLIENTS"
@@ -225,8 +266,9 @@ const DashboardStatsHeader = ({ periodHours = 24, clientId }: DashboardStatsHead
           }
           icon={Server}
           iconBgColor="bg-green-500/20"
-          isLoading={clientsLoading || clientStatsLoading}
+          isLoading={clientsLoading || clientStatsLoading || timeseriesLoading}
           devices={clientChartDevices}
+          timeseries={clientTimeseries}
         />
         <StatCardWithChart
           title="TOTAL READINGS"
@@ -234,8 +276,9 @@ const DashboardStatsHeader = ({ periodHours = 24, clientId }: DashboardStatsHead
           subtitle={`${readings1h.toLocaleString()} last hour`}
           icon={Database}
           iconBgColor="bg-blue-500/20"
-          isLoading={isLoading}
+          isLoading={isLoading || timeseriesLoading}
           devices={sensorChartDevices}
+          timeseries={readingsTimeseries}
         />
         <StatCardWithChart
           title="SENSOR TYPES"
@@ -243,95 +286,11 @@ const DashboardStatsHeader = ({ periodHours = 24, clientId }: DashboardStatsHead
           subtitle={`${totalDevices} unique devices`}
           icon={Radio}
           iconBgColor="bg-purple-500/20"
-          isLoading={isLoading || deviceTreeLoading}
+          isLoading={isLoading || deviceTreeLoading || timeseriesLoading}
           devices={deviceChartDevices}
+          timeseries={sensorTimeseries}
         />
       </div>
-
-      {/* Connected Clients Details - Real Client Info */}
-      {activeClients.length > 0 && (
-        <div className="glass-card rounded-lg p-4 border border-border/50">
-          <div className="flex items-center gap-2 mb-3">
-            <Server className="w-4 h-4 text-green-500" />
-            <span className="text-sm font-medium">Connected Clients</span>
-            <Badge variant="outline" className="ml-auto text-xs">
-              {activeClients.length} active
-            </Badge>
-          </div>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-            {activeClients.slice(0, 6).map((client: Client, idx: number) => (
-              <div 
-                key={client.client_id || idx} 
-                className="p-3 rounded-lg bg-background/50 border border-border/30 hover:border-green-500/30 transition-colors"
-              >
-                <div className="flex items-start justify-between mb-2">
-                  <div className="min-w-0 flex-1">
-                    <div className="flex items-center gap-2">
-                      <div className="w-2 h-2 rounded-full bg-green-500 animate-pulse" />
-                      <span className="font-medium text-sm truncate" title={client.hostname || client.client_id}>
-                        {client.hostname || client.client_id?.slice(0, 16) || `Client ${idx + 1}`}
-                      </span>
-                    </div>
-                    {client.ip_address && (
-                      <div className="flex items-center gap-1 mt-1">
-                        <Globe className="w-3 h-3 text-muted-foreground" />
-                        <span className="text-xs text-muted-foreground">{client.ip_address}</span>
-                      </div>
-                    )}
-                  </div>
-                  <Badge 
-                    variant={client.state === 'adopted' ? 'default' : 'secondary'}
-                    className="text-[10px] px-1.5 py-0.5"
-                  >
-                    {client.state || 'active'}
-                  </Badge>
-                </div>
-                
-                {/* Sensors */}
-                {Array.isArray(client.sensors) && client.sensors.length > 0 && (
-                  <div className="mt-2">
-                    <div className="flex items-center gap-1 mb-1">
-                      <Cpu className="w-3 h-3 text-muted-foreground" />
-                      <span className="text-[10px] text-muted-foreground">
-                        {client.sensors.length} sensors
-                      </span>
-                    </div>
-                    <div className="flex flex-wrap gap-1">
-                      {client.sensors.slice(0, 4).map((sensor: string, sIdx: number) => {
-                        // Clean up sensor name for display
-                        const displayName = sensor.replace(/_\d+$/, '').replace(/_/g, ' ');
-                        return (
-                          <Badge 
-                            key={sIdx} 
-                            variant="outline" 
-                            className="text-[9px] px-1 py-0 capitalize"
-                          >
-                            {displayName}
-                          </Badge>
-                        );
-                      })}
-                      {client.sensors.length > 4 && (
-                        <Badge variant="outline" className="text-[9px] px-1 py-0">
-                          +{client.sensors.length - 4}
-                        </Badge>
-                      )}
-                    </div>
-                  </div>
-                )}
-                
-                {/* MAC Address */}
-                {client.mac_address && (
-                  <div className="mt-2 pt-2 border-t border-border/30">
-                    <span className="text-[10px] text-muted-foreground font-mono">
-                      MAC: {client.mac_address}
-                    </span>
-                  </div>
-                )}
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
     </div>
   );
 };
