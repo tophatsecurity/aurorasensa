@@ -179,7 +179,13 @@ export {
   useDashboardTimeseries,
   useDashboardSystemStats,
   useDashboardSensorStats,
+  useDashboardClientStats,
   useDashboardSensorTimeseries,
+  // Types
+  type DashboardSensorStatsItem,
+  type DashboardSensorStatsResponse,
+  type ClientStatsItem,
+  type ClientStatsResponse,
 } from "./dashboard";
 
 export {
