@@ -349,6 +349,19 @@ export {
   type ArduinoTimeseriesPoint,
 } from "./arduino";
 
+// Arduino Stats with all 10 measurements
+export {
+  useArduino1hrStats,
+  useArduino6hrStats,
+  useArduino24hrStats,
+  useArduinoDashboardStats,
+  useArduinoAllStats,
+  type ArduinoHourlyStats,
+  type ArduinoStatsResponse,
+  type ArduinoCurrentMeasurements,
+  type ArduinoStatsAggregated,
+} from "./arduinoStats";
+
 // Re-export from the original file for hooks not yet migrated
 // This ensures backward compatibility during the transition
 export {

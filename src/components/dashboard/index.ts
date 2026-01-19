@@ -13,3 +13,4 @@ export { default as ClientReadingsBreakdown } from './ClientReadingsBreakdown';
 export { default as ClientSensorMeasurements } from './ClientSensorMeasurements';
 export { default as StarlinkPowerSection } from './StarlinkPowerSection';
 export { default as StarlinkPowerTrendChart } from './StarlinkPowerTrendChart';
+export { default as ArduinoSensorSection } from './ArduinoSensorSection';
