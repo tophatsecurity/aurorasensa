@@ -46,11 +46,7 @@ import SystemMonitorCharts from "./SystemMonitorCharts";
 import { AdsbSection, LoRaSection, WifiBluetoothSection, GpsSection, AlertsSection, BatchesSection, MaritimeSection, DashboardStatsHeader, DashboardSensorSummary, DashboardDeviceActivity, ClientReadingsBreakdown, ClientSensorMeasurements } from "./dashboard";
 import HourlyTrendChart from "./dashboard/HourlyTrendChart";
 
-import { 
-  ContextFilters,  
-  timePeriodLabel 
-} from "@/components/ui/context-selectors";
-import { useClientContext } from "@/contexts/ClientContext";
+import { timePeriodLabel } from "@/components/ui/context-selectors";
 import { 
   useComprehensiveStats, 
   useAlerts, 
@@ -125,17 +121,12 @@ const formatTempCompact = (celsius: number | null | undefined): string => {
 };
 
 const DashboardContent = () => {
-  // Use shared client context for time period and client selection
-  const { 
-    selectedClientId: selectedClient, 
-    setSelectedClientId: setSelectedClient,
-    timePeriod,
-    setTimePeriod,
-    periodHours 
-  } = useClientContext();
+  // Fixed time period for dashboard - no client filtering
+  const timePeriod = "24h" as const;
+  const periodHours = 24;
   
-  // Normalize client ID - "all" or empty means global view (no filter)
-  const effectiveClientId = selectedClient && selectedClient !== "all" ? selectedClient : undefined;
+  // No client filtering - always show global view
+  const effectiveClientId = undefined;
   
   // Core stats with client filtering
   const { data: stats, isLoading: statsLoading } = useComprehensiveStats(effectiveClientId);
@@ -491,35 +482,19 @@ const DashboardContent = () => {
           <h1 className="text-3xl font-bold text-foreground">AURORASENSE Server</h1>
           <ConnectionStatusIndicator />
         </div>
-        <div className="flex items-center gap-4">
-          <ContextFilters
-            timePeriod={timePeriod}
-            onTimePeriodChange={setTimePeriod}
-            clientId={selectedClient}
-            onClientChange={setSelectedClient}
-            showClientFilter={true}
-          />
-        </div>
       </div>
 
       {/* Key Stats - Refactored Component */}
-      <DashboardStatsHeader periodHours={periodHours} clientId={selectedClient} />
+      <DashboardStatsHeader periodHours={periodHours} />
 
       {/* Hourly Readings Trend Chart */}
       <div className="mb-8">
-        <HourlyTrendChart clientId={selectedClient} />
+        <HourlyTrendChart />
       </div>
-
-      {/* Client Sensors & Measurements - Shows when a specific client is selected */}
-      {selectedClient && selectedClient !== "all" && (
-        <div className="mb-8">
-          <ClientSensorMeasurements clientId={selectedClient} />
-        </div>
-      )}
 
       {/* Client Readings Breakdown */}
       <div className="mb-8">
-        <ClientReadingsBreakdown periodHours={periodHours} clientId={selectedClient} />
+        <ClientReadingsBreakdown periodHours={periodHours} />
       </div>
 
       {/* Power Consumption */}
@@ -528,12 +503,12 @@ const DashboardContent = () => {
           <Zap className="w-5 h-5 text-orange-500" />
           Power Consumption ({periodLabel})
         </h2>
-        <PowerConsumptionCharts hours={periodHours} clientId={selectedClient} />
+        <PowerConsumptionCharts hours={periodHours} />
       </div>
 
       {/* All Temperatures Over Time - moved below Power Consumption */}
       <div className="mb-8">
-        <ThermalProbeDeviceChart hours={periodHours} clientId={selectedClient} />
+        <ThermalProbeDeviceChart hours={periodHours} />
       </div>
 
       {/* Thermal - All Temperature Sources */}
@@ -1242,7 +1217,7 @@ const DashboardContent = () => {
       </div>
 
       {/* Sensor Types Summary - Refactored Component */}
-      <DashboardSensorSummary periodHours={periodHours} clientId={selectedClient} />
+      <DashboardSensorSummary periodHours={periodHours} />
 
       {/* 24h Sensor Comparison */}
       <div className="mb-8">
@@ -1561,7 +1536,7 @@ const DashboardContent = () => {
       </div>
 
       {/* Device Activity - Refactored Component */}
-      <DashboardDeviceActivity periodHours={periodHours} clientId={selectedClient} />
+      <DashboardDeviceActivity periodHours={periodHours} />
 
       {/* Maritime & RF Tracking */}
       <div className="mb-8">
