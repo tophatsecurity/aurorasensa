@@ -3,7 +3,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Loader2, TrendingUp, BarChart3 } from "lucide-react";
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar } from "recharts";
 import { useWeeklyStats } from "@/hooks/aurora";
-import { format, parseISO, startOfWeek, subWeeks } from "date-fns";
+import { format, parseISO } from "date-fns";
 
 interface WeeklyTrendChartProps {
   clientId?: string | null;
@@ -49,19 +49,8 @@ export default function WeeklyTrendChart({ clientId }: WeeklyTrendChartProps) {
     }
 
     if (records.length === 0) {
-      // Generate placeholder data for last 12 weeks if no data
-      const placeholderData = [];
-      for (let i = 11; i >= 0; i--) {
-        const weekStart = startOfWeek(subWeeks(new Date(), i));
-        placeholderData.push({
-          week: format(weekStart, 'MMM d'),
-          weekFull: format(weekStart, 'MMM d, yyyy'),
-          readings: 0,
-          devices: 0,
-          clients: 0,
-        });
-      }
-      return placeholderData;
+      // No data available - return empty array (no placeholder/demo data)
+      return [];
     }
 
     // Sort by date and format for display
@@ -152,6 +141,26 @@ export default function WeeklyTrendChart({ clientId }: WeeklyTrendChartProps) {
         </CardHeader>
         <CardContent className="h-[280px] flex items-center justify-center text-muted-foreground">
           Unable to load weekly stats
+        </CardContent>
+      </Card>
+    );
+  }
+
+  // Show empty state when no data
+  if (chartData.length === 0) {
+    return (
+      <Card className="glass-card border-border/50">
+        <CardHeader className="pb-2">
+          <CardTitle className="text-sm font-medium flex items-center gap-2">
+            <TrendingUp className="w-4 h-4 text-primary" />
+            Weekly Readings Trend
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="h-[280px] flex items-center justify-center text-muted-foreground">
+          <div className="text-center">
+            <TrendingUp className="w-12 h-12 mx-auto mb-3 opacity-30" />
+            <p>No weekly data available</p>
+          </div>
         </CardContent>
       </Card>
     );
