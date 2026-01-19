@@ -233,10 +233,11 @@ const DashboardContent = () => {
   const aggregatedClientCount = allClientsFromState.length;
   const clientsArrayCount = clients?.length ?? 0;
   
-  // Use the best available client count (prefer globalStats, then comprehensive stats)
-  const effectiveClients = comprehensiveClientCount > 0 ? comprehensiveClientCount :
+  // Use the best available client count (prefer clientsByState which is most reliable)
+  // Note: globalStats may return empty {}, so prioritize aggregatedClientCount
+  const effectiveClients = aggregatedClientCount > 0 ? aggregatedClientCount :
+                          comprehensiveClientCount > 0 ? comprehensiveClientCount :
                           clientStatsTotal > 0 ? clientStatsTotal : 
-                          aggregatedClientCount > 0 ? aggregatedClientCount : 
                           clientsArrayCount;
 
   // Filter out deleted/disabled/suspended clients for dashboard display
@@ -253,7 +254,8 @@ const DashboardContent = () => {
     );
   }, [allClientsFromState, clients]);
 
-  const totalClients = effectiveClients > 0 ? effectiveClients : activeClients.length;
+  // totalClients should reflect the actual count from clientsByState or other sources
+  const totalClients = effectiveClients > 0 ? effectiveClients : (activeClients.length > 0 ? activeClients.length : clientsArrayCount);
   const activeDevices1h = global?.activity?.last_1_hour?.active_devices_1h ?? 0;
   const readings1h = global?.activity?.last_1_hour?.readings_1h ?? 0;
   
