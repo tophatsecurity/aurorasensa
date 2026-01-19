@@ -1,5 +1,5 @@
 import { useMemo } from "react";
-import { Server, Database, Activity, TrendingUp } from "lucide-react";
+import { Server, Database, Activity } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
 import { Badge } from "@/components/ui/badge";
@@ -7,7 +7,6 @@ import { Skeleton } from "@/components/ui/skeleton";
 import {
   useDashboardClientStats,
   useClientsWithHostnames,
-  type ClientStatsItem,
 } from "@/hooks/aurora";
 import { ResponsiveContainer, PieChart, Pie, Cell, Tooltip, BarChart, Bar, XAxis, YAxis, CartesianGrid } from "recharts";
 
@@ -73,8 +72,9 @@ const ClientReadingsBreakdown = ({ periodHours = 24, clientId }: ClientReadingsB
 
   const totalClients = chartData.length;
 
-  // Custom tooltip for charts
-  const CustomTooltip = ({ active, payload }: { active?: boolean; payload?: Array<{ payload: typeof chartData[0] }> }) => {
+  // Custom tooltip content renderer for charts
+  const renderTooltipContent = (props: { active?: boolean; payload?: Array<{ payload: typeof chartData[0] }> }) => {
+    const { active, payload } = props;
     if (!active || !payload?.length) return null;
     const data = payload[0].payload;
     
@@ -179,7 +179,7 @@ const ClientReadingsBreakdown = ({ periodHours = 24, clientId }: ClientReadingsB
                     <Cell key={`cell-${index}`} fill={entry.color} stroke="transparent" />
                   ))}
                 </Pie>
-                <Tooltip content={<CustomTooltip />} />
+                <Tooltip content={renderTooltipContent} />
               </PieChart>
             </ResponsiveContainer>
           </div>
@@ -196,7 +196,7 @@ const ClientReadingsBreakdown = ({ periodHours = 24, clientId }: ClientReadingsB
                   width={80}
                   tick={{ fontSize: 10, fill: 'hsl(var(--muted-foreground))' }}
                 />
-                <Tooltip content={<CustomTooltip />} />
+                <Tooltip content={renderTooltipContent} />
                 <Bar dataKey="value" radius={[0, 4, 4, 0]}>
                   {chartData.map((entry, index) => (
                     <Cell key={`bar-${index}`} fill={entry.color} />
