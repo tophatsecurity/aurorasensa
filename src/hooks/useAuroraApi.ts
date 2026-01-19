@@ -2973,24 +2973,47 @@ export function useArduinoSensorTimeseries(hours: number = 24, clientId?: string
         
         const transformedReadings: ArduinoSensorReading[] = (response.readings || []).map(r => {
           const data = r.data;
+          // Type-safe extraction with additional fallback paths
+          const anyData = data as Record<string, unknown> | undefined;
+          const anyReading = r as unknown as Record<string, unknown>;
+          
+          // Extract nested objects safely
+          const th = anyData?.th as { temp_c?: number; hum_pct?: number } | undefined;
+          const bmp = anyData?.bmp as { temp_c?: number; press_hpa?: number } | undefined;
+          const analog = anyData?.analog as { light_raw?: number; sound_raw?: number; pot_raw?: number } | undefined;
+          const accel = anyData?.accel as { x_ms2?: number; y_ms2?: number; z_ms2?: number } | undefined;
+          
           return {
             timestamp: r.timestamp,
             device_id: r.device_id,
             client_id: r.client_id,
-            // DHT/AHT temperature from nested or legacy format
-            th_temp_c: data?.th?.temp_c ?? data?.aht_temp_c ?? data?.temp_c,
-            th_humidity: data?.th?.hum_pct ?? data?.aht_humidity ?? data?.humidity,
+            // DHT/AHT temperature from nested or legacy format (with root-level fallbacks)
+            th_temp_c: th?.temp_c ?? 
+              (anyData?.aht_temp_c as number | undefined) ?? 
+              (anyData?.temp_c as number | undefined) ??
+              (anyReading?.aht_temp_c as number | undefined) ??
+              (anyReading?.temp_c as number | undefined),
+            th_humidity: th?.hum_pct ?? 
+              (anyData?.aht_humidity as number | undefined) ?? 
+              (anyData?.humidity as number | undefined) ??
+              (anyReading?.aht_humidity as number | undefined) ??
+              (anyReading?.humidity as number | undefined),
             // BMP temperature from nested or legacy format
-            bmp_temp_c: data?.bmp?.temp_c ?? data?.bme280_temp_c,
-            bmp_pressure_hpa: data?.bmp?.press_hpa ?? data?.bme280_pressure_hpa,
+            bmp_temp_c: bmp?.temp_c ?? 
+              (anyData?.bme280_temp_c as number | undefined) ??
+              (anyData?.bmp_temp_c as number | undefined),
+            bmp_pressure_hpa: bmp?.press_hpa ?? 
+              (anyData?.bme280_pressure_hpa as number | undefined) ??
+              (anyData?.bmp_pressure_hpa as number | undefined) ??
+              (anyData?.pressure_hpa as number | undefined),
             // Analog sensors
-            light_raw: data?.analog?.light_raw,
-            sound_raw: data?.analog?.sound_raw,
-            pot_raw: data?.analog?.pot_raw,
+            light_raw: analog?.light_raw ?? (anyData?.light_raw as number | undefined),
+            sound_raw: analog?.sound_raw ?? (anyData?.sound_raw as number | undefined),
+            pot_raw: analog?.pot_raw ?? (anyData?.pot_raw as number | undefined),
             // Accelerometer
-            accel_x: data?.accel?.x_ms2,
-            accel_y: data?.accel?.y_ms2,
-            accel_z: data?.accel?.z_ms2,
+            accel_x: accel?.x_ms2 ?? (anyData?.accel_x as number | undefined),
+            accel_y: accel?.y_ms2 ?? (anyData?.accel_y as number | undefined),
+            accel_z: accel?.z_ms2 ?? (anyData?.accel_z as number | undefined),
           };
         });
         
