@@ -91,13 +91,13 @@ export const LoRaSection = memo(function LoRaSection({ hours = 24 }: LoRaSection
             <div className="w-8 h-8 rounded-lg bg-amber-500/20 flex items-center justify-center">
               <Activity className="w-4 h-4 text-amber-400" />
             </div>
-            <span className="text-xs text-muted-foreground">Frequency</span>
+            <span className="text-xs text-muted-foreground">Readings</span>
           </div>
           <div className="text-2xl font-bold text-amber-400">
-            915.0
+            {stats?.count ?? 0}
           </div>
           <div className="text-xs text-muted-foreground mt-1">
-            MHz band
+            Total count
           </div>
         </div>
       </div>
