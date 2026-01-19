@@ -40,7 +40,7 @@ import StarlinkCharts from "./StarlinkCharts";
 import ThermalProbeCharts from "./ThermalProbeCharts";
 import ThermalProbeDeviceChart from "./ThermalProbeDeviceChart";
 import HumidityCharts from "./HumidityCharts";
-import PowerConsumptionCharts from "./PowerConsumptionCharts";
+import StarlinkPowerSection from "./dashboard/StarlinkPowerSection";
 import SystemMonitorCharts from "./SystemMonitorCharts";
 
 import { AdsbSection, LoRaSection, WifiBluetoothSection, GpsSection, AlertsSection, BatchesSection, MaritimeSection, DashboardStatsHeader, DashboardSensorSummary, DashboardDeviceActivity, ClientReadingsBreakdown, ClientSensorMeasurements } from "./dashboard";
@@ -497,13 +497,13 @@ const DashboardContent = () => {
         <ClientReadingsBreakdown periodHours={periodHours} />
       </div>
 
-      {/* Power Consumption */}
+      {/* Starlink Power per Device */}
       <div className="mb-8">
         <h2 className="text-lg font-semibold mb-4 flex items-center gap-2">
-          <Zap className="w-5 h-5 text-orange-500" />
-          Power Consumption ({periodLabel})
+          <Satellite className="w-5 h-5 text-purple-500" />
+          Starlink Power by Device ({periodLabel})
         </h2>
-        <PowerConsumptionCharts hours={periodHours} />
+        <StarlinkPowerSection hours={periodHours} />
       </div>
 
       {/* All Temperatures Over Time - moved below Power Consumption */}

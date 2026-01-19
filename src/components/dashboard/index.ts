@@ -11,3 +11,4 @@ export { default as DashboardDeviceActivity } from './DashboardDeviceActivity';
 export { default as HourlyTrendChart } from './HourlyTrendChart';
 export { default as ClientReadingsBreakdown } from './ClientReadingsBreakdown';
 export { default as ClientSensorMeasurements } from './ClientSensorMeasurements';
+export { default as StarlinkPowerSection } from './StarlinkPowerSection';
