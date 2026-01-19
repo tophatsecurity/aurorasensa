@@ -6,9 +6,20 @@ import {
   useAdsbStats, 
   useAdsbEmergencies,
   useAdsbCoverage,
+  useAdsbHistorical,
 } from "@/hooks/aurora";
 import { Loader2 } from "lucide-react";
 import { formatLastSeen } from "@/utils/dateUtils";
+import { format } from "date-fns";
+import {
+  ResponsiveContainer,
+  AreaChart,
+  Area,
+  XAxis,
+  YAxis,
+  Tooltip,
+  CartesianGrid,
+} from "recharts";
 
 interface AdsbSectionProps {
   hours?: number;
@@ -19,6 +30,28 @@ export const AdsbSection = memo(function AdsbSection({ hours = 24 }: AdsbSection
   const { data: stats } = useAdsbStats();
   const { data: emergencies } = useAdsbEmergencies();
   const { data: coverage } = useAdsbCoverage();
+  const { data: historicalData } = useAdsbHistorical(hours * 60);
+
+  // Build chart data from historical readings
+  const chartData = useMemo(() => {
+    if (!historicalData?.readings || historicalData.readings.length === 0) return [];
+    
+    // Group readings by time and count aircraft
+    const buckets: Record<string, number> = {};
+    
+    historicalData.readings.forEach(r => {
+      if (r.timestamp) {
+        const time = format(new Date(r.timestamp), "HH:mm");
+        const data = r.data as { aircraft_list?: Array<unknown> };
+        const count = data?.aircraft_list?.length ?? 1;
+        buckets[time] = (buckets[time] ?? 0) + count;
+      }
+    });
+    
+    return Object.entries(buckets)
+      .map(([time, count]) => ({ time, aircraft: count }))
+      .slice(-24);
+  }, [historicalData]);
 
   const activeAircraft = useMemo(() => {
     if (!aircraft) return [];
@@ -102,6 +135,54 @@ export const AdsbSection = memo(function AdsbSection({ hours = 24 }: AdsbSection
           </div>
         </div>
       </div>
+
+      {/* Aircraft Activity Chart */}
+      {chartData.length > 0 && (
+        <div className="glass-card rounded-xl p-4 border border-border/50 mb-4">
+          <h3 className="text-sm font-medium mb-4 flex items-center gap-2">
+            <Activity className="w-4 h-4 text-cyan-400" />
+            Aircraft Activity Over Time
+          </h3>
+          <div className="h-32">
+            <ResponsiveContainer width="100%" height="100%">
+              <AreaChart data={chartData}>
+                <defs>
+                  <linearGradient id="adsbAircraftGradient" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="5%" stopColor="hsl(var(--primary))" stopOpacity={0.3} />
+                    <stop offset="95%" stopColor="hsl(var(--primary))" stopOpacity={0} />
+                  </linearGradient>
+                </defs>
+                <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" opacity={0.3} />
+                <XAxis 
+                  dataKey="time" 
+                  tick={{ fontSize: 10 }} 
+                  stroke="hsl(var(--muted-foreground))"
+                />
+                <YAxis 
+                  tick={{ fontSize: 10 }} 
+                  stroke="hsl(var(--muted-foreground))"
+                />
+                <Tooltip
+                  contentStyle={{
+                    backgroundColor: 'hsl(var(--card))',
+                    border: '1px solid hsl(var(--border))',
+                    borderRadius: '8px',
+                  }}
+                  formatter={(value: number) => [value, 'Aircraft']}
+                />
+                <Area
+                  type="monotone"
+                  dataKey="aircraft"
+                  stroke="hsl(var(--primary))"
+                  fill="url(#adsbAircraftGradient)"
+                  strokeWidth={2}
+                  name="Aircraft"
+                />
+              </AreaChart>
+            </ResponsiveContainer>
+          </div>
+        </div>
+      )}
 
       {/* Aircraft List */}
       {aircraftLoading ? (

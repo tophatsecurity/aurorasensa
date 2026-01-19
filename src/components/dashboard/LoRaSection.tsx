@@ -4,8 +4,11 @@ import { Badge } from "@/components/ui/badge";
 import { 
   useLoraDevices,
   useSensorTypeStatsById,
+  useLoraRecentDetections,
+  useLoraGlobalStats,
 } from "@/hooks/aurora";
 import { formatLastSeen } from "@/utils/dateUtils";
+import { format } from "date-fns";
 import {
   ResponsiveContainer,
   AreaChart,
@@ -23,14 +26,44 @@ interface LoRaSectionProps {
 export const LoRaSection = memo(function LoRaSection({ hours = 24 }: LoRaSectionProps) {
   const { data: stats, isLoading: statsLoading } = useSensorTypeStatsById("lora");
   const { data: devicesData } = useLoraDevices();
+  const { data: detectionsData } = useLoraRecentDetections(hours * 60);
+  const { data: globalStats } = useLoraGlobalStats();
   const devices = devicesData?.devices ?? [];
+  const detections = detectionsData?.detections ?? [];
 
-  const chartData: { time: string; rssi: number }[] = [];
+  // Build chart data from recent detections
+  const chartData = useMemo(() => {
+    if (!detections || detections.length === 0) return [];
+    
+    // Group detections by time (hour buckets) and average RSSI
+    const buckets: Record<string, { rssi: number[]; snr: number[] }> = {};
+    
+    detections.forEach(d => {
+      if (d.timestamp && d.rssi !== undefined) {
+        const time = format(new Date(d.timestamp), "HH:mm");
+        if (!buckets[time]) {
+          buckets[time] = { rssi: [], snr: [] };
+        }
+        buckets[time].rssi.push(d.rssi);
+        if (d.snr !== undefined) {
+          buckets[time].snr.push(d.snr);
+        }
+      }
+    });
+    
+    return Object.entries(buckets)
+      .map(([time, values]) => ({
+        time,
+        rssi: values.rssi.reduce((a, b) => a + b, 0) / values.rssi.length,
+        snr: values.snr.length > 0 ? values.snr.reduce((a, b) => a + b, 0) / values.snr.length : 0,
+      }))
+      .slice(-24);
+  }, [detections]);
 
-  const totalPackets = stats?.total_readings ?? 0;
-  const activeDevices = devices.length ?? stats?.device_count ?? 0;
-  // SensorTypeStats doesn't have avg_value, use numeric_field_stats_24h if available
-  const avgRssi = stats?.numeric_field_stats_24h?.rssi?.avg ?? null;
+  const totalPackets = globalStats?.total_detections ?? stats?.total_readings ?? detections.length;
+  const activeDevices = globalStats?.active_devices ?? devices.length ?? stats?.device_count ?? 0;
+  // Use global stats or sensor type stats for avg RSSI
+  const avgRssi = globalStats?.avg_rssi ?? stats?.numeric_field_stats_24h?.rssi?.avg ?? null;
 
   return (
     <div className="mb-8">
