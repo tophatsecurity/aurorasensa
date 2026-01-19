@@ -163,18 +163,34 @@ export default function StatsContent() {
     return enrichDevicesWithLocations(devices);
   }, [clientSensorData, actualClientId]);
 
-  // Process client stats for display
+  // Process client stats for display - fallback to constructing from clients list if API returns empty
   const clientStatsList = useMemo(() => {
-    if (!statsByClient?.clients) return [];
-    return statsByClient.clients.map((c: any) => ({
-      client_id: c.client_id,
-      hostname: c.hostname || c.client_id,
-      reading_count: c.reading_count || 0,
-      device_count: c.device_count || 0,
-      sensor_types: c.sensor_types || [],
-      last_reading: c.last_reading,
-    }));
-  }, [statsByClient]);
+    // If we have data from statsByClient, use it
+    if (statsByClient?.clients && statsByClient.clients.length > 0) {
+      return statsByClient.clients.map((c: any) => ({
+        client_id: c.client_id,
+        hostname: c.hostname || c.client_id,
+        reading_count: c.reading_count || 0,
+        device_count: c.device_count || 0,
+        sensor_types: c.sensor_types || [],
+        last_reading: c.last_reading,
+      }));
+    }
+    
+    // Fallback: construct from clients list
+    if (clients && clients.length > 0) {
+      return clients.map((client: any) => ({
+        client_id: client.client_id,
+        hostname: client.hostname || client.client_id,
+        reading_count: client.batches_received || client.batch_count || 0,
+        device_count: client.sensors?.length || 0,
+        sensor_types: client.sensors || [],
+        last_reading: client.last_seen,
+      }));
+    }
+    
+    return [];
+  }, [statsByClient, clients]);
 
   // Collect API errors
   const apiErrors = useMemo(() => {
@@ -283,7 +299,9 @@ export default function StatsContent() {
           <GlobalStatsCards 
             comprehensiveStats={comprehensiveStats} 
             stats1hr={stats1hr} 
-            stats24hr={stats24hr} 
+            stats24hr={stats24hr}
+            clientsCount={clients?.length}
+            sensorsCount={clients?.reduce((acc: number, c: any) => acc + (c.sensors?.length || 0), 0)}
           />
 
           {/* Charts Row - Readings Trend & Client Breakdown */}

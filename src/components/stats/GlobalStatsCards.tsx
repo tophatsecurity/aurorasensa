@@ -62,6 +62,9 @@ interface GlobalStatsCardsProps {
     devices?: number;
     clients?: number;
   } | null;
+  // Fallback values from clients list
+  clientsCount?: number;
+  sensorsCount?: number;
 }
 
 function formatNumber(num?: number): string {
@@ -71,14 +74,14 @@ function formatNumber(num?: number): string {
   return num.toLocaleString();
 }
 
-export default function GlobalStatsCards({ comprehensiveStats, stats1hr, stats24hr }: GlobalStatsCardsProps) {
+export default function GlobalStatsCards({ comprehensiveStats, stats1hr, stats24hr, clientsCount, sensorsCount }: GlobalStatsCardsProps) {
   const global = comprehensiveStats?.global;
   
-  // Use flat structure first, fallback to nested
+  // Use flat structure first, fallback to nested, then fallback to props
   const totalReadings = global?.total_readings ?? global?.database?.total_readings;
   const totalBatches = global?.total_batches ?? global?.database?.total_batches;
-  const totalClients = global?.total_clients ?? global?.database?.total_clients;
-  const totalDevices = global?.total_devices ?? global?.devices?.total_unique_devices;
+  const totalClients = global?.total_clients ?? global?.database?.total_clients ?? clientsCount;
+  const totalDevices = global?.total_devices ?? global?.devices?.total_unique_devices ?? sensorsCount;
   const deviceTypes = global?.sensor_types_count ?? global?.device_breakdown?.length ?? global?.devices?.total_device_types;
   const activeDevices1h = global?.activity?.last_1_hour?.active_devices_1h;
   const avgReadingsPerHour = global?.activity?.avg_readings_per_hour;

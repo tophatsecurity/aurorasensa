@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState } from "react";
 import { 
   Users, UserPlus, UserX, Trash2, RefreshCw, Search, CheckCircle, 
   Power, PowerOff, Ban, RotateCcw, Clock, History, ChevronDown, ChevronUp, Pencil,
@@ -191,9 +191,34 @@ const ClientsContent = () => {
   };
 
   // Get latest readings for a specific client's sensors
-  const getClientSensorReadings = (clientId: string) => {
+  const getClientSensorReadings = (clientId: string, clientSensors: string[]) => {
     if (!latestReadings) return [];
-    return latestReadings.filter(r => r.device_id?.includes(clientId));
+    
+    // Extract client hash from client_id (e.g., "client_d83adde37b37" -> "d83adde37b37")
+    const clientHash = clientId.replace('client_', '');
+    
+    // Filter readings that match:
+    // 1. device_id matches one of the client's sensor IDs
+    // 2. OR batch_id contains the client hash
+    // 3. OR client_id matches
+    return latestReadings.filter(r => {
+      // The reading data may have a 'sensor' field in the raw data
+      const readingData = r as { device_id?: string; batch_id?: string; client_id?: string };
+      
+      // Check if device_id matches any of the client's sensors
+      const deviceIdMatch = clientSensors.some(sensorId => 
+        readingData.device_id === sensorId || 
+        readingData.device_id?.toLowerCase() === sensorId.toLowerCase()
+      );
+      
+      // Check batch_id for client hash
+      const batchIdMatch = readingData.batch_id?.includes(clientHash);
+      
+      // Check client_id field if present
+      const clientIdMatch = readingData.client_id === clientId || readingData.client_id?.includes(clientHash);
+      
+      return deviceIdMatch || batchIdMatch || clientIdMatch;
+    });
   };
 
   const toggleClientExpanded = (clientId: string) => {
@@ -900,10 +925,16 @@ const ClientsContent = () => {
                           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
                             {sensors.map((sensorId) => {
                               const SensorIcon = getSensorIcon(sensorId);
-                              const readings = getClientSensorReadings(client.client_id).filter(r => 
-                                r.device_type?.toLowerCase().includes(sensorId.split('_')[0]?.toLowerCase() || '')
+                              // Get readings for this client's sensors
+                              const clientReadings = getClientSensorReadings(client.client_id, sensors);
+                              // Filter for this specific sensor
+                              const sensorBaseName = sensorId.split('_')[0]?.toLowerCase() || '';
+                              const sensorReadings = clientReadings.filter(r => 
+                                r.device_id?.toLowerCase() === sensorId.toLowerCase() ||
+                                r.device_type?.toLowerCase().includes(sensorBaseName) ||
+                                r.device_id?.toLowerCase().includes(sensorBaseName)
                               );
-                              const latestReading = readings[0];
+                              const latestReading = sensorReadings[0];
 
                               return (
                                 <div 
