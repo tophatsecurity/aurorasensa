@@ -41,6 +41,7 @@ import ThermalProbeCharts from "./ThermalProbeCharts";
 import ThermalProbeDeviceChart from "./ThermalProbeDeviceChart";
 import HumidityCharts from "./HumidityCharts";
 import StarlinkPowerSection from "./dashboard/StarlinkPowerSection";
+import ArduinoSensorSection from "./dashboard/ArduinoSensorSection";
 import SystemMonitorCharts from "./SystemMonitorCharts";
 
 import { AdsbSection, LoRaSection, WifiBluetoothSection, GpsSection, AlertsSection, BatchesSection, MaritimeSection, DashboardStatsHeader, DashboardSensorSummary, DashboardDeviceActivity, ClientReadingsBreakdown, ClientSensorMeasurements } from "./dashboard";
@@ -1431,6 +1432,9 @@ const DashboardContent = () => {
           </div>
         </div>
       </div>
+
+      {/* Arduino Sensor Kit */}
+      <ArduinoSensorSection />
 
       {/* Realtime Sensor Charts */}
       <div className="mb-8">
