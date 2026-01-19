@@ -61,7 +61,8 @@ import {
   useStarlinkDeviceMetrics,
   StarlinkTimeseriesPoint 
 } from "@/hooks/aurora";
-import { StarlinkMonitoringPanel, StarlinkPerformanceCharts, StarlinkSignalChart } from "@/components/starlink";
+import { StarlinkMonitoringPanel, StarlinkPerformanceCharts, StarlinkSignalChart, StarlinkDeviceDetailView } from "@/components/starlink";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 
 // Chart color palette
@@ -114,6 +115,7 @@ const MetricCard = ({ title, value, unit, icon, trend, status, subtitle, isLoadi
 };
 
 const StarlinkContent = () => {
+  const [activeMainTab, setActiveMainTab] = useState<string>("dashboard");
   const [selectedDevice, setSelectedDevice] = useState<string>("all");
   const [selectedClients, setSelectedClients] = useState<string[]>([]);
   const [clientFilterOpen, setClientFilterOpen] = useState(false);
@@ -288,21 +290,42 @@ const StarlinkContent = () => {
   return (
     <div className="flex-1 overflow-y-auto p-8">
       {/* Header */}
-      <div className="flex items-center gap-4 mb-8 flex-wrap">
-        <div className="w-12 h-12 rounded-xl bg-violet-500/20 flex items-center justify-center">
-          <Satellite className="w-6 h-6 text-violet-400" />
+      <div className="flex items-center gap-4 mb-6 flex-wrap">
+        <div className="w-12 h-12 rounded-xl bg-purple-500/20 flex items-center justify-center">
+          <Satellite className="w-6 h-6 text-purple-500" />
         </div>
         <div>
-          <h1 className="text-3xl font-bold text-foreground">Starlink Dashboard</h1>
+          <h1 className="text-3xl font-bold text-foreground">Starlink Satellite Internet</h1>
           <p className="text-muted-foreground">
-            {isAllSelected 
-              ? `${starlinkDevicesWithMetrics.length} terminal${starlinkDevicesWithMetrics.length !== 1 ? 's' : ''} detected` 
-              : selectedDeviceData 
-                ? `${selectedDeviceData.device_id} @ ${getClientName(selectedDeviceData.client_id)}`
-                : `Device: ${selectedDevice}`}
-            {selectedClients.length > 0 && ` • ${selectedClients.length} client${selectedClients.length !== 1 ? 's' : ''} filtered`}
+            {starlinkDevicesWithMetrics.length} terminal{starlinkDevicesWithMetrics.length !== 1 ? 's' : ''} detected
           </p>
         </div>
+      </div>
+
+      {/* Main Tabs */}
+      <Tabs value={activeMainTab} onValueChange={setActiveMainTab} className="w-full">
+        <TabsList className="mb-6">
+          <TabsTrigger value="dashboard" className="gap-2">
+            <Activity className="w-4 h-4" />
+            Dashboard
+          </TabsTrigger>
+          <TabsTrigger value="device-details" className="gap-2">
+            <Satellite className="w-4 h-4" />
+            Device Details
+          </TabsTrigger>
+        </TabsList>
+
+        <TabsContent value="dashboard" className="mt-0 space-y-6">
+          {/* Dashboard Header with Filters */}
+          <div className="flex items-center gap-4 flex-wrap">
+            <p className="text-muted-foreground text-sm">
+              {isAllSelected 
+                ? `Viewing all ${starlinkDevicesWithMetrics.length} terminal${starlinkDevicesWithMetrics.length !== 1 ? 's' : ''}` 
+                : selectedDeviceData 
+                  ? `${selectedDeviceData.device_id} @ ${getClientName(selectedDeviceData.client_id)}`
+                  : `Device: ${selectedDevice}`}
+              {selectedClients.length > 0 && ` • ${selectedClients.length} client${selectedClients.length !== 1 ? 's' : ''} filtered`}
+            </p>
         
         {/* Filters */}
         <div className="ml-auto flex items-center gap-3">
@@ -803,6 +826,13 @@ const StarlinkContent = () => {
           </div>
         </div>
       )}
+        </TabsContent>
+
+        {/* Device Details Tab */}
+        <TabsContent value="device-details" className="mt-0">
+          <StarlinkDeviceDetailView />
+        </TabsContent>
+      </Tabs>
     </div>
   );
 };
