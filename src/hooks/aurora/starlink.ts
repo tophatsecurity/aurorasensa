@@ -65,12 +65,35 @@ export function useStarlinkDevicesFromReadings() {
     queryKey: ["aurora", "starlink", "devices-from-readings"],
     queryFn: async () => {
       try {
-        const response = await callAuroraApi<{ count: number; readings: LatestReading[] }>(READINGS.LATEST);
-        const readings = response?.readings || [];
+        // First try the dedicated Starlink readings endpoint
+        let readings: Array<{
+          batch_id?: string;
+          client_id?: string;
+          device_id?: string;
+          device_type?: string;
+          sensor?: string;
+          measurement?: string;
+          timestamp?: string;
+          data?: Record<string, unknown>;
+        }> = [];
         
-        // Filter for starlink readings and extract device info
+        try {
+          const starlinkResponse = await callAuroraApi<{ count: number; readings: typeof readings }>(
+            withQuery(READINGS.BY_SENSOR_TYPE('starlink_dish_comprehensive'), { hours: '24' })
+          );
+          readings = starlinkResponse?.readings || [];
+        } catch {
+          // Fallback to latest readings if sensor-specific endpoint fails
+          const latestResponse = await callAuroraApi<{ count: number; readings: typeof readings }>(READINGS.LATEST);
+          readings = latestResponse?.readings || [];
+        }
+        
+        // Filter for starlink readings - check multiple possible type names
         const starlinkReadings = readings.filter(r => 
           r.device_type === 'starlink' || 
+          r.device_type === 'starlink_dish_comprehensive' ||
+          r.device_type === 'starlink_dish' ||
+          r.sensor?.toLowerCase().includes('starlink') ||
           r.device_id?.toLowerCase().includes('starlink')
         );
         
@@ -79,12 +102,34 @@ export function useStarlinkDevicesFromReadings() {
         
         starlinkReadings.forEach(reading => {
           const clientId = reading.client_id || 'unknown';
-          const deviceId = reading.device_id || 'unknown';
+          
+          // Parse measurement if it's a JSON string
+          let measurementData: Record<string, unknown> = {};
+          if (typeof reading.measurement === 'string') {
+            try {
+              measurementData = JSON.parse(reading.measurement);
+            } catch {
+              measurementData = {};
+            }
+          } else if (reading.data) {
+            measurementData = reading.data;
+          }
+          
+          // Extract starlink data from the nested structure
+          const starlinkData = (measurementData?.starlink as Record<string, unknown>) || measurementData || {};
+          
+          // Get device_id from starlink data or reading
+          const deviceId = (starlinkData.device_id as string) || reading.device_id || reading.sensor || 'unknown';
           const compositeKey = `${clientId}:${deviceId}`;
           
-          // Extract metrics from the reading data with null safety
-          const data = (reading.data || {}) as Record<string, unknown>;
-          const starlinkData = ((data?.starlink as Record<string, unknown>) || data || {}) as Record<string, unknown>;
+          // Skip if we already have a more recent reading for this device
+          const existing = devicesMap.get(compositeKey);
+          if (existing && existing.last_seen && reading.timestamp) {
+            if (new Date(existing.last_seen) > new Date(reading.timestamp)) {
+              return;
+            }
+          }
+          
           const pingLatency = ((starlinkData?.ping_latency as Record<string, number>) || {}) as Record<string, number>;
           
           // Extract coordinates with null safety
