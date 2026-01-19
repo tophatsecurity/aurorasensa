@@ -44,7 +44,7 @@ import StarlinkPowerSection from "./dashboard/StarlinkPowerSection";
 import ArduinoSensorSection from "./dashboard/ArduinoSensorSection";
 import SystemMonitorCharts from "./SystemMonitorCharts";
 
-import { AdsbSection, LoRaSection, WifiBluetoothSection, GpsSection, AlertsSection, BatchesSection, MaritimeSection, DashboardStatsHeader, DashboardSensorSummary, DashboardDeviceActivity, ClientReadingsBreakdown, ClientSensorMeasurements } from "./dashboard";
+import { AdsbSection, LoRaSection, WifiBluetoothSection, GpsSection, AlertsSection, BatchesSection, MaritimeSection, DashboardStatsHeader, DashboardSensorSummary, DashboardDeviceActivity, ClientReadingsBreakdown, ClientSensorMeasurements, SensorTypeStatsSection } from "./dashboard";
 import HourlyTrendChart from "./dashboard/HourlyTrendChart";
 
 import { timePeriodLabel } from "@/components/ui/context-selectors";
@@ -492,6 +492,9 @@ const DashboardContent = () => {
       <div className="mb-8">
         <HourlyTrendChart />
       </div>
+
+      {/* Sensor Type Statistics with Charts */}
+      <SensorTypeStatsSection periodHours={periodHours} />
 
       {/* Client Readings Breakdown */}
       <div className="mb-8">
