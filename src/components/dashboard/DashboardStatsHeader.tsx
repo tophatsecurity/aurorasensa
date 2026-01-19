@@ -317,9 +317,9 @@ const DashboardStatsHeader = ({ periodHours = 24, clientId }: DashboardStatsHead
           timeseries={clientTimeseries}
         />
         <StatCardWithChart
-          title="TOTAL READINGS"
+          title="READINGS (DAILY)"
           value={isLoading ? "..." : displayReadings.toLocaleString()}
-          subtitle={`${readings1h.toLocaleString()} last hour`}
+          subtitle={`${readings1h.toLocaleString()} in last hour`}
           icon={Database}
           iconBgColor="bg-blue-500/20"
           isLoading={isLoading || timeseriesLoading}
