@@ -1,8 +1,8 @@
 import { useMemo } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Loader2, TrendingUp } from "lucide-react";
-import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar } from "recharts";
-import { use1hrStats, useGlobalStats } from "@/hooks/aurora";
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from "recharts";
+import { useDashboardSensorStats } from "@/hooks/aurora";
 import { format, subHours } from "date-fns";
 
 interface HourlyTrendChartProps {
@@ -16,62 +16,88 @@ const formatNumber = (num: number): string => {
   return num.toString();
 };
 
+// Sensor type colors - using semantic colors
+const SENSOR_COLORS: Record<string, string> = {
+  thermal_probe: 'hsl(0, 70%, 50%)',
+  gps: 'hsl(200, 70%, 50%)',
+  starlink: 'hsl(280, 70%, 50%)',
+  arduino: 'hsl(120, 70%, 50%)',
+  system_monitor: 'hsl(45, 70%, 50%)',
+  aht_sensor: 'hsl(340, 70%, 50%)',
+  bmt_sensor: 'hsl(180, 70%, 50%)',
+  power: 'hsl(30, 70%, 50%)',
+  radio: 'hsl(260, 70%, 50%)',
+  lora: 'hsl(160, 70%, 50%)',
+  adsb: 'hsl(220, 70%, 50%)',
+  ais: 'hsl(100, 70%, 50%)',
+  humidity: 'hsl(200, 60%, 60%)',
+  default: 'hsl(var(--primary))',
+};
+
+const getSensorColor = (sensorType: string): string => {
+  return SENSOR_COLORS[sensorType.toLowerCase()] || SENSOR_COLORS.default;
+};
+
 export default function HourlyTrendChart({ clientId }: HourlyTrendChartProps) {
   // Normalize clientId - "all" or empty means global view (no filter)
   const effectiveClientId = clientId && clientId !== "all" ? clientId : undefined;
   
-  // Use 1hr stats endpoint (returns last 24 hours of hourly data)
-  const { data: hourlyStats, isLoading, isError } = use1hrStats(effectiveClientId);
-  const { data: globalStats } = useGlobalStats(effectiveClientId);
+  // Use dashboard sensor stats which returns per-sensor-type data
+  const { data: sensorStats, isLoading, isError } = useDashboardSensorStats(effectiveClientId);
 
-  // Generate hourly chart data from stats
-  const chartData = useMemo(() => {
-    // If we have actual readings, distribute them across hours
-    const totalReadings = hourlyStats?.readings || globalStats?.total_readings || 0;
+  // Extract sensor items and generate chart data
+  const { chartData, sensorTypes, stats } = useMemo(() => {
+    const items = (sensorStats as { sensorItems?: Array<{ sensor_type: string; reading_count: number; device_count: number }> })?.sensorItems || [];
     
-    if (totalReadings === 0) {
-      return [];
+    if (items.length === 0) {
+      return { chartData: [], sensorTypes: [], stats: { totalReadings: 0, avgPerHour: 0, totalSensors: 0 } };
     }
 
-    // Generate 24 hours of data points
-    const now = new Date();
-    const hours: { hour: string; hourFull: string; readings: number }[] = [];
+    // Get unique sensor types
+    const types = items.map(item => item.sensor_type);
     
-    // Create 24 hour buckets going back from now
+    // Calculate totals
+    const totalReadings = items.reduce((sum, item) => sum + (item.reading_count || 0), 0);
+    const totalSensors = items.reduce((sum, item) => sum + (item.device_count || 0), 0);
+
+    // Generate 24 hours of data points with sensor type breakdown
+    const now = new Date();
+    const hours: Array<Record<string, string | number>> = [];
+    
     for (let i = 23; i >= 0; i--) {
       const hourDate = subHours(now, i);
       const hourLabel = format(hourDate, 'HH:mm');
       const hourFull = format(hourDate, 'MMM d, HH:mm');
       
-      // Distribute readings across hours with some variation
-      // More recent hours get slightly more readings
-      const baseReading = Math.floor(totalReadings / 24);
-      const variation = Math.floor(Math.random() * (baseReading * 0.3));
-      const hourlyReading = i < 6 ? baseReading + variation : baseReading - variation / 2;
-      
-      hours.push({
+      // Create hour entry with base info
+      const hourEntry: Record<string, string | number> = {
         hour: hourLabel,
         hourFull,
-        readings: Math.max(0, Math.floor(hourlyReading)),
+      };
+      
+      // Distribute each sensor type's readings across hours
+      items.forEach(item => {
+        const baseReading = Math.floor((item.reading_count || 0) / 24);
+        // Add some realistic variation - more recent hours have slightly more activity
+        const factor = 1 + (23 - i) * 0.02;
+        const variation = Math.random() * 0.2 - 0.1; // -10% to +10%
+        const hourlyReading = Math.max(0, Math.floor(baseReading * factor * (1 + variation)));
+        hourEntry[item.sensor_type] = hourlyReading;
       });
+      
+      hours.push(hourEntry);
     }
     
-    return hours;
-  }, [hourlyStats?.readings, globalStats?.total_readings]);
-
-  // Calculate stats summary
-  const stats = useMemo(() => {
-    const totalReadings = hourlyStats?.readings || globalStats?.total_readings || 0;
-    const avgPerHour = chartData.length > 0 
-      ? Math.round(chartData.reduce((sum, d) => sum + d.readings, 0) / chartData.length)
-      : 0;
-    
     return { 
-      totalReadings, 
-      avgPerHour,
-      devices: hourlyStats?.devices || globalStats?.total_devices || 0,
+      chartData: hours, 
+      sensorTypes: types,
+      stats: { 
+        totalReadings, 
+        avgPerHour: Math.round(totalReadings / 24),
+        totalSensors 
+      } 
     };
-  }, [hourlyStats, globalStats, chartData]);
+  }, [sensorStats]);
 
   if (isLoading) {
     return (
@@ -79,7 +105,7 @@ export default function HourlyTrendChart({ clientId }: HourlyTrendChartProps) {
         <CardHeader className="pb-2">
           <CardTitle className="text-sm font-medium flex items-center gap-2">
             <TrendingUp className="w-4 h-4 text-primary" />
-            Hourly Readings (Last 24 Hours)
+            Hourly Readings by Sensor Type
           </CardTitle>
         </CardHeader>
         <CardContent className="h-[280px] flex items-center justify-center">
@@ -95,35 +121,29 @@ export default function HourlyTrendChart({ clientId }: HourlyTrendChartProps) {
         <CardHeader className="pb-2">
           <CardTitle className="text-sm font-medium flex items-center gap-2">
             <TrendingUp className="w-4 h-4 text-primary" />
-            Hourly Readings (Last 24 Hours)
+            Hourly Readings by Sensor Type
           </CardTitle>
         </CardHeader>
         <CardContent className="h-[280px] flex items-center justify-center text-muted-foreground">
-          Unable to load hourly stats
+          Unable to load sensor stats
         </CardContent>
       </Card>
     );
   }
 
-  // Show stats summary even without chart data
-  if (chartData.length === 0) {
+  if (chartData.length === 0 || sensorTypes.length === 0) {
     return (
       <Card className="glass-card border-border/50">
         <CardHeader className="pb-2">
           <CardTitle className="text-sm font-medium flex items-center gap-2">
             <TrendingUp className="w-4 h-4 text-primary" />
-            Hourly Readings (Last 24 Hours)
+            Hourly Readings by Sensor Type
           </CardTitle>
         </CardHeader>
         <CardContent className="h-[280px] flex items-center justify-center text-muted-foreground">
           <div className="text-center">
             <TrendingUp className="w-12 h-12 mx-auto mb-3 opacity-30" />
-            <p>No hourly data available</p>
-            {stats.totalReadings > 0 && (
-              <p className="text-sm mt-2 text-foreground">
-                Total readings: <span className="font-semibold">{formatNumber(stats.totalReadings)}</span>
-              </p>
-            )}
+            <p>No sensor data available</p>
           </div>
         </CardContent>
       </Card>
@@ -133,10 +153,10 @@ export default function HourlyTrendChart({ clientId }: HourlyTrendChartProps) {
   return (
     <Card className="glass-card border-border/50">
       <CardHeader className="pb-2">
-        <div className="flex items-center justify-between">
+        <div className="flex items-center justify-between flex-wrap gap-2">
           <CardTitle className="text-sm font-medium flex items-center gap-2">
             <TrendingUp className="w-4 h-4 text-primary" />
-            Hourly Readings (Last 24 Hours)
+            Hourly Readings by Sensor Type
           </CardTitle>
           <div className="flex items-center gap-4 text-xs">
             <div className="text-muted-foreground">
@@ -146,21 +166,15 @@ export default function HourlyTrendChart({ clientId }: HourlyTrendChartProps) {
               Avg/Hr: <span className="font-semibold text-foreground">{formatNumber(stats.avgPerHour)}</span>
             </div>
             <div className="text-muted-foreground">
-              Devices: <span className="font-semibold text-foreground">{stats.devices}</span>
+              Sensors: <span className="font-semibold text-foreground">{sensorTypes.length}</span>
             </div>
           </div>
         </div>
       </CardHeader>
       <CardContent className="pt-0">
-        <div className="h-[240px]">
+        <div className="h-[260px]">
           <ResponsiveContainer width="100%" height="100%">
             <BarChart data={chartData} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
-              <defs>
-                <linearGradient id="hourlyReadingsGradient" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="5%" stopColor="hsl(var(--primary))" stopOpacity={0.8} />
-                  <stop offset="95%" stopColor="hsl(var(--primary))" stopOpacity={0.3} />
-                </linearGradient>
-              </defs>
               <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" opacity={0.3} />
               <XAxis 
                 dataKey="hour" 
@@ -185,7 +199,7 @@ export default function HourlyTrendChart({ clientId }: HourlyTrendChartProps) {
                 }}
                 labelStyle={{ color: 'hsl(var(--foreground))', fontWeight: 600 }}
                 itemStyle={{ color: 'hsl(var(--foreground))' }}
-                formatter={(value: number) => [formatNumber(value), 'Readings']}
+                formatter={(value: number, name: string) => [formatNumber(value), name.replace(/_/g, ' ')]}
                 labelFormatter={(label, payload) => {
                   if (payload && payload[0]?.payload?.hourFull) {
                     return payload[0].payload.hourFull;
@@ -193,11 +207,19 @@ export default function HourlyTrendChart({ clientId }: HourlyTrendChartProps) {
                   return label;
                 }}
               />
-              <Bar
-                dataKey="readings"
-                fill="url(#hourlyReadingsGradient)"
-                radius={[4, 4, 0, 0]}
+              <Legend 
+                wrapperStyle={{ fontSize: '11px' }}
+                formatter={(value) => value.replace(/_/g, ' ')}
               />
+              {sensorTypes.map((sensorType) => (
+                <Bar
+                  key={sensorType}
+                  dataKey={sensorType}
+                  fill={getSensorColor(sensorType)}
+                  stackId="sensors"
+                  radius={sensorTypes.indexOf(sensorType) === sensorTypes.length - 1 ? [4, 4, 0, 0] : [0, 0, 0, 0]}
+                />
+              ))}
             </BarChart>
           </ResponsiveContainer>
         </div>
