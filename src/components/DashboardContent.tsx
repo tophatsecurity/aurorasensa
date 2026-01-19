@@ -43,7 +43,7 @@ import HumidityCharts from "./HumidityCharts";
 import PowerConsumptionCharts from "./PowerConsumptionCharts";
 import SystemMonitorCharts from "./SystemMonitorCharts";
 
-import { AdsbSection, LoRaSection, WifiBluetoothSection, GpsSection, AlertsSection, BatchesSection, MaritimeSection, DashboardStatsHeader, DashboardSensorSummary, DashboardDeviceActivity, ClientReadingsBreakdown } from "./dashboard";
+import { AdsbSection, LoRaSection, WifiBluetoothSection, GpsSection, AlertsSection, BatchesSection, MaritimeSection, DashboardStatsHeader, DashboardSensorSummary, DashboardDeviceActivity, ClientReadingsBreakdown, ClientSensorMeasurements } from "./dashboard";
 import HourlyTrendChart from "./dashboard/HourlyTrendChart";
 
 import { 
@@ -509,6 +509,13 @@ const DashboardContent = () => {
       <div className="mb-8">
         <HourlyTrendChart clientId={selectedClient} />
       </div>
+
+      {/* Client Sensors & Measurements - Shows when a specific client is selected */}
+      {selectedClient && selectedClient !== "all" && (
+        <div className="mb-8">
+          <ClientSensorMeasurements clientId={selectedClient} />
+        </div>
+      )}
 
       {/* Client Readings Breakdown */}
       <div className="mb-8">
