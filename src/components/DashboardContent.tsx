@@ -722,56 +722,106 @@ const DashboardContent = () => {
           />
         </div>
         
-        {/* Arduino DHT/TH Temperature Row */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-4">
+      </div>
+
+      {/* Arduino Sensor Kit Section */}
+      <div className="mb-8">
+        <h2 className="text-lg font-semibold mb-4 flex items-center gap-2">
+          <Cpu className="w-5 h-5 text-violet-500" />
+          Arduino Sensor Kit ({periodLabel})
+          {arduinoTimeseriesLoading && <Loader2 className="w-4 h-4 animate-spin text-muted-foreground" />}
+          <Badge variant="outline" className="ml-2 text-xs">
+            {arduinoTimeseries?.count ?? 0} readings
+          </Badge>
+        </h2>
+        
+        {/* Temperature & Humidity Row */}
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 mb-4">
           {/* Arduino TH Temperature */}
           <StatCardWithChart
-            title="ARDUINO TH TEMP"
+            title="TH TEMPERATURE"
             value={(arduinoTimeseries?.readings?.length ?? 0) > 0 
-              ? (arduinoTimeseries?.readings?.[arduinoTimeseries.readings.length - 1]?.th_temp_c?.toFixed(1) ?? "—")
-              : "—"}
+              ? (arduinoTimeseries?.readings?.[arduinoTimeseries.readings.length - 1]?.th_temp_c?.toFixed(1) ?? 
+                 ahtTimeseries?.readings?.[ahtTimeseries?.readings?.length - 1]?.aht_temp_c?.toFixed(1) ?? "—")
+              : ahtTimeseries?.readings?.[ahtTimeseries?.readings?.length - 1]?.aht_temp_c?.toFixed(1) ?? "—"}
             unit="°C"
-            subtitle={`${arduinoTimeseries?.count ?? 0} readings`}
+            subtitle={(arduinoTimeseries?.readings?.length ?? 0) > 0 
+              ? `${cToF(arduinoTimeseries?.readings?.[arduinoTimeseries.readings.length - 1]?.th_temp_c)?.toFixed(1) ?? '—'}°F`
+              : `${cToF(ahtTimeseries?.readings?.[ahtTimeseries?.readings?.length - 1]?.aht_temp_c)?.toFixed(1) ?? 'No data'}°F`}
             icon={Thermometer}
             iconBgColor="bg-rose-500/20"
-            isLoading={arduinoTimeseriesLoading}
-            timeseries={(arduinoTimeseries?.readings || []).filter(r => r.th_temp_c !== undefined).map(r => ({
-              timestamp: r.timestamp,
-              value: r.th_temp_c ?? 0,
-            }))}
+            isLoading={arduinoTimeseriesLoading || ahtTimeseriesLoading}
+            timeseries={(arduinoTimeseries?.readings || ahtTimeseries?.readings || [])
+              .filter(r => (r as { th_temp_c?: number; aht_temp_c?: number }).th_temp_c !== undefined || (r as { th_temp_c?: number; aht_temp_c?: number }).aht_temp_c !== undefined)
+              .map(r => ({
+                timestamp: r.timestamp,
+                value: (r as { th_temp_c?: number; aht_temp_c?: number }).th_temp_c ?? (r as { th_temp_c?: number; aht_temp_c?: number }).aht_temp_c ?? 0,
+              }))}
             devices={[{
-              device_id: "arduino_th",
+              device_id: "arduino_th_temp",
               device_type: "arduino_sensor_kit",
               color: "#f43f5e",
-              reading_count: arduinoTimeseries?.count ?? 0,
+              reading_count: arduinoTimeseries?.count ?? ahtTimeseries?.count ?? 0,
               status: "active"
             }]}
           />
           
           {/* Arduino TH Humidity */}
           <StatCardWithChart
-            title="ARDUINO TH HUMIDITY"
+            title="TH HUMIDITY"
             value={(arduinoTimeseries?.readings?.length ?? 0) > 0 
-              ? (arduinoTimeseries?.readings?.[arduinoTimeseries.readings.length - 1]?.th_humidity?.toFixed(1) ?? "—")
-              : "—"}
+              ? (arduinoTimeseries?.readings?.[arduinoTimeseries.readings.length - 1]?.th_humidity?.toFixed(1) ?? 
+                 ahtTimeseries?.readings?.[ahtTimeseries?.readings?.length - 1]?.aht_humidity?.toFixed(1) ?? "—")
+              : ahtTimeseries?.readings?.[ahtTimeseries?.readings?.length - 1]?.aht_humidity?.toFixed(1) ?? "—"}
             unit="%"
-            subtitle={`${arduinoTimeseries?.count ?? 0} readings`}
+            subtitle="Relative humidity"
             icon={Droplets}
             iconBgColor="bg-sky-500/20"
-            isLoading={arduinoTimeseriesLoading}
-            timeseries={(arduinoTimeseries?.readings || []).filter(r => r.th_humidity !== undefined).map(r => ({
-              timestamp: r.timestamp,
-              value: r.th_humidity ?? 0,
-            }))}
+            isLoading={arduinoTimeseriesLoading || ahtTimeseriesLoading}
+            timeseries={(arduinoTimeseries?.readings || ahtTimeseries?.readings || [])
+              .filter(r => (r as { th_humidity?: number; aht_humidity?: number }).th_humidity !== undefined || (r as { th_humidity?: number; aht_humidity?: number }).aht_humidity !== undefined)
+              .map(r => ({
+                timestamp: r.timestamp,
+                value: (r as { th_humidity?: number; aht_humidity?: number }).th_humidity ?? (r as { th_humidity?: number; aht_humidity?: number }).aht_humidity ?? 0,
+              }))}
             devices={[{
               device_id: "arduino_th_hum",
               device_type: "arduino_sensor_kit",
               color: "#0ea5e9",
-              reading_count: arduinoTimeseries?.count ?? 0,
+              reading_count: arduinoTimeseries?.count ?? ahtTimeseries?.count ?? 0,
               status: "active"
             }]}
           />
           
+          {/* BMP Pressure */}
+          <StatCardWithChart
+            title="BMP PRESSURE"
+            value={(arduinoTimeseries?.readings?.length ?? 0) > 0 
+              ? (arduinoTimeseries?.readings?.[arduinoTimeseries.readings.length - 1]?.bmp_pressure_hpa?.toFixed(0) ?? bmtPressure?.avg?.toFixed(0) ?? "—")
+              : bmtPressure?.avg?.toFixed(0) ?? "—"}
+            unit=" hPa"
+            subtitle={bmtPressure?.avg !== undefined 
+              ? `Min: ${bmtPressure.min?.toFixed(0)} | Max: ${bmtPressure.max?.toFixed(0)} hPa`
+              : "Barometric pressure"}
+            icon={Activity}
+            iconBgColor="bg-cyan-500/20"
+            isLoading={arduinoTimeseriesLoading}
+            timeseries={(arduinoTimeseries?.readings || []).filter(r => r.bmp_pressure_hpa !== undefined).map(r => ({
+              timestamp: r.timestamp,
+              value: r.bmp_pressure_hpa ?? 0,
+            }))}
+            devices={[{
+              device_id: "arduino_bmp_pressure",
+              device_type: "arduino_sensor_kit",
+              color: "#06b6d4",
+              reading_count: arduinoTimeseries?.count ?? 0,
+              status: "active"
+            }]}
+          />
+        </div>
+        
+        {/* Analog Sensors Row */}
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
           {/* Arduino Light Sensor */}
           <StatCardWithChart
             title="LIGHT LEVEL"
@@ -779,7 +829,7 @@ const DashboardContent = () => {
               ? (arduinoTimeseries?.readings?.[arduinoTimeseries.readings.length - 1]?.light_raw?.toString() ?? "—")
               : "—"}
             unit=""
-            subtitle="Raw analog value"
+            subtitle="Analog sensor (0-1023)"
             icon={Activity}
             iconBgColor="bg-yellow-500/20"
             isLoading={arduinoTimeseriesLoading}
@@ -803,7 +853,7 @@ const DashboardContent = () => {
               ? (arduinoTimeseries?.readings?.[arduinoTimeseries.readings.length - 1]?.sound_raw?.toString() ?? "—")
               : "—"}
             unit=""
-            subtitle="Raw analog value"
+            subtitle="Analog sensor (0-1023)"
             icon={Radio}
             iconBgColor="bg-emerald-500/20"
             isLoading={arduinoTimeseriesLoading}
@@ -819,8 +869,37 @@ const DashboardContent = () => {
               status: "active"
             }]}
           />
+          
+          {/* BMP Temperature */}
+          <StatCardWithChart
+            title="BMP TEMPERATURE"
+            value={(arduinoTimeseries?.readings?.length ?? 0) > 0 
+              ? (arduinoTimeseries?.readings?.[arduinoTimeseries.readings.length - 1]?.bmp_temp_c?.toFixed(1) ?? bmtTemp?.avg?.toFixed(1) ?? "—")
+              : bmtTemp?.avg?.toFixed(1) ?? "—"}
+            unit="°C"
+            subtitle={bmtTemp?.avg !== undefined 
+              ? `${cToF(bmtTemp.avg)?.toFixed(1)}°F`
+              : "BMP280 sensor"}
+            icon={Thermometer}
+            iconBgColor="bg-amber-500/20"
+            isLoading={arduinoTimeseriesLoading}
+            timeseries={(arduinoTimeseries?.readings || []).filter(r => r.bmp_temp_c !== undefined).map(r => ({
+              timestamp: r.timestamp,
+              value: r.bmp_temp_c ?? 0,
+            }))}
+            devices={[{
+              device_id: "arduino_bmp_temp",
+              device_type: "arduino_sensor_kit",
+              color: "#f59e0b",
+              reading_count: arduinoTimeseries?.count ?? bmtStats?.count ?? 0,
+              status: "active"
+            }]}
+          />
         </div>
-        
+      </div>
+
+      {/* Continue Thermal Section */}
+      <div className="mb-8">
         <div className="mt-4">
           <ThermalProbeCharts />
         </div>
