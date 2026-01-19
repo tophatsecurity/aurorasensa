@@ -71,13 +71,16 @@ const DashboardStatsHeader = ({ periodHours = 24, clientId }: DashboardStatsHead
     0;
   
   
-  // Client count - prefer globalStats
+  // Client count - prioritize clientsByState data which is most reliable when stats endpoints return empty
+  // Note: globalStats (/api/stats/global) often returns {} empty object
+  const clientsFromStates = allClientsFromState.length;
   const clientCountFromStats = 
+    clientsFromStates > 0 ? clientsFromStates :
     globalStats?.total_clients ??
     clientStats?.total ?? 
     global?.total_clients ?? 
     activeClients.length;
-  const totalClients = clientCountFromStats > 0 ? clientCountFromStats : 1; // Fallback to at least 1 since we know there's data
+  const totalClients = clientCountFromStats > 0 ? clientCountFromStats : (clients?.length || 1);
 
   // Sensor types count - prefer globalStats
   const sensorTypesFromStats = 
