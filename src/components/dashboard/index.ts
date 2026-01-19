@@ -12,3 +12,4 @@ export { default as HourlyTrendChart } from './HourlyTrendChart';
 export { default as ClientReadingsBreakdown } from './ClientReadingsBreakdown';
 export { default as ClientSensorMeasurements } from './ClientSensorMeasurements';
 export { default as StarlinkPowerSection } from './StarlinkPowerSection';
+export { default as StarlinkPowerTrendChart } from './StarlinkPowerTrendChart';

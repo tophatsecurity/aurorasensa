@@ -1,11 +1,13 @@
-import { useMemo } from "react";
-import { Satellite, Zap, Activity, TrendingUp, TrendingDown, Minus, Loader2, RefreshCw } from "lucide-react";
+import { useMemo, useState } from "react";
+import { Satellite, Zap, Activity, TrendingUp, Loader2, RefreshCw, ChevronDown, ChevronUp } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { useStarlinkDevicesFromReadings } from "@/hooks/aurora/starlink";
 import { formatLastSeen } from "@/utils/dateUtils";
+import StarlinkPowerTrendChart from "./StarlinkPowerTrendChart";
 
 interface StarlinkPowerSectionProps {
   hours?: number;
@@ -13,6 +15,7 @@ interface StarlinkPowerSectionProps {
 
 const StarlinkPowerSection = ({ hours = 24 }: StarlinkPowerSectionProps) => {
   const { data: starlinkDevices, isLoading, refetch, isRefetching } = useStarlinkDevicesFromReadings();
+  const [showTrendCharts, setShowTrendCharts] = useState(true);
 
   // Calculate total power and stats
   const powerStats = useMemo(() => {
@@ -139,84 +142,119 @@ const StarlinkPowerSection = ({ hours = 24 }: StarlinkPowerSectionProps) => {
           </CardContent>
         </Card>
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-          {powerStats.devices.map((device) => (
-            <Card key={device.composite_key} className="bg-card/50 border-border/50 hover:border-primary/30 transition-colors">
-              <CardHeader className="pb-2">
-                <div className="flex items-start justify-between">
-                  <div className="flex items-center gap-2">
-                    <Satellite className="w-5 h-5 text-purple-500" />
-                    <CardTitle className="text-sm font-medium truncate max-w-[150px]">
-                      {device.device_id}
-                    </CardTitle>
-                  </div>
-                  {getConnectionBadge(device.metrics.connected)}
-                </div>
-                <p className="text-xs text-muted-foreground truncate">
-                  Client: {device.client_id}
-                </p>
-              </CardHeader>
-              <CardContent className="space-y-3">
-                {/* Power Reading */}
-                <div className="space-y-1">
+        <>
+          {/* Historical Power Trend Charts */}
+          <Collapsible open={showTrendCharts} onOpenChange={setShowTrendCharts}>
+            <Card className="bg-card/50 border-border/50">
+              <CollapsibleTrigger asChild>
+                <CardHeader className="cursor-pointer hover:bg-muted/20 transition-colors pb-3">
                   <div className="flex items-center justify-between">
-                    <span className="text-xs text-muted-foreground">Power</span>
-                    <span className={`text-lg font-bold ${getPowerStatusColor(device.power)}`}>
-                      {device.power.toFixed(1)}W
-                    </span>
+                    <CardTitle className="text-sm font-medium flex items-center gap-2">
+                      <TrendingUp className="w-4 h-4 text-primary" />
+                      Power Consumption Trends ({hours}h)
+                    </CardTitle>
+                    <Button variant="ghost" size="icon" className="h-6 w-6">
+                      {showTrendCharts ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+                    </Button>
                   </div>
-                  <Progress 
-                    value={getPowerProgress(device.power)} 
-                    className="h-2"
-                  />
-                </div>
-
-                {/* Additional Metrics */}
-                <div className="grid grid-cols-2 gap-2 text-xs">
-                  {device.metrics.downlink_throughput_bps !== undefined && (
-                    <div className="flex flex-col">
-                      <span className="text-muted-foreground">Downlink</span>
-                      <span className="font-medium text-foreground">
-                        {(device.metrics.downlink_throughput_bps / 1e6).toFixed(1)} Mbps
-                      </span>
-                    </div>
-                  )}
-                  {device.metrics.uplink_throughput_bps !== undefined && (
-                    <div className="flex flex-col">
-                      <span className="text-muted-foreground">Uplink</span>
-                      <span className="font-medium text-foreground">
-                        {(device.metrics.uplink_throughput_bps / 1e6).toFixed(1)} Mbps
-                      </span>
-                    </div>
-                  )}
-                  {device.metrics.pop_ping_latency_ms !== undefined && (
-                    <div className="flex flex-col">
-                      <span className="text-muted-foreground">Latency</span>
-                      <span className="font-medium text-foreground">
-                        {device.metrics.pop_ping_latency_ms.toFixed(0)} ms
-                      </span>
-                    </div>
-                  )}
-                  {device.metrics.obstruction_percent !== undefined && (
-                    <div className="flex flex-col">
-                      <span className="text-muted-foreground">Obstruction</span>
-                      <span className="font-medium text-foreground">
-                        {device.metrics.obstruction_percent.toFixed(1)}%
-                      </span>
-                    </div>
-                  )}
-                </div>
-
-                {/* Last Seen */}
-                {device.last_seen && (
-                  <p className="text-xs text-muted-foreground pt-1 border-t border-border/50">
-                    Last seen: {formatLastSeen(device.last_seen)}
-                  </p>
-                )}
-              </CardContent>
+                </CardHeader>
+              </CollapsibleTrigger>
+              <CollapsibleContent>
+                <CardContent className="pt-0">
+                  <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                    {powerStats.devices.map((device) => (
+                      <StarlinkPowerTrendChart 
+                        key={device.composite_key} 
+                        device={device} 
+                        hours={hours} 
+                      />
+                    ))}
+                  </div>
+                </CardContent>
+              </CollapsibleContent>
             </Card>
-          ))}
-        </div>
+          </Collapsible>
+
+          {/* Device Cards */}
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {powerStats.devices.map((device) => (
+              <Card key={device.composite_key} className="bg-card/50 border-border/50 hover:border-primary/30 transition-colors">
+                <CardHeader className="pb-2">
+                  <div className="flex items-start justify-between">
+                    <div className="flex items-center gap-2">
+                      <Satellite className="w-5 h-5 text-purple-500" />
+                      <CardTitle className="text-sm font-medium truncate max-w-[150px]">
+                        {device.device_id}
+                      </CardTitle>
+                    </div>
+                    {getConnectionBadge(device.metrics.connected)}
+                  </div>
+                  <p className="text-xs text-muted-foreground truncate">
+                    Client: {device.client_id}
+                  </p>
+                </CardHeader>
+                <CardContent className="space-y-3">
+                  {/* Power Reading */}
+                  <div className="space-y-1">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs text-muted-foreground">Power</span>
+                      <span className={`text-lg font-bold ${getPowerStatusColor(device.power)}`}>
+                        {device.power.toFixed(1)}W
+                      </span>
+                    </div>
+                    <Progress 
+                      value={getPowerProgress(device.power)} 
+                      className="h-2"
+                    />
+                  </div>
+
+                  {/* Additional Metrics */}
+                  <div className="grid grid-cols-2 gap-2 text-xs">
+                    {device.metrics.downlink_throughput_bps !== undefined && (
+                      <div className="flex flex-col">
+                        <span className="text-muted-foreground">Downlink</span>
+                        <span className="font-medium text-foreground">
+                          {(device.metrics.downlink_throughput_bps / 1e6).toFixed(1)} Mbps
+                        </span>
+                      </div>
+                    )}
+                    {device.metrics.uplink_throughput_bps !== undefined && (
+                      <div className="flex flex-col">
+                        <span className="text-muted-foreground">Uplink</span>
+                        <span className="font-medium text-foreground">
+                          {(device.metrics.uplink_throughput_bps / 1e6).toFixed(1)} Mbps
+                        </span>
+                      </div>
+                    )}
+                    {device.metrics.pop_ping_latency_ms !== undefined && (
+                      <div className="flex flex-col">
+                        <span className="text-muted-foreground">Latency</span>
+                        <span className="font-medium text-foreground">
+                          {device.metrics.pop_ping_latency_ms.toFixed(0)} ms
+                        </span>
+                      </div>
+                    )}
+                    {device.metrics.obstruction_percent !== undefined && (
+                      <div className="flex flex-col">
+                        <span className="text-muted-foreground">Obstruction</span>
+                        <span className="font-medium text-foreground">
+                          {device.metrics.obstruction_percent.toFixed(1)}%
+                        </span>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Last Seen */}
+                  {device.last_seen && (
+                    <p className="text-xs text-muted-foreground pt-1 border-t border-border/50">
+                      Last seen: {formatLastSeen(device.last_seen)}
+                    </p>
+                  )}
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+        </>
       )}
     </div>
   );
