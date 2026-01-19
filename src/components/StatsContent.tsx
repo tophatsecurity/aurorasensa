@@ -19,6 +19,7 @@ import {
   use24hrStats,
 } from "@/hooks/aurora";
 import { useClientContext } from "@/contexts/ClientContext";
+import { ClientSelector } from "@/components/ui/context-selectors";
 
 import {
   type DeviceGroup,
@@ -250,7 +251,7 @@ export default function StatsContent() {
         </div>
         <div className="flex items-center gap-3">
           {/* Context Selector - Global or Client ID */}
-          <div className="flex items-center gap-2 bg-muted/50 rounded-lg p-1">
+          <div className="flex items-center gap-2 bg-muted/50 rounded-lg p-1.5">
             <button
               onClick={() => handleClientChange("all")}
               className={`flex items-center gap-2 px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${
@@ -263,22 +264,11 @@ export default function StatsContent() {
               Global
             </button>
             <div className="w-px h-6 bg-border" />
-            <select
-              value={isGlobalView ? "" : selectedClientId}
-              onChange={(e) => e.target.value && handleClientChange(e.target.value)}
-              className={`bg-transparent border-0 text-sm font-medium focus:outline-none focus:ring-0 cursor-pointer px-2 py-1.5 rounded-md transition-colors ${
-                !isGlobalView
-                  ? 'bg-primary text-primary-foreground'
-                  : 'text-muted-foreground hover:text-foreground hover:bg-muted'
-              }`}
-            >
-              <option value="" disabled>Select Client</option>
-              {(clients || []).map((client) => (
-                <option key={client.client_id} value={client.client_id}>
-                  {client.hostname || client.client_id}
-                </option>
-              ))}
-            </select>
+            <ClientSelector
+              value={selectedClientId}
+              onChange={handleClientChange}
+              showAllOption={false}
+            />
           </div>
         </div>
       </div>
