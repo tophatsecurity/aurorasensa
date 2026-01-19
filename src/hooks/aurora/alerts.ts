@@ -89,20 +89,18 @@ export interface CreateAlertRulePayload {
 }
 
 // API format - what the backend actually expects
+// Based on http://aurora.tophatsecurity.com:9151/docs
 interface ApiAlertRulePayload {
   rule_name: string;
-  rule_type: string;
+  rule_type: string; // threshold | rate_of_change | missing_data
+  sensor_type: string; // Required field
+  metric_field?: string; // Field to monitor
+  condition?: string; // above | below | equals
+  threshold_high?: number | null;
+  threshold_low?: number | null;
+  severity?: string; // critical | warning | info
+  enabled?: number; // 1 or 0 (integer, not boolean)
   description?: string;
-  enabled?: boolean;
-  severity?: string;
-  sensor_type_filter?: string;
-  conditions?: {
-    field: string;
-    operator?: string | null;
-    value?: number | string | null;
-  }[];
-  notification_channels?: string[];
-  cooldown_minutes?: number;
 }
 
 export interface UpdateAlertRulePayload extends Partial<CreateAlertRulePayload> {}
@@ -290,18 +288,22 @@ export function useCreateAlertRule() {
   
   return useMutation({
     mutationFn: async (rule: CreateAlertRulePayload) => {
+      // Extract condition info from the conditions array
+      const firstCondition = rule.conditions?.[0];
+      
       // Transform from frontend format to API format
-      // API requires rule_name and rule_type fields
+      // API requires: rule_name, rule_type, sensor_type, metric_field, condition, threshold_high/low, severity, enabled (int)
       const apiPayload: ApiAlertRulePayload = {
         rule_name: rule.name,
         rule_type: rule.rule_type || rule.category || deriveRuleType(rule.sensor_type_filter),
+        sensor_type: rule.sensor_type_filter || "system_monitor",
+        metric_field: firstCondition?.field || "value",
+        condition: mapOperatorToCondition(firstCondition?.operator),
+        threshold_high: typeof firstCondition?.value === 'number' ? firstCondition.value : parseFloat(String(firstCondition?.value)) || null,
+        threshold_low: null,
+        severity: rule.severity || "warning",
+        enabled: rule.enabled !== false ? 1 : 0, // Convert boolean to integer
         description: rule.description,
-        enabled: rule.enabled,
-        severity: rule.severity,
-        sensor_type_filter: rule.sensor_type_filter,
-        conditions: rule.conditions,
-        notification_channels: rule.notification_channels,
-        cooldown_minutes: rule.cooldown_minutes,
       };
       return callAuroraApi<{ success: boolean; id?: number }>(ALERTS.RULES, "POST", apiPayload);
     },
@@ -309,6 +311,24 @@ export function useCreateAlertRule() {
       queryClient.invalidateQueries({ queryKey: ["aurora", "alerts", "rules"] });
     },
   });
+}
+
+// Helper function to map operator to API condition format
+function mapOperatorToCondition(operator?: string | null): string {
+  if (!operator) return "above";
+  const opMap: Record<string, string> = {
+    ">": "above",
+    ">=": "above",
+    "<": "below",
+    "<=": "below",
+    "=": "equals",
+    "==": "equals",
+    "!=": "equals", // No 'not_equals', fallback to equals
+    "above": "above",
+    "below": "below",
+    "equals": "equals",
+  };
+  return opMap[operator.toLowerCase()] || "above";
 }
 
 // Helper function to derive rule_type from sensor_type_filter
@@ -322,12 +342,12 @@ function deriveRuleType(sensorTypeFilter?: string): string {
     "starlink_dish_comprehensive": "threshold",
     "wifi_scanner": "threshold",
     "bluetooth_scanner": "threshold",
-    "lora_detector": "detection",
-    "gps": "geofence",
-    "adsb": "detection",
-    "ais": "detection",
-    "aprs": "detection",
-    "epirb": "emergency",
+    "lora_detector": "threshold",
+    "gps": "threshold",
+    "adsb": "threshold",
+    "ais": "threshold",
+    "aprs": "threshold",
+    "epirb": "threshold",
   };
   
   return typeMap[sensorTypeFilter] || "threshold";
@@ -338,21 +358,36 @@ export function useUpdateAlertRule() {
   
   return useMutation({
     mutationFn: async ({ ruleId, updates }: { ruleId: number; updates: UpdateAlertRulePayload }) => {
-      // Transform from frontend format to API format if name is present
-      const apiPayload: Partial<ApiAlertRulePayload> = {
-        ...updates,
-      };
+      // Build API payload properly
+      const firstCondition = updates.conditions?.[0];
       
-      // Map name to rule_name if present
+      const apiPayload: Partial<ApiAlertRulePayload> = {};
+      
+      // Map frontend fields to API fields
       if (updates.name) {
         apiPayload.rule_name = updates.name;
-        delete (apiPayload as unknown as { name?: string }).name;
       }
-      
-      // Add rule_type if category is present
-      if (updates.category) {
-        apiPayload.rule_type = updates.category;
-        delete (apiPayload as unknown as { category?: string }).category;
+      if (updates.category || updates.rule_type) {
+        apiPayload.rule_type = updates.rule_type || updates.category;
+      }
+      if (updates.sensor_type_filter) {
+        apiPayload.sensor_type = updates.sensor_type_filter;
+      }
+      if (updates.description !== undefined) {
+        apiPayload.description = updates.description;
+      }
+      if (updates.severity) {
+        apiPayload.severity = updates.severity;
+      }
+      if (updates.enabled !== undefined) {
+        apiPayload.enabled = updates.enabled ? 1 : 0;
+      }
+      if (firstCondition) {
+        apiPayload.metric_field = firstCondition.field;
+        apiPayload.condition = mapOperatorToCondition(firstCondition.operator);
+        apiPayload.threshold_high = typeof firstCondition.value === 'number' 
+          ? firstCondition.value 
+          : parseFloat(String(firstCondition.value)) || null;
       }
       
       return callAuroraApi<{ success: boolean }>(ALERTS.RULE(ruleId), "PUT", apiPayload);
