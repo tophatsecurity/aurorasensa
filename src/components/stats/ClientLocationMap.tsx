@@ -39,7 +39,12 @@ export function ClientLocationMap({
 
   // Determine map center - prefer resolved location, fallback to device center
   const mapCenter = useMemo(() => {
-    if (resolvedLocation.latitude && resolvedLocation.longitude) {
+    // Safely check if resolvedLocation has valid coordinates
+    if (resolvedLocation && 
+        typeof resolvedLocation.latitude === 'number' && 
+        typeof resolvedLocation.longitude === 'number' &&
+        !isNaN(resolvedLocation.latitude) && 
+        !isNaN(resolvedLocation.longitude)) {
       return { lat: resolvedLocation.latitude, lng: resolvedLocation.longitude };
     }
     if (devicesWithLocation.length > 0) {
@@ -67,7 +72,7 @@ export function ClientLocationMap({
     return iconMap[source] || HelpCircle;
   };
 
-  const SourceIcon = getSourceIcon(resolvedLocation.source);
+  const SourceIcon = getSourceIcon(resolvedLocation?.source ?? 'unknown');
 
   return (
     <Card className="glass-card border-border/50">
@@ -79,12 +84,12 @@ export function ClientLocationMap({
           </div>
           {hasLocation && (
             <div className="flex items-center gap-2">
-              <Badge variant="outline" className={`text-xs font-normal ${getSourceColor(resolvedLocation.source)}`}>
+              <Badge variant="outline" className={`text-xs font-normal ${getSourceColor(resolvedLocation?.source ?? 'unknown')}`}>
                 <SourceIcon className="w-3 h-3 mr-1" />
-                {getSourceLabel(resolvedLocation.source)}
+                {getSourceLabel(resolvedLocation?.source ?? 'unknown')}
               </Badge>
               <span className="text-xs font-normal text-muted-foreground font-mono">
-                {mapCenter.lat.toFixed(4)}, {mapCenter.lng.toFixed(4)}
+                {typeof mapCenter.lat === 'number' ? mapCenter.lat.toFixed(4) : '—'}, {typeof mapCenter.lng === 'number' ? mapCenter.lng.toFixed(4) : '—'}
               </span>
             </div>
           )}
