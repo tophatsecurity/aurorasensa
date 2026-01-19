@@ -43,7 +43,8 @@ import HumidityCharts from "./HumidityCharts";
 import PowerConsumptionCharts from "./PowerConsumptionCharts";
 import SystemMonitorCharts from "./SystemMonitorCharts";
 
-import { AdsbSection, LoRaSection, WifiBluetoothSection, GpsSection, AlertsSection, BatchesSection, MaritimeSection, DashboardStatsHeader, DashboardSensorSummary, DashboardDeviceActivity, WeeklyTrendChart, ClientReadingsBreakdown } from "./dashboard";
+import { AdsbSection, LoRaSection, WifiBluetoothSection, GpsSection, AlertsSection, BatchesSection, MaritimeSection, DashboardStatsHeader, DashboardSensorSummary, DashboardDeviceActivity, ClientReadingsBreakdown } from "./dashboard";
+import HourlyTrendChart from "./dashboard/HourlyTrendChart";
 
 import { 
   ContextFilters,  
@@ -504,9 +505,9 @@ const DashboardContent = () => {
       {/* Key Stats - Refactored Component */}
       <DashboardStatsHeader periodHours={periodHours} clientId={selectedClient} />
 
-      {/* Weekly Readings Trend Chart */}
+      {/* Hourly Readings Trend Chart */}
       <div className="mb-8">
-        <WeeklyTrendChart clientId={selectedClient} />
+        <HourlyTrendChart clientId={selectedClient} />
       </div>
 
       {/* Client Readings Breakdown */}
