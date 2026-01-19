@@ -2,7 +2,7 @@ import { useMemo } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Loader2, TrendingUp } from "lucide-react";
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
-import { useStatsAll } from "@/hooks/aurora";
+import { useDashboardTimeseries, useGlobalStats } from "@/hooks/aurora";
 import { format, parseISO } from "date-fns";
 
 interface HourlyTrendChartProps {
@@ -19,56 +19,71 @@ const formatNumber = (num: number): string => {
 export default function HourlyTrendChart({ clientId }: HourlyTrendChartProps) {
   // Normalize clientId - "all" or empty means global view (no filter)
   const effectiveClientId = clientId && clientId !== "all" ? clientId : undefined;
-  const { data: statsAll, isLoading, isError } = useStatsAll({ 
-    clientId: effectiveClientId,
-    limitHourly: 24 // Get last 24 hourly records
-  });
+  
+  // Use dashboard timeseries for hourly data (last 24 hours)
+  const { data: timeseries, isLoading, isError } = useDashboardTimeseries(24, effectiveClientId);
+  const { data: globalStats } = useGlobalStats(effectiveClientId);
 
-  // Process hourly data for chart display
+  // Process timeseries data for hourly chart display
   const chartData = useMemo(() => {
-    if (!statsAll) return [];
+    if (!timeseries) return [];
 
-    // Get hourly data from the response
-    const hourlyData = statsAll.hourly || [];
+    // Combine all sensor timeseries to get hourly reading counts
+    const allSeries = [
+      timeseries.humidity || [],
+      timeseries.power || [],
+      timeseries.signal || [],
+      timeseries.temperature || [],
+    ];
+
+    // Aggregate readings by hour
+    const byHour: Record<string, number> = {};
     
-    if (hourlyData.length === 0) {
-      return [];
-    }
-
-    // Sort by date and format for display
-    const sortedRecords = [...hourlyData].sort((a, b) => {
-      const dateA = a.start_time || a.period || '';
-      const dateB = b.start_time || b.period || '';
-      return new Date(dateA).getTime() - new Date(dateB).getTime();
+    allSeries.forEach(series => {
+      if (!Array.isArray(series)) return;
+      series.forEach(point => {
+        if (!point?.timestamp) return;
+        try {
+          const date = parseISO(point.timestamp);
+          const hourKey = format(date, 'yyyy-MM-dd HH:00');
+          byHour[hourKey] = (byHour[hourKey] || 0) + 1;
+        } catch {
+          // Skip invalid timestamps
+        }
+      });
     });
 
-    return sortedRecords.map(record => {
-      const dateStr = record.start_time || record.period || '';
-      let hourLabel = 'Hour';
-      let hourFull = dateStr;
-      
-      try {
-        const date = parseISO(dateStr);
-        hourLabel = format(date, 'HH:mm');
-        hourFull = format(date, 'MMM d, HH:mm');
-      } catch {
-        hourLabel = dateStr.slice(11, 16) || dateStr.slice(0, 10);
-      }
+    // Convert to chart format and sort
+    const hourlyData = Object.entries(byHour)
+      .sort((a, b) => a[0].localeCompare(b[0]))
+      .map(([hourKey, count]) => {
+        let hourLabel = 'Hour';
+        let hourFull = hourKey;
+        
+        try {
+          const date = parseISO(hourKey);
+          hourLabel = format(date, 'HH:mm');
+          hourFull = format(date, 'MMM d, HH:mm');
+        } catch {
+          hourLabel = hourKey.slice(11, 16) || hourKey.slice(0, 10);
+        }
 
-      return {
-        hour: hourLabel,
-        hourFull,
-        readings: record.readings || 0,
-        devices: record.devices || 0,
-        clients: record.clients || 0,
-      };
-    });
-  }, [statsAll]);
+        return {
+          hour: hourLabel,
+          hourFull,
+          readings: count,
+        };
+      });
+
+    return hourlyData;
+  }, [timeseries]);
 
   // Calculate totals and trends
   const stats = useMemo(() => {
     if (chartData.length === 0) {
-      return { totalReadings: 0, avgPerHour: 0, trend: 'stable', trendPercent: 0 };
+      // Use globalStats for total readings if chart is empty
+      const totalFromGlobal = globalStats?.total_readings || 0;
+      return { totalReadings: totalFromGlobal, avgPerHour: 0, trend: 'stable' as const, trendPercent: 0 };
     }
 
     const totalReadings = chartData.reduce((sum, d) => sum + (d.readings || 0), 0);
@@ -93,7 +108,7 @@ export default function HourlyTrendChart({ clientId }: HourlyTrendChartProps) {
     }
 
     return { totalReadings, avgPerHour, trend, trendPercent };
-  }, [chartData]);
+  }, [chartData, globalStats]);
 
   if (isLoading) {
     return (
@@ -141,6 +156,9 @@ export default function HourlyTrendChart({ clientId }: HourlyTrendChartProps) {
           <div className="text-center">
             <TrendingUp className="w-12 h-12 mx-auto mb-3 opacity-30" />
             <p>No hourly data available</p>
+            {stats.totalReadings > 0 && (
+              <p className="text-sm mt-2">Total readings: {formatNumber(stats.totalReadings)}</p>
+            )}
           </div>
         </CardContent>
       </Card>
