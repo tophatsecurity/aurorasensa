@@ -36,7 +36,10 @@ import {
 } from "@/components/ui/select";
 import { 
   TimePeriodSelector,
-  ClientSelector
+  ClientSelector,
+  DROPDOWN_TRIGGER_STYLES,
+  DROPDOWN_CONTENT_STYLES,
+  DROPDOWN_ITEM_STYLES,
 } from "@/components/ui/context-selectors";
 import { useClientContext } from "@/contexts/ClientContext";
 import { 
@@ -446,12 +449,12 @@ const CorrelationContent = () => {
         <div className="ml-auto flex items-center gap-3">
           {activeTab === 'power-thermal' && (
             <Select value={tempMeasurement} onValueChange={(v) => setTempMeasurement(v as TempMeasurement)}>
-              <SelectTrigger className="w-[160px] bg-background border-border">
+              <SelectTrigger className={`w-[160px] ${DROPDOWN_TRIGGER_STYLES}`}>
                 <SelectValue placeholder="Temp Measurement" />
               </SelectTrigger>
-              <SelectContent className="bg-background border-border z-50">
+              <SelectContent className={DROPDOWN_CONTENT_STYLES}>
                 {TEMP_MEASUREMENTS.map(m => (
-                  <SelectItem key={m.value} value={m.value}>{m.label}</SelectItem>
+                  <SelectItem key={m.value} value={m.value} className={DROPDOWN_ITEM_STYLES}>{m.label}</SelectItem>
                 ))}
               </SelectContent>
             </Select>

@@ -11,6 +11,15 @@ import { useClientsWithHostnames, Client } from "@/hooks/aurora";
 import { useClientContextOptional } from "@/contexts/ClientContext";
 
 // ============================================
+// CENTRALIZED DROPDOWN STYLING
+// ============================================
+
+// Shared styling constants for consistent dropdown appearance
+const DROPDOWN_TRIGGER_STYLES = "h-9 bg-card border-border text-sm font-medium shadow-sm hover:bg-accent/50 transition-colors";
+const DROPDOWN_CONTENT_STYLES = "bg-card border-border shadow-xl";
+const DROPDOWN_ITEM_STYLES = "text-sm cursor-pointer";
+
+// ============================================
 // TIME PERIOD SELECTOR
 // ============================================
 
@@ -20,13 +29,14 @@ interface TimePeriodSelectorProps {
   value?: TimePeriodOption;
   onChange?: (value: TimePeriodOption) => void;
   className?: string;
+  compact?: boolean;
 }
 
 const TIME_PERIOD_OPTIONS: { value: TimePeriodOption; label: string; hours: number }[] = [
-  { value: "1h", label: "1h", hours: 1 },
-  { value: "6h", label: "6h", hours: 6 },
-  { value: "12h", label: "12h", hours: 12 },
-  { value: "24h", label: "24hr", hours: 24 },
+  { value: "1h", label: "1 Hour", hours: 1 },
+  { value: "6h", label: "6 Hours", hours: 6 },
+  { value: "12h", label: "12 Hours", hours: 12 },
+  { value: "24h", label: "24 Hours", hours: 24 },
   { value: "weekly", label: "Weekly", hours: 168 },
 ];
 
@@ -43,6 +53,7 @@ export const TimePeriodSelector = memo(function TimePeriodSelector({
   value,
   onChange,
   className = "",
+  compact = false,
 }: TimePeriodSelectorProps) {
   // Use context if available, otherwise use props
   const context = useClientContextOptional();
@@ -51,19 +62,19 @@ export const TimePeriodSelector = memo(function TimePeriodSelector({
 
   return (
     <div className={`flex items-center gap-2 ${className}`}>
-      <Clock className="w-4 h-4 text-muted-foreground" />
+      {!compact && <Clock className="w-4 h-4 text-muted-foreground" />}
       <Select value={effectiveValue} onValueChange={effectiveOnChange}>
-        <SelectTrigger className="w-[100px] h-8 bg-card/90 backdrop-blur border-border/50 text-xs">
-          <SelectValue placeholder="Time" />
+        <SelectTrigger className={`${compact ? 'w-[90px]' : 'w-[120px]'} ${DROPDOWN_TRIGGER_STYLES}`}>
+          <SelectValue placeholder="Time Period" />
         </SelectTrigger>
-        <SelectContent className="bg-card border-border z-[2000]">
+        <SelectContent className={DROPDOWN_CONTENT_STYLES}>
           {TIME_PERIOD_OPTIONS.map((option) => (
             <SelectItem 
               key={option.value} 
               value={option.value}
-              className="text-xs"
+              className={DROPDOWN_ITEM_STYLES}
             >
-              {option.label}
+              {compact ? option.value : option.label}
             </SelectItem>
           ))}
         </SelectContent>
@@ -81,6 +92,7 @@ interface ClientSelectorProps {
   onChange?: (value: string) => void;
   className?: string;
   showAllOption?: boolean;
+  compact?: boolean;
 }
 
 // Helper to get a meaningful display name for a client
@@ -106,6 +118,7 @@ export const ClientSelector = memo(function ClientSelector({
   onChange,
   className = "",
   showAllOption = true,
+  compact = false,
 }: ClientSelectorProps) {
   const { data: clients, isLoading } = useClientsWithHostnames();
   
@@ -119,16 +132,30 @@ export const ClientSelector = memo(function ClientSelector({
     c && c.client_id && !['deleted', 'disabled', 'suspended'].includes(c.state || '')
   ) || [];
 
+  // Get display label for current selection
+  const getSelectedLabel = () => {
+    if (isLoading) return "Loading...";
+    if (effectiveValue === "all") return "All Clients";
+    const selectedClient = activeClients.find(c => c.client_id === effectiveValue);
+    if (selectedClient) {
+      const name = getClientDisplayName(selectedClient, activeClients.indexOf(selectedClient));
+      return compact && name.length > 12 ? `${name.slice(0, 12)}...` : name;
+    }
+    return "Select Client";
+  };
+
   return (
     <div className={`flex items-center gap-2 ${className}`}>
-      <Server className="w-4 h-4 text-muted-foreground" />
+      {!compact && <Server className="w-4 h-4 text-muted-foreground" />}
       <Select value={effectiveValue} onValueChange={effectiveOnChange} disabled={isLoading}>
-        <SelectTrigger className="w-[160px] h-8 bg-card/90 backdrop-blur border-border/50 text-xs">
-          <SelectValue placeholder={isLoading ? "Loading..." : "Select Client"} />
+        <SelectTrigger className={`${compact ? 'w-[140px]' : 'w-[180px]'} ${DROPDOWN_TRIGGER_STYLES}`}>
+          <SelectValue placeholder={getSelectedLabel()}>
+            {getSelectedLabel()}
+          </SelectValue>
         </SelectTrigger>
-        <SelectContent className="bg-card border-border z-[2000]">
+        <SelectContent className={DROPDOWN_CONTENT_STYLES}>
           {showAllOption && (
-            <SelectItem value="all" className="text-xs">
+            <SelectItem value="all" className={DROPDOWN_ITEM_STYLES}>
               All Clients
             </SelectItem>
           )}
@@ -136,11 +163,16 @@ export const ClientSelector = memo(function ClientSelector({
             <SelectItem 
               key={client.client_id} 
               value={client.client_id}
-              className="text-xs"
+              className={DROPDOWN_ITEM_STYLES}
             >
               {getClientDisplayName(client, index)}
             </SelectItem>
           ))}
+          {activeClients.length === 0 && !isLoading && (
+            <div className="px-2 py-1.5 text-sm text-muted-foreground">
+              No clients available
+            </div>
+          )}
         </SelectContent>
       </Select>
     </div>
@@ -157,6 +189,8 @@ interface ContextFiltersProps {
   clientId?: string;
   onClientChange?: (value: string) => void;
   showClientFilter?: boolean;
+  showAllOption?: boolean;
+  compact?: boolean;
   className?: string;
 }
 
@@ -166,6 +200,8 @@ export const ContextFilters = memo(function ContextFilters({
   clientId,
   onClientChange,
   showClientFilter = true,
+  showAllOption = true,
+  compact = false,
   className = "",
 }: ContextFiltersProps) {
   // Use context if available, otherwise use props
@@ -176,11 +212,26 @@ export const ContextFilters = memo(function ContextFilters({
   const effectiveOnClientChange = onClientChange ?? context?.setSelectedClientId;
 
   return (
-    <div className={`flex items-center gap-4 ${className}`}>
+    <div className={`flex items-center gap-3 ${className}`}>
       {showClientFilter && (
-        <ClientSelector value={effectiveClientId} onChange={effectiveOnClientChange} />
+        <ClientSelector 
+          value={effectiveClientId} 
+          onChange={effectiveOnClientChange} 
+          showAllOption={showAllOption}
+          compact={compact}
+        />
       )}
-      <TimePeriodSelector value={effectiveTimePeriod} onChange={effectiveOnTimePeriodChange} />
+      <TimePeriodSelector 
+        value={effectiveTimePeriod} 
+        onChange={effectiveOnTimePeriodChange}
+        compact={compact}
+      />
     </div>
   );
 });
+
+// ============================================
+// EXPORT STYLING CONSTANTS FOR REUSE
+// ============================================
+
+export { DROPDOWN_TRIGGER_STYLES, DROPDOWN_CONTENT_STYLES, DROPDOWN_ITEM_STYLES };

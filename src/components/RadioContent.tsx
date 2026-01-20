@@ -60,7 +60,7 @@ import {
   Bar,
   Legend
 } from "recharts";
-import { TimePeriodSelector } from "@/components/ui/context-selectors";
+import { TimePeriodSelector, DROPDOWN_TRIGGER_STYLES, DROPDOWN_CONTENT_STYLES, DROPDOWN_ITEM_STYLES } from "@/components/ui/context-selectors";
 import { useClientContext } from "@/contexts/ClientContext";
 import { useClients, useLatestReadings, useSensorTypeStatsById, useAllSensorStats, useWifiScannerTimeseries, useBluetoothScannerTimeseries, useLoraDetectorTimeseries, useAdsbAircraftWithHistory, useLoraDevices, useLoraGlobalStats, useRecentLoraDetections } from "@/hooks/aurora";
 import { formatDistanceToNow } from "date-fns";
@@ -610,13 +610,13 @@ const RadioContent = () => {
         </div>
         <div className="flex items-center gap-3 flex-wrap">
           <Select value={selectedDevice} onValueChange={setSelectedDevice}>
-            <SelectTrigger className="w-44 bg-background">
+            <SelectTrigger className={`w-44 ${DROPDOWN_TRIGGER_STYLES}`}>
               <SelectValue placeholder="All Clients" />
             </SelectTrigger>
-            <SelectContent className="bg-background border border-border z-50">
-              <SelectItem value="all">All Clients</SelectItem>
+            <SelectContent className={DROPDOWN_CONTENT_STYLES}>
+              <SelectItem value="all" className={DROPDOWN_ITEM_STYLES}>All Clients</SelectItem>
               {availableDevices.map(device => (
-                <SelectItem key={device} value={device}>
+                <SelectItem key={device} value={device} className={DROPDOWN_ITEM_STYLES}>
                   {device}
                 </SelectItem>
               ))}
