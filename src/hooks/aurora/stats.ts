@@ -315,21 +315,26 @@ export interface SensorGroupedStats {
 
 export interface ClientDetailedStats {
   client_id: string;
+  time_window_hours?: number;
   overall: {
     total_readings: number;
-    total_devices: number;
-    sensor_types_count: number;
+    device_count: number;
+    sensor_type_count: number;
+    first_reading?: string;
+    last_reading?: string;
   };
   by_sensor_type: Array<{
     sensor_type: string;
     reading_count: number;
     device_count: number;
+    first_reading?: string;
     last_reading?: string;
   }>;
   recent_devices: Array<{
     device_id: string;
-    device_type: string;
-    last_activity?: string;
+    sensor_type: string;
+    reading_count: number;
+    last_seen?: string;
   }>;
 }
 

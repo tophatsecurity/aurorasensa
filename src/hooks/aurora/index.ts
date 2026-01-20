@@ -67,6 +67,10 @@ export {
   useSetWifiMode,
   useUpdateWifiConfig,
   useDisconnectWifiClient,
+  // Latest Batch
+  useClientLatestBatch,
+  type ClientLatestBatch,
+  type LatestBatchReading,
 } from "./clients";
 
 export {
