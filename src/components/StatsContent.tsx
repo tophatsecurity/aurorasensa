@@ -201,7 +201,7 @@ export default function StatsContent() {
             <h1 className="text-2xl font-bold">
               {isClientSelected 
                 ? (selectedClientData?.hostname || actualClientId) 
-                : "Client Statistics"}
+                : "Stats"}
             </h1>
             <p className="text-muted-foreground text-sm">
               {isClientSelected 
