@@ -151,6 +151,15 @@ function extractNumber(data: unknown, ...keys: string[]): number | null {
 
 // Extract sensor data from latest batch readings
 interface SensorValues {
+  // System Info
+  hostname: string | null;
+  uptimeDays: number | null;
+  uptimeSeconds: number | null;
+  osName: string | null;
+  model: string | null;
+  cpuTempC: number | null;
+  cpuTempF: number | null;
+  // Environmental
   thermalTempC: number | null;
   thermalTempF: number | null;
   arduinoTempC: number | null;
@@ -160,32 +169,47 @@ interface SensorValues {
   pressureInHg: number | null;
   light: number | null;
   sound: number | null;
+  // Starlink
   starlinkPower: number | null;
   starlinkLatency: number | null;
   starlinkDownloadMbps: number | null;
   starlinkUploadMbps: number | null;
+  starlinkObstruction: number | null;
+  starlinkUptimeS: number | null;
+  // System Performance
   cpuPercent: number | null;
   memoryPercent: number | null;
   diskPercent: number | null;
+  // Location
   latitude: number | null;
   longitude: number | null;
   altitudeM: number | null;
   altitudeFt: number | null;
   satellites: number | null;
+  // Connectivity
   wifiNetworks: number | null;
   wifiSignal: number | null;
   bluetoothDevices: number | null;
+  wifiTrackedNetworks: number | null;
 }
 
 function extractSensorValuesFromBatch(batchData: unknown): SensorValues {
   const defaults: SensorValues = {
+    // System Info
+    hostname: null, uptimeDays: null, uptimeSeconds: null, osName: null, model: null,
+    cpuTempC: null, cpuTempF: null,
+    // Environmental
     thermalTempC: null, thermalTempF: null, arduinoTempC: null, arduinoTempF: null,
-    humidity: null, pressure: null, pressureInHg: null,
-    light: null, sound: null, starlinkPower: null, starlinkLatency: null,
-    starlinkDownloadMbps: null, starlinkUploadMbps: null, cpuPercent: null,
-    memoryPercent: null, diskPercent: null, latitude: null, longitude: null,
-    altitudeM: null, altitudeFt: null, satellites: null, wifiNetworks: null, 
-    wifiSignal: null, bluetoothDevices: null,
+    humidity: null, pressure: null, pressureInHg: null, light: null, sound: null,
+    // Starlink
+    starlinkPower: null, starlinkLatency: null, starlinkDownloadMbps: null, 
+    starlinkUploadMbps: null, starlinkObstruction: null, starlinkUptimeS: null,
+    // System Performance
+    cpuPercent: null, memoryPercent: null, diskPercent: null,
+    // Location
+    latitude: null, longitude: null, altitudeM: null, altitudeFt: null, satellites: null,
+    // Connectivity
+    wifiNetworks: null, wifiSignal: null, bluetoothDevices: null, wifiTrackedNetworks: null,
   };
   
   if (!batchData || typeof batchData !== 'object') return defaults;
@@ -282,7 +306,9 @@ function extractSensorValuesFromBatch(batchData: unknown): SensorValues {
     if (starlink && defaults.starlinkPower === null) {
       // Try direct properties
       defaults.starlinkPower = extractNumber(starlink, 'power_watts', 'avg_power_watts', 'power', 'power_w');
-      defaults.starlinkLatency = extractNumber(starlink, 'pop_ping_latency_ms', 'latency_ms', 'latency');
+      defaults.starlinkLatency = extractNumber(starlink, 'pop_ping_latency_ms', 'latency_ms', 'latency', 'ping_ms');
+      defaults.starlinkObstruction = extractNumber(starlink, 'obstruction_percent', 'obstruction_pct', 'obstruction');
+      defaults.starlinkUptimeS = extractNumber(starlink, 'uptime_s', 'uptime', 'uptime_seconds');
       const dlBps = extractNumber(starlink, 'downlink_throughput_bps', 'download_bps', 'dl_throughput');
       const ulBps = extractNumber(starlink, 'uplink_throughput_bps', 'upload_bps', 'ul_throughput');
       defaults.starlinkDownloadMbps = bpsToMbps(dlBps);
@@ -295,12 +321,18 @@ function extractSensorValuesFromBatch(batchData: unknown): SensorValues {
           defaults.starlinkPower = extractNumber(nestedStarlink, 'power_watts', 'avg_power_watts', 'power');
         }
         if (defaults.starlinkLatency === null) {
-          defaults.starlinkLatency = extractNumber(nestedStarlink, 'pop_ping_latency_ms', 'latency_ms');
+          defaults.starlinkLatency = extractNumber(nestedStarlink, 'pop_ping_latency_ms', 'latency_ms', 'ping_ms');
           // Check ping_latency object
           const pingLatency = nestedStarlink['ping_latency'] as Record<string, unknown> | undefined;
           if (pingLatency && defaults.starlinkLatency === null) {
-            defaults.starlinkLatency = extractNumber(pingLatency, 'Mean RTT, drop == 0', 'Mean RTT, drop < 1');
+            defaults.starlinkLatency = extractNumber(pingLatency, 'Mean RTT, drop == 0', 'Mean RTT, drop < 1', 'mean_rtt');
           }
+        }
+        if (defaults.starlinkObstruction === null) {
+          defaults.starlinkObstruction = extractNumber(nestedStarlink, 'obstruction_percent', 'obstruction_pct');
+        }
+        if (defaults.starlinkUptimeS === null) {
+          defaults.starlinkUptimeS = extractNumber(nestedStarlink, 'uptime_s', 'uptime');
         }
         if (defaults.starlinkDownloadMbps === null) {
           const dl = extractNumber(nestedStarlink, 'downlink_throughput_bps');
@@ -315,10 +347,27 @@ function extractSensorValuesFromBatch(batchData: unknown): SensorValues {
       // Check for ping_latency at root level
       const rootPingLatency = starlink['ping_latency'] as Record<string, unknown> | undefined;
       if (rootPingLatency && defaults.starlinkLatency === null) {
-        defaults.starlinkLatency = extractNumber(rootPingLatency, 'Mean RTT, drop == 0', 'Mean RTT, drop < 1');
+        defaults.starlinkLatency = extractNumber(rootPingLatency, 'Mean RTT, drop == 0', 'Mean RTT, drop < 1', 'mean_rtt');
       }
       
       if (defaults.starlinkPower !== null) break;
+    }
+  }
+  
+  // Also check for starlink in any sensor key containing 'starlink'
+  for (const sensorKey of Object.keys(sensors)) {
+    if (sensorKey.toLowerCase().includes('starlink') && defaults.starlinkPower === null) {
+      const starlinkData = sensors[sensorKey] as Record<string, unknown> | undefined;
+      if (starlinkData) {
+        defaults.starlinkPower = extractNumber(starlinkData, 'power_watts', 'avg_power_watts', 'power');
+        defaults.starlinkLatency = extractNumber(starlinkData, 'pop_ping_latency_ms', 'latency_ms', 'latency', 'ping_ms');
+        defaults.starlinkObstruction = extractNumber(starlinkData, 'obstruction_percent', 'obstruction_pct');
+        defaults.starlinkUptimeS = extractNumber(starlinkData, 'uptime_s', 'uptime');
+        const dl = extractNumber(starlinkData, 'downlink_throughput_bps', 'download_bps');
+        const ul = extractNumber(starlinkData, 'uplink_throughput_bps', 'upload_bps');
+        defaults.starlinkDownloadMbps = bpsToMbps(dl);
+        defaults.starlinkUploadMbps = bpsToMbps(ul);
+      }
     }
   }
   
@@ -340,6 +389,16 @@ function extractSensorValuesFromBatch(batchData: unknown): SensorValues {
   // Extract System Monitor data
   const systemMonitor = sensors['system_monitor_1'] as Record<string, unknown> | undefined;
   if (systemMonitor) {
+    // Extract system info (hostname, uptime, os, model)
+    const systemInfo = systemMonitor['system'] as Record<string, unknown> | undefined;
+    if (systemInfo) {
+      defaults.hostname = typeof systemInfo['hostname'] === 'string' ? systemInfo['hostname'] : null;
+      defaults.uptimeDays = extractNumber(systemInfo, 'uptime_days');
+      defaults.uptimeSeconds = extractNumber(systemInfo, 'uptime_seconds');
+      defaults.osName = typeof systemInfo['os'] === 'string' ? systemInfo['os'] : null;
+      defaults.model = typeof systemInfo['model'] === 'string' ? systemInfo['model'] : null;
+    }
+    
     // Check direct properties first
     defaults.cpuPercent = extractNumber(systemMonitor, 'cpu_percent', 'cpu_usage', 'cpu');
     defaults.memoryPercent = extractNumber(systemMonitor, 'memory_percent', 'mem_percent');
@@ -351,6 +410,11 @@ function extractSensorValuesFromBatch(batchData: unknown): SensorValues {
       if (defaults.cpuPercent === null) {
         defaults.cpuPercent = extractNumber(performance, 'cpu_usage_percent', 'cpu_percent', 'cpu_usage');
       }
+      // CPU Temperature
+      defaults.cpuTempC = extractNumber(performance, 'cpu_temp_celsius', 'cpu_temp');
+      const cpuTempF = extractNumber(performance, 'cpu_temp_fahrenheit');
+      defaults.cpuTempF = cpuTempF !== null ? cpuTempF : cToF(defaults.cpuTempC);
+      
       // Check nested memory object
       const memoryNested = performance['memory'] as Record<string, unknown> | undefined;
       if (memoryNested && defaults.memoryPercent === null) {
@@ -379,6 +443,7 @@ function extractSensorValuesFromBatch(batchData: unknown): SensorValues {
   if (wifi) {
     // Direct count property
     defaults.wifiNetworks = extractNumber(wifi, 'networks_found');
+    defaults.wifiTrackedNetworks = extractNumber(wifi, 'tracked_networks_count');
     
     const networks = wifi['networks'] as unknown[] | undefined;
     if (networks) {
@@ -463,15 +528,30 @@ function CurrentTab({
   sensorBreakdown: Array<{ sensor_type: string; reading_count: number; device_count: number }>;
   clientStats: unknown;
 }) {
+  // Format uptime nicely
+  const formatUptime = (days: number | null, seconds: number | null): string => {
+    if (days !== null) {
+      const wholeDays = Math.floor(days);
+      const hours = Math.round((days - wholeDays) * 24);
+      return `${wholeDays}d ${hours}h`;
+    }
+    if (seconds !== null) {
+      const d = Math.floor(seconds / 86400);
+      const h = Math.floor((seconds % 86400) / 3600);
+      return `${d}d ${h}h`;
+    }
+    return '--';
+  };
+
   return (
     <div className="space-y-6">
-      {/* Overview Stats */}
+      {/* System Overview with Hostname & Uptime */}
       <Card className="border-border/50">
         <CardHeader className="pb-3">
           <div className="flex items-center justify-between flex-wrap gap-2">
             <CardTitle className="text-sm flex items-center gap-2">
               <Database className="w-4 h-4 text-primary" />
-              Client Overview (24h)
+              Client Overview
             </CardTitle>
             <div className="flex gap-2 flex-wrap">
               <Badge variant="outline" className="text-xs">
@@ -491,6 +571,40 @@ function CurrentTab({
             </div>
           </div>
         </CardHeader>
+        <CardContent>
+          <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-3">
+            <div className="flex items-center gap-3 p-3 rounded-lg bg-muted/30 border border-border/50 col-span-2">
+              <div className="w-10 h-10 rounded-lg bg-primary/20 flex items-center justify-center flex-shrink-0">
+                <Cpu className="w-5 h-5 text-primary" />
+              </div>
+              <div className="min-w-0 flex-1">
+                <p className="text-xs text-muted-foreground">Hostname</p>
+                <p className="text-lg font-bold truncate">{sensorValues.hostname || '--'}</p>
+                {sensorValues.model && (
+                  <p className="text-xs text-muted-foreground truncate">{sensorValues.model}</p>
+                )}
+              </div>
+            </div>
+            <StatCard 
+              icon={Clock} 
+              label="Uptime" 
+              value={formatUptime(sensorValues.uptimeDays, sensorValues.uptimeSeconds)} 
+              unit="" 
+              color="green-500" 
+            />
+            <StatCard 
+              icon={Thermometer} 
+              label="CPU Temp" 
+              value={sensorValues.cpuTempF?.toFixed(1)} 
+              unit="°F" 
+              color="orange-500"
+              secondaryValue={sensorValues.cpuTempC?.toFixed(1)}
+              secondaryUnit="°C"
+            />
+            <StatCard icon={Cpu} label="CPU Usage" value={sensorValues.cpuPercent?.toFixed(0)} unit="%" color="blue-500" />
+            <StatCard icon={HardDrive} label="Memory" value={sensorValues.memoryPercent?.toFixed(0)} unit="%" color="purple-500" />
+          </div>
+        </CardContent>
       </Card>
 
       {/* Environmental Sensors */}
@@ -545,56 +659,55 @@ function CurrentTab({
         </CardContent>
       </Card>
 
-      {/* Power & Connectivity */}
+      {/* Starlink & Connectivity */}
       <Card className="border-border/50">
         <CardHeader className="pb-3">
           <CardTitle className="text-sm flex items-center gap-2">
-            <Zap className="w-4 h-4 text-chart-4" />
-            Power & Connectivity (Latest)
+            <Satellite className="w-4 h-4 text-chart-4" />
+            Starlink & Connectivity (Latest)
           </CardTitle>
         </CardHeader>
         <CardContent>
           {isLoading ? (
             <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
-              {[...Array(6)].map((_, i) => (
+              {[...Array(8)].map((_, i) => (
                 <div key={i} className="h-20 bg-muted/30 animate-pulse rounded-lg" />
               ))}
             </div>
           ) : (
-            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
-              <StatCard icon={Satellite} label="Starlink Power" value={sensorValues.starlinkPower?.toFixed(0)} unit="W" color="yellow-500" />
+            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
+              <StatCard icon={Zap} label="Starlink Power" value={sensorValues.starlinkPower?.toFixed(0)} unit="W" color="yellow-500" />
               <StatCard icon={Activity} label="Starlink Latency" value={sensorValues.starlinkLatency?.toFixed(0)} unit="ms" color="blue-500" />
+              <StatCard icon={TrendingUp} label="Download" value={sensorValues.starlinkDownloadMbps?.toFixed(1)} unit="Mbps" color="green-500" />
+              <StatCard icon={TrendingUp} label="Upload" value={sensorValues.starlinkUploadMbps?.toFixed(1)} unit="Mbps" color="primary" />
+              <StatCard icon={Satellite} label="Obstruction" value={sensorValues.starlinkObstruction?.toFixed(1)} unit="%" color="orange-500" />
+              <StatCard icon={Clock} label="Starlink Uptime" value={sensorValues.starlinkUptimeS ? Math.floor(sensorValues.starlinkUptimeS / 3600) : null} unit="hrs" color="purple-500" />
               <StatCard icon={Wifi} label="WiFi Networks" value={sensorValues.wifiNetworks} unit="" color="green-500" />
-              <StatCard icon={Wifi} label="Best WiFi Signal" value={sensorValues.wifiSignal} unit="dBm" color="green-500" />
-              <StatCard icon={Radio} label="BT Devices" value={sensorValues.bluetoothDevices} unit="" color="purple-500" />
-              <StatCard icon={Navigation} label="GPS Satellites" value={sensorValues.satellites} unit="" color="primary" />
+              <StatCard icon={Radio} label="BT Tracked" value={sensorValues.bluetoothDevices} unit="" color="purple-500" />
             </div>
           )}
         </CardContent>
       </Card>
 
-      {/* System & Location */}
+      {/* Location */}
       <Card className="border-border/50">
         <CardHeader className="pb-3">
           <CardTitle className="text-sm flex items-center gap-2">
-            <Cpu className="w-4 h-4 text-primary" />
-            System & Location (Latest)
+            <Navigation className="w-4 h-4 text-chart-3" />
+            Location (Latest)
           </CardTitle>
         </CardHeader>
         <CardContent>
           {isLoading ? (
-            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
-              {[...Array(6)].map((_, i) => (
+            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
+              {[...Array(4)].map((_, i) => (
                 <div key={i} className="h-20 bg-muted/30 animate-pulse rounded-lg" />
               ))}
             </div>
           ) : (
-            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
-              <StatCard icon={Cpu} label="CPU Usage" value={sensorValues.cpuPercent?.toFixed(1)} unit="%" color="orange-500" />
-              <StatCard icon={Activity} label="Memory" value={sensorValues.memoryPercent?.toFixed(1)} unit="%" color="blue-500" />
-              <StatCard icon={HardDrive} label="Disk Usage" value={sensorValues.diskPercent?.toFixed(1)} unit="%" color="red-500" />
-              <StatCard icon={Navigation} label="Latitude" value={sensorValues.latitude?.toFixed(4)} unit="°" color="green-500" />
-              <StatCard icon={Compass} label="Longitude" value={sensorValues.longitude?.toFixed(4)} unit="°" color="green-500" />
+            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
+              <StatCard icon={Navigation} label="Latitude" value={sensorValues.latitude?.toFixed(6)} unit="°" color="green-500" />
+              <StatCard icon={Compass} label="Longitude" value={sensorValues.longitude?.toFixed(6)} unit="°" color="green-500" />
               <StatCard 
                 icon={Satellite} 
                 label="Altitude" 
@@ -604,6 +717,7 @@ function CurrentTab({
                 secondaryValue={sensorValues.altitudeM?.toFixed(0)}
                 secondaryUnit="m"
               />
+              <StatCard icon={Navigation} label="GPS Satellites" value={sensorValues.satellites} unit="" color="blue-500" />
             </div>
           )}
         </CardContent>
