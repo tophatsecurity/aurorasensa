@@ -340,32 +340,53 @@ function extractSensorValuesFromBatch(batchData: unknown): SensorValues {
   // Extract System Monitor data
   const systemMonitor = sensors['system_monitor_1'] as Record<string, unknown> | undefined;
   if (systemMonitor) {
+    // Check direct properties first
     defaults.cpuPercent = extractNumber(systemMonitor, 'cpu_percent', 'cpu_usage', 'cpu');
-    defaults.memoryPercent = extractNumber(systemMonitor, 'memory_percent', 'mem_percent', 'memory');
-    defaults.diskPercent = extractNumber(systemMonitor, 'disk_percent', 'disk_usage', 'disk');
+    defaults.memoryPercent = extractNumber(systemMonitor, 'memory_percent', 'mem_percent');
+    defaults.diskPercent = extractNumber(systemMonitor, 'disk_percent', 'disk_usage');
     
+    // Check nested 'performance' object (actual API structure)
+    const performance = systemMonitor['performance'] as Record<string, unknown> | undefined;
+    if (performance) {
+      if (defaults.cpuPercent === null) {
+        defaults.cpuPercent = extractNumber(performance, 'cpu_usage_percent', 'cpu_percent', 'cpu_usage');
+      }
+      // Check nested memory object
+      const memoryNested = performance['memory'] as Record<string, unknown> | undefined;
+      if (memoryNested && defaults.memoryPercent === null) {
+        defaults.memoryPercent = extractNumber(memoryNested, 'usage_percent', 'percent', 'used_percent');
+      }
+    }
+    
+    // Legacy structure checks
     const cpu = systemMonitor['cpu'] as Record<string, unknown> | undefined;
     const memory = systemMonitor['memory'] as Record<string, unknown> | undefined;
     const disk = systemMonitor['disk'] as Record<string, unknown> | undefined;
     
     if (cpu && defaults.cpuPercent === null) {
-      defaults.cpuPercent = extractNumber(cpu, 'percent', 'usage');
+      defaults.cpuPercent = extractNumber(cpu, 'percent', 'usage', 'usage_percent');
     }
     if (memory && defaults.memoryPercent === null) {
-      defaults.memoryPercent = extractNumber(memory, 'percent', 'usage');
+      defaults.memoryPercent = extractNumber(memory, 'percent', 'usage', 'usage_percent');
     }
     if (disk && defaults.diskPercent === null) {
-      defaults.diskPercent = extractNumber(disk, 'percent', 'usage');
+      defaults.diskPercent = extractNumber(disk, 'percent', 'usage', 'usage_percent');
     }
   }
   
   // Extract WiFi data
   const wifi = sensors['wifi_scanner_1'] as Record<string, unknown> | undefined;
   if (wifi) {
+    // Direct count property
+    defaults.wifiNetworks = extractNumber(wifi, 'networks_found');
+    
     const networks = wifi['networks'] as unknown[] | undefined;
     if (networks) {
-      defaults.wifiNetworks = networks.length;
-      const signals = networks.map(n => extractNumber(n, 'signal', 'rssi', 'signal_strength')).filter(s => s !== null) as number[];
+      if (defaults.wifiNetworks === null) {
+        defaults.wifiNetworks = networks.length;
+      }
+      // Get best signal (use rssi_dbm from actual API)
+      const signals = networks.map(n => extractNumber(n, 'rssi_dbm', 'signal', 'rssi', 'signal_strength')).filter(s => s !== null) as number[];
       if (signals.length > 0) {
         defaults.wifiSignal = Math.max(...signals);
       }
@@ -375,7 +396,8 @@ function extractSensorValuesFromBatch(batchData: unknown): SensorValues {
   // Extract Bluetooth data
   const bluetooth = sensors['bluetooth_scanner_1'] as Record<string, unknown> | undefined;
   if (bluetooth) {
-    defaults.bluetoothDevices = extractNumber(bluetooth, 'devices_found', 'ble_devices_found');
+    // Use tracked_devices_count which is the actual count from API
+    defaults.bluetoothDevices = extractNumber(bluetooth, 'tracked_devices_count', 'devices_found', 'ble_devices_found');
     if (defaults.bluetoothDevices === null) {
       const devices = bluetooth['devices'] as unknown[] | undefined;
       if (devices) {
