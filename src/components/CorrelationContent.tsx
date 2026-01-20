@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useMemo, useState, useEffect } from "react";
 import {
   XAxis,
   YAxis,
@@ -35,8 +35,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { 
-  ContextFilters, 
-  timePeriodLabel,
+  TimePeriodSelector,
   ClientSelector
 } from "@/components/ui/context-selectors";
 import { useClientContext } from "@/contexts/ClientContext";
@@ -45,6 +44,8 @@ import {
   useDashboardTimeseries,
   useThermalProbeTimeseries,
   useArduinoSensorTimeseries,
+  useClientsWithHostnames,
+  Client,
 } from "@/hooks/aurora";
 
 interface CorrelationStats {
@@ -253,6 +254,21 @@ const CorrelationContent = () => {
   const [activeTab, setActiveTab] = useState("power-thermal");
   const [tempMeasurement, setTempMeasurement] = useState<TempMeasurement>('thermal-probe');
   
+  // Fetch clients to auto-select first one
+  const { data: clients } = useClientsWithHostnames();
+  
+  // Filter to active clients only
+  const activeClients = clients?.filter((c: Client) => 
+    c && c.client_id && !['deleted', 'disabled', 'suspended'].includes(c.state || '')
+  ) || [];
+  
+  // Auto-select first client if "all" is selected or no client is selected
+  useEffect(() => {
+    if (activeClients.length > 0 && (selectedClient === 'all' || !selectedClient)) {
+      setSelectedClient(activeClients[0].client_id);
+    }
+  }, [activeClients, selectedClient, setSelectedClient]);
+  
   const { data: starlinkData, isLoading: starlinkLoading } = useStarlinkTimeseries(timeRange, selectedClient);
   const { data: dashboardData, isLoading: dashboardLoading } = useDashboardTimeseries(timeRange, selectedClient);
   const { data: thermalData, isLoading: thermalLoading } = useThermalProbeTimeseries(timeRange, selectedClient);
@@ -440,12 +456,14 @@ const CorrelationContent = () => {
               </SelectContent>
             </Select>
           )}
-          <ContextFilters
-            timePeriod={timePeriod}
-            onTimePeriodChange={setTimePeriod}
-            clientId={selectedClient}
-            onClientChange={setSelectedClient}
-            showClientFilter={true}
+          <ClientSelector 
+            value={selectedClient} 
+            onChange={setSelectedClient} 
+            showAllOption={false}
+          />
+          <TimePeriodSelector 
+            value={timePeriod} 
+            onChange={setTimePeriod} 
           />
           <Badge className="bg-primary/20 text-primary border-primary/30">
             {isLoading ? 'Loading...' : 'Live'}
