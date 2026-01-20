@@ -186,7 +186,7 @@ export function ClientListView({ onClientSelect }: ClientListViewProps) {
                       </div>
                       
                       {/* Last Seen */}
-                      {client.last_seen && (
+                      {client.last_seen && !isNaN(new Date(client.last_seen).getTime()) && (
                         <span className="text-muted-foreground/70">
                           • {formatDistanceToNow(new Date(client.last_seen), { addSuffix: true })}
                         </span>
