@@ -250,26 +250,11 @@ export default function StatsContent() {
           </p>
         </div>
         <div className="flex items-center gap-3">
-          {/* Context Selector - Global or Client ID */}
-          <div className="flex items-center gap-2 bg-muted/50 rounded-lg p-1.5">
-            <button
-              onClick={() => handleClientChange("all")}
-              className={`flex items-center gap-2 px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${
-                isGlobalView 
-                  ? 'bg-primary text-primary-foreground' 
-                  : 'text-muted-foreground hover:text-foreground hover:bg-muted'
-              }`}
-            >
-              <Globe className="w-4 h-4" />
-              Global
-            </button>
-            <div className="w-px h-6 bg-border" />
-            <ClientSelector
-              value={selectedClientId}
-              onChange={handleClientChange}
-              showAllOption={false}
-            />
-          </div>
+          <ClientSelector
+            value={selectedClientId}
+            onChange={handleClientChange}
+            showAllOption={true}
+          />
         </div>
       </div>
 
