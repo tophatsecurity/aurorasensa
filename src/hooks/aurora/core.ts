@@ -5,11 +5,11 @@ import { updateConnectionState } from "../useConnectionStatus";
 import { withQuery } from "./endpoints";
 
 // Enhanced retry configuration for edge function cold starts
-const MAX_RETRIES = 8;
-const COLD_START_RETRIES = 6;
-const INITIAL_BACKOFF_MS = 150;
-const COLD_START_BACKOFF_MS = 100;
-const MAX_BACKOFF_MS = 6000;
+const MAX_RETRIES = 10;
+const COLD_START_RETRIES = 8;
+const INITIAL_BACKOFF_MS = 200;
+const COLD_START_BACKOFF_MS = 150;
+const MAX_BACKOFF_MS = 8000;
 
 // Storage keys for Aurora auth
 const AURORA_TOKEN_KEY = 'aurora_access_token';
