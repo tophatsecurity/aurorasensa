@@ -305,6 +305,8 @@ export {
   useSensorStatsByType,
   useSensorTypeStats,
   useSensorsByClientId,
+  // NEW: Client timeseries
+  useClientTimeseries,
   // Types
   type ClientStats,
   type TimePeriodStats,
@@ -326,6 +328,9 @@ export {
   type SensorTypeByTypeStats,
   type SensorTypeDetailedStats,
   type ClientSensorTypeStats,
+  // NEW: Client timeseries types
+  type ClientTimeseriesPoint,
+  type ClientTimeseriesResponse,
 } from "./stats";
 
 // Client-specific sensor data hooks

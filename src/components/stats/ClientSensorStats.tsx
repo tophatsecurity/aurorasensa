@@ -32,6 +32,9 @@ import {
   useClientDetailStats,
   useClientLatestBatch,
   useSensorsByClientId,
+  useClientTimeseries,
+  useThermalProbeTimeseries,
+  useArduinoSensorTimeseries,
 } from "@/hooks/aurora";
 import {
   LineChart,
@@ -480,36 +483,111 @@ function CurrentTab({
 // =============================================
 function TrendTab({ 
   sensorBreakdown,
-  clientStats 
+  clientStats,
+  clientId,
 }: { 
   sensorBreakdown: Array<{ sensor_type: string; reading_count: number; device_count: number; first_reading?: string; last_reading?: string }>;
   clientStats: unknown;
+  clientId: string;
 }) {
-  // Generate mock trend data based on sensor breakdown
+  // Fetch real historical timeseries data
+  const { data: clientTimeseries, isLoading: timeseriesLoading } = useClientTimeseries(clientId, 24);
+  const { data: thermalData, isLoading: thermalLoading } = useThermalProbeTimeseries(24, clientId);
+  const { data: arduinoData, isLoading: arduinoLoading } = useArduinoSensorTimeseries(24, clientId);
+
+  // Process timeseries data into hourly buckets for charting
   const trendData = useMemo(() => {
     const hours = 24;
-    const data = [];
+    const data: Record<string, unknown>[] = [];
     const now = new Date();
     
+    // Create hour buckets
+    const hourBuckets: Record<string, Record<string, number>> = {};
     for (let i = hours; i >= 0; i--) {
       const time = subHours(now, i);
+      const hourKey = format(time, 'HH:00');
+      hourBuckets[hourKey] = {};
+    }
+    
+    // Process client timeseries data if available
+    if (clientTimeseries?.timeseries && clientTimeseries.timeseries.length > 0) {
+      clientTimeseries.timeseries.forEach((point) => {
+        try {
+          const timestamp = parseISO(point.timestamp);
+          const hourKey = format(timestamp, 'HH:00');
+          if (hourBuckets[hourKey]) {
+            const sensorType = point.sensor_type || 'unknown';
+            hourBuckets[hourKey][sensorType] = (hourBuckets[hourKey][sensorType] || 0) + (point.reading_count || 1);
+          }
+        } catch { /* ignore invalid timestamps */ }
+      });
+    }
+    
+    // Process thermal probe readings
+    if (thermalData?.readings && thermalData.readings.length > 0) {
+      thermalData.readings.forEach((reading) => {
+        try {
+          const timestamp = parseISO(reading.timestamp);
+          const hourKey = format(timestamp, 'HH:00');
+          if (hourBuckets[hourKey]) {
+            hourBuckets[hourKey]['thermal_probe'] = (hourBuckets[hourKey]['thermal_probe'] || 0) + 1;
+          }
+        } catch { /* ignore */ }
+      });
+    }
+    
+    // Process arduino readings
+    if (arduinoData?.readings && arduinoData.readings.length > 0) {
+      arduinoData.readings.forEach((reading) => {
+        try {
+          const timestamp = parseISO(reading.timestamp);
+          const hourKey = format(timestamp, 'HH:00');
+          if (hourBuckets[hourKey]) {
+            hourBuckets[hourKey]['arduino'] = (hourBuckets[hourKey]['arduino'] || 0) + 1;
+          }
+        } catch { /* ignore */ }
+      });
+    }
+    
+    // If no real data, fall back to estimated distribution from sensor breakdown
+    const hasRealData = Object.values(hourBuckets).some(bucket => Object.keys(bucket).length > 0);
+    
+    // Build chart data
+    for (let i = hours; i >= 0; i--) {
+      const time = subHours(now, i);
+      const hourKey = format(time, 'HH:00');
+      const bucket = hourBuckets[hourKey];
+      
       const point: Record<string, unknown> = {
-        time: format(time, 'HH:mm'),
+        time: hourKey,
         hour: i,
       };
       
-      // Distribute readings across hours with some variation
-      sensorBreakdown.slice(0, 5).forEach((sensor) => {
-        const baseValue = Math.round((sensor.reading_count || 0) / hours);
-        const variation = Math.random() * 0.4 + 0.8; // 0.8 to 1.2
-        point[sensor.sensor_type] = Math.round(baseValue * variation);
-      });
+      if (hasRealData) {
+        // Use real data from buckets
+        sensorBreakdown.slice(0, 5).forEach((sensor) => {
+          point[sensor.sensor_type] = bucket[sensor.sensor_type] || 0;
+        });
+      } else {
+        // Fallback to estimated distribution
+        sensorBreakdown.slice(0, 5).forEach((sensor) => {
+          const baseValue = Math.round((sensor.reading_count || 0) / hours);
+          // Use hour index for deterministic variation instead of random
+          const variation = 0.7 + (Math.sin(i * 0.5 + sensor.sensor_type.length) * 0.3 + 0.3);
+          point[sensor.sensor_type] = Math.round(baseValue * variation);
+        });
+      }
       
       data.push(point);
     }
     
     return data;
-  }, [sensorBreakdown]);
+  }, [clientTimeseries, thermalData, arduinoData, sensorBreakdown]);
+
+  const isLoading = timeseriesLoading || thermalLoading || arduinoLoading;
+  const hasRealData = (clientTimeseries?.timeseries?.length || 0) > 0 || 
+                      (thermalData?.readings?.length || 0) > 0 || 
+                      (arduinoData?.readings?.length || 0) > 0;
 
   const chartColors = [
     'hsl(var(--chart-1))',
@@ -524,48 +602,69 @@ function TrendTab({
       {/* Readings Over Time */}
       <Card className="border-border/50">
         <CardHeader className="pb-3">
-          <CardTitle className="text-sm flex items-center gap-2">
-            <TrendingUp className="w-4 h-4 text-primary" />
-            Readings Over Time (24h)
-          </CardTitle>
+          <div className="flex items-center justify-between flex-wrap gap-2">
+            <CardTitle className="text-sm flex items-center gap-2">
+              <TrendingUp className="w-4 h-4 text-primary" />
+              Readings Over Time (24h)
+            </CardTitle>
+            <div className="flex items-center gap-2">
+              {isLoading && (
+                <Badge variant="outline" className="text-xs animate-pulse">
+                  Loading...
+                </Badge>
+              )}
+              <Badge variant={hasRealData ? "default" : "secondary"} className="text-xs">
+                {hasRealData ? 'Live Data' : 'Estimated'}
+              </Badge>
+            </div>
+          </div>
         </CardHeader>
         <CardContent>
-          <div className="h-[300px]">
-            <ResponsiveContainer width="100%" height="100%">
-              <AreaChart data={trendData}>
-                <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
-                <XAxis 
-                  dataKey="time" 
-                  className="text-xs" 
-                  tick={{ fill: 'hsl(var(--muted-foreground))' }}
-                />
-                <YAxis 
-                  className="text-xs" 
-                  tick={{ fill: 'hsl(var(--muted-foreground))' }}
-                />
-                <Tooltip 
-                  contentStyle={{ 
-                    backgroundColor: 'hsl(var(--card))', 
-                    border: '1px solid hsl(var(--border))',
-                    borderRadius: '8px',
-                  }}
-                />
-                <Legend />
-                {sensorBreakdown.slice(0, 5).map((sensor, idx) => (
-                  <Area
-                    key={sensor.sensor_type}
-                    type="monotone"
-                    dataKey={sensor.sensor_type}
-                    name={sensor.sensor_type.replace(/_/g, ' ')}
-                    stackId="1"
-                    stroke={chartColors[idx % chartColors.length]}
-                    fill={chartColors[idx % chartColors.length]}
-                    fillOpacity={0.6}
+          {isLoading ? (
+            <div className="h-[300px] flex items-center justify-center">
+              <div className="flex flex-col items-center gap-2">
+                <Activity className="w-8 h-8 text-muted-foreground animate-pulse" />
+                <p className="text-sm text-muted-foreground">Loading timeseries data...</p>
+              </div>
+            </div>
+          ) : (
+            <div className="h-[300px]">
+              <ResponsiveContainer width="100%" height="100%">
+                <AreaChart data={trendData}>
+                  <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
+                  <XAxis 
+                    dataKey="time" 
+                    className="text-xs" 
+                    tick={{ fill: 'hsl(var(--muted-foreground))' }}
                   />
-                ))}
-              </AreaChart>
-            </ResponsiveContainer>
-          </div>
+                  <YAxis 
+                    className="text-xs" 
+                    tick={{ fill: 'hsl(var(--muted-foreground))' }}
+                  />
+                  <Tooltip 
+                    contentStyle={{ 
+                      backgroundColor: 'hsl(var(--card))', 
+                      border: '1px solid hsl(var(--border))',
+                      borderRadius: '8px',
+                    }}
+                  />
+                  <Legend />
+                  {sensorBreakdown.slice(0, 5).map((sensor, idx) => (
+                    <Area
+                      key={sensor.sensor_type}
+                      type="monotone"
+                      dataKey={sensor.sensor_type}
+                      name={sensor.sensor_type.replace(/_/g, ' ')}
+                      stackId="1"
+                      stroke={chartColors[idx % chartColors.length]}
+                      fill={chartColors[idx % chartColors.length]}
+                      fillOpacity={0.6}
+                    />
+                  ))}
+                </AreaChart>
+              </ResponsiveContainer>
+            </div>
+          )}
         </CardContent>
       </Card>
 
@@ -850,6 +949,7 @@ export default function ClientSensorStats({ clientId }: ClientSensorStatsProps) 
         <TrendTab 
           sensorBreakdown={sensorBreakdown}
           clientStats={clientStats}
+          clientId={effectiveClientId}
         />
       </TabsContent>
 
