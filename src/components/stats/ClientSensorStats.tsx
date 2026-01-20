@@ -9,12 +9,13 @@ import {
   Activity,
   Cpu,
   HardDrive,
-  MemoryStick,
   Wifi,
   Radio,
   Satellite,
   Navigation,
-  Compass
+  Compass,
+  Database,
+  type LucideIcon
 } from "lucide-react";
 import { 
   AreaChart, 
@@ -27,13 +28,13 @@ import {
 } from "recharts";
 import { format, parseISO } from "date-fns";
 import { 
-  useClientStarlinkData,
-  useClientSystemMonitorData,
-  useClientThermalData,
-  useClientArduinoData,
-  useClientGpsData,
-  useClientWifiData,
-  useClientSensorData,
+  useClientDetailStats,
+  useStatsBySensor,
+  useStarlinkPower,
+  useArduino1hrStats,
+  useClientSystemInfo,
+  useThermalProbeTimeseries,
+  useGpsReadings,
 } from "@/hooks/aurora";
 
 interface ClientSensorStatsProps {
@@ -52,7 +53,7 @@ const colorClasses: Record<string, { bg: string; text: string }> = {
   'purple-500': { bg: 'bg-chart-5/20', text: 'text-chart-5' },
 };
 
-// Stat card component for current values
+// Stat card component
 function StatCard({ 
   icon: Icon, 
   label, 
@@ -62,7 +63,7 @@ function StatCard({
   subValue,
   subLabel 
 }: { 
-  icon: React.ElementType; 
+  icon: LucideIcon; 
   label: string; 
   value: string | number | null | undefined; 
   unit: string;
@@ -94,18 +95,17 @@ function StatCard({
   );
 }
 
-// Helper to safely extract numeric value from nested data
-function extractNumber(data: Record<string, unknown> | null | undefined, ...keys: string[]): number | null {
-  if (!data) return null;
+// Helper to safely extract numeric value
+function extractNumber(data: unknown, ...keys: string[]): number | null {
+  if (!data || typeof data !== 'object') return null;
+  const obj = data as Record<string, unknown>;
   
   for (const key of keys) {
-    // Direct key
-    if (typeof data[key] === 'number' && !isNaN(data[key] as number)) {
-      return data[key] as number;
+    if (typeof obj[key] === 'number' && !isNaN(obj[key] as number)) {
+      return obj[key] as number;
     }
-    // Check nested objects
-    for (const nestedKey of Object.keys(data)) {
-      const nested = data[nestedKey];
+    for (const nestedKey of Object.keys(obj)) {
+      const nested = obj[nestedKey];
       if (nested && typeof nested === 'object' && !Array.isArray(nested)) {
         const nestedObj = nested as Record<string, unknown>;
         if (typeof nestedObj[key] === 'number' && !isNaN(nestedObj[key] as number)) {
@@ -117,35 +117,146 @@ function extractNumber(data: Record<string, unknown> | null | undefined, ...keys
   return null;
 }
 
+// Get sensor reading count from sensor stats
+function getSensorReadingCount(
+  sensorStats: { sensors: Array<{ sensor_type: string; reading_count: number }> } | null | undefined,
+  ...sensorTypes: string[]
+): number {
+  if (!sensorStats?.sensors) return 0;
+  let total = 0;
+  for (const sensor of sensorStats.sensors) {
+    const type = sensor.sensor_type?.toLowerCase() || '';
+    for (const target of sensorTypes) {
+      if (type.includes(target.toLowerCase())) {
+        total += sensor.reading_count || 0;
+        break;
+      }
+    }
+  }
+  return total;
+}
+
 export default function ClientSensorStats({ clientId, isGlobalView = true }: ClientSensorStatsProps) {
   const effectiveClientId = clientId && clientId !== 'all' ? clientId : '';
   
-  // Fetch client-specific sensor data
-  const { data: sensorData, isLoading: sensorDataLoading } = useClientSensorData(effectiveClientId);
-  const { data: starlinkData, isLoading: starlinkLoading } = useClientStarlinkData(effectiveClientId);
-  const { data: systemData, isLoading: systemLoading } = useClientSystemMonitorData(effectiveClientId);
-  const { data: thermalData, isLoading: thermalLoading } = useClientThermalData(effectiveClientId);
-  const { data: arduinoData, isLoading: arduinoLoading } = useClientArduinoData(effectiveClientId);
-  const { data: gpsData, isLoading: gpsLoading } = useClientGpsData(effectiveClientId);
-  const { data: wifiData, isLoading: wifiLoading } = useClientWifiData(effectiveClientId);
+  // Use client detail stats for comprehensive data
+  const { data: clientStats, isLoading: clientStatsLoading } = useClientDetailStats(effectiveClientId || null, 24);
+  
+  // Use stats by sensor filtered by client
+  const { data: sensorStats, isLoading: sensorStatsLoading } = useStatsBySensor({ 
+    clientId: effectiveClientId || null, 
+    hours: 24 
+  });
+  
+  // Arduino 1hr stats for latest measurements
+  const { data: arduino1hrStats, isLoading: arduinoLoading } = useArduino1hrStats();
+  
+  // Starlink power data
+  const { data: starlinkPower, isLoading: starlinkLoading } = useStarlinkPower();
+  
+  // System info for this client
+  const { data: systemInfo, isLoading: systemLoading } = useClientSystemInfo(effectiveClientId);
+  
+  // GPS readings for location data
+  const { data: gpsReadings, isLoading: gpsLoading } = useGpsReadings(24);
+  
+  // Thermal probe timeseries for chart
+  const { data: thermalTimeseries, isLoading: thermalLoading } = useThermalProbeTimeseries(24, effectiveClientId);
 
-  // Process thermal data
-  const thermalStats = useMemo(() => {
-    if (!thermalData?.readings || thermalData.readings.length === 0) {
-      return { current: null, chartData: [] };
+  // Extract sensor type counts from by_sensor_type
+  const sensorTypeCounts = useMemo(() => {
+    const counts: Record<string, number> = {};
+    if (clientStats?.by_sensor_type) {
+      for (const st of clientStats.by_sensor_type) {
+        counts[st.sensor_type?.toLowerCase() || ''] = st.reading_count || 0;
+      }
+    }
+    return counts;
+  }, [clientStats]);
+
+  // Arduino stats
+  const arduinoStats = useMemo(() => {
+    if (arduino1hrStats?.aggregated) {
+      const agg = arduino1hrStats.aggregated;
+      return {
+        temp: agg.current?.temp_c ?? agg.averages?.temp_c ?? null,
+        humidity: agg.current?.humidity ?? agg.averages?.humidity ?? null,
+        pressure: agg.current?.pressure_hpa ? agg.current.pressure_hpa * 100 : (agg.averages?.pressure_hpa ? agg.averages.pressure_hpa * 100 : null),
+        light: extractNumber(agg.current, 'light', 'light_level') ?? extractNumber(agg.averages, 'light', 'light_level'),
+      };
+    }
+    return { temp: null, humidity: null, pressure: null, light: null };
+  }, [arduino1hrStats]);
+
+  // Starlink stats
+  const starlinkStats = useMemo(() => {
+    if (!starlinkPower?.device_summaries || starlinkPower.device_summaries.length === 0) {
+      return { power: null, chartData: [] };
     }
     
-    const latest = thermalData.readings[0];
-    const latestData = latest?.data || {};
+    const power = starlinkPower.device_summaries.reduce(
+      (sum, d) => sum + (d.overall?.avg_watts || 0), 0
+    );
     
-    const current = extractNumber(latestData, 'temp_c', 'probe_c', 'ambient_c', 'temperature');
+    const chartData: { time: string; power: number }[] = [];
+    if (starlinkPower.power_data && starlinkPower.power_data.length > 0) {
+      const hourlyData = new Map<string, number[]>();
+      starlinkPower.power_data.forEach((point) => {
+        try {
+          const hour = format(parseISO(point.timestamp), 'HH:00');
+          if (!hourlyData.has(hour)) hourlyData.set(hour, []);
+          hourlyData.get(hour)!.push(point.power_watts);
+        } catch { /* skip */ }
+      });
+      
+      Array.from(hourlyData.entries())
+        .map(([time, powers]) => ({
+          time,
+          power: powers.reduce((a, b) => a + b, 0) / powers.length,
+        }))
+        .sort((a, b) => a.time.localeCompare(b.time))
+        .forEach(d => chartData.push(d));
+    }
     
-    // Build chart data (grouped by hour)
+    return { power, chartData };
+  }, [starlinkPower]);
+
+  // System stats
+  const systemStats = useMemo(() => {
+    if (!systemInfo) {
+      return { cpu: null, memory: null, disk: null };
+    }
+    return {
+      cpu: extractNumber(systemInfo, 'cpu_percent', 'cpu_usage', 'cpu'),
+      memory: extractNumber(systemInfo, 'memory_percent', 'mem_percent', 'memory_usage', 'memory'),
+      disk: extractNumber(systemInfo, 'disk_percent', 'disk_usage', 'disk'),
+    };
+  }, [systemInfo]);
+
+  // GPS stats
+  const gpsStats = useMemo(() => {
+    const readings = gpsReadings?.readings;
+    if (!readings || readings.length === 0) {
+      return { lat: null, lng: null, alt: null, satellites: null };
+    }
+    const latest = readings[0];
+    return {
+      lat: extractNumber(latest, 'latitude', 'lat'),
+      lng: extractNumber(latest, 'longitude', 'lng', 'lon'),
+      alt: extractNumber(latest, 'altitude', 'alt', 'altitude_m'),
+      satellites: extractNumber(latest, 'satellites', 'sats'),
+    };
+  }, [gpsReadings]);
+
+  // Thermal chart data
+  const thermalChartData = useMemo(() => {
+    if (!thermalTimeseries?.readings || thermalTimeseries.readings.length === 0) return [];
+    
     const hourlyData = new Map<string, number[]>();
-    thermalData.readings.forEach((reading) => {
+    thermalTimeseries.readings.forEach((reading) => {
       try {
         const hour = format(parseISO(reading.timestamp), 'HH:00');
-        const temp = extractNumber(reading.data, 'temp_c', 'probe_c', 'ambient_c', 'temperature');
+        const temp = extractNumber(reading, 'temp_c', 'probe_c', 'ambient_c', 'temperature');
         if (temp !== null) {
           if (!hourlyData.has(hour)) hourlyData.set(hour, []);
           hourlyData.get(hour)!.push(temp);
@@ -153,135 +264,26 @@ export default function ClientSensorStats({ clientId, isGlobalView = true }: Cli
       } catch { /* skip */ }
     });
     
-    const chartData = Array.from(hourlyData.entries())
+    return Array.from(hourlyData.entries())
       .map(([time, temps]) => ({
         time,
         temperature: temps.reduce((a, b) => a + b, 0) / temps.length,
       }))
       .sort((a, b) => a.time.localeCompare(b.time));
-    
-    return { current, chartData };
-  }, [thermalData]);
+  }, [thermalTimeseries]);
 
-  // Process Arduino data
-  const arduinoStats = useMemo(() => {
-    if (!arduinoData?.readings || arduinoData.readings.length === 0) {
-      return { temp: null, humidity: null, pressure: null, light: null };
-    }
-    
-    const latest = arduinoData.readings[0];
-    const data = latest?.data || {};
-    
-    return {
-      temp: extractNumber(data, 'th_temp_c', 'aht_temp_c', 'bmp_temp_c', 'temp_c', 'temperature'),
-      humidity: extractNumber(data, 'th_humidity', 'aht_humidity', 'humidity'),
-      pressure: extractNumber(data, 'bmp_pressure_pa', 'pressure', 'pressure_pa'),
-      light: extractNumber(data, 'light', 'light_level', 'lux'),
-    };
-  }, [arduinoData]);
+  // Current thermal value
+  const currentThermal = useMemo(() => {
+    if (!thermalTimeseries?.readings || thermalTimeseries.readings.length === 0) return null;
+    return extractNumber(thermalTimeseries.readings[0], 'temp_c', 'probe_c', 'ambient_c', 'temperature');
+  }, [thermalTimeseries]);
 
-  // Process Starlink data
-  const starlinkStats = useMemo(() => {
-    if (!starlinkData?.readings || starlinkData.readings.length === 0) {
-      return { power: null, latency: null, uplink: null, downlink: null, chartData: [] };
-    }
-    
-    const latest = starlinkData.readings[0];
-    const data = latest?.data || {};
-    
-    // Extract from nested starlink object if present
-    const starlinkNested = (data.starlink as Record<string, unknown>) || data;
-    
-    const power = extractNumber(starlinkNested, 'power_watts', 'power_w', 'power');
-    const latency = extractNumber(starlinkNested, 'pop_ping_latency_ms', 'latency_ms', 'ping_latency_ms');
-    const uplink = extractNumber(starlinkNested, 'uplink_throughput_bps', 'uplink_bps');
-    const downlink = extractNumber(starlinkNested, 'downlink_throughput_bps', 'downlink_bps');
-    
-    // Build power chart data
-    const hourlyData = new Map<string, number[]>();
-    starlinkData.readings.forEach((reading) => {
-      try {
-        const hour = format(parseISO(reading.timestamp), 'HH:00');
-        const nested = (reading.data?.starlink as Record<string, unknown>) || reading.data || {};
-        const p = extractNumber(nested, 'power_watts', 'power_w', 'power');
-        if (p !== null) {
-          if (!hourlyData.has(hour)) hourlyData.set(hour, []);
-          hourlyData.get(hour)!.push(p);
-        }
-      } catch { /* skip */ }
-    });
-    
-    const chartData = Array.from(hourlyData.entries())
-      .map(([time, powers]) => ({
-        time,
-        power: powers.reduce((a, b) => a + b, 0) / powers.length,
-      }))
-      .sort((a, b) => a.time.localeCompare(b.time));
-    
-    return { power, latency, uplink, downlink, chartData };
-  }, [starlinkData]);
-
-  // Process System Monitor data
-  const systemStats = useMemo(() => {
-    if (!systemData?.latest) {
-      return { cpu: null, memory: null, disk: null };
-    }
-    
-    const data = systemData.latest.data || {};
-    
-    return {
-      cpu: extractNumber(data, 'cpu_percent', 'cpu_usage', 'cpu'),
-      memory: extractNumber(data, 'memory_percent', 'mem_percent', 'memory_usage', 'memory'),
-      disk: extractNumber(data, 'disk_percent', 'disk_usage', 'disk'),
-    };
-  }, [systemData]);
-
-  // Process GPS data
-  const gpsStats = useMemo(() => {
-    if (!gpsData?.readings || gpsData.readings.length === 0) {
-      return { lat: null, lng: null, alt: null, speed: null, satellites: null };
-    }
-    
-    const latest = gpsData.readings[0];
-    const data = latest?.data || {};
-    const gpsNested = (data.gps as Record<string, unknown>) || data;
-    
-    return {
-      lat: extractNumber(gpsNested, 'latitude', 'lat'),
-      lng: extractNumber(gpsNested, 'longitude', 'lng', 'lon'),
-      alt: extractNumber(gpsNested, 'altitude', 'alt', 'altitude_m'),
-      speed: extractNumber(gpsNested, 'speed', 'speed_kmh', 'ground_speed'),
-      satellites: extractNumber(gpsNested, 'satellites', 'sats', 'satellites_visible'),
-    };
-  }, [gpsData]);
-
-  // Process WiFi data
-  const wifiStats = useMemo(() => {
-    const networkCount = wifiData?.networks?.length || 0;
-    const status = wifiData?.status as Record<string, unknown> | null;
-    const connectedNetwork = status?.ssid as string | null;
-    const signalStrength = typeof status?.signal === 'number' ? status.signal : null;
-    
-    return {
-      networkCount,
-      connectedNetwork,
-      signalStrength,
-    };
-  }, [wifiData]);
-
-  // Calculate total readings
-  const totalReadings = sensorData?.readings?.length || 0;
-  const sensorTypes = Object.keys(sensorData?.byType || {}).length;
+  const totalReadings = clientStats?.overall?.total_readings || 0;
+  const totalDevices = clientStats?.overall?.total_devices || 0;
+  const sensorTypesCount = clientStats?.overall?.sensor_types_count || 0;
   
-  const isLoading = sensorDataLoading || starlinkLoading || systemLoading || 
-                    thermalLoading || arduinoLoading || gpsLoading || wifiLoading;
-
-  // Check if we have any real data
-  const hasData = thermalStats.current !== null || 
-                  arduinoStats.temp !== null || 
-                  starlinkStats.power !== null ||
-                  systemStats.cpu !== null ||
-                  gpsStats.lat !== null;
+  const isLoading = clientStatsLoading || sensorStatsLoading || arduinoLoading || 
+                    starlinkLoading || systemLoading || gpsLoading || thermalLoading;
 
   if (!effectiveClientId) {
     return (
@@ -295,38 +297,44 @@ export default function ClientSensorStats({ clientId, isGlobalView = true }: Cli
 
   return (
     <div className="space-y-6">
-      {/* Environmental Stats Row */}
+      {/* Overview Stats */}
       <Card className="border-border/50">
         <CardHeader className="pb-3">
           <div className="flex items-center justify-between">
             <CardTitle className="text-sm flex items-center gap-2">
-              <Activity className="w-4 h-4 text-primary" />
-              Environmental Sensors
+              <Database className="w-4 h-4 text-primary" />
+              Client Overview
             </CardTitle>
-            <Badge variant="outline" className="text-xs">
-              {totalReadings} readings
-            </Badge>
+            <div className="flex gap-2">
+              <Badge variant="outline" className="text-xs">
+                {totalReadings.toLocaleString()} readings
+              </Badge>
+              <Badge variant="outline" className="text-xs">
+                {totalDevices} devices
+              </Badge>
+              <Badge variant="outline" className="text-xs">
+                {sensorTypesCount} sensor types
+              </Badge>
+            </div>
           </div>
         </CardHeader>
         <CardContent>
           {isLoading ? (
-            <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-3">
+            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
               {[...Array(6)].map((_, i) => (
                 <div key={i} className="h-20 bg-muted/30 animate-pulse rounded-lg" />
               ))}
             </div>
           ) : (
             <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
-              {/* Thermal Probe */}
               <StatCard
                 icon={Thermometer}
                 label="Thermal Probe"
-                value={thermalStats.current?.toFixed(1)}
+                value={currentThermal?.toFixed(1)}
                 unit="°C"
                 color="orange-500"
               />
               
-              {/* Arduino Temperature */}
               <StatCard
                 icon={Thermometer}
                 label="Arduino Temp"
@@ -335,7 +343,6 @@ export default function ClientSensorStats({ clientId, isGlobalView = true }: Cli
                 color="red-500"
               />
               
-              {/* Humidity */}
               <StatCard
                 icon={Droplets}
                 label="Humidity"
@@ -344,7 +351,6 @@ export default function ClientSensorStats({ clientId, isGlobalView = true }: Cli
                 color="blue-500"
               />
               
-              {/* Pressure */}
               <StatCard
                 icon={Gauge}
                 label="Pressure"
@@ -353,94 +359,55 @@ export default function ClientSensorStats({ clientId, isGlobalView = true }: Cli
                 color="purple-500"
               />
               
-              {/* Light Level */}
               <StatCard
-                icon={Activity}
-                label="Light Level"
-                value={arduinoStats.light?.toFixed(0)}
-                unit="lux"
+                icon={Satellite}
+                label="Starlink Power"
+                value={starlinkStats.power?.toFixed(0)}
+                unit="W"
                 color="yellow-500"
               />
               
-              {/* Sensor Types */}
               <StatCard
-                icon={Gauge}
-                label="Sensor Types"
-                value={sensorTypes}
+                icon={Navigation}
+                label="GPS Satellites"
+                value={gpsStats.satellites}
                 unit=""
-                color="primary"
+                color="green-500"
               />
             </div>
           )}
         </CardContent>
       </Card>
 
-      {/* Power & Connectivity Row */}
-      <Card className="border-border/50">
-        <CardHeader className="pb-3">
-          <CardTitle className="text-sm flex items-center gap-2">
-            <Zap className="w-4 h-4 text-chart-4" />
-            Power & Connectivity
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
-            {/* Starlink Power */}
-            <StatCard
-              icon={Satellite}
-              label="Starlink Power"
-              value={starlinkStats.power?.toFixed(0)}
-              unit="W"
-              color="yellow-500"
-            />
-            
-            {/* Starlink Latency */}
-            <StatCard
-              icon={Activity}
-              label="Latency"
-              value={starlinkStats.latency?.toFixed(0)}
-              unit="ms"
-              color="green-500"
-            />
-            
-            {/* Uplink */}
-            <StatCard
-              icon={Zap}
-              label="Uplink"
-              value={starlinkStats.uplink ? (starlinkStats.uplink / 1000000).toFixed(1) : null}
-              unit="Mbps"
-              color="blue-500"
-            />
-            
-            {/* Downlink */}
-            <StatCard
-              icon={Zap}
-              label="Downlink"
-              value={starlinkStats.downlink ? (starlinkStats.downlink / 1000000).toFixed(1) : null}
-              unit="Mbps"
-              color="primary"
-            />
-            
-            {/* WiFi Networks */}
-            <StatCard
-              icon={Wifi}
-              label="WiFi Networks"
-              value={wifiStats.networkCount}
-              unit=""
-              color="purple-500"
-            />
-            
-            {/* WiFi Signal */}
-            <StatCard
-              icon={Radio}
-              label="WiFi Signal"
-              value={wifiStats.signalStrength}
-              unit="dBm"
-              color="green-500"
-            />
-          </div>
-        </CardContent>
-      </Card>
+      {/* Sensor Breakdown */}
+      {sensorStats?.sensors && sensorStats.sensors.length > 0 && (
+        <Card className="border-border/50">
+          <CardHeader className="pb-3">
+            <CardTitle className="text-sm flex items-center gap-2">
+              <Activity className="w-4 h-4 text-primary" />
+              Sensor Breakdown (24h)
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6 gap-3">
+              {sensorStats.sensors.slice(0, 12).map((sensor) => (
+                <div 
+                  key={sensor.sensor_type} 
+                  className="p-3 rounded-lg bg-muted/30 border border-border/50"
+                >
+                  <p className="text-xs text-muted-foreground capitalize truncate">
+                    {(sensor.sensor_type || 'unknown').replace(/_/g, ' ')}
+                  </p>
+                  <p className="text-xl font-bold">{(sensor.reading_count || 0).toLocaleString()}</p>
+                  <p className="text-xs text-muted-foreground">
+                    {sensor.device_count || 0} device{sensor.device_count !== 1 ? 's' : ''}
+                  </p>
+                </div>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       {/* System & Location Row */}
       <Card className="border-border/50">
@@ -452,7 +419,6 @@ export default function ClientSensorStats({ clientId, isGlobalView = true }: Cli
         </CardHeader>
         <CardContent>
           <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
-            {/* CPU */}
             <StatCard
               icon={Cpu}
               label="CPU Usage"
@@ -461,16 +427,14 @@ export default function ClientSensorStats({ clientId, isGlobalView = true }: Cli
               color="orange-500"
             />
             
-            {/* Memory */}
             <StatCard
-              icon={MemoryStick}
+              icon={Activity}
               label="Memory"
               value={systemStats.memory?.toFixed(1)}
               unit="%"
               color="blue-500"
             />
             
-            {/* Disk */}
             <StatCard
               icon={HardDrive}
               label="Disk Usage"
@@ -479,7 +443,6 @@ export default function ClientSensorStats({ clientId, isGlobalView = true }: Cli
               color="red-500"
             />
             
-            {/* GPS Coordinates */}
             <StatCard
               icon={Navigation}
               label="Latitude"
@@ -496,21 +459,18 @@ export default function ClientSensorStats({ clientId, isGlobalView = true }: Cli
               color="green-500"
             />
             
-            {/* GPS Satellites */}
             <StatCard
               icon={Satellite}
-              label="GPS Sats"
-              value={gpsStats.satellites}
-              unit=""
+              label="Altitude"
+              value={gpsStats.alt?.toFixed(0)}
+              unit="m"
               color="primary"
-              subValue={gpsStats.alt?.toFixed(0)}
-              subLabel="Alt (m)"
             />
           </div>
         </CardContent>
       </Card>
 
-      {/* Timeseries Charts Row */}
+      {/* Timeseries Charts */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
         {/* Thermal Probe Chart */}
         <Card className="border-border/50">
@@ -523,10 +483,10 @@ export default function ClientSensorStats({ clientId, isGlobalView = true }: Cli
           <CardContent>
             {thermalLoading ? (
               <div className="h-[200px] bg-muted/30 animate-pulse rounded-lg" />
-            ) : thermalStats.chartData.length > 0 ? (
+            ) : thermalChartData.length > 0 ? (
               <div className="h-[200px]">
                 <ResponsiveContainer width="100%" height="100%">
-                  <AreaChart data={thermalStats.chartData}>
+                  <AreaChart data={thermalChartData}>
                     <defs>
                       <linearGradient id="thermalGradient" x1="0" y1="0" x2="0" y2="1">
                         <stop offset="5%" stopColor="hsl(var(--chart-1))" stopOpacity={0.3} />
@@ -534,32 +494,13 @@ export default function ClientSensorStats({ clientId, isGlobalView = true }: Cli
                       </linearGradient>
                     </defs>
                     <CartesianGrid strokeDasharray="3 3" className="stroke-border/50" />
-                    <XAxis 
-                      dataKey="time" 
-                      tick={{ fontSize: 10 }}
-                      className="text-muted-foreground"
-                    />
-                    <YAxis 
-                      tick={{ fontSize: 10 }}
-                      className="text-muted-foreground"
-                      domain={['auto', 'auto']}
-                      tickFormatter={(v) => `${v}°C`}
-                    />
+                    <XAxis dataKey="time" tick={{ fontSize: 10 }} className="text-muted-foreground" />
+                    <YAxis tick={{ fontSize: 10 }} className="text-muted-foreground" domain={['auto', 'auto']} tickFormatter={(v) => `${v}°C`} />
                     <Tooltip 
-                      contentStyle={{ 
-                        backgroundColor: 'hsl(var(--card))', 
-                        border: '1px solid hsl(var(--border))',
-                        borderRadius: '8px',
-                      }}
+                      contentStyle={{ backgroundColor: 'hsl(var(--card))', border: '1px solid hsl(var(--border))', borderRadius: '8px' }}
                       formatter={(value: number) => [`${value.toFixed(1)}°C`, 'Temperature']}
                     />
-                    <Area
-                      type="monotone"
-                      dataKey="temperature"
-                      stroke="hsl(var(--chart-1))"
-                      fill="url(#thermalGradient)"
-                      strokeWidth={2}
-                    />
+                    <Area type="monotone" dataKey="temperature" stroke="hsl(var(--chart-1))" fill="url(#thermalGradient)" strokeWidth={2} />
                   </AreaChart>
                 </ResponsiveContainer>
               </div>
@@ -576,7 +517,7 @@ export default function ClientSensorStats({ clientId, isGlobalView = true }: Cli
           <CardHeader className="pb-3">
             <CardTitle className="text-sm flex items-center gap-2">
               <Zap className="w-4 h-4 text-chart-4" />
-              Starlink Power Usage (24h)
+              Starlink Power (24h)
             </CardTitle>
           </CardHeader>
           <CardContent>
@@ -593,43 +534,20 @@ export default function ClientSensorStats({ clientId, isGlobalView = true }: Cli
                       </linearGradient>
                     </defs>
                     <CartesianGrid strokeDasharray="3 3" className="stroke-border/50" />
-                    <XAxis 
-                      dataKey="time" 
-                      tick={{ fontSize: 10 }}
-                      className="text-muted-foreground"
-                    />
-                    <YAxis 
-                      tick={{ fontSize: 10 }}
-                      className="text-muted-foreground"
-                      domain={['auto', 'auto']}
-                      tickFormatter={(v) => `${v}W`}
-                    />
+                    <XAxis dataKey="time" tick={{ fontSize: 10 }} className="text-muted-foreground" />
+                    <YAxis tick={{ fontSize: 10 }} className="text-muted-foreground" domain={['auto', 'auto']} tickFormatter={(v) => `${v}W`} />
                     <Tooltip 
-                      contentStyle={{ 
-                        backgroundColor: 'hsl(var(--card))', 
-                        border: '1px solid hsl(var(--border))',
-                        borderRadius: '8px',
-                      }}
+                      contentStyle={{ backgroundColor: 'hsl(var(--card))', border: '1px solid hsl(var(--border))', borderRadius: '8px' }}
                       formatter={(value: number) => [`${value.toFixed(1)}W`, 'Power']}
                     />
-                    <Area
-                      type="monotone"
-                      dataKey="power"
-                      stroke="hsl(var(--chart-4))"
-                      fill="url(#powerGradient)"
-                      strokeWidth={2}
-                    />
+                    <Area type="monotone" dataKey="power" stroke="hsl(var(--chart-4))" fill="url(#powerGradient)" strokeWidth={2} />
                   </AreaChart>
                 </ResponsiveContainer>
               </div>
             ) : starlinkStats.power !== null ? (
               <div className="h-[200px] flex flex-col items-center justify-center">
-                <div className="text-4xl font-bold text-chart-4">
-                  {starlinkStats.power?.toFixed(0) ?? '--'}W
-                </div>
-                <p className="text-sm text-muted-foreground mt-2">
-                  Current Starlink power consumption
-                </p>
+                <div className="text-4xl font-bold text-chart-4">{starlinkStats.power?.toFixed(0) ?? '--'}W</div>
+                <p className="text-sm text-muted-foreground mt-2">Current Starlink power consumption</p>
               </div>
             ) : (
               <div className="h-[200px] flex items-center justify-center text-muted-foreground text-sm">
