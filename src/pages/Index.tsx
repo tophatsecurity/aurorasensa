@@ -36,11 +36,15 @@ import ClientSensorBreakdownContent from "@/components/ClientSensorBreakdownCont
 import { AuroraAuthPage } from "@/components/auth/AuroraAuthPage";
 import { useAuroraAuthContext } from "@/hooks/useAuroraAuth";
 import { useEpirbAlertNotifications } from "@/hooks/useEpirbAlertNotifications";
+import { usePrewarm } from "@/hooks/usePrewarm";
 import { Loader2 } from "lucide-react";
 
 const Index = () => {
   const [activeItem, setActiveItem] = useState("dashboard");
   const { user, loading, signIn, signUp, serverStatus } = useAuroraAuthContext();
+  
+  // Prewarm edge function silently on app load to avoid cold start errors
+  usePrewarm();
 
   // Show loading spinner while checking auth/session validity
   if (loading) {
