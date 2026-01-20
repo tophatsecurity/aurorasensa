@@ -310,6 +310,8 @@ export const STATS = {
   DEVICE: (deviceId: string) => `/api/stats/devices/${deviceId}`,
   SENSORS: '/api/stats/sensors',
   SENSOR_TYPE: (sensorType: string) => `/api/stats/sensors/${sensorType}`,
+  SENSORS_BY_TYPE: '/api/stats/sensors/by-type',
+  SENSORS_BY_CLIENT: (clientId: string) => `/api/stats/sensors/by-client/${clientId}`,
   AIRCRAFT: '/api/stats/aircraft',
   ENDPOINTS: '/api/stats/endpoints',
   ENDPOINTS_HISTORY: '/api/stats/endpoints/history',

@@ -711,6 +711,144 @@ export function useClientDetailStats(clientId: string | null, hours: number = 24
   });
 }
 
+// =============================================
+// NEW: Sensor Stats by Type endpoint (all sensor types with stats)
+// =============================================
+export interface SensorTypeByTypeStats {
+  sensor_type: string;
+  reading_count: number;
+  client_count: number;
+  device_count: number;
+  avg_data_size?: number;
+  first_reading?: string;
+  last_reading?: string;
+}
+
+export function useSensorStatsByType(hours: number = 24) {
+  return useQuery({
+    queryKey: ["aurora", "stats", "sensors", "by-type", hours],
+    queryFn: async () => {
+      const raw = await callAuroraApi<{ data: SensorTypeByTypeStats[]; status: string; time_window_hours: number }>(
+        STATS.SENSORS_BY_TYPE,
+        "GET",
+        undefined,
+        { params: { hours } }
+      );
+      // Handle wrapped response
+      if (raw && 'data' in raw && Array.isArray(raw.data)) {
+        return raw.data;
+      }
+      // Handle direct array
+      if (Array.isArray(raw)) {
+        return raw;
+      }
+      return [];
+    },
+    enabled: hasAuroraSession(),
+    staleTime: 60000,
+    refetchInterval: 120000,
+    retry: 1,
+  });
+}
+
+// =============================================
+// NEW: Specific Sensor Type detailed stats
+// =============================================
+export interface SensorTypeDetailedStats {
+  sensor_type: string;
+  time_window_hours: number;
+  overall: {
+    total_readings: number;
+    client_count: number;
+    device_count: number;
+    avg_data_size?: number;
+    first_reading?: string;
+    last_reading?: string;
+  };
+  by_client: Array<{
+    client_id: string;
+    device_count: number;
+    reading_count: number;
+    first_reading?: string;
+    last_reading?: string;
+  }>;
+  active_devices: Array<{
+    client_id: string;
+    sensor: string;
+    reading_count: number;
+    last_seen?: string;
+  }>;
+}
+
+export function useSensorTypeStats(sensorType: string | null, hours: number = 24) {
+  return useQuery({
+    queryKey: ["aurora", "stats", "sensors", sensorType, hours],
+    queryFn: async () => {
+      if (!sensorType) return null;
+      const raw = await callAuroraApi<{ data: SensorTypeDetailedStats; status: string } | SensorTypeDetailedStats>(
+        STATS.SENSOR_TYPE(sensorType),
+        "GET",
+        undefined,
+        { params: { hours } }
+      );
+      // Handle wrapped response
+      if (raw && 'data' in raw && raw.data) {
+        return raw.data;
+      }
+      return raw as SensorTypeDetailedStats;
+    },
+    enabled: hasAuroraSession() && !!sensorType,
+    staleTime: 60000,
+    refetchInterval: 120000,
+    retry: 1,
+  });
+}
+
+// =============================================
+// NEW: Sensors by Client ID (all sensors for a specific client)
+// =============================================
+export interface ClientSensorTypeStats {
+  sensor_type: string;
+  device_count: number;
+  reading_count: number;
+  first_reading?: string;
+  last_reading?: string;
+}
+
+export function useSensorsByClientId(clientId: string | null, hours: number = 24) {
+  return useQuery({
+    queryKey: ["aurora", "stats", "sensors", "by-client", clientId, hours],
+    queryFn: async () => {
+      if (!clientId || clientId === "all") return { sensors: [], sensor_count: 0 };
+      const raw = await callAuroraApi<{ 
+        data: ClientSensorTypeStats[]; 
+        client_id: string;
+        sensor_count: number;
+        status: string;
+        time_window_hours: number;
+      }>(
+        STATS.SENSORS_BY_CLIENT(clientId),
+        "GET",
+        undefined,
+        { params: { hours } }
+      );
+      // Handle wrapped response
+      if (raw && 'data' in raw && Array.isArray(raw.data)) {
+        return { sensors: raw.data, sensor_count: raw.sensor_count || raw.data.length };
+      }
+      // Handle direct array
+      if (Array.isArray(raw)) {
+        return { sensors: raw, sensor_count: raw.length };
+      }
+      return { sensors: [], sensor_count: 0 };
+    },
+    enabled: hasAuroraSession() && !!clientId && clientId !== "all",
+    staleTime: 30000,
+    refetchInterval: 60000,
+    retry: 1,
+  });
+}
+
 // NEW: Device readings
 export function useDeviceReadings(deviceId: string | null, hours: number = 24) {
   return useQuery({

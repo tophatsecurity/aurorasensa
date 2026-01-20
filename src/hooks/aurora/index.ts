@@ -301,6 +301,10 @@ export {
   useDeviceStatsHistory,
   useAlertStatsHistory,
   useSystemResourceStatsHistory,
+  // NEW: Sensor stats endpoints
+  useSensorStatsByType,
+  useSensorTypeStats,
+  useSensorsByClientId,
   // Types
   type ClientStats,
   type TimePeriodStats,
@@ -318,6 +322,10 @@ export {
   type DeviceReadings,
   type DeviceDetailedStats,
   type StatsAllResponse,
+  // NEW: Sensor stats types
+  type SensorTypeByTypeStats,
+  type SensorTypeDetailedStats,
+  type ClientSensorTypeStats,
 } from "./stats";
 
 // Client-specific sensor data hooks
