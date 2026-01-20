@@ -1,10 +1,10 @@
-import { useState, useMemo, useEffect } from "react";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { useState, useMemo } from "react";
 import { ApiError, ApiErrorBanner } from "@/components/ui/api-error";
 import { ComponentErrorBoundary } from "@/components/ui/error-boundary";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Globe, Users, Database, Cpu, Layers, BarChart3, Clock, Activity, TrendingUp } from "lucide-react";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Database, Cpu, Layers, Clock, ChevronLeft } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
 import "leaflet/dist/leaflet.css";
 import { 
@@ -12,14 +12,10 @@ import {
   useClient,
   useClientSystemInfo,
   useClientSensorData,
-  useGlobalStats,
-  useComprehensiveStats,
   useStatsByClient,
-  use1hrStats,
-  use24hrStats,
 } from "@/hooks/aurora";
 import { useClientContext } from "@/contexts/ClientContext";
-import { ClientSelector } from "@/components/ui/context-selectors";
+import { Button } from "@/components/ui/button";
 
 import {
   type DeviceGroup,
@@ -33,12 +29,8 @@ import {
   ClientSensorStats,
   ClientListView,
 } from "@/components/stats";
-import GlobalStatsCards from "@/components/stats/GlobalStatsCards";
-import GlobalReadingsTrendChart from "@/components/stats/GlobalReadingsTrendChart";
-import ClientTrendChart from "@/components/stats/ClientTrendChart";
 
 // Helper to convert client sensor readings to device groups
-// Handles both old format (device_id, device_type) and new format (sensor_type, client_id)
 function processClientSensorDataToGroups(
   readings: Array<{ 
     device_id?: string; 
@@ -55,18 +47,15 @@ function processClientSensorDataToGroups(
   const groups = new Map<string, DeviceGroup>();
   
   readings.forEach((reading) => {
-    // Support both old (device_type) and new (sensor_type) formats
     const sensorType = reading.sensor_type || reading.device_type || 'unknown';
     const deviceId = reading.device_id || sensorType;
     const readingClientId = reading.client_id || clientId;
     
     const key = `${readingClientId}:${sensorType}`;
     
-    // Extract location if available
     const data = reading.data || {};
     let location: { lat: number; lng: number } | undefined;
     
-    // Check for location in various places
     const starlinkData = data.starlink as Record<string, unknown> | undefined;
     if (starlinkData) {
       if (typeof starlinkData.latitude === 'number' && typeof starlinkData.longitude === 'number') {
@@ -100,12 +89,10 @@ function processClientSensorDataToGroups(
     const group = groups.get(key)!;
     group.readings.push(sensorReading);
     
-    // Update latest if this reading is newer
     if (new Date(reading.timestamp) > new Date(group.latest.timestamp)) {
       group.latest = sensorReading;
     }
     
-    // Update location if available
     if (location) {
       group.location = location;
     }
@@ -114,30 +101,13 @@ function processClientSensorDataToGroups(
   return Array.from(groups.values());
 }
 
-// Helper to format large numbers
-function formatNumber(num?: number): string {
-  if (num === undefined || num === null) return "0";
-  if (num >= 1000000) return `${(num / 1000000).toFixed(1)}M`;
-  if (num >= 1000) return `${(num / 1000).toFixed(1)}K`;
-  return num.toLocaleString();
-}
-
 export default function StatsContent() {
-  // Use global client context
   const { selectedClientId, setSelectedClientId, isAllClients } = useClientContext();
   const [activeTab, setActiveTab] = useState<string>("overview");
   const [isRetrying, setIsRetrying] = useState(false);
 
-  // Map context values - "all" in context means global view
-  const isGlobalView = isAllClients;
+  const isClientSelected = !isAllClients && selectedClientId;
   const actualClientId = isAllClients ? "" : selectedClientId;
-
-  // Global stats hooks
-  const { data: globalStats, isLoading: globalStatsLoading } = useGlobalStats();
-  const { data: comprehensiveStats, isLoading: comprehensiveLoading } = useComprehensiveStats();
-  const { data: statsByClient, isLoading: statsByClientLoading } = useStatsByClient({ hours: 24 });
-  const { data: stats1hr } = use1hrStats();
-  const { data: stats24hr } = use24hrStats();
 
   // Fetch clients
   const { 
@@ -147,7 +117,7 @@ export default function StatsContent() {
     refetch: refetchClients 
   } = useClientsWithHostnames();
   
-  // Fetch client-specific sensor data (from batches) - only when a specific client is selected
+  // Fetch client-specific sensor data - only when a specific client is selected
   const { 
     data: clientSensorData, 
     isLoading: sensorsLoading, 
@@ -159,41 +129,12 @@ export default function StatsContent() {
   const { data: selectedClientData } = useClient(actualClientId);
   const { data: selectedClientSystemInfo } = useClientSystemInfo(actualClientId);
 
-  // Process readings into device groups and enrich with locations
+  // Process readings into device groups
   const filteredDevices = useMemo(() => {
     if (!clientSensorData?.readings || clientSensorData.readings.length === 0) return [];
     const devices = processClientSensorDataToGroups(clientSensorData.readings, actualClientId);
     return enrichDevicesWithLocations(devices);
   }, [clientSensorData, actualClientId]);
-
-  // Process client stats for display - fallback to constructing from clients list if API returns empty
-  const clientStatsList = useMemo(() => {
-    // If we have data from statsByClient, use it
-    if (statsByClient?.clients && statsByClient.clients.length > 0) {
-      return statsByClient.clients.map((c: any) => ({
-        client_id: c.client_id,
-        hostname: c.hostname || c.client_id,
-        reading_count: c.reading_count || 0,
-        device_count: c.device_count || 0,
-        sensor_types: c.sensor_types || [],
-        last_reading: c.last_reading,
-      }));
-    }
-    
-    // Fallback: construct from clients list
-    if (clients && clients.length > 0) {
-      return clients.map((client: any) => ({
-        client_id: client.client_id,
-        hostname: client.hostname || client.client_id,
-        reading_count: client.batches_received || client.batch_count || 0,
-        device_count: client.sensors?.length || 0,
-        sensor_types: client.sensors || [],
-        last_reading: client.last_seen,
-      }));
-    }
-    
-    return [];
-  }, [statsByClient, clients]);
 
   // Collect API errors
   const apiErrors = useMemo(() => {
@@ -203,9 +144,9 @@ export default function StatsContent() {
     return errors;
   }, [sensorsError, clientsError]);
 
-  const isLoading = clientsLoading || globalStatsLoading;
+  const isLoading = clientsLoading;
   const sensorsAreLoading = sensorsLoading && actualClientId;
-  const hasData = (clientSensorData?.readings && clientSensorData.readings.length > 0) || (clients && clients.length > 0) || globalStats;
+  const hasData = (clientSensorData?.readings && clientSensorData.readings.length > 0) || (clients && clients.length > 0);
   const hasCriticalError = apiErrors.length > 0 && !hasData && !isLoading;
 
   const handleRefresh = async () => {
@@ -214,10 +155,13 @@ export default function StatsContent() {
     setIsRetrying(false);
   };
 
-  const handleClientChange = (clientId: string) => {
+  const handleClientSelect = (clientId: string) => {
     setSelectedClientId(clientId);
-    // Reset to overview tab when switching contexts
     setActiveTab("overview");
+  };
+
+  const handleBackToList = () => {
+    setSelectedClientId("all");
   };
 
   if (isLoading) {
@@ -239,24 +183,32 @@ export default function StatsContent() {
 
   return (
     <div className="flex-1 overflow-y-auto p-6 space-y-6">
-      {/* Header with Context Selector */}
+      {/* Header */}
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-        <div>
-          <h1 className="text-2xl font-bold">
-            {isGlobalView ? "Global Statistics" : "Client Statistics"}
-          </h1>
-          <p className="text-muted-foreground text-sm">
-            {isGlobalView 
-              ? "Overview of all clients and sensor data" 
-              : `Detailed stats for ${selectedClientData?.hostname || actualClientId}`}
-          </p>
-        </div>
         <div className="flex items-center gap-3">
-          <ClientSelector
-            value={selectedClientId}
-            onChange={handleClientChange}
-            showAllOption={true}
-          />
+          {isClientSelected && (
+            <Button 
+              variant="ghost" 
+              size="sm" 
+              onClick={handleBackToList}
+              className="gap-1"
+            >
+              <ChevronLeft className="w-4 h-4" />
+              Back
+            </Button>
+          )}
+          <div>
+            <h1 className="text-2xl font-bold">
+              {isClientSelected 
+                ? (selectedClientData?.hostname || actualClientId) 
+                : "Client Statistics"}
+            </h1>
+            <p className="text-muted-foreground text-sm">
+              {isClientSelected 
+                ? "Detailed sensor statistics and data"
+                : "Select a client to view detailed statistics"}
+            </p>
+          </div>
         </div>
       </div>
 
@@ -269,61 +221,13 @@ export default function StatsContent() {
         />
       )}
 
-      {/* GLOBAL VIEW */}
-      {isGlobalView && (
-        <>
-          {/* Global Stats Cards */}
-          <GlobalStatsCards 
-            comprehensiveStats={comprehensiveStats} 
-            stats1hr={stats1hr} 
-            stats24hr={stats24hr}
-            clientsCount={clients?.length}
-            sensorsCount={clients?.reduce((acc: number, c: any) => acc + (c.sensors?.length || 0), 0)}
-          />
-
-          {/* Charts Row - Readings Trend & Client Breakdown */}
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-            <GlobalReadingsTrendChart 
-              readingsByDay={comprehensiveStats?.global?.readings_by_day}
-              isLoading={comprehensiveLoading}
-            />
-            <ClientTrendChart 
-              clientStats={clientStatsList}
-              isLoading={statsByClientLoading}
-            />
-          </div>
-
-          {/* Client List with Locations and Sensors */}
-          <ClientListView onClientSelect={handleClientChange} />
-
-          {/* Device Type Breakdown */}
-          {comprehensiveStats?.global?.device_breakdown && comprehensiveStats.global.device_breakdown.length > 0 && (
-            <Card className="border-border/50">
-              <CardHeader className="pb-3">
-                <CardTitle className="text-sm flex items-center gap-2">
-                  <Layers className="w-4 h-4 text-primary" />
-                  Device Types
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-3">
-                  {comprehensiveStats.global.device_breakdown.map((dt: any) => (
-                    <div key={dt.device_type} className="p-3 rounded-lg bg-muted/30 border border-border/50">
-                      <p className="text-xs text-muted-foreground capitalize truncate">
-                        {dt.device_type?.replace(/_/g, ' ') || 'Unknown'}
-                      </p>
-                      <p className="text-xl font-bold">{formatNumber(dt.count)}</p>
-                    </div>
-                  ))}
-                </div>
-              </CardContent>
-            </Card>
-          )}
-        </>
+      {/* CLIENT LIST VIEW - When no client selected */}
+      {!isClientSelected && (
+        <ClientListView onClientSelect={handleClientSelect} />
       )}
 
       {/* CLIENT-SPECIFIC VIEW */}
-      {!isGlobalView && (
+      {isClientSelected && (
         <>
           {/* Current Sensor Stats - Thermal, AHT, Starlink Power */}
           <ComponentErrorBoundary name="ClientSensorStats">
@@ -341,7 +245,7 @@ export default function StatsContent() {
             </ComponentErrorBoundary>
           )}
 
-          {/* Sensor Data Tabs - Primary content showing each sensor type */}
+          {/* Sensor Data Tabs */}
           <div className="space-y-4">
             {sensorsAreLoading ? (
               <div className="text-center py-12 text-muted-foreground">
@@ -367,7 +271,6 @@ export default function StatsContent() {
               <TabsTrigger value="raw">Raw Data</TabsTrigger>
             </TabsList>
 
-            {/* Overview Tab - Summary stats */}
             <TabsContent value="overview" className="space-y-4">
               {filteredDevices.length > 0 && (
                 <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-3">
@@ -398,7 +301,6 @@ export default function StatsContent() {
               )}
             </TabsContent>
 
-            {/* Location Map Tab */}
             <TabsContent value="map">
               <ComponentErrorBoundary name="ClientLocationMap">
                 <ClientLocationMap 
@@ -409,7 +311,6 @@ export default function StatsContent() {
               </ComponentErrorBoundary>
             </TabsContent>
 
-            {/* Raw JSON Tab - Latest Batch */}
             <TabsContent value="raw" className="space-y-4">
               <ComponentErrorBoundary name="RawJsonPanel">
                 <RawJsonPanel clientId={actualClientId} />
@@ -422,7 +323,6 @@ export default function StatsContent() {
   );
 }
 
-// Summary stat card component
 function SummaryStatCard({ 
   label, 
   value, 

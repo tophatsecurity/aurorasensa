@@ -12,10 +12,11 @@ import {
   Activity,
   ChevronRight,
   Globe,
-  Server
+  Server,
+  Database
 } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
-import { useClientsWithHostnames, useAllClientsSystemInfo } from "@/hooks/aurora";
+import { useClientsWithHostnames, useAllClientsSystemInfo, useStatsByClient } from "@/hooks/aurora";
 
 interface ClientListViewProps {
   onClientSelect: (clientId: string) => void;
@@ -48,13 +49,23 @@ function getSensorColor(sensorType: string): string {
 export function ClientListView({ onClientSelect }: ClientListViewProps) {
   const { data: clients, isLoading: clientsLoading } = useClientsWithHostnames();
   const { data: systemInfoAll } = useAllClientsSystemInfo();
+  const { data: statsByClient } = useStatsByClient({ hours: 24 });
 
-  // Enrich clients with location data from system info
+  // Enrich clients with location data and reading counts
   const enrichedClients = useMemo(() => {
     if (!clients || clients.length === 0) return [];
 
+    // Build a map of client stats for quick lookup
+    const statsMap = new Map<string, { reading_count: number }>();
+    if (statsByClient?.clients) {
+      statsByClient.clients.forEach((c: any) => {
+        statsMap.set(c.client_id, { reading_count: c.reading_count || 0 });
+      });
+    }
+
     return clients.map((client: any) => {
       const systemInfo = systemInfoAll?.clients?.[client.client_id];
+      const clientStats = statsMap.get(client.client_id);
       
       // Try to get location from various sources
       let location: { city?: string; country?: string; lat?: number; lng?: number } | null = null;
@@ -81,9 +92,10 @@ export function ClientListView({ onClientSelect }: ClientListViewProps) {
         ip_address: ipAddress,
         location,
         systemInfo,
+        reading_count: clientStats?.reading_count || client.batches_received || client.batch_count || 0,
       };
     });
-  }, [clients, systemInfoAll]);
+  }, [clients, systemInfoAll, statsByClient]);
 
   if (clientsLoading) {
     return (
@@ -143,8 +155,9 @@ export function ClientListView({ onClientSelect }: ClientListViewProps) {
                       {client.client_id}
                     </p>
                     
-                    {/* Location */}
-                    <div className="flex items-center gap-2 mt-2 text-xs text-muted-foreground">
+                    {/* Location & Stats Row */}
+                    <div className="flex flex-wrap items-center gap-3 mt-2 text-xs text-muted-foreground">
+                      {/* Location */}
                       {client.location?.city || client.location?.country ? (
                         <div className="flex items-center gap-1">
                           <MapPin className="w-3 h-3" />
@@ -165,7 +178,14 @@ export function ClientListView({ onClientSelect }: ClientListViewProps) {
                           <span>No location</span>
                         </div>
                       )}
+
+                      {/* Reading Count */}
+                      <div className="flex items-center gap-1 text-primary">
+                        <Database className="w-3 h-3" />
+                        <span className="font-medium">{client.reading_count.toLocaleString()} readings</span>
+                      </div>
                       
+                      {/* Last Seen */}
                       {client.last_seen && (
                         <span className="text-muted-foreground/70">
                           • {formatDistanceToNow(new Date(client.last_seen), { addSuffix: true })}
