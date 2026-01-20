@@ -9,17 +9,16 @@ import {
   CartesianGrid, 
   Tooltip, 
   ResponsiveContainer,
-  Legend
 } from "recharts";
 import { format, parseISO } from "date-fns";
 import { 
-  useThermalProbeStats, 
   useThermalProbeTimeseries,
-  useAhtSensorTimeseries,
+  useArduinoSensorTimeseries,
 } from "@/hooks/useAuroraApi";
 import { 
   useStarlinkDevicesFromReadings, 
-  useStarlinkPower 
+  useStarlinkPower,
+  useArduino1hrStats,
 } from "@/hooks/aurora";
 
 interface ClientSensorStatsProps {
@@ -79,34 +78,40 @@ function StatCard({
 }
 
 export default function ClientSensorStats({ clientId, isGlobalView = true }: ClientSensorStatsProps) {
-  // Fetch thermal probe data
-  const { data: thermalStats, isLoading: thermalStatsLoading } = useThermalProbeStats();
-  const { data: thermalTimeseries, isLoading: thermalTimeseriesLoading } = useThermalProbeTimeseries(24, clientId !== 'all' ? clientId : undefined);
+  const effectiveClientId = clientId !== 'all' ? clientId : undefined;
   
-  // Fetch AHT/BHT sensor data (temperature/humidity)
-  const { data: ahtTimeseries, isLoading: ahtLoading } = useAhtSensorTimeseries(24, clientId !== 'all' ? clientId : undefined);
+  // Fetch thermal probe data - has 31k readings
+  const { data: thermalTimeseries, isLoading: thermalTimeseriesLoading } = useThermalProbeTimeseries(24, effectiveClientId);
   
-  // Fetch Starlink power data
+  // Fetch Arduino sensor data (has temp/humidity from sensor kit) - 31k readings
+  const { data: arduinoTimeseries, isLoading: arduinoLoading } = useArduinoSensorTimeseries(24, effectiveClientId);
+  const { data: arduino1hrStats, isLoading: arduino1hrLoading } = useArduino1hrStats();
+  
+  // Fetch Starlink power data - 8k readings
   const { data: starlinkDevices, isLoading: starlinkDevicesLoading } = useStarlinkDevicesFromReadings();
   const { data: starlinkPower, isLoading: starlinkPowerLoading } = useStarlinkPower();
 
   // Process thermal timeseries data for charts
   const thermalChartData = useMemo(() => {
-    if (!thermalTimeseries?.readings) return [];
+    if (!thermalTimeseries?.readings || thermalTimeseries.readings.length === 0) return [];
     
     // Group by hour for cleaner visualization
     const hourlyData = new Map<string, { temps: number[]; count: number }>();
     
-    thermalTimeseries.readings.forEach((reading: any) => {
-      const hour = format(parseISO(reading.timestamp), 'HH:00');
-      const temp = reading.temp_c ?? reading.temperature ?? reading.data?.temp_c;
-      
-      if (typeof temp === 'number') {
-        if (!hourlyData.has(hour)) {
-          hourlyData.set(hour, { temps: [], count: 0 });
+    thermalTimeseries.readings.forEach((reading) => {
+      try {
+        const hour = format(parseISO(reading.timestamp), 'HH:00');
+        const temp = reading.temp_c ?? reading.probe_c ?? reading.ambient_c;
+        
+        if (typeof temp === 'number' && !isNaN(temp)) {
+          if (!hourlyData.has(hour)) {
+            hourlyData.set(hour, { temps: [], count: 0 });
+          }
+          hourlyData.get(hour)!.temps.push(temp);
+          hourlyData.get(hour)!.count++;
         }
-        hourlyData.get(hour)!.temps.push(temp);
-        hourlyData.get(hour)!.count++;
+      } catch {
+        // Skip invalid timestamps
       }
     });
     
@@ -119,31 +124,57 @@ export default function ClientSensorStats({ clientId, isGlobalView = true }: Cli
       .sort((a, b) => a.time.localeCompare(b.time));
   }, [thermalTimeseries]);
 
-  // Process Starlink power timeseries
+  // Process Starlink power data for chart
   const starlinkPowerChartData = useMemo(() => {
-    if (!starlinkDevices || starlinkDevices.length === 0) return [];
-    
-    // Get power readings from all devices and aggregate
-    const powerByTime = new Map<string, number[]>();
-    
-    starlinkDevices.forEach((device: any) => {
-      if (device.power_watts) {
-        const time = device.last_seen ? format(parseISO(device.last_seen), 'HH:mm') : 'now';
-        if (!powerByTime.has(time)) {
-          powerByTime.set(time, []);
+    // Use power_data from the dedicated power endpoint if available
+    if (starlinkPower?.power_data && starlinkPower.power_data.length > 0) {
+      const hourlyData = new Map<string, number[]>();
+      
+      starlinkPower.power_data.forEach((point) => {
+        try {
+          const hour = format(parseISO(point.timestamp), 'HH:00');
+          if (!hourlyData.has(hour)) {
+            hourlyData.set(hour, []);
+          }
+          hourlyData.get(hour)!.push(point.power_watts);
+        } catch {
+          // Skip invalid
         }
-        powerByTime.get(time)!.push(device.power_watts);
-      }
-    });
+      });
+      
+      return Array.from(hourlyData.entries())
+        .map(([time, powers]) => ({
+          time,
+          power: powers.reduce((a, b) => a + b, 0) / powers.length,
+        }))
+        .sort((a, b) => a.time.localeCompare(b.time));
+    }
     
-    return Array.from(powerByTime.entries())
-      .map(([time, powers]) => ({
-        time,
-        power: powers.reduce((a, b) => a + b, 0) / powers.length,
-      }));
-  }, [starlinkDevices]);
+    return [];
+  }, [starlinkPower]);
 
-  // Extract current values
+  // Extract current values from Arduino (which has temp/humidity from sensor kit)
+  const currentArduino = useMemo(() => {
+    // First try the hourly aggregated stats
+    if (arduino1hrStats?.aggregated) {
+      const agg = arduino1hrStats.aggregated;
+      return {
+        temp: agg.current?.temp_c ?? agg.averages?.temp_c,
+        humidity: agg.current?.humidity ?? agg.averages?.humidity,
+      };
+    }
+    // Fallback to latest timeseries reading
+    if (arduinoTimeseries?.readings?.length > 0) {
+      const latest = arduinoTimeseries.readings[0];
+      return {
+        temp: latest.th_temp_c ?? latest.bmp_temp_c,
+        humidity: latest.th_humidity,
+      };
+    }
+    return { temp: null, humidity: null };
+  }, [arduino1hrStats, arduinoTimeseries]);
+
+  // Extract current thermal probe value
   const currentThermal = useMemo(() => {
     if (thermalTimeseries?.readings?.length > 0) {
       const latest = thermalTimeseries.readings[0];
@@ -151,23 +182,10 @@ export default function ClientSensorStats({ clientId, isGlobalView = true }: Cli
         temp: latest.temp_c ?? latest.probe_c ?? latest.ambient_c,
       };
     }
-    // Fallback to stats
-    return {
-      temp: thermalStats?.avg_temp_c ?? thermalStats?.latest_reading?.temp_c as number | undefined,
-    };
-  }, [thermalTimeseries, thermalStats]);
+    return { temp: null };
+  }, [thermalTimeseries]);
 
-  const currentAht = useMemo(() => {
-    if (ahtTimeseries?.readings?.length > 0) {
-      const latest = ahtTimeseries.readings[0];
-      return {
-        temp: latest.aht_temp_c ?? latest.temp_c,
-        humidity: latest.aht_humidity ?? latest.humidity,
-      };
-    }
-    return { temp: null, humidity: null };
-  }, [ahtTimeseries]);
-
+  // Extract current Starlink power
   const currentStarlinkPower = useMemo(() => {
     // Try dedicated power endpoint - use device_summaries for current power
     if (starlinkPower?.device_summaries && starlinkPower.device_summaries.length > 0) {
@@ -190,9 +208,8 @@ export default function ClientSensorStats({ clientId, isGlobalView = true }: Cli
     return { power: null, deviceCount: 0 };
   }, [starlinkPower, starlinkDevices]);
 
-  const totalReadings = thermalStats?.count ?? thermalTimeseries?.readings?.length ?? 0;
-
-  const isLoading = thermalStatsLoading || thermalTimeseriesLoading || ahtLoading || starlinkDevicesLoading || starlinkPowerLoading;
+  const totalReadings = (thermalTimeseries?.readings?.length ?? 0) + (arduinoTimeseries?.readings?.length ?? 0);
+  const isLoading = thermalTimeseriesLoading || arduinoLoading || arduino1hrLoading || starlinkDevicesLoading || starlinkPowerLoading;
 
   return (
     <div className="space-y-6">
@@ -222,20 +239,20 @@ export default function ClientSensorStats({ clientId, isGlobalView = true }: Cli
                 color="orange-500"
               />
               
-              {/* AHT/BHT Temperature */}
+              {/* Arduino Temperature (from sensor kit) */}
               <StatCard
                 icon={Thermometer}
-                label="AHT Temperature"
-                value={currentAht.temp?.toFixed(1)}
+                label="Arduino Temp"
+                value={currentArduino.temp?.toFixed(1)}
                 unit="°C"
                 color="red-500"
               />
               
-              {/* AHT/BHT Humidity */}
+              {/* Arduino Humidity */}
               <StatCard
                 icon={Droplets}
-                label="AHT Humidity"
-                value={currentAht.humidity?.toFixed(1)}
+                label="Humidity"
+                value={currentArduino.humidity?.toFixed(1)}
                 unit="%"
                 color="blue-500"
               />
@@ -334,58 +351,56 @@ export default function ClientSensorStats({ clientId, isGlobalView = true }: Cli
             </CardTitle>
           </CardHeader>
           <CardContent>
-            {starlinkDevicesLoading ? (
+            {starlinkPowerLoading ? (
               <div className="h-[200px] bg-muted/30 animate-pulse rounded-lg" />
-            ) : starlinkPowerChartData.length > 0 || currentStarlinkPower.power ? (
+            ) : starlinkPowerChartData.length > 0 ? (
               <div className="h-[200px]">
-                {starlinkPowerChartData.length > 0 ? (
-                  <ResponsiveContainer width="100%" height="100%">
-                    <AreaChart data={starlinkPowerChartData}>
-                      <defs>
-                        <linearGradient id="powerGradient" x1="0" y1="0" x2="0" y2="1">
-                          <stop offset="5%" stopColor="hsl(var(--chart-4))" stopOpacity={0.3} />
-                          <stop offset="95%" stopColor="hsl(var(--chart-4))" stopOpacity={0} />
-                        </linearGradient>
-                      </defs>
-                      <CartesianGrid strokeDasharray="3 3" className="stroke-border/50" />
-                      <XAxis 
-                        dataKey="time" 
-                        tick={{ fontSize: 10 }}
-                        className="text-muted-foreground"
-                      />
-                      <YAxis 
-                        tick={{ fontSize: 10 }}
-                        className="text-muted-foreground"
-                        domain={['auto', 'auto']}
-                        tickFormatter={(v) => `${v}W`}
-                      />
-                      <Tooltip 
-                        contentStyle={{ 
-                          backgroundColor: 'hsl(var(--card))', 
-                          border: '1px solid hsl(var(--border))',
-                          borderRadius: '8px',
-                        }}
-                        formatter={(value: number) => [`${value.toFixed(1)}W`, 'Power']}
-                      />
-                      <Area
-                        type="monotone"
-                        dataKey="power"
-                        stroke="hsl(var(--chart-4))"
-                        fill="url(#powerGradient)"
-                        strokeWidth={2}
-                      />
-                    </AreaChart>
-                  </ResponsiveContainer>
-                ) : (
-                  <div className="h-full flex flex-col items-center justify-center">
-                    <div className="text-4xl font-bold text-chart-4">
-                      {currentStarlinkPower.power?.toFixed(0) ?? '--'}W
-                    </div>
-                    <p className="text-sm text-muted-foreground mt-2">
-                      Current power across {currentStarlinkPower.deviceCount} terminal(s)
-                    </p>
-                  </div>
-                )}
+                <ResponsiveContainer width="100%" height="100%">
+                  <AreaChart data={starlinkPowerChartData}>
+                    <defs>
+                      <linearGradient id="powerGradient" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="5%" stopColor="hsl(var(--chart-4))" stopOpacity={0.3} />
+                        <stop offset="95%" stopColor="hsl(var(--chart-4))" stopOpacity={0} />
+                      </linearGradient>
+                    </defs>
+                    <CartesianGrid strokeDasharray="3 3" className="stroke-border/50" />
+                    <XAxis 
+                      dataKey="time" 
+                      tick={{ fontSize: 10 }}
+                      className="text-muted-foreground"
+                    />
+                    <YAxis 
+                      tick={{ fontSize: 10 }}
+                      className="text-muted-foreground"
+                      domain={['auto', 'auto']}
+                      tickFormatter={(v) => `${v}W`}
+                    />
+                    <Tooltip 
+                      contentStyle={{ 
+                        backgroundColor: 'hsl(var(--card))', 
+                        border: '1px solid hsl(var(--border))',
+                        borderRadius: '8px',
+                      }}
+                      formatter={(value: number) => [`${value.toFixed(1)}W`, 'Power']}
+                    />
+                    <Area
+                      type="monotone"
+                      dataKey="power"
+                      stroke="hsl(var(--chart-4))"
+                      fill="url(#powerGradient)"
+                      strokeWidth={2}
+                    />
+                  </AreaChart>
+                </ResponsiveContainer>
+              </div>
+            ) : currentStarlinkPower.power ? (
+              <div className="h-[200px] flex flex-col items-center justify-center">
+                <div className="text-4xl font-bold text-chart-4">
+                  {currentStarlinkPower.power?.toFixed(0) ?? '--'}W
+                </div>
+                <p className="text-sm text-muted-foreground mt-2">
+                  Current power across {currentStarlinkPower.deviceCount} terminal(s)
+                </p>
               </div>
             ) : (
               <div className="h-[200px] flex items-center justify-center text-muted-foreground text-sm">
