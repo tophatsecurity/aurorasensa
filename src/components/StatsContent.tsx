@@ -231,7 +231,7 @@ export default function StatsContent() {
         <>
           {/* Current Sensor Stats - Thermal, AHT, Starlink Power */}
           <ComponentErrorBoundary name="ClientSensorStats">
-            <ClientSensorStats clientId={actualClientId} isGlobalView={false} />
+            <ClientSensorStats clientId={actualClientId} />
           </ComponentErrorBoundary>
 
           {/* Client Info Card */}

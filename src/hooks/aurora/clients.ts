@@ -584,3 +584,56 @@ export function useDisconnectWifiClient() {
     },
   });
 }
+
+// =============================================
+// CLIENT LATEST BATCH
+// =============================================
+
+export interface LatestBatchReading {
+  data?: Record<string, unknown>;
+  device_id?: string;
+  device_type?: string;
+  sensors?: Record<string, {
+    device_type?: string;
+    device_timestamp?: string;
+    [key: string]: unknown;
+  }>;
+}
+
+export interface ClientLatestBatch {
+  batch: {
+    batch_id: string;
+    batch_timestamp: string;
+    client_id: string;
+    created_at: string;
+    json_content: {
+      batch_id: string;
+      batch_timestamp: string;
+      client_id: string;
+      reading_count: number;
+      readings: LatestBatchReading[];
+    };
+    processing_time_ms?: number;
+    reading_count: number;
+  };
+}
+
+export function useClientLatestBatch(clientId: string | null, includeJson: boolean = true) {
+  return useQuery({
+    queryKey: ["aurora", "clients", clientId, "latest-batch", includeJson],
+    queryFn: async () => {
+      if (!clientId || clientId === "all") return null;
+      const result = await callAuroraApi<ClientLatestBatch>(
+        `/api/clients/${clientId}/latest-batch`,
+        "GET",
+        undefined,
+        { params: { include_json: includeJson } }
+      );
+      return result;
+    },
+    enabled: hasAuroraSession() && !!clientId && clientId !== "all",
+    staleTime: 30000,
+    refetchInterval: 60000,
+    retry: 1,
+  });
+}
