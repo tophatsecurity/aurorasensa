@@ -1161,3 +1161,79 @@ export function useSystemResourceStatsHistory(hours: number = 24, clientId?: str
     retry: 0,
   });
 }
+
+// =============================================
+// CLIENT TIMESERIES HOOKS
+// =============================================
+
+export interface ClientTimeseriesPoint {
+  timestamp: string;
+  hour?: string;
+  sensor_type: string;
+  reading_count: number;
+  device_count?: number;
+  avg_value?: number;
+  min_value?: number;
+  max_value?: number;
+}
+
+export interface ClientTimeseriesResponse {
+  client_id: string;
+  hours: number;
+  timeseries: ClientTimeseriesPoint[];
+  summary?: {
+    total_readings: number;
+    sensor_types: string[];
+    peak_hour?: string;
+    avg_readings_per_hour?: number;
+  };
+}
+
+export function useClientTimeseries(clientId: string | null, hours: number = 24) {
+  return useQuery({
+    queryKey: ["aurora", "timeseries", "client", clientId, hours],
+    queryFn: async (): Promise<ClientTimeseriesResponse> => {
+      if (!clientId || clientId === 'all') {
+        return { client_id: '', hours, timeseries: [] };
+      }
+      try {
+        const response = await callAuroraApi<ClientTimeseriesResponse | { data: ClientTimeseriesResponse }>(
+          `${TIMESERIES.CLIENT(clientId)}?hours=${hours}`
+        );
+        // Handle both direct response and nested data structure
+        const data = 'data' in response ? response.data : response;
+        return {
+          client_id: data.client_id || clientId,
+          hours: data.hours || hours,
+          timeseries: data.timeseries || [],
+          summary: data.summary,
+        };
+      } catch (error) {
+        console.warn(`Client timeseries endpoint failed:`, error);
+        // Fallback to sensor stats history filtered by sensor types
+        try {
+          const sensorHistory = await callAuroraApi<SensorStatsHistoryPoint[]>(
+            `${STATS.HISTORY_SENSORS}?hours=${hours}&client_id=${clientId}`
+          );
+          return {
+            client_id: clientId,
+            hours,
+            timeseries: Array.isArray(sensorHistory) ? sensorHistory.map(p => ({
+              timestamp: p.timestamp,
+              sensor_type: p.sensor_type,
+              reading_count: p.reading_count,
+              device_count: p.device_count,
+              avg_value: p.avg_value,
+            })) : [],
+          };
+        } catch {
+          return { client_id: clientId, hours, timeseries: [] };
+        }
+      }
+    },
+    enabled: hasAuroraSession() && !!clientId && clientId !== 'all',
+    staleTime: 60000,
+    refetchInterval: 120000,
+    retry: 1,
+  });
+}
