@@ -14,7 +14,7 @@ import { useClientContextOptional } from "@/contexts/ClientContext";
 // TIME PERIOD SELECTOR
 // ============================================
 
-export type TimePeriodOption = "1h" | "6h" | "24h" | "weekly";
+export type TimePeriodOption = "1h" | "6h" | "12h" | "24h" | "weekly";
 
 interface TimePeriodSelectorProps {
   value?: TimePeriodOption;
@@ -25,6 +25,7 @@ interface TimePeriodSelectorProps {
 const TIME_PERIOD_OPTIONS: { value: TimePeriodOption; label: string; hours: number }[] = [
   { value: "1h", label: "1h", hours: 1 },
   { value: "6h", label: "6h", hours: 6 },
+  { value: "12h", label: "12h", hours: 12 },
   { value: "24h", label: "24hr", hours: 24 },
   { value: "weekly", label: "Weekly", hours: 168 },
 ];

@@ -29,6 +29,7 @@ export function timePeriodToHours(period: TimePeriodOption): number {
   switch (period) {
     case "1h": return 1;
     case "6h": return 6;
+    case "12h": return 12;
     case "24h": return 24;
     case "weekly": return 168;
     default: return 24;
