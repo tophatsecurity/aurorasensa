@@ -177,10 +177,39 @@ function extractSensorValuesFromBatch(batchData: unknown): SensorValues {
   
   const sensors = reading.sensors;
   
-  // Extract thermal probe data
-  const thermal = sensors['thermal_probe_1'] as Record<string, unknown> | undefined;
-  if (thermal) {
-    defaults.thermalTemp = extractNumber(thermal, 'temp_c', 'probe_c', 'ambient_c', 'temperature');
+  // Extract thermal probe data - check multiple possible sensor keys
+  const thermalKeys = ['thermal_probe_1', 'thermal_probe', 'thermalProbe', 'thermal'];
+  for (const key of thermalKeys) {
+    const thermal = sensors[key] as Record<string, unknown> | undefined;
+    if (thermal && defaults.thermalTemp === null) {
+      // Try direct properties
+      defaults.thermalTemp = extractNumber(thermal, 'temp_c', 'probe_c', 'ambient_c', 'temperature', 'value', 'temp');
+      
+      // Check for nested 'probe' object
+      const probe = thermal['probe'] as Record<string, unknown> | undefined;
+      if (probe && defaults.thermalTemp === null) {
+        defaults.thermalTemp = extractNumber(probe, 'temp_c', 'temperature', 'value');
+      }
+      
+      // Check for 'readings' array inside thermal
+      const thermalReadings = thermal['readings'] as unknown[] | undefined;
+      if (thermalReadings && thermalReadings.length > 0 && defaults.thermalTemp === null) {
+        const firstReading = thermalReadings[0] as Record<string, unknown>;
+        defaults.thermalTemp = extractNumber(firstReading, 'temp_c', 'temperature', 'value');
+      }
+      
+      if (defaults.thermalTemp !== null) break;
+    }
+  }
+  
+  // Also check for thermal probes directly in sensors root with numbered keys
+  for (const sensorKey of Object.keys(sensors)) {
+    if (sensorKey.toLowerCase().includes('thermal') && defaults.thermalTemp === null) {
+      const thermalData = sensors[sensorKey] as Record<string, unknown> | undefined;
+      if (thermalData) {
+        defaults.thermalTemp = extractNumber(thermalData, 'temp_c', 'probe_c', 'ambient_c', 'temperature', 'value');
+      }
+    }
   }
   
   // Extract Arduino data
