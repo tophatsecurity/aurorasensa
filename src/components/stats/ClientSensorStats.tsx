@@ -35,6 +35,9 @@ import {
   useClientTimeseries,
   useThermalProbeTimeseries,
   useArduinoSensorTimeseries,
+  useClientThermalData,
+  useClientStarlinkData,
+  useClientSystemMonitorData,
 } from "@/hooks/aurora";
 import {
   LineChart,
@@ -65,23 +68,39 @@ const colorClasses: Record<string, { bg: string; text: string }> = {
   'purple-500': { bg: 'bg-chart-5/20', text: 'text-chart-5' },
 };
 
-// Stat card component
+// Unit conversion helpers
+function cToF(celsius: number | null): number | null {
+  if (celsius === null) return null;
+  return (celsius * 9/5) + 32;
+}
+
+function metersToFeet(meters: number | null): number | null {
+  if (meters === null) return null;
+  return meters * 3.28084;
+}
+
+function bpsToMbps(bps: number | null): number | null {
+  if (bps === null) return null;
+  return bps / 1000000;
+}
+
+// Stat card component with dual units support
 function StatCard({ 
   icon: Icon, 
   label, 
   value, 
   unit, 
   color = "primary",
-  subValue,
-  subLabel 
+  secondaryValue,
+  secondaryUnit,
 }: { 
   icon: LucideIcon; 
   label: string; 
   value: string | number | null | undefined; 
   unit: string;
   color?: string;
-  subValue?: string | number | null;
-  subLabel?: string;
+  secondaryValue?: string | number | null;
+  secondaryUnit?: string;
 }) {
   const displayValue = value !== null && value !== undefined ? value : '--';
   const colorClass = colorClasses[color] || colorClasses.primary;
@@ -97,9 +116,9 @@ function StatCard({
           {displayValue}
           <span className="text-sm font-normal text-muted-foreground ml-1">{unit}</span>
         </p>
-        {subValue !== undefined && subLabel && (
+        {secondaryValue !== undefined && secondaryValue !== null && secondaryUnit && (
           <p className="text-xs text-muted-foreground">
-            {subLabel}: {subValue ?? '--'}
+            {secondaryValue} {secondaryUnit}
           </p>
         )}
       </div>
@@ -132,22 +151,26 @@ function extractNumber(data: unknown, ...keys: string[]): number | null {
 
 // Extract sensor data from latest batch readings
 interface SensorValues {
-  thermalTemp: number | null;
-  arduinoTemp: number | null;
+  thermalTempC: number | null;
+  thermalTempF: number | null;
+  arduinoTempC: number | null;
+  arduinoTempF: number | null;
   humidity: number | null;
   pressure: number | null;
+  pressureInHg: number | null;
   light: number | null;
   sound: number | null;
   starlinkPower: number | null;
   starlinkLatency: number | null;
-  starlinkDownload: number | null;
-  starlinkUpload: number | null;
+  starlinkDownloadMbps: number | null;
+  starlinkUploadMbps: number | null;
   cpuPercent: number | null;
   memoryPercent: number | null;
   diskPercent: number | null;
   latitude: number | null;
   longitude: number | null;
-  altitude: number | null;
+  altitudeM: number | null;
+  altitudeFt: number | null;
   satellites: number | null;
   wifiNetworks: number | null;
   wifiSignal: number | null;
@@ -156,12 +179,13 @@ interface SensorValues {
 
 function extractSensorValuesFromBatch(batchData: unknown): SensorValues {
   const defaults: SensorValues = {
-    thermalTemp: null, arduinoTemp: null, humidity: null, pressure: null,
+    thermalTempC: null, thermalTempF: null, arduinoTempC: null, arduinoTempF: null,
+    humidity: null, pressure: null, pressureInHg: null,
     light: null, sound: null, starlinkPower: null, starlinkLatency: null,
-    starlinkDownload: null, starlinkUpload: null, cpuPercent: null,
+    starlinkDownloadMbps: null, starlinkUploadMbps: null, cpuPercent: null,
     memoryPercent: null, diskPercent: null, latitude: null, longitude: null,
-    altitude: null, satellites: null, wifiNetworks: null, wifiSignal: null,
-    bluetoothDevices: null,
+    altitudeM: null, altitudeFt: null, satellites: null, wifiNetworks: null, 
+    wifiSignal: null, bluetoothDevices: null,
   };
   
   if (!batchData || typeof batchData !== 'object') return defaults;
@@ -181,33 +205,45 @@ function extractSensorValuesFromBatch(batchData: unknown): SensorValues {
   const thermalKeys = ['thermal_probe_1', 'thermal_probe', 'thermalProbe', 'thermal'];
   for (const key of thermalKeys) {
     const thermal = sensors[key] as Record<string, unknown> | undefined;
-    if (thermal && defaults.thermalTemp === null) {
-      // Try direct properties
-      defaults.thermalTemp = extractNumber(thermal, 'temp_c', 'probe_c', 'ambient_c', 'temperature', 'value', 'temp');
+    if (thermal && defaults.thermalTempC === null) {
+      // Try direct properties - prioritize F value if available
+      defaults.thermalTempF = extractNumber(thermal, 'temperature_f', 'temp_f');
+      defaults.thermalTempC = extractNumber(thermal, 'temperature_c', 'temp_c', 'probe_c', 'ambient_c', 'temperature', 'value', 'temp');
       
       // Check for nested 'probe' object
       const probe = thermal['probe'] as Record<string, unknown> | undefined;
-      if (probe && defaults.thermalTemp === null) {
-        defaults.thermalTemp = extractNumber(probe, 'temp_c', 'temperature', 'value');
+      if (probe && defaults.thermalTempC === null) {
+        defaults.thermalTempC = extractNumber(probe, 'temp_c', 'temperature', 'value');
+        defaults.thermalTempF = extractNumber(probe, 'temp_f', 'temperature_f');
       }
       
       // Check for 'readings' array inside thermal
       const thermalReadings = thermal['readings'] as unknown[] | undefined;
-      if (thermalReadings && thermalReadings.length > 0 && defaults.thermalTemp === null) {
+      if (thermalReadings && thermalReadings.length > 0 && defaults.thermalTempC === null) {
         const firstReading = thermalReadings[0] as Record<string, unknown>;
-        defaults.thermalTemp = extractNumber(firstReading, 'temp_c', 'temperature', 'value');
+        defaults.thermalTempC = extractNumber(firstReading, 'temp_c', 'temperature', 'value');
+        defaults.thermalTempF = extractNumber(firstReading, 'temp_f', 'temperature_f');
       }
       
-      if (defaults.thermalTemp !== null) break;
+      // Calculate missing unit
+      if (defaults.thermalTempC !== null && defaults.thermalTempF === null) {
+        defaults.thermalTempF = cToF(defaults.thermalTempC);
+      }
+      
+      if (defaults.thermalTempC !== null) break;
     }
   }
   
   // Also check for thermal probes directly in sensors root with numbered keys
   for (const sensorKey of Object.keys(sensors)) {
-    if (sensorKey.toLowerCase().includes('thermal') && defaults.thermalTemp === null) {
+    if (sensorKey.toLowerCase().includes('thermal') && defaults.thermalTempC === null) {
       const thermalData = sensors[sensorKey] as Record<string, unknown> | undefined;
       if (thermalData) {
-        defaults.thermalTemp = extractNumber(thermalData, 'temp_c', 'probe_c', 'ambient_c', 'temperature', 'value');
+        defaults.thermalTempF = extractNumber(thermalData, 'temperature_f', 'temp_f');
+        defaults.thermalTempC = extractNumber(thermalData, 'temperature_c', 'temp_c', 'probe_c', 'ambient_c', 'temperature', 'value');
+        if (defaults.thermalTempC !== null && defaults.thermalTempF === null) {
+          defaults.thermalTempF = cToF(defaults.thermalTempC);
+        }
       }
     }
   }
@@ -220,13 +256,17 @@ function extractSensorValuesFromBatch(batchData: unknown): SensorValues {
     const analog = arduino['analog'] as Record<string, unknown> | undefined;
     
     if (th) {
-      defaults.arduinoTemp = extractNumber(th, 'temp_c', 'temperature');
+      defaults.arduinoTempC = extractNumber(th, 'temp_c', 'temperature');
+      defaults.arduinoTempF = cToF(defaults.arduinoTempC);
       defaults.humidity = extractNumber(th, 'hum_pct', 'humidity');
     }
     if (bmp) {
-      defaults.pressure = extractNumber(bmp, 'press_hpa', 'pressure');
-      if (!defaults.arduinoTemp) {
-        defaults.arduinoTemp = extractNumber(bmp, 'temp_c');
+      const pressHpa = extractNumber(bmp, 'press_hpa', 'pressure');
+      defaults.pressure = pressHpa;
+      defaults.pressureInHg = pressHpa !== null ? pressHpa * 0.02953 : null;
+      if (!defaults.arduinoTempC) {
+        defaults.arduinoTempC = extractNumber(bmp, 'temp_c');
+        defaults.arduinoTempF = cToF(defaults.arduinoTempC);
       }
     }
     if (analog) {
@@ -243,8 +283,10 @@ function extractSensorValuesFromBatch(batchData: unknown): SensorValues {
       // Try direct properties
       defaults.starlinkPower = extractNumber(starlink, 'power_watts', 'avg_power_watts', 'power', 'power_w');
       defaults.starlinkLatency = extractNumber(starlink, 'pop_ping_latency_ms', 'latency_ms', 'latency');
-      defaults.starlinkDownload = extractNumber(starlink, 'downlink_throughput_bps', 'download_bps', 'dl_throughput');
-      defaults.starlinkUpload = extractNumber(starlink, 'uplink_throughput_bps', 'upload_bps', 'ul_throughput');
+      const dlBps = extractNumber(starlink, 'downlink_throughput_bps', 'download_bps', 'dl_throughput');
+      const ulBps = extractNumber(starlink, 'uplink_throughput_bps', 'upload_bps', 'ul_throughput');
+      defaults.starlinkDownloadMbps = bpsToMbps(dlBps);
+      defaults.starlinkUploadMbps = bpsToMbps(ulBps);
       
       // Check for nested 'starlink' object inside
       const nestedStarlink = starlink['starlink'] as Record<string, unknown> | undefined;
@@ -260,11 +302,13 @@ function extractSensorValuesFromBatch(batchData: unknown): SensorValues {
             defaults.starlinkLatency = extractNumber(pingLatency, 'Mean RTT, drop == 0', 'Mean RTT, drop < 1');
           }
         }
-        if (defaults.starlinkDownload === null) {
-          defaults.starlinkDownload = extractNumber(nestedStarlink, 'downlink_throughput_bps');
+        if (defaults.starlinkDownloadMbps === null) {
+          const dl = extractNumber(nestedStarlink, 'downlink_throughput_bps');
+          defaults.starlinkDownloadMbps = bpsToMbps(dl);
         }
-        if (defaults.starlinkUpload === null) {
-          defaults.starlinkUpload = extractNumber(nestedStarlink, 'uplink_throughput_bps');
+        if (defaults.starlinkUploadMbps === null) {
+          const ul = extractNumber(nestedStarlink, 'uplink_throughput_bps');
+          defaults.starlinkUploadMbps = bpsToMbps(ul);
         }
       }
       
@@ -285,8 +329,10 @@ function extractSensorValuesFromBatch(batchData: unknown): SensorValues {
       if (starlinkData) {
         defaults.starlinkPower = extractNumber(starlinkData, 'power_watts', 'avg_power_watts', 'power');
         defaults.starlinkLatency = extractNumber(starlinkData, 'pop_ping_latency_ms', 'latency_ms', 'latency');
-        defaults.starlinkDownload = extractNumber(starlinkData, 'downlink_throughput_bps', 'download_bps');
-        defaults.starlinkUpload = extractNumber(starlinkData, 'uplink_throughput_bps', 'upload_bps');
+        const dl = extractNumber(starlinkData, 'downlink_throughput_bps', 'download_bps');
+        const ul = extractNumber(starlinkData, 'uplink_throughput_bps', 'upload_bps');
+        defaults.starlinkDownloadMbps = bpsToMbps(dl);
+        defaults.starlinkUploadMbps = bpsToMbps(ul);
       }
     }
   }
@@ -343,11 +389,34 @@ function extractSensorValuesFromBatch(batchData: unknown): SensorValues {
   if (gps) {
     defaults.latitude = extractNumber(gps, 'latitude', 'lat');
     defaults.longitude = extractNumber(gps, 'longitude', 'lng', 'lon');
-    defaults.altitude = extractNumber(gps, 'altitude', 'alt');
+    defaults.altitudeM = extractNumber(gps, 'altitude', 'alt');
+    defaults.altitudeFt = metersToFeet(defaults.altitudeM);
     defaults.satellites = extractNumber(gps, 'satellites', 'sats', 'num_satellites');
   }
   
   return defaults;
+}
+
+// Extract sensor values from readings API response
+function extractFromReadingsApi(readings: unknown[]): Partial<SensorValues> {
+  const values: Partial<SensorValues> = {};
+  
+  if (!readings || !Array.isArray(readings) || readings.length === 0) return values;
+  
+  // Get the latest reading (first one since sorted desc)
+  const latestReading = readings[0] as { measurement?: string; data?: unknown };
+  
+  // Parse the measurement JSON string
+  let measurementData: Record<string, unknown> = {};
+  if (typeof latestReading.measurement === 'string') {
+    try {
+      measurementData = JSON.parse(latestReading.measurement);
+    } catch { /* ignore parse error */ }
+  } else if (latestReading.data && typeof latestReading.data === 'object') {
+    measurementData = latestReading.data as Record<string, unknown>;
+  }
+  
+  return measurementData;
 }
 
 // =============================================
@@ -419,10 +488,34 @@ function CurrentTab({
             </div>
           ) : (
             <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
-              <StatCard icon={Thermometer} label="Thermal Probe" value={sensorValues.thermalTemp?.toFixed(1)} unit="°C" color="orange-500" />
-              <StatCard icon={Thermometer} label="Arduino Temp" value={sensorValues.arduinoTemp?.toFixed(1)} unit="°C" color="red-500" />
+              <StatCard 
+                icon={Thermometer} 
+                label="Thermal Probe" 
+                value={sensorValues.thermalTempF?.toFixed(1)} 
+                unit="°F" 
+                color="orange-500"
+                secondaryValue={sensorValues.thermalTempC?.toFixed(1)}
+                secondaryUnit="°C"
+              />
+              <StatCard 
+                icon={Thermometer} 
+                label="Arduino Temp" 
+                value={sensorValues.arduinoTempF?.toFixed(1)} 
+                unit="°F" 
+                color="red-500"
+                secondaryValue={sensorValues.arduinoTempC?.toFixed(1)}
+                secondaryUnit="°C"
+              />
               <StatCard icon={Droplets} label="Humidity" value={sensorValues.humidity?.toFixed(1)} unit="%" color="blue-500" />
-              <StatCard icon={Gauge} label="Pressure" value={sensorValues.pressure?.toFixed(0)} unit="hPa" color="purple-500" />
+              <StatCard 
+                icon={Gauge} 
+                label="Pressure" 
+                value={sensorValues.pressureInHg?.toFixed(2)} 
+                unit="inHg" 
+                color="purple-500"
+                secondaryValue={sensorValues.pressure?.toFixed(0)}
+                secondaryUnit="hPa"
+              />
               <StatCard icon={Sun} label="Light Level" value={sensorValues.light} unit="" color="yellow-500" />
               <StatCard icon={Volume2} label="Sound Level" value={sensorValues.sound} unit="" color="green-500" />
             </div>
@@ -480,7 +573,15 @@ function CurrentTab({
               <StatCard icon={HardDrive} label="Disk Usage" value={sensorValues.diskPercent?.toFixed(1)} unit="%" color="red-500" />
               <StatCard icon={Navigation} label="Latitude" value={sensorValues.latitude?.toFixed(4)} unit="°" color="green-500" />
               <StatCard icon={Compass} label="Longitude" value={sensorValues.longitude?.toFixed(4)} unit="°" color="green-500" />
-              <StatCard icon={Satellite} label="Altitude" value={sensorValues.altitude?.toFixed(0)} unit="m" color="primary" />
+              <StatCard 
+                icon={Satellite} 
+                label="Altitude" 
+                value={sensorValues.altitudeFt?.toFixed(0)} 
+                unit="ft" 
+                color="primary"
+                secondaryValue={sensorValues.altitudeM?.toFixed(0)}
+                secondaryUnit="m"
+              />
             </div>
           )}
         </CardContent>
@@ -945,10 +1046,41 @@ export default function ClientSensorStats({ clientId }: ClientSensorStatsProps) 
   // Use sensors by client for accurate sensor breakdown (/api/stats/sensors/by-client/{id})
   const { data: sensorsByClient, isLoading: sensorsLoading } = useSensorsByClientId(effectiveClientId || null, 24);
 
-  // Extract real-time sensor values from latest batch
+  // Fallback data from readings API
+  const { data: thermalData } = useClientThermalData(effectiveClientId);
+  const { data: starlinkData } = useClientStarlinkData(effectiveClientId);
+  const { data: systemData } = useClientSystemMonitorData(effectiveClientId);
+
+  // Extract real-time sensor values - combine batch data with fallback readings
   const sensorValues = useMemo(() => {
-    return extractSensorValuesFromBatch(latestBatch);
-  }, [latestBatch]);
+    const batchValues = extractSensorValuesFromBatch(latestBatch);
+    
+    // If batch data missing, try to extract from readings API fallbacks
+    if (batchValues.thermalTempC === null && thermalData?.latest?.data) {
+      const data = thermalData.latest.data as Record<string, unknown>;
+      batchValues.thermalTempC = (data.temperature_c as number) ?? null;
+      batchValues.thermalTempF = (data.temperature_f as number) ?? cToF(batchValues.thermalTempC);
+    }
+    
+    if (batchValues.starlinkPower === null && starlinkData?.latest?.data) {
+      const data = starlinkData.latest.data as Record<string, unknown>;
+      batchValues.starlinkPower = (data.power_watts as number) ?? (data.avg_power_watts as number) ?? null;
+      batchValues.starlinkLatency = (data.pop_ping_latency_ms as number) ?? (data.latency_ms as number) ?? null;
+      const dl = (data.downlink_throughput_bps as number) ?? null;
+      const ul = (data.uplink_throughput_bps as number) ?? null;
+      batchValues.starlinkDownloadMbps = dl !== null ? dl / 1000000 : null;
+      batchValues.starlinkUploadMbps = ul !== null ? ul / 1000000 : null;
+    }
+    
+    if (batchValues.cpuPercent === null && systemData?.latest?.data) {
+      const data = systemData.latest.data as Record<string, unknown>;
+      batchValues.cpuPercent = (data.cpu_percent as number) ?? null;
+      batchValues.memoryPercent = (data.memory_percent as number) ?? null;
+      batchValues.diskPercent = (data.disk_percent as number) ?? null;
+    }
+    
+    return batchValues;
+  }, [latestBatch, thermalData, starlinkData, systemData]);
 
   // Get aggregate stats from client detail endpoint
   const totalReadings = clientStats?.overall?.total_readings || 0;
