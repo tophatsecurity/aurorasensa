@@ -31,6 +31,7 @@ import {
   RawJsonPanel,
   enrichDevicesWithLocations,
   ClientSensorStats,
+  ClientListView,
 } from "@/components/stats";
 import GlobalStatsCards from "@/components/stats/GlobalStatsCards";
 import GlobalReadingsTrendChart from "@/components/stats/GlobalReadingsTrendChart";
@@ -292,77 +293,8 @@ export default function StatsContent() {
             />
           </div>
 
-          {/* Client Breakdown Table */}
-          <Card className="border-border/50">
-            <CardHeader className="pb-3">
-              <CardTitle className="text-sm flex items-center gap-2">
-                <Users className="w-4 h-4 text-primary" />
-                Client Breakdown (Last 24 Hours)
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              {statsByClientLoading ? (
-                <div className="text-center py-8 text-muted-foreground">Loading client stats...</div>
-              ) : clientStatsList.length > 0 ? (
-                <div className="space-y-2">
-                  {/* Table Header */}
-                  <div className="grid grid-cols-12 gap-4 px-3 py-2 text-xs font-medium text-muted-foreground border-b border-border/50">
-                    <div className="col-span-4">Client</div>
-                    <div className="col-span-2 text-right">Readings</div>
-                    <div className="col-span-2 text-right">Devices</div>
-                    <div className="col-span-2">Sensor Types</div>
-                    <div className="col-span-2 text-right">Last Active</div>
-                  </div>
-                  
-                  {/* Table Rows */}
-                  {clientStatsList.map((client: any) => (
-                    <div 
-                      key={client.client_id}
-                      onClick={() => handleClientChange(client.client_id)}
-                      className="grid grid-cols-12 gap-4 px-3 py-3 rounded-lg hover:bg-muted/50 cursor-pointer transition-colors border border-transparent hover:border-primary/30"
-                    >
-                      <div className="col-span-4 flex items-center gap-2">
-                        <div className="w-8 h-8 rounded-lg bg-primary/20 flex items-center justify-center">
-                          <Cpu className="w-4 h-4 text-primary" />
-                        </div>
-                        <div className="min-w-0">
-                          <p className="font-medium truncate">{client.hostname}</p>
-                          <p className="text-xs text-muted-foreground truncate">{client.client_id}</p>
-                        </div>
-                      </div>
-                      <div className="col-span-2 text-right font-mono font-semibold text-lg">
-                        {formatNumber(client.reading_count)}
-                      </div>
-                      <div className="col-span-2 text-right font-mono">
-                        {client.device_count}
-                      </div>
-                      <div className="col-span-2 flex flex-wrap gap-1">
-                        {client.sensor_types?.slice(0, 3).map((type: string) => (
-                          <Badge key={type} variant="secondary" className="text-[10px] px-1.5 py-0">
-                            {type.replace(/_/g, ' ')}
-                          </Badge>
-                        ))}
-                        {client.sensor_types?.length > 3 && (
-                          <Badge variant="outline" className="text-[10px] px-1.5 py-0">
-                            +{client.sensor_types.length - 3}
-                          </Badge>
-                        )}
-                      </div>
-                      <div className="col-span-2 text-right text-xs text-muted-foreground">
-                        {client.last_reading 
-                          ? formatDistanceToNow(new Date(client.last_reading), { addSuffix: true })
-                          : 'N/A'}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              ) : (
-                <div className="text-center py-8 text-muted-foreground">
-                  No client statistics available
-                </div>
-              )}
-            </CardContent>
-          </Card>
+          {/* Client List with Locations and Sensors */}
+          <ClientListView onClientSelect={handleClientChange} />
 
           {/* Device Type Breakdown */}
           {comprehensiveStats?.global?.device_breakdown && comprehensiveStats.global.device_breakdown.length > 0 && (
