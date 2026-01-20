@@ -53,16 +53,38 @@ export function useClientsWithHostnames() {
     queryKey: ["aurora", "clients", "with-hostnames"],
     queryFn: async () => {
       try {
-        // Fetch clients list and system info in parallel for efficiency
-        const [clientsResponse, systemInfoResponse] = await Promise.all([
-          callAuroraApi<ClientsListResponse | Client[]>(CLIENTS.LIST),
+        // Fetch from all-states endpoint (more reliable) and system info in parallel
+        const [allStatesResponse, systemInfoResponse] = await Promise.all([
+          callAuroraApi<ClientsByStateResponse | Client[]>(CLIENTS.ALL_STATES).catch(() => null),
           callAuroraApi<AllClientsSystemInfoResponse>(CLIENTS.SYSTEM_INFO_ALL).catch(() => null),
         ]);
         
-        // Handle both array response and wrapped response
-        const clients = Array.isArray(clientsResponse) 
-          ? clientsResponse 
-          : (clientsResponse?.clients || []);
+        // Handle both array response and wrapped response from all-states
+        let clients: Client[] = [];
+        if (allStatesResponse) {
+          if (Array.isArray(allStatesResponse)) {
+            clients = allStatesResponse;
+          } else if (typeof allStatesResponse === 'object') {
+            // all-states returns { states: { adopted: [], pending: [], ... } } or { clients_by_state: {...} }
+            const stateResponse = allStatesResponse as ClientsByStateResponse;
+            const statesData = stateResponse.states || stateResponse.clients_by_state;
+            if (statesData) {
+              clients = [
+                ...(statesData.adopted || []),
+                ...(statesData.pending || []),
+                ...(statesData.registered || []),
+              ];
+            }
+          }
+        }
+        
+        // Fallback to LIST endpoint if all-states returns empty
+        if (clients.length === 0) {
+          const listResponse = await callAuroraApi<ClientsListResponse | Client[]>(CLIENTS.LIST).catch(() => null);
+          if (listResponse) {
+            clients = Array.isArray(listResponse) ? listResponse : (listResponse?.clients || []);
+          }
+        }
         
         if (clients.length === 0) {
           return [];
