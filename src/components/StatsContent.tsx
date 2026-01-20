@@ -30,6 +30,7 @@ import {
   StatsLoadingSkeleton,
   RawJsonPanel,
   enrichDevicesWithLocations,
+  ClientSensorStats,
 } from "@/components/stats";
 import GlobalStatsCards from "@/components/stats/GlobalStatsCards";
 import GlobalReadingsTrendChart from "@/components/stats/GlobalReadingsTrendChart";
@@ -392,6 +393,11 @@ export default function StatsContent() {
       {/* CLIENT-SPECIFIC VIEW */}
       {!isGlobalView && (
         <>
+          {/* Current Sensor Stats - Thermal, AHT, Starlink Power */}
+          <ComponentErrorBoundary name="ClientSensorStats">
+            <ClientSensorStats clientId={actualClientId} isGlobalView={false} />
+          </ComponentErrorBoundary>
+
           {/* Client Info Card */}
           {selectedClientData && (
             <ComponentErrorBoundary name="ClientInfoCard">

@@ -32,3 +32,4 @@ export { RawJsonPanel } from "./RawJsonPanel";
 export { default as GlobalStatsCards } from "./GlobalStatsCards";
 export { default as GlobalReadingsTrendChart } from "./GlobalReadingsTrendChart";
 export { default as ClientTrendChart } from "./ClientTrendChart";
+export { default as ClientSensorStats } from "./ClientSensorStats";
