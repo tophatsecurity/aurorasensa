@@ -23,6 +23,7 @@ import { format, parseISO } from "date-fns";
 import { 
   useClientDetailStats,
   useClientLatestBatch,
+  useSensorsByClientId,
 } from "@/hooks/aurora";
 
 interface ClientSensorStatsProps {
@@ -268,6 +269,9 @@ export default function ClientSensorStats({ clientId }: ClientSensorStatsProps) 
   // Use latest batch for real-time sensor values (/api/clients/{id}/latest-batch)
   const { data: latestBatch, isLoading: batchLoading } = useClientLatestBatch(effectiveClientId || null, true);
 
+  // NEW: Use sensors by client for accurate sensor breakdown (/api/stats/sensors/by-client/{id})
+  const { data: sensorsByClient, isLoading: sensorsLoading } = useSensorsByClientId(effectiveClientId || null, 24);
+
   // Extract real-time sensor values from latest batch
   const sensorValues = useMemo(() => {
     return extractSensorValuesFromBatch(latestBatch);
@@ -276,13 +280,22 @@ export default function ClientSensorStats({ clientId }: ClientSensorStatsProps) 
   // Get aggregate stats from client detail endpoint
   const totalReadings = clientStats?.overall?.total_readings || 0;
   const totalDevices = clientStats?.overall?.device_count || 0;
-  const sensorTypesCount = clientStats?.overall?.sensor_type_count || 0;
   
-  // Get sensor breakdown from by_sensor_type
+  // Prefer sensors by client endpoint for sensor count and breakdown
+  const sensorTypesCount = sensorsByClient?.sensor_count || clientStats?.overall?.sensor_type_count || 0;
+  
+  // Get sensor breakdown - prefer new endpoint, fallback to client stats
   const sensorBreakdown = useMemo(() => {
-    if (!clientStats?.by_sensor_type) return [];
-    return clientStats.by_sensor_type.sort((a, b) => (b.reading_count || 0) - (a.reading_count || 0));
-  }, [clientStats]);
+    // Use new sensors by client endpoint if available
+    if (sensorsByClient?.sensors && sensorsByClient.sensors.length > 0) {
+      return sensorsByClient.sensors.sort((a, b) => (b.reading_count || 0) - (a.reading_count || 0));
+    }
+    // Fallback to client stats by_sensor_type
+    if (clientStats?.by_sensor_type) {
+      return clientStats.by_sensor_type.sort((a, b) => (b.reading_count || 0) - (a.reading_count || 0));
+    }
+    return [];
+  }, [sensorsByClient, clientStats]);
 
   // Get batch timestamp
   const batchTimestamp = useMemo(() => {
@@ -295,7 +308,7 @@ export default function ClientSensorStats({ clientId }: ClientSensorStatsProps) 
     return null;
   }, [latestBatch]);
 
-  const isLoading = clientStatsLoading || batchLoading;
+  const isLoading = clientStatsLoading || batchLoading || sensorsLoading;
 
   if (!effectiveClientId) {
     return (
