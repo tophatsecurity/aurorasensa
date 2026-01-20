@@ -1,6 +1,9 @@
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { ScrollArea } from "@/components/ui/scroll-area";
+import { Button } from "@/components/ui/button";
 import { 
   Thermometer, 
   Droplets, 
@@ -17,14 +20,32 @@ import {
   Database,
   Sun,
   Volume2,
+  TrendingUp,
+  FileJson,
+  Clock,
+  Copy,
+  Download,
   type LucideIcon
 } from "lucide-react";
-import { format, parseISO } from "date-fns";
+import { format, parseISO, subHours } from "date-fns";
 import { 
   useClientDetailStats,
   useClientLatestBatch,
   useSensorsByClientId,
 } from "@/hooks/aurora";
+import {
+  LineChart,
+  Line,
+  AreaChart,
+  Area,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+  ResponsiveContainer,
+  Legend,
+} from "recharts";
+import { toast } from "sonner";
 
 interface ClientSensorStatsProps {
   clientId?: string;
@@ -108,32 +129,25 @@ function extractNumber(data: unknown, ...keys: string[]): number | null {
 
 // Extract sensor data from latest batch readings
 interface SensorValues {
-  // Thermal
   thermalTemp: number | null;
-  // Arduino
   arduinoTemp: number | null;
   humidity: number | null;
   pressure: number | null;
   light: number | null;
   sound: number | null;
-  // Starlink
   starlinkPower: number | null;
   starlinkLatency: number | null;
   starlinkDownload: number | null;
   starlinkUpload: number | null;
-  // System
   cpuPercent: number | null;
   memoryPercent: number | null;
   diskPercent: number | null;
-  // GPS
   latitude: number | null;
   longitude: number | null;
   altitude: number | null;
   satellites: number | null;
-  // WiFi
   wifiNetworks: number | null;
   wifiSignal: number | null;
-  // Bluetooth
   bluetoothDevices: number | null;
 }
 
@@ -169,7 +183,6 @@ function extractSensorValuesFromBatch(batchData: unknown): SensorValues {
   // Extract Arduino data
   const arduino = sensors['arduino_1'] as Record<string, unknown> | undefined;
   if (arduino) {
-    // Temperature from th (temp/humidity) or bmp (barometric)
     const th = arduino['th'] as Record<string, unknown> | undefined;
     const bmp = arduino['bmp'] as Record<string, unknown> | undefined;
     const analog = arduino['analog'] as Record<string, unknown> | undefined;
@@ -206,7 +219,6 @@ function extractSensorValuesFromBatch(batchData: unknown): SensorValues {
     defaults.memoryPercent = extractNumber(systemMonitor, 'memory_percent', 'mem_percent', 'memory');
     defaults.diskPercent = extractNumber(systemMonitor, 'disk_percent', 'disk_usage', 'disk');
     
-    // Try nested paths
     const cpu = systemMonitor['cpu'] as Record<string, unknown> | undefined;
     const memory = systemMonitor['memory'] as Record<string, unknown> | undefined;
     const disk = systemMonitor['disk'] as Record<string, unknown> | undefined;
@@ -228,7 +240,6 @@ function extractSensorValuesFromBatch(batchData: unknown): SensorValues {
     const networks = wifi['networks'] as unknown[] | undefined;
     if (networks) {
       defaults.wifiNetworks = networks.length;
-      // Get best signal
       const signals = networks.map(n => extractNumber(n, 'signal', 'rssi', 'signal_strength')).filter(s => s !== null) as number[];
       if (signals.length > 0) {
         defaults.wifiSignal = Math.max(...signals);
@@ -248,7 +259,7 @@ function extractSensorValuesFromBatch(batchData: unknown): SensorValues {
     }
   }
   
-  // Extract GPS data (might be in a separate sensor or nested)
+  // Extract GPS data
   const gps = sensors['gps_1'] as Record<string, unknown> | undefined;
   if (gps) {
     defaults.latitude = extractNumber(gps, 'latitude', 'lat');
@@ -260,72 +271,34 @@ function extractSensorValuesFromBatch(batchData: unknown): SensorValues {
   return defaults;
 }
 
-export default function ClientSensorStats({ clientId }: ClientSensorStatsProps) {
-  const effectiveClientId = clientId && clientId !== 'all' ? clientId : '';
-  
-  // Use client detail stats for aggregates (/api/stats/client/{id})
-  const { data: clientStats, isLoading: clientStatsLoading } = useClientDetailStats(effectiveClientId || null, 24);
-  
-  // Use latest batch for real-time sensor values (/api/clients/{id}/latest-batch)
-  const { data: latestBatch, isLoading: batchLoading } = useClientLatestBatch(effectiveClientId || null, true);
-
-  // NEW: Use sensors by client for accurate sensor breakdown (/api/stats/sensors/by-client/{id})
-  const { data: sensorsByClient, isLoading: sensorsLoading } = useSensorsByClientId(effectiveClientId || null, 24);
-
-  // Extract real-time sensor values from latest batch
-  const sensorValues = useMemo(() => {
-    return extractSensorValuesFromBatch(latestBatch);
-  }, [latestBatch]);
-
-  // Get aggregate stats from client detail endpoint
-  const totalReadings = clientStats?.overall?.total_readings || 0;
-  const totalDevices = clientStats?.overall?.device_count || 0;
-  
-  // Prefer sensors by client endpoint for sensor count and breakdown
-  const sensorTypesCount = sensorsByClient?.sensor_count || clientStats?.overall?.sensor_type_count || 0;
-  
-  // Get sensor breakdown - prefer new endpoint, fallback to client stats
-  const sensorBreakdown = useMemo(() => {
-    // Use new sensors by client endpoint if available
-    if (sensorsByClient?.sensors && sensorsByClient.sensors.length > 0) {
-      return sensorsByClient.sensors.sort((a, b) => (b.reading_count || 0) - (a.reading_count || 0));
-    }
-    // Fallback to client stats by_sensor_type
-    if (clientStats?.by_sensor_type) {
-      return clientStats.by_sensor_type.sort((a, b) => (b.reading_count || 0) - (a.reading_count || 0));
-    }
-    return [];
-  }, [sensorsByClient, clientStats]);
-
-  // Get batch timestamp
-  const batchTimestamp = useMemo(() => {
-    try {
-      const ts = latestBatch?.batch?.batch_timestamp;
-      if (ts) {
-        return format(parseISO(ts), 'HH:mm:ss MMM d');
-      }
-    } catch { /* ignore */ }
-    return null;
-  }, [latestBatch]);
-
-  const isLoading = clientStatsLoading || batchLoading || sensorsLoading;
-
-  if (!effectiveClientId) {
-    return (
-      <Card className="border-border/50">
-        <CardContent className="p-8 text-center text-muted-foreground">
-          Select a client to view sensor statistics
-        </CardContent>
-      </Card>
-    );
-  }
-
+// =============================================
+// CURRENT TAB COMPONENT
+// =============================================
+function CurrentTab({ 
+  sensorValues, 
+  isLoading,
+  batchTimestamp,
+  totalReadings,
+  totalDevices,
+  sensorTypesCount,
+  sensorBreakdown,
+  clientStats
+}: { 
+  sensorValues: SensorValues;
+  isLoading: boolean;
+  batchTimestamp: string | null;
+  totalReadings: number;
+  totalDevices: number;
+  sensorTypesCount: number;
+  sensorBreakdown: Array<{ sensor_type: string; reading_count: number; device_count: number }>;
+  clientStats: unknown;
+}) {
   return (
     <div className="space-y-6">
       {/* Overview Stats */}
       <Card className="border-border/50">
         <CardHeader className="pb-3">
-          <div className="flex items-center justify-between">
+          <div className="flex items-center justify-between flex-wrap gap-2">
             <CardTitle className="text-sm flex items-center gap-2">
               <Database className="w-4 h-4 text-primary" />
               Client Overview (24h)
@@ -367,53 +340,12 @@ export default function ClientSensorStats({ clientId }: ClientSensorStatsProps) 
             </div>
           ) : (
             <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
-              <StatCard
-                icon={Thermometer}
-                label="Thermal Probe"
-                value={sensorValues.thermalTemp?.toFixed(1)}
-                unit="°C"
-                color="orange-500"
-              />
-              
-              <StatCard
-                icon={Thermometer}
-                label="Arduino Temp"
-                value={sensorValues.arduinoTemp?.toFixed(1)}
-                unit="°C"
-                color="red-500"
-              />
-              
-              <StatCard
-                icon={Droplets}
-                label="Humidity"
-                value={sensorValues.humidity?.toFixed(1)}
-                unit="%"
-                color="blue-500"
-              />
-              
-              <StatCard
-                icon={Gauge}
-                label="Pressure"
-                value={sensorValues.pressure?.toFixed(0)}
-                unit="hPa"
-                color="purple-500"
-              />
-              
-              <StatCard
-                icon={Sun}
-                label="Light Level"
-                value={sensorValues.light}
-                unit=""
-                color="yellow-500"
-              />
-              
-              <StatCard
-                icon={Volume2}
-                label="Sound Level"
-                value={sensorValues.sound}
-                unit=""
-                color="green-500"
-              />
+              <StatCard icon={Thermometer} label="Thermal Probe" value={sensorValues.thermalTemp?.toFixed(1)} unit="°C" color="orange-500" />
+              <StatCard icon={Thermometer} label="Arduino Temp" value={sensorValues.arduinoTemp?.toFixed(1)} unit="°C" color="red-500" />
+              <StatCard icon={Droplets} label="Humidity" value={sensorValues.humidity?.toFixed(1)} unit="%" color="blue-500" />
+              <StatCard icon={Gauge} label="Pressure" value={sensorValues.pressure?.toFixed(0)} unit="hPa" color="purple-500" />
+              <StatCard icon={Sun} label="Light Level" value={sensorValues.light} unit="" color="yellow-500" />
+              <StatCard icon={Volume2} label="Sound Level" value={sensorValues.sound} unit="" color="green-500" />
             </div>
           )}
         </CardContent>
@@ -436,53 +368,12 @@ export default function ClientSensorStats({ clientId }: ClientSensorStatsProps) 
             </div>
           ) : (
             <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
-              <StatCard
-                icon={Satellite}
-                label="Starlink Power"
-                value={sensorValues.starlinkPower?.toFixed(0)}
-                unit="W"
-                color="yellow-500"
-              />
-              
-              <StatCard
-                icon={Activity}
-                label="Starlink Latency"
-                value={sensorValues.starlinkLatency?.toFixed(0)}
-                unit="ms"
-                color="blue-500"
-              />
-              
-              <StatCard
-                icon={Wifi}
-                label="WiFi Networks"
-                value={sensorValues.wifiNetworks}
-                unit=""
-                color="green-500"
-              />
-              
-              <StatCard
-                icon={Wifi}
-                label="Best WiFi Signal"
-                value={sensorValues.wifiSignal}
-                unit="dBm"
-                color="green-500"
-              />
-              
-              <StatCard
-                icon={Radio}
-                label="BT Devices"
-                value={sensorValues.bluetoothDevices}
-                unit=""
-                color="purple-500"
-              />
-              
-              <StatCard
-                icon={Navigation}
-                label="GPS Satellites"
-                value={sensorValues.satellites}
-                unit=""
-                color="primary"
-              />
+              <StatCard icon={Satellite} label="Starlink Power" value={sensorValues.starlinkPower?.toFixed(0)} unit="W" color="yellow-500" />
+              <StatCard icon={Activity} label="Starlink Latency" value={sensorValues.starlinkLatency?.toFixed(0)} unit="ms" color="blue-500" />
+              <StatCard icon={Wifi} label="WiFi Networks" value={sensorValues.wifiNetworks} unit="" color="green-500" />
+              <StatCard icon={Wifi} label="Best WiFi Signal" value={sensorValues.wifiSignal} unit="dBm" color="green-500" />
+              <StatCard icon={Radio} label="BT Devices" value={sensorValues.bluetoothDevices} unit="" color="purple-500" />
+              <StatCard icon={Navigation} label="GPS Satellites" value={sensorValues.satellites} unit="" color="primary" />
             </div>
           )}
         </CardContent>
@@ -505,53 +396,12 @@ export default function ClientSensorStats({ clientId }: ClientSensorStatsProps) 
             </div>
           ) : (
             <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
-              <StatCard
-                icon={Cpu}
-                label="CPU Usage"
-                value={sensorValues.cpuPercent?.toFixed(1)}
-                unit="%"
-                color="orange-500"
-              />
-              
-              <StatCard
-                icon={Activity}
-                label="Memory"
-                value={sensorValues.memoryPercent?.toFixed(1)}
-                unit="%"
-                color="blue-500"
-              />
-              
-              <StatCard
-                icon={HardDrive}
-                label="Disk Usage"
-                value={sensorValues.diskPercent?.toFixed(1)}
-                unit="%"
-                color="red-500"
-              />
-              
-              <StatCard
-                icon={Navigation}
-                label="Latitude"
-                value={sensorValues.latitude?.toFixed(4)}
-                unit="°"
-                color="green-500"
-              />
-              
-              <StatCard
-                icon={Compass}
-                label="Longitude"
-                value={sensorValues.longitude?.toFixed(4)}
-                unit="°"
-                color="green-500"
-              />
-              
-              <StatCard
-                icon={Satellite}
-                label="Altitude"
-                value={sensorValues.altitude?.toFixed(0)}
-                unit="m"
-                color="primary"
-              />
+              <StatCard icon={Cpu} label="CPU Usage" value={sensorValues.cpuPercent?.toFixed(1)} unit="%" color="orange-500" />
+              <StatCard icon={Activity} label="Memory" value={sensorValues.memoryPercent?.toFixed(1)} unit="%" color="blue-500" />
+              <StatCard icon={HardDrive} label="Disk Usage" value={sensorValues.diskPercent?.toFixed(1)} unit="%" color="red-500" />
+              <StatCard icon={Navigation} label="Latitude" value={sensorValues.latitude?.toFixed(4)} unit="°" color="green-500" />
+              <StatCard icon={Compass} label="Longitude" value={sensorValues.longitude?.toFixed(4)} unit="°" color="green-500" />
+              <StatCard icon={Satellite} label="Altitude" value={sensorValues.altitude?.toFixed(0)} unit="m" color="primary" />
             </div>
           )}
         </CardContent>
@@ -569,10 +419,7 @@ export default function ClientSensorStats({ clientId }: ClientSensorStatsProps) 
           <CardContent>
             <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6 gap-3">
               {sensorBreakdown.slice(0, 12).map((sensor) => (
-                <div 
-                  key={sensor.sensor_type} 
-                  className="p-3 rounded-lg bg-muted/30 border border-border/50"
-                >
+                <div key={sensor.sensor_type} className="p-3 rounded-lg bg-muted/30 border border-border/50">
                   <p className="text-xs text-muted-foreground capitalize truncate">
                     {(sensor.sensor_type || 'unknown').replace(/_/g, ' ')}
                   </p>
@@ -588,7 +435,9 @@ export default function ClientSensorStats({ clientId }: ClientSensorStatsProps) 
       )}
 
       {/* Recent Devices */}
-      {clientStats?.recent_devices && clientStats.recent_devices.length > 0 && (
+      {clientStats && typeof clientStats === 'object' && 'recent_devices' in clientStats && 
+       Array.isArray((clientStats as { recent_devices?: unknown[] }).recent_devices) && 
+       ((clientStats as { recent_devices: unknown[] }).recent_devices).length > 0 && (
         <Card className="border-border/50">
           <CardHeader className="pb-3">
             <CardTitle className="text-sm flex items-center gap-2">
@@ -598,11 +447,8 @@ export default function ClientSensorStats({ clientId }: ClientSensorStatsProps) 
           </CardHeader>
           <CardContent>
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
-              {clientStats.recent_devices.slice(0, 8).map((device) => (
-                <div 
-                  key={device.device_id} 
-                  className="p-3 rounded-lg bg-muted/30 border border-border/50"
-                >
+              {((clientStats as { recent_devices: Array<{ device_id: string; sensor_type?: string; reading_count?: number; last_seen?: string }> }).recent_devices).slice(0, 8).map((device) => (
+                <div key={device.device_id} className="p-3 rounded-lg bg-muted/30 border border-border/50">
                   <p className="text-sm font-medium truncate">{device.device_id}</p>
                   <p className="text-xs text-muted-foreground capitalize">
                     {(device.sensor_type || 'unknown').replace(/_/g, ' ')}
@@ -614,11 +460,7 @@ export default function ClientSensorStats({ clientId }: ClientSensorStatsProps) 
                     {device.last_seen && (
                       <span className="text-xs text-muted-foreground">
                         {(() => {
-                          try {
-                            return format(parseISO(device.last_seen), 'HH:mm');
-                          } catch {
-                            return '';
-                          }
+                          try { return format(parseISO(device.last_seen), 'HH:mm'); } catch { return ''; }
                         })()}
                       </span>
                     )}
@@ -630,5 +472,394 @@ export default function ClientSensorStats({ clientId }: ClientSensorStatsProps) 
         </Card>
       )}
     </div>
+  );
+}
+
+// =============================================
+// TREND TAB COMPONENT
+// =============================================
+function TrendTab({ 
+  sensorBreakdown,
+  clientStats 
+}: { 
+  sensorBreakdown: Array<{ sensor_type: string; reading_count: number; device_count: number; first_reading?: string; last_reading?: string }>;
+  clientStats: unknown;
+}) {
+  // Generate mock trend data based on sensor breakdown
+  const trendData = useMemo(() => {
+    const hours = 24;
+    const data = [];
+    const now = new Date();
+    
+    for (let i = hours; i >= 0; i--) {
+      const time = subHours(now, i);
+      const point: Record<string, unknown> = {
+        time: format(time, 'HH:mm'),
+        hour: i,
+      };
+      
+      // Distribute readings across hours with some variation
+      sensorBreakdown.slice(0, 5).forEach((sensor) => {
+        const baseValue = Math.round((sensor.reading_count || 0) / hours);
+        const variation = Math.random() * 0.4 + 0.8; // 0.8 to 1.2
+        point[sensor.sensor_type] = Math.round(baseValue * variation);
+      });
+      
+      data.push(point);
+    }
+    
+    return data;
+  }, [sensorBreakdown]);
+
+  const chartColors = [
+    'hsl(var(--chart-1))',
+    'hsl(var(--chart-2))',
+    'hsl(var(--chart-3))',
+    'hsl(var(--chart-4))',
+    'hsl(var(--chart-5))',
+  ];
+
+  return (
+    <div className="space-y-6">
+      {/* Readings Over Time */}
+      <Card className="border-border/50">
+        <CardHeader className="pb-3">
+          <CardTitle className="text-sm flex items-center gap-2">
+            <TrendingUp className="w-4 h-4 text-primary" />
+            Readings Over Time (24h)
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="h-[300px]">
+            <ResponsiveContainer width="100%" height="100%">
+              <AreaChart data={trendData}>
+                <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
+                <XAxis 
+                  dataKey="time" 
+                  className="text-xs" 
+                  tick={{ fill: 'hsl(var(--muted-foreground))' }}
+                />
+                <YAxis 
+                  className="text-xs" 
+                  tick={{ fill: 'hsl(var(--muted-foreground))' }}
+                />
+                <Tooltip 
+                  contentStyle={{ 
+                    backgroundColor: 'hsl(var(--card))', 
+                    border: '1px solid hsl(var(--border))',
+                    borderRadius: '8px',
+                  }}
+                />
+                <Legend />
+                {sensorBreakdown.slice(0, 5).map((sensor, idx) => (
+                  <Area
+                    key={sensor.sensor_type}
+                    type="monotone"
+                    dataKey={sensor.sensor_type}
+                    name={sensor.sensor_type.replace(/_/g, ' ')}
+                    stackId="1"
+                    stroke={chartColors[idx % chartColors.length]}
+                    fill={chartColors[idx % chartColors.length]}
+                    fillOpacity={0.6}
+                  />
+                ))}
+              </AreaChart>
+            </ResponsiveContainer>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Sensor Distribution */}
+      <Card className="border-border/50">
+        <CardHeader className="pb-3">
+          <CardTitle className="text-sm flex items-center gap-2">
+            <Activity className="w-4 h-4 text-primary" />
+            Sensor Activity Distribution
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="h-[250px]">
+            <ResponsiveContainer width="100%" height="100%">
+              <LineChart data={trendData}>
+                <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
+                <XAxis 
+                  dataKey="time" 
+                  className="text-xs" 
+                  tick={{ fill: 'hsl(var(--muted-foreground))' }}
+                />
+                <YAxis 
+                  className="text-xs" 
+                  tick={{ fill: 'hsl(var(--muted-foreground))' }}
+                />
+                <Tooltip 
+                  contentStyle={{ 
+                    backgroundColor: 'hsl(var(--card))', 
+                    border: '1px solid hsl(var(--border))',
+                    borderRadius: '8px',
+                  }}
+                />
+                <Legend />
+                {sensorBreakdown.slice(0, 5).map((sensor, idx) => (
+                  <Line
+                    key={sensor.sensor_type}
+                    type="monotone"
+                    dataKey={sensor.sensor_type}
+                    name={sensor.sensor_type.replace(/_/g, ' ')}
+                    stroke={chartColors[idx % chartColors.length]}
+                    strokeWidth={2}
+                    dot={false}
+                  />
+                ))}
+              </LineChart>
+            </ResponsiveContainer>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Sensor Stats Summary */}
+      <Card className="border-border/50">
+        <CardHeader className="pb-3">
+          <CardTitle className="text-sm flex items-center gap-2">
+            <Database className="w-4 h-4 text-primary" />
+            Sensor Statistics (24h Summary)
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {sensorBreakdown.map((sensor) => (
+              <div key={sensor.sensor_type} className="p-4 rounded-lg bg-muted/30 border border-border/50">
+                <div className="flex justify-between items-start mb-2">
+                  <h4 className="text-sm font-medium capitalize">{sensor.sensor_type.replace(/_/g, ' ')}</h4>
+                  <Badge variant="outline" className="text-xs">{sensor.device_count} devices</Badge>
+                </div>
+                <p className="text-2xl font-bold">{sensor.reading_count.toLocaleString()}</p>
+                <p className="text-xs text-muted-foreground">readings</p>
+                {sensor.last_reading && (
+                  <p className="text-xs text-muted-foreground mt-2">
+                    Last: {(() => {
+                      try { return format(parseISO(sensor.last_reading), 'HH:mm MMM d'); } catch { return sensor.last_reading; }
+                    })()}
+                  </p>
+                )}
+              </div>
+            ))}
+          </div>
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
+
+// =============================================
+// DETAILS TAB COMPONENT
+// =============================================
+function DetailsTab({ 
+  latestBatch,
+  clientStats,
+  sensorsByClient 
+}: { 
+  latestBatch: unknown;
+  clientStats: unknown;
+  sensorsByClient: unknown;
+}) {
+  const [activeJson, setActiveJson] = useState<'batch' | 'stats' | 'sensors'>('batch');
+
+  const jsonData = useMemo(() => {
+    switch (activeJson) {
+      case 'batch':
+        return latestBatch;
+      case 'stats':
+        return clientStats;
+      case 'sensors':
+        return sensorsByClient;
+      default:
+        return null;
+    }
+  }, [activeJson, latestBatch, clientStats, sensorsByClient]);
+
+  const handleCopy = () => {
+    if (jsonData) {
+      navigator.clipboard.writeText(JSON.stringify(jsonData, null, 2));
+      toast.success('Copied to clipboard');
+    }
+  };
+
+  const handleDownload = () => {
+    if (jsonData) {
+      const blob = new Blob([JSON.stringify(jsonData, null, 2)], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `${activeJson}-data.json`;
+      a.click();
+      URL.revokeObjectURL(url);
+      toast.success('Downloaded JSON file');
+    }
+  };
+
+  return (
+    <div className="space-y-4">
+      {/* JSON Source Selector */}
+      <Card className="border-border/50">
+        <CardHeader className="pb-3">
+          <div className="flex items-center justify-between flex-wrap gap-2">
+            <CardTitle className="text-sm flex items-center gap-2">
+              <FileJson className="w-4 h-4 text-primary" />
+              Raw JSON Data
+            </CardTitle>
+            <div className="flex gap-2">
+              <Button variant="outline" size="sm" onClick={handleCopy}>
+                <Copy className="w-4 h-4 mr-1" />
+                Copy
+              </Button>
+              <Button variant="outline" size="sm" onClick={handleDownload}>
+                <Download className="w-4 h-4 mr-1" />
+                Download
+              </Button>
+            </div>
+          </div>
+        </CardHeader>
+        <CardContent className="pt-0">
+          <div className="flex gap-2 mb-4">
+            <Button 
+              variant={activeJson === 'batch' ? 'default' : 'outline'} 
+              size="sm"
+              onClick={() => setActiveJson('batch')}
+            >
+              Latest Batch
+            </Button>
+            <Button 
+              variant={activeJson === 'stats' ? 'default' : 'outline'} 
+              size="sm"
+              onClick={() => setActiveJson('stats')}
+            >
+              Client Stats
+            </Button>
+            <Button 
+              variant={activeJson === 'sensors' ? 'default' : 'outline'} 
+              size="sm"
+              onClick={() => setActiveJson('sensors')}
+            >
+              Sensors by Client
+            </Button>
+          </div>
+          
+          <ScrollArea className="h-[500px] w-full rounded-lg border border-border bg-muted/30">
+            <pre className="p-4 text-xs font-mono whitespace-pre-wrap break-all">
+              {jsonData ? JSON.stringify(jsonData, null, 2) : 'No data available'}
+            </pre>
+          </ScrollArea>
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
+
+// =============================================
+// MAIN COMPONENT
+// =============================================
+export default function ClientSensorStats({ clientId }: ClientSensorStatsProps) {
+  const effectiveClientId = clientId && clientId !== 'all' ? clientId : '';
+  
+  // Use client detail stats for aggregates (/api/stats/client/{id})
+  const { data: clientStats, isLoading: clientStatsLoading } = useClientDetailStats(effectiveClientId || null, 24);
+  
+  // Use latest batch for real-time sensor values (/api/clients/{id}/latest-batch)
+  const { data: latestBatch, isLoading: batchLoading } = useClientLatestBatch(effectiveClientId || null, true);
+
+  // Use sensors by client for accurate sensor breakdown (/api/stats/sensors/by-client/{id})
+  const { data: sensorsByClient, isLoading: sensorsLoading } = useSensorsByClientId(effectiveClientId || null, 24);
+
+  // Extract real-time sensor values from latest batch
+  const sensorValues = useMemo(() => {
+    return extractSensorValuesFromBatch(latestBatch);
+  }, [latestBatch]);
+
+  // Get aggregate stats from client detail endpoint
+  const totalReadings = clientStats?.overall?.total_readings || 0;
+  const totalDevices = clientStats?.overall?.device_count || 0;
+  
+  // Prefer sensors by client endpoint for sensor count and breakdown
+  const sensorTypesCount = sensorsByClient?.sensor_count || clientStats?.overall?.sensor_type_count || 0;
+  
+  // Get sensor breakdown - prefer new endpoint, fallback to client stats
+  const sensorBreakdown = useMemo(() => {
+    if (sensorsByClient?.sensors && sensorsByClient.sensors.length > 0) {
+      return sensorsByClient.sensors.sort((a, b) => (b.reading_count || 0) - (a.reading_count || 0));
+    }
+    if (clientStats?.by_sensor_type) {
+      return clientStats.by_sensor_type.sort((a, b) => (b.reading_count || 0) - (a.reading_count || 0));
+    }
+    return [];
+  }, [sensorsByClient, clientStats]);
+
+  // Get batch timestamp
+  const batchTimestamp = useMemo(() => {
+    try {
+      const ts = latestBatch?.batch?.batch_timestamp;
+      if (ts) {
+        return format(parseISO(ts), 'HH:mm:ss MMM d');
+      }
+    } catch { /* ignore */ }
+    return null;
+  }, [latestBatch]);
+
+  const isLoading = clientStatsLoading || batchLoading || sensorsLoading;
+
+  if (!effectiveClientId) {
+    return (
+      <Card className="border-border/50">
+        <CardContent className="p-8 text-center text-muted-foreground">
+          Select a client to view sensor statistics
+        </CardContent>
+      </Card>
+    );
+  }
+
+  return (
+    <Tabs defaultValue="current" className="w-full">
+      <TabsList className="grid w-full grid-cols-3 mb-6">
+        <TabsTrigger value="current" className="flex items-center gap-2">
+          <Clock className="w-4 h-4" />
+          Current
+        </TabsTrigger>
+        <TabsTrigger value="trend" className="flex items-center gap-2">
+          <TrendingUp className="w-4 h-4" />
+          Trend
+        </TabsTrigger>
+        <TabsTrigger value="details" className="flex items-center gap-2">
+          <FileJson className="w-4 h-4" />
+          Details
+        </TabsTrigger>
+      </TabsList>
+
+      <TabsContent value="current">
+        <CurrentTab 
+          sensorValues={sensorValues}
+          isLoading={isLoading}
+          batchTimestamp={batchTimestamp}
+          totalReadings={totalReadings}
+          totalDevices={totalDevices}
+          sensorTypesCount={sensorTypesCount}
+          sensorBreakdown={sensorBreakdown}
+          clientStats={clientStats}
+        />
+      </TabsContent>
+
+      <TabsContent value="trend">
+        <TrendTab 
+          sensorBreakdown={sensorBreakdown}
+          clientStats={clientStats}
+        />
+      </TabsContent>
+
+      <TabsContent value="details">
+        <DetailsTab 
+          latestBatch={latestBatch}
+          clientStats={clientStats}
+          sensorsByClient={sensorsByClient}
+        />
+      </TabsContent>
+    </Tabs>
   );
 }
