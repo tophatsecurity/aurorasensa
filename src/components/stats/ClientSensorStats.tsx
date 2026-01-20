@@ -235,13 +235,60 @@ function extractSensorValuesFromBatch(batchData: unknown): SensorValues {
     }
   }
   
-  // Extract Starlink data
-  const starlink = sensors['starlink_dish_1'] as Record<string, unknown> | undefined;
-  if (starlink) {
-    defaults.starlinkPower = extractNumber(starlink, 'power_watts', 'avg_power_watts', 'power');
-    defaults.starlinkLatency = extractNumber(starlink, 'pop_ping_latency_ms', 'latency_ms', 'latency');
-    defaults.starlinkDownload = extractNumber(starlink, 'downlink_throughput_bps', 'download_bps');
-    defaults.starlinkUpload = extractNumber(starlink, 'uplink_throughput_bps', 'upload_bps');
+  // Extract Starlink data - check multiple possible sensor keys
+  const starlinkKeys = ['starlink_dish_1', 'starlink_dish', 'starlink_dish_comprehensive', 'starlink', 'starlink_1'];
+  for (const key of starlinkKeys) {
+    const starlink = sensors[key] as Record<string, unknown> | undefined;
+    if (starlink && defaults.starlinkPower === null) {
+      // Try direct properties
+      defaults.starlinkPower = extractNumber(starlink, 'power_watts', 'avg_power_watts', 'power', 'power_w');
+      defaults.starlinkLatency = extractNumber(starlink, 'pop_ping_latency_ms', 'latency_ms', 'latency');
+      defaults.starlinkDownload = extractNumber(starlink, 'downlink_throughput_bps', 'download_bps', 'dl_throughput');
+      defaults.starlinkUpload = extractNumber(starlink, 'uplink_throughput_bps', 'upload_bps', 'ul_throughput');
+      
+      // Check for nested 'starlink' object inside
+      const nestedStarlink = starlink['starlink'] as Record<string, unknown> | undefined;
+      if (nestedStarlink) {
+        if (defaults.starlinkPower === null) {
+          defaults.starlinkPower = extractNumber(nestedStarlink, 'power_watts', 'avg_power_watts', 'power');
+        }
+        if (defaults.starlinkLatency === null) {
+          defaults.starlinkLatency = extractNumber(nestedStarlink, 'pop_ping_latency_ms', 'latency_ms');
+          // Check ping_latency object
+          const pingLatency = nestedStarlink['ping_latency'] as Record<string, unknown> | undefined;
+          if (pingLatency && defaults.starlinkLatency === null) {
+            defaults.starlinkLatency = extractNumber(pingLatency, 'Mean RTT, drop == 0', 'Mean RTT, drop < 1');
+          }
+        }
+        if (defaults.starlinkDownload === null) {
+          defaults.starlinkDownload = extractNumber(nestedStarlink, 'downlink_throughput_bps');
+        }
+        if (defaults.starlinkUpload === null) {
+          defaults.starlinkUpload = extractNumber(nestedStarlink, 'uplink_throughput_bps');
+        }
+      }
+      
+      // Check for ping_latency at root level
+      const rootPingLatency = starlink['ping_latency'] as Record<string, unknown> | undefined;
+      if (rootPingLatency && defaults.starlinkLatency === null) {
+        defaults.starlinkLatency = extractNumber(rootPingLatency, 'Mean RTT, drop == 0', 'Mean RTT, drop < 1');
+      }
+      
+      if (defaults.starlinkPower !== null) break;
+    }
+  }
+  
+  // Also check for starlink in any sensor key containing 'starlink'
+  for (const sensorKey of Object.keys(sensors)) {
+    if (sensorKey.toLowerCase().includes('starlink') && defaults.starlinkPower === null) {
+      const starlinkData = sensors[sensorKey] as Record<string, unknown> | undefined;
+      if (starlinkData) {
+        defaults.starlinkPower = extractNumber(starlinkData, 'power_watts', 'avg_power_watts', 'power');
+        defaults.starlinkLatency = extractNumber(starlinkData, 'pop_ping_latency_ms', 'latency_ms', 'latency');
+        defaults.starlinkDownload = extractNumber(starlinkData, 'downlink_throughput_bps', 'download_bps');
+        defaults.starlinkUpload = extractNumber(starlinkData, 'uplink_throughput_bps', 'upload_bps');
+      }
+    }
   }
   
   // Extract System Monitor data
