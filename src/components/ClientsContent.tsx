@@ -821,7 +821,12 @@ const ClientsContent = () => {
                           }`} />
                           <div className="min-w-0 flex-1">
                             <div className="flex items-center gap-2 flex-wrap">
-                              <span className="font-medium truncate">{client.hostname || client.client_id}</span>
+                              {client.hostname && (
+                                <span className="font-medium truncate">{client.hostname}</span>
+                              )}
+                              <span className={`truncate ${client.hostname ? 'text-muted-foreground text-sm' : 'font-medium'}`}>
+                                {client.hostname ? `(${client.client_id})` : client.client_id}
+                              </span>
                               <Badge variant="outline" className={`text-xs ${stateConfig.color}`}>
                                 <StateIcon className="w-3 h-3 mr-1" />
                                 {stateConfig.label}
@@ -836,11 +841,22 @@ const ClientsContent = () => {
                               )}
                             </div>
                             <div className="flex items-center gap-4 mt-1 text-sm text-muted-foreground flex-wrap">
-                              <span className="truncate">ID: {client.client_id}</span>
                               {client.mac_address && <span>MAC: {client.mac_address}</span>}
                               {client.ip_address && <span>IP: {client.ip_address}</span>}
                               <span>Last seen: {formatLastSeen(client.last_seen)}</span>
-                            </div>
+                              {/* Location Source */}
+                              {(client.location?.latitude || client.location?.city || client.location?.source || sensors.some(s => s.toLowerCase().includes('starlink'))) && (
+                                <span className="flex items-center gap-1">
+                                  <Navigation className="w-3 h-3" />
+                                  {(client.location?.source?.toLowerCase().includes('starlink') || sensors.some(s => s.toLowerCase().includes('starlink')))
+                                    ? <span className="text-violet-400">Starlink</span>
+                                    : <span className="text-cyan-400">Geo Location</span>
+                                  }
+                                  {client.location?.city && (
+                                    <span className="text-muted-foreground">({client.location.city}{client.location.country ? `, ${client.location.country}` : ''})</span>
+                                  )}
+                                </span>
+                              )}</div>
                             
                             {/* Sensors Badge Row */}
                             {sensors.length > 0 && (
