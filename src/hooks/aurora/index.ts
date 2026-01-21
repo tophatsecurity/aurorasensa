@@ -214,6 +214,15 @@ export {
   useIpGeolocationByIp,
   useClientGeolocation,
   type IpGeolocation,
+  // Location API (new unified endpoints)
+  useClientLatestLocation,
+  useClientLocationHistory,
+  useLocationSummary,
+  useClientLocationTrack,
+  type ClientLocation,
+  type LocationHistoryPoint,
+  type LocationSummary,
+  type GeoJsonTrack,
 } from "./system";
 
 export {
