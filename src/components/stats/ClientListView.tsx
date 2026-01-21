@@ -83,9 +83,15 @@ export function ClientListView({ onClientSelect }: ClientListViewProps) {
       // Check systemInfo for IP info
       const ipAddress = systemInfo?.ip || client.ip_address;
       
+      // Get display hostname - use actual hostname, systemInfo hostname, or derive from client_id
+      const actualHostname = client.hostname && client.hostname !== client.client_id 
+        ? client.hostname 
+        : systemInfo?.hostname || null;
+      
       return {
         client_id: client.client_id,
-        hostname: client.hostname || client.client_id,
+        hostname: actualHostname,
+        displayName: actualHostname || `Client ${client.client_id.replace('client_', '').slice(0, 8)}`,
         sensors: client.sensors || [],
         last_seen: client.last_seen,
         state: client.state || 'unknown',
@@ -143,7 +149,9 @@ export function ClientListView({ onClientSelect }: ClientListViewProps) {
                   </div>
                   <div className="min-w-0 flex-1">
                     <div className="flex items-center gap-2">
-                      <h3 className="font-medium truncate">{client.hostname}</h3>
+                      <h3 className="font-medium truncate">
+                        {client.hostname || client.displayName}
+                      </h3>
                       <Badge 
                         variant={client.state === 'adopted' ? 'default' : 'secondary'}
                         className="text-[10px] px-1.5 py-0 shrink-0"
