@@ -855,28 +855,56 @@ interface ArduinoMeasurementCardProps {
   icon: React.ReactNode;
   bgColor: string;
   iconColor: string;
+  min?: number;
+  max?: number;
+  avg?: number;
 }
 
-const ArduinoMeasurementCard = ({ title, value, unit, icon, bgColor, iconColor }: ArduinoMeasurementCardProps) => (
-  <Card className="glass-card border-border/50 hover:border-primary/30 transition-colors">
-    <CardContent className="p-4">
-      <div className="flex items-center gap-2 mb-2">
-        <div className={`w-8 h-8 rounded-lg ${bgColor} flex items-center justify-center`}>
-          <span className={iconColor}>{icon}</span>
+const ArduinoMeasurementCard = ({ title, value, unit, icon, bgColor, iconColor, min, max, avg }: ArduinoMeasurementCardProps) => {
+  const hasStats = min !== undefined || max !== undefined || avg !== undefined;
+  
+  const formatStatValue = (val: number | undefined) => {
+    if (val === undefined) return '—';
+    return Number.isInteger(val) ? val.toString() : val.toFixed(1);
+  };
+  
+  return (
+    <Card className="glass-card border-border/50 hover:border-primary/30 transition-colors">
+      <CardContent className="p-4">
+        <div className="flex items-center gap-2 mb-2">
+          <div className={`w-8 h-8 rounded-lg ${bgColor} flex items-center justify-center`}>
+            <span className={iconColor}>{icon}</span>
+          </div>
+          <span className="text-xs text-muted-foreground font-medium">{title}</span>
         </div>
-        <span className="text-xs text-muted-foreground font-medium">{title}</span>
-      </div>
-      <p className="text-2xl font-bold font-mono">
-        {value !== undefined ? (
-          typeof value === 'number' && !Number.isInteger(value) 
-            ? value.toFixed(2) 
-            : value
-        ) : '—'}
-        <span className="text-sm font-normal text-muted-foreground ml-1">{unit}</span>
-      </p>
-    </CardContent>
-  </Card>
-);
+        <p className="text-2xl font-bold font-mono">
+          {value !== undefined ? (
+            typeof value === 'number' && !Number.isInteger(value) 
+              ? value.toFixed(2) 
+              : value
+          ) : '—'}
+          <span className="text-sm font-normal text-muted-foreground ml-1">{unit}</span>
+        </p>
+        {hasStats && (
+          <div className="mt-3 pt-3 border-t border-border/50 grid grid-cols-3 gap-1 text-center">
+            <div>
+              <p className="text-[10px] text-muted-foreground uppercase tracking-wide">Min</p>
+              <p className="text-xs font-mono text-blue-400">{formatStatValue(min)}</p>
+            </div>
+            <div>
+              <p className="text-[10px] text-muted-foreground uppercase tracking-wide">Avg</p>
+              <p className="text-xs font-mono text-emerald-400">{formatStatValue(avg)}</p>
+            </div>
+            <div>
+              <p className="text-[10px] text-muted-foreground uppercase tracking-wide">Max</p>
+              <p className="text-xs font-mono text-amber-400">{formatStatValue(max)}</p>
+            </div>
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  );
+};
 
 // Arduino Sensor View Component (individual cards for each measurement)
 const ArduinoSensorView = ({ readings, latestReading }: { readings: SensorReading[]; latestReading: SensorReading }) => {
@@ -969,7 +997,34 @@ const ArduinoSensorView = ({ readings, latestReading }: { readings: SensorReadin
     return { environmental: envData, analog: analogData, motion: motionData };
   }, [readings]);
 
-  const allMeasurements: Array<{
+  // Calculate statistics (min/max/avg) from historical readings
+  const stats = useMemo(() => {
+    const calcStats = (values: (number | undefined)[]) => {
+      const nums = values.filter((v): v is number => v !== undefined && !isNaN(v));
+      if (nums.length === 0) return { min: undefined, max: undefined, avg: undefined };
+      return {
+        min: Math.min(...nums),
+        max: Math.max(...nums),
+        avg: nums.reduce((a, b) => a + b, 0) / nums.length,
+      };
+    };
+
+    return {
+      temperature: calcStats(chartData.environmental.map(d => d.temperature)),
+      humidity: calcStats(chartData.environmental.map(d => d.humidity)),
+      pressure: calcStats(chartData.environmental.map(d => d.pressure)),
+      light: calcStats(chartData.analog.map(d => d.light)),
+      sound: calcStats(chartData.analog.map(d => d.sound)),
+      potentiometer: calcStats(chartData.analog.map(d => d.potentiometer)),
+      accelX: calcStats(chartData.motion.map(d => d.accelX)),
+      accelY: calcStats(chartData.motion.map(d => d.accelY)),
+      accelZ: calcStats(chartData.motion.map(d => d.accelZ)),
+    };
+  }, [chartData]);
+
+  type StatsKey = 'temperature' | 'humidity' | 'pressure' | 'light' | 'sound' | 'potentiometer' | 'accelX' | 'accelY' | 'accelZ';
+  
+  interface MeasurementItem {
     title: string;
     value: number | string | undefined;
     unit: string;
@@ -977,21 +1032,24 @@ const ArduinoSensorView = ({ readings, latestReading }: { readings: SensorReadin
     bgColor: string;
     iconColor: string;
     category: string;
-  }> = [
+    statsKey: StatsKey;
+  }
+
+  const allMeasurements: MeasurementItem[] = ([
     // Environmental
-    { title: 'Temperature', value: sensorData.temperature as number | string | undefined, unit: '°C', icon: <Thermometer className="w-4 h-4" />, bgColor: 'bg-red-500/20', iconColor: 'text-red-400', category: 'environmental' },
-    { title: 'Humidity', value: sensorData.humidity as number | string | undefined, unit: '%', icon: <Droplets className="w-4 h-4" />, bgColor: 'bg-blue-500/20', iconColor: 'text-blue-400', category: 'environmental' },
-    { title: 'Pressure', value: sensorData.pressure as number | string | undefined, unit: 'hPa', icon: <Gauge className="w-4 h-4" />, bgColor: 'bg-purple-500/20', iconColor: 'text-purple-400', category: 'environmental' },
-    { title: 'BMP Temp', value: sensorData.bmpTemp as number | string | undefined, unit: '°C', icon: <Thermometer className="w-4 h-4" />, bgColor: 'bg-orange-500/20', iconColor: 'text-orange-400', category: 'environmental' },
+    { title: 'Temperature', value: sensorData.temperature, unit: '°C', icon: <Thermometer className="w-4 h-4" />, bgColor: 'bg-red-500/20', iconColor: 'text-red-400', category: 'environmental', statsKey: 'temperature' as StatsKey },
+    { title: 'Humidity', value: sensorData.humidity, unit: '%', icon: <Droplets className="w-4 h-4" />, bgColor: 'bg-blue-500/20', iconColor: 'text-blue-400', category: 'environmental', statsKey: 'humidity' as StatsKey },
+    { title: 'Pressure', value: sensorData.pressure, unit: 'hPa', icon: <Gauge className="w-4 h-4" />, bgColor: 'bg-purple-500/20', iconColor: 'text-purple-400', category: 'environmental', statsKey: 'pressure' as StatsKey },
+    { title: 'BMP Temp', value: sensorData.bmpTemp, unit: '°C', icon: <Thermometer className="w-4 h-4" />, bgColor: 'bg-orange-500/20', iconColor: 'text-orange-400', category: 'environmental', statsKey: 'temperature' as StatsKey },
     // Light & Sound
-    { title: 'Light Level', value: sensorData.light as number | string | undefined, unit: '', icon: <Sun className="w-4 h-4" />, bgColor: 'bg-yellow-500/20', iconColor: 'text-yellow-400', category: 'analog' },
-    { title: 'Sound Level', value: sensorData.sound as number | string | undefined, unit: '', icon: <Volume2 className="w-4 h-4" />, bgColor: 'bg-cyan-500/20', iconColor: 'text-cyan-400', category: 'analog' },
-    { title: 'Potentiometer', value: sensorData.potentiometer as number | string | undefined, unit: '', icon: <Settings className="w-4 h-4" />, bgColor: 'bg-pink-500/20', iconColor: 'text-pink-400', category: 'analog' },
+    { title: 'Light Level', value: sensorData.light, unit: '', icon: <Sun className="w-4 h-4" />, bgColor: 'bg-yellow-500/20', iconColor: 'text-yellow-400', category: 'analog', statsKey: 'light' as StatsKey },
+    { title: 'Sound Level', value: sensorData.sound, unit: '', icon: <Volume2 className="w-4 h-4" />, bgColor: 'bg-cyan-500/20', iconColor: 'text-cyan-400', category: 'analog', statsKey: 'sound' as StatsKey },
+    { title: 'Potentiometer', value: sensorData.potentiometer, unit: '', icon: <Settings className="w-4 h-4" />, bgColor: 'bg-pink-500/20', iconColor: 'text-pink-400', category: 'analog', statsKey: 'potentiometer' as StatsKey },
     // Accelerometer
-    { title: 'Accel X', value: sensorData.accelX as number | string | undefined, unit: 'g', icon: <Activity className="w-4 h-4" />, bgColor: 'bg-emerald-500/20', iconColor: 'text-emerald-400', category: 'motion' },
-    { title: 'Accel Y', value: sensorData.accelY as number | string | undefined, unit: 'g', icon: <Activity className="w-4 h-4" />, bgColor: 'bg-teal-500/20', iconColor: 'text-teal-400', category: 'motion' },
-    { title: 'Accel Z', value: sensorData.accelZ as number | string | undefined, unit: 'g', icon: <Activity className="w-4 h-4" />, bgColor: 'bg-sky-500/20', iconColor: 'text-sky-400', category: 'motion' },
-  ].filter(m => m.value !== undefined);
+    { title: 'Accel X', value: sensorData.accelX, unit: 'g', icon: <Activity className="w-4 h-4" />, bgColor: 'bg-emerald-500/20', iconColor: 'text-emerald-400', category: 'motion', statsKey: 'accelX' as StatsKey },
+    { title: 'Accel Y', value: sensorData.accelY, unit: 'g', icon: <Activity className="w-4 h-4" />, bgColor: 'bg-teal-500/20', iconColor: 'text-teal-400', category: 'motion', statsKey: 'accelY' as StatsKey },
+    { title: 'Accel Z', value: sensorData.accelZ, unit: 'g', icon: <Activity className="w-4 h-4" />, bgColor: 'bg-sky-500/20', iconColor: 'text-sky-400', category: 'motion', statsKey: 'accelZ' as StatsKey },
+  ] as MeasurementItem[]).filter(m => m.value !== undefined);
 
   // Group by category for section headers
   const environmental = allMeasurements.filter(m => m.category === 'environmental');
@@ -1022,6 +1080,9 @@ const ArduinoSensorView = ({ readings, latestReading }: { readings: SensorReadin
                 icon={m.icon}
                 bgColor={m.bgColor}
                 iconColor={m.iconColor}
+                min={stats[m.statsKey]?.min}
+                max={stats[m.statsKey]?.max}
+                avg={stats[m.statsKey]?.avg}
               />
             ))}
           </div>
@@ -1089,6 +1150,9 @@ const ArduinoSensorView = ({ readings, latestReading }: { readings: SensorReadin
                 icon={m.icon}
                 bgColor={m.bgColor}
                 iconColor={m.iconColor}
+                min={stats[m.statsKey]?.min}
+                max={stats[m.statsKey]?.max}
+                avg={stats[m.statsKey]?.avg}
               />
             ))}
           </div>
@@ -1156,6 +1220,9 @@ const ArduinoSensorView = ({ readings, latestReading }: { readings: SensorReadin
                 icon={m.icon}
                 bgColor={m.bgColor}
                 iconColor={m.iconColor}
+                min={stats[m.statsKey]?.min}
+                max={stats[m.statsKey]?.max}
+                avg={stats[m.statsKey]?.avg}
               />
             ))}
           </div>
