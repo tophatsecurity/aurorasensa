@@ -184,7 +184,8 @@ const DashboardContent = () => {
   // ===== DERIVED METRICS FROM DASHBOARD API =====
   const totalReadings = dashboardStats?.total_readings ?? sensorStats?.readings_last_24h ?? 0;
   const totalBatches = (dashboardStats as Record<string, unknown>)?.total_batches as number ?? 0;
-  const totalClients = dashboardStats?.total_clients ?? clientStats?.clients?.length ?? sensorStats?.total_clients ?? 0;
+  // Prefer clientStats (from all-states) as it has accurate client count
+  const totalClients = clientStats?.clients?.length ?? dashboardStats?.total_clients ?? sensorStats?.total_clients ?? 0;
   const totalDevices = dashboardStats?.total_devices ?? sensorStats?.total_devices ?? 0;
   const sensorTypesCount = dashboardStats?.total_sensors ?? sensorStats?.total_sensors ?? 0;
   const activeClients24h = (dashboardStats as Record<string, unknown>)?.active_clients_24h as number ?? totalClients;
