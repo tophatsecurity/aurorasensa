@@ -1,47 +1,51 @@
 import { useMemo, useState, Suspense, lazy } from "react";
 import { 
-  Thermometer, 
   Zap, 
   Loader2,
   Database,
   Satellite,
-  Plane,
   Radio,
   Users,
   Gauge,
   Wifi,
   Activity,
-  Signal,
   RefreshCw,
   HardDrive,
   TrendingUp,
-  Clock,
-  BarChart3
+  BarChart3,
+  Server,
+  Cpu,
+  ThermometerSun
 } from "lucide-react";
 import ConnectionStatusIndicator from "./ConnectionStatusIndicator";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Progress } from "@/components/ui/progress";
+import { 
+  BarChart, 
+  Bar, 
+  XAxis, 
+  YAxis, 
+  ResponsiveContainer, 
+  Tooltip,
+  Cell,
+  LineChart,
+  Line,
+  CartesianGrid
+} from 'recharts';
 
-// Lazy load heavy chart components
-const HourlyClientTrendChart = lazy(() => import("./dashboard/HourlyClientTrendChart"));
+// Lazy load heavy chart components  
 const HourlyTrendChart = lazy(() => import("./dashboard/HourlyTrendChart"));
 const SensorTypeStatsSection = lazy(() => import("./dashboard/SensorTypeStatsSection"));
-const PowerHistoryChart = lazy(() => import("./dashboard/PowerHistoryChart"));
-const StarlinkCharts = lazy(() => import("./StarlinkCharts"));
 
 // Use dashboard-specific hooks that fetch from /api/dashboard/* and /api/stats/* endpoints
 import { 
   useDashboardStats,
   useDashboardSensorStats,
   useDashboardClientStats,
-  useAlertStats,
-  usePowerSummary,
-  useBluetoothStats,
-  useWifiStats,
-  useAdsbStats,
   useLoraGlobalStats,
+  useStarlinkReadings,
 } from "@/hooks/aurora";
 
 // Chart loading fallback
@@ -95,29 +99,6 @@ const PrimaryStat = ({
   </div>
 );
 
-// Secondary stat - compact row
-const SecondaryStat = ({ 
-  label, 
-  value, 
-  icon: Icon, 
-  iconColor,
-}: { 
-  label: string; 
-  value: string | number; 
-  icon: React.ElementType; 
-  iconColor: string;
-}) => (
-  <div className="flex items-center gap-3 p-3 rounded-lg bg-card/50 border border-border/30 hover:border-border/50 transition-colors">
-    <div className={`p-2 rounded-lg ${iconColor}`}>
-      <Icon className="w-4 h-4" />
-    </div>
-    <div className="flex-1 min-w-0">
-      <p className="text-xs text-muted-foreground truncate">{label}</p>
-      <p className="text-lg font-semibold truncate">{value}</p>
-    </div>
-  </div>
-);
-
 // Device breakdown bar
 const DeviceBar = ({ 
   name, 
@@ -149,9 +130,44 @@ const formatNumber = (num: number): string => {
   return num.toLocaleString();
 };
 
-// Format bytes
-const formatBytes = (bytes: string): string => {
-  return bytes; // Already formatted from API
+// Starlink reading type from hook
+interface StarlinkReadingData {
+  timestamp: string;
+  signal_dbm?: number;
+  power_w?: number;
+  snr?: number;
+  downlink_throughput_bps?: number;
+  uplink_throughput_bps?: number;
+  pop_ping_latency_ms?: number;
+}
+
+// Parse Starlink data from readings (using the StarlinkReading type from hook)
+const parseStarlinkData = (readings: StarlinkReadingData[] | undefined) => {
+  if (!readings || readings.length === 0) return null;
+  
+  const latest = readings[0];
+  if (!latest) return null;
+  
+  return {
+    state: 'CONNECTED', // Inferred from having readings
+    powerWatts: latest.power_w,
+    latencyMs: latest.pop_ping_latency_ms,
+    downlinkBps: latest.downlink_throughput_bps,
+    uplinkBps: latest.uplink_throughput_bps,
+    signalDbm: latest.signal_dbm,
+    snr: latest.snr,
+  };
+};
+
+// Parse Starlink timeseries from readings
+const parseStarlinkTimeseries = (readings: StarlinkReadingData[] | undefined) => {
+  if (!readings || readings.length === 0) return [];
+  
+  return readings.slice(0, 24).reverse().map((r, idx) => ({
+    time: new Date(r.timestamp).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }),
+    power: r.power_w ?? 0,
+    latency: r.pop_ping_latency_ms ?? 0,
+  }));
 };
 
 const DashboardContent = () => {
@@ -159,22 +175,11 @@ const DashboardContent = () => {
   const [isRefreshing, setIsRefreshing] = useState(false);
   
   // ===== DASHBOARD STATS FROM API =====
-  // Primary dashboard stats from /api/stats/global - contains device_breakdown, readings_by_day, storage
   const { data: dashboardStats, isLoading: dashboardStatsLoading, refetch: refetchDashboardStats } = useDashboardStats();
-  
-  // Sensor stats from /api/dashboard/sensor-stats - contains per-sensor type breakdown
   const { data: sensorStats, isLoading: sensorStatsLoading } = useDashboardSensorStats();
-  
-  // Client stats from /api/stats/by-client
   const { data: clientStats, isLoading: clientStatsLoading } = useDashboardClientStats(undefined, periodHours);
-  
-  // Secondary stats - for quick metrics
-  const { data: alertStats } = useAlertStats();
-  const { data: powerSummary } = usePowerSummary();
-  const { data: wifiStats } = useWifiStats();
-  const { data: bluetoothStats } = useBluetoothStats();
-  const { data: adsbStats } = useAdsbStats();
   const { data: loraStats } = useLoraGlobalStats();
+  const { data: starlinkReadings } = useStarlinkReadings(periodHours);
 
   // ===== DERIVED METRICS FROM DASHBOARD API =====
   const totalReadings = dashboardStats?.total_readings ?? sensorStats?.readings_last_24h ?? 0;
@@ -193,15 +198,19 @@ const DashboardContent = () => {
 
   const maxDeviceCount = deviceBreakdown.length > 0 ? deviceBreakdown[0].count : 0;
 
-  // Readings by day from /api/stats/global
+  // Readings by day from /api/stats/global - for chart
   const readingsByDay = useMemo(() => {
     const data = (dashboardStats as Record<string, unknown>)?.readings_by_day as Array<{ date: string; count: number }> | undefined;
     if (!data || !Array.isArray(data)) return [];
-    return data.slice(0, 7);
+    return data.slice(0, 7).reverse().map(d => ({
+      date: new Date(d.date).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' }),
+      shortDate: new Date(d.date).toLocaleDateString('en-US', { weekday: 'short' }),
+      count: d.count,
+    }));
   }, [dashboardStats]);
 
-  const todayReadings = readingsByDay.length > 0 ? readingsByDay[0].count : 0;
-  const yesterdayReadings = readingsByDay.length > 1 ? readingsByDay[1].count : 0;
+  const todayReadings = readingsByDay.length > 0 ? readingsByDay[readingsByDay.length - 1].count : 0;
+  const yesterdayReadings = readingsByDay.length > 1 ? readingsByDay[readingsByDay.length - 2].count : 0;
   const readingsTrend = yesterdayReadings > 0 
     ? ((todayReadings - yesterdayReadings) / yesterdayReadings * 100).toFixed(0) 
     : '0';
@@ -213,13 +222,20 @@ const DashboardContent = () => {
   const sensorItems = sensorStats?.sensorItems ?? [];
   const topSensorTypes = sensorItems.slice(0, 5);
 
-  // Secondary metrics
-  const currentPower = powerSummary?.total_power_watts ?? powerSummary?.avg_power_watts;
-  const wifiNetworks = wifiStats?.unique_networks_24h ?? wifiStats?.total_networks_discovered ?? 0;
-  const btDevices = bluetoothStats?.unique_devices_24h ?? bluetoothStats?.total_devices_discovered ?? 0;
-  const aircraftCount = adsbStats?.aircraft_active ?? adsbStats?.aircraft_tracked_total ?? 0;
-  const loraDevices = loraStats?.total_devices ?? loraStats?.active_devices ?? 0;
-  const activeAlerts = alertStats?.active ?? 0;
+  // Starlink metrics from /api/readings/sensor/starlink
+  const starlinkData = useMemo(() => 
+    parseStarlinkData(starlinkReadings?.readings), 
+    [starlinkReadings]
+  );
+  
+  const starlinkTimeseries = useMemo(() => 
+    parseStarlinkTimeseries(starlinkReadings?.readings), 
+    [starlinkReadings]
+  );
+
+  // LoRa from /api/lora/stats/global
+  const loraDevicesCount = loraStats?.total_devices ?? 0;
+  const loraDetections = loraStats?.total_detections ?? 0;
 
   const isLoading = dashboardStatsLoading || sensorStatsLoading || clientStatsLoading;
 
@@ -239,6 +255,9 @@ const DashboardContent = () => {
     'bg-rose-500',
     'bg-blue-500'
   ];
+
+  // Chart colors
+  const chartColors = ['#06b6d4', '#10b981', '#8b5cf6', '#f59e0b', '#ef4444', '#3b82f6'];
 
   return (
     <div className="flex-1 overflow-y-auto p-6 lg:p-8">
@@ -260,7 +279,7 @@ const DashboardContent = () => {
         </Button>
       </div>
 
-      {/* ===== PRIMARY STATS ROW - From /api/stats/global ===== */}
+      {/* ===== PRIMARY STATS ROW ===== */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
         <PrimaryStat
           label="Total Readings"
@@ -297,9 +316,58 @@ const DashboardContent = () => {
         />
       </div>
 
-      {/* ===== BREAKDOWN CARDS ROW ===== */}
+      {/* ===== READINGS TREND + DEVICE BREAKDOWN ROW ===== */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-6">
-        {/* Device Breakdown - From /api/stats/global device_breakdown */}
+        {/* Daily Readings Trend - Bar Chart */}
+        <Card className="glass-card border-border/50">
+          <CardHeader className="pb-3">
+            <CardTitle className="text-sm font-medium flex items-center gap-2">
+              <TrendingUp className="w-4 h-4 text-cyan-400" />
+              Daily Readings (Last 7 Days)
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            {readingsByDay.length > 0 ? (
+              <ResponsiveContainer width="100%" height={180}>
+                <BarChart data={readingsByDay}>
+                  <XAxis 
+                    dataKey="shortDate" 
+                    tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 11 }}
+                    axisLine={false}
+                    tickLine={false}
+                  />
+                  <YAxis 
+                    tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 11 }}
+                    axisLine={false}
+                    tickLine={false}
+                    tickFormatter={(v) => formatNumber(v)}
+                    width={50}
+                  />
+                  <Tooltip 
+                    contentStyle={{ 
+                      backgroundColor: 'hsl(var(--card))', 
+                      border: '1px solid hsl(var(--border))',
+                      borderRadius: '8px'
+                    }}
+                    formatter={(value: number) => [formatNumber(value), 'Readings']}
+                    labelFormatter={(label, payload) => payload?.[0]?.payload?.date || label}
+                  />
+                  <Bar dataKey="count" radius={[4, 4, 0, 0]}>
+                    {readingsByDay.map((_, index) => (
+                      <Cell key={`cell-${index}`} fill={chartColors[index % chartColors.length]} />
+                    ))}
+                  </Bar>
+                </BarChart>
+              </ResponsiveContainer>
+            ) : (
+              <div className="h-[180px] flex items-center justify-center text-muted-foreground">
+                No data available
+              </div>
+            )}
+          </CardContent>
+        </Card>
+
+        {/* Device Breakdown */}
         <Card className="glass-card border-border/50">
           <CardHeader className="pb-3">
             <CardTitle className="text-sm font-medium flex items-center gap-2">
@@ -323,8 +391,11 @@ const DashboardContent = () => {
             )}
           </CardContent>
         </Card>
+      </div>
 
-        {/* Sensor Types - From /api/dashboard/sensor-stats */}
+      {/* ===== SENSOR TYPES + STARLINK ROW ===== */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-6">
+        {/* Sensor Types */}
         <Card className="glass-card border-border/50">
           <CardHeader className="pb-3">
             <CardTitle className="text-sm font-medium flex items-center gap-2">
@@ -348,55 +419,187 @@ const DashboardContent = () => {
             )}
           </CardContent>
         </Card>
+
+        {/* Starlink Live Status - from /api/readings/sensor/starlink */}
+        <Card className="glass-card border-border/50">
+          <CardHeader className="pb-3">
+            <CardTitle className="text-sm font-medium flex items-center gap-2">
+              <Satellite className="w-4 h-4 text-violet-400" />
+              Starlink Live Status
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            {starlinkData ? (
+              <div className="space-y-4">
+                {/* Status indicators */}
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="flex items-center gap-2 p-2 rounded-lg bg-muted/30">
+                    <div className={`w-2 h-2 rounded-full ${starlinkData.state === 'CONNECTED' ? 'bg-emerald-500' : 'bg-amber-500'}`} />
+                    <span className="text-xs text-muted-foreground">Status</span>
+                    <span className="text-sm font-medium ml-auto">{starlinkData.state}</span>
+                  </div>
+                  <div className="flex items-center gap-2 p-2 rounded-lg bg-muted/30">
+                    <Zap className="w-3 h-3 text-amber-400" />
+                    <span className="text-xs text-muted-foreground">Power</span>
+                    <span className="text-sm font-medium ml-auto">{starlinkData.powerWatts?.toFixed(1) ?? '--'}W</span>
+                  </div>
+                  <div className="flex items-center gap-2 p-2 rounded-lg bg-muted/30">
+                    <Activity className="w-3 h-3 text-cyan-400" />
+                    <span className="text-xs text-muted-foreground">Latency</span>
+                    <span className="text-sm font-medium ml-auto">{starlinkData.latencyMs?.toFixed(0) ?? '--'}ms</span>
+                  </div>
+                  <div className="flex items-center gap-2 p-2 rounded-lg bg-muted/30">
+                    <TrendingUp className="w-3 h-3 text-emerald-400" />
+                    <span className="text-xs text-muted-foreground">Download</span>
+                    <span className="text-sm font-medium ml-auto">{starlinkData.downlinkBps ? formatNumber(starlinkData.downlinkBps / 1000) + ' kbps' : '--'}</span>
+                  </div>
+                  <div className="flex items-center gap-2 p-2 rounded-lg bg-muted/30">
+                    <Radio className="w-3 h-3 text-blue-400" />
+                    <span className="text-xs text-muted-foreground">Upload</span>
+                    <span className="text-sm font-medium ml-auto">{starlinkData.uplinkBps ? formatNumber(starlinkData.uplinkBps / 1000) + ' kbps' : '--'}</span>
+                  </div>
+                  <div className="flex items-center gap-2 p-2 rounded-lg bg-muted/30">
+                    <Wifi className="w-3 h-3 text-violet-400" />
+                    <span className="text-xs text-muted-foreground">Signal</span>
+                    <span className="text-sm font-medium ml-auto">{starlinkData.signalDbm?.toFixed(0) ?? '--'} dBm</span>
+                  </div>
+                  <div className="flex items-center gap-2 p-2 rounded-lg bg-muted/30">
+                    <Gauge className="w-3 h-3 text-rose-400" />
+                    <span className="text-xs text-muted-foreground">SNR</span>
+                    <span className="text-sm font-medium ml-auto">{starlinkData.snr?.toFixed(1) ?? '--'}</span>
+                  </div>
+                </div>
+              </div>
+            ) : (
+              <div className="h-[140px] flex items-center justify-center text-muted-foreground">
+                <div className="text-center">
+                  <Satellite className="w-8 h-8 mx-auto mb-2 opacity-50" />
+                  <p className="text-sm">No Starlink data available</p>
+                </div>
+              </div>
+            )}
+          </CardContent>
+        </Card>
       </div>
 
-      {/* ===== SECONDARY METRICS ROW ===== */}
-      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3 mb-6">
-        <SecondaryStat
-          label="Power"
-          value={currentPower ? `${currentPower.toFixed(0)}W` : '--'}
-          icon={Zap}
-          iconColor="bg-yellow-500/20 text-yellow-400"
-        />
-        <SecondaryStat
-          label="WiFi Networks"
-          value={formatNumber(wifiNetworks)}
-          icon={Wifi}
-          iconColor="bg-blue-500/20 text-blue-400"
-        />
-        <SecondaryStat
-          label="BT Devices"
-          value={formatNumber(btDevices)}
-          icon={Signal}
-          iconColor="bg-purple-500/20 text-purple-400"
-        />
-        <SecondaryStat
-          label="Aircraft"
-          value={aircraftCount}
-          icon={Plane}
-          iconColor="bg-sky-500/20 text-sky-400"
-        />
-        <SecondaryStat
-          label="LoRa"
-          value={loraDevices}
-          icon={Activity}
-          iconColor="bg-green-500/20 text-green-400"
-        />
-        <SecondaryStat
-          label="Alerts"
-          value={activeAlerts}
-          icon={Thermometer}
-          iconColor={activeAlerts > 0 ? "bg-red-500/20 text-red-400" : "bg-muted/50 text-muted-foreground"}
-        />
+      {/* ===== STARLINK POWER/LATENCY CHART + SYSTEM INFO ===== */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-6">
+        {/* Starlink Power & Latency Trend */}
+        {starlinkTimeseries.length > 0 && (
+          <Card className="glass-card border-border/50">
+            <CardHeader className="pb-3">
+              <CardTitle className="text-sm font-medium flex items-center gap-2">
+                <Zap className="w-4 h-4 text-amber-400" />
+                Starlink Power & Latency (24h)
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <ResponsiveContainer width="100%" height={180}>
+                <LineChart data={starlinkTimeseries}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" opacity={0.3} />
+                  <XAxis 
+                    dataKey="time" 
+                    tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 10 }}
+                    axisLine={false}
+                    tickLine={false}
+                    interval="preserveStartEnd"
+                  />
+                  <YAxis 
+                    yAxisId="power"
+                    orientation="left"
+                    tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 10 }}
+                    axisLine={false}
+                    tickLine={false}
+                    tickFormatter={(v) => `${v}W`}
+                    width={40}
+                  />
+                  <YAxis 
+                    yAxisId="latency"
+                    orientation="right"
+                    tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 10 }}
+                    axisLine={false}
+                    tickLine={false}
+                    tickFormatter={(v) => `${v}ms`}
+                    width={45}
+                  />
+                  <Tooltip 
+                    contentStyle={{ 
+                      backgroundColor: 'hsl(var(--card))', 
+                      border: '1px solid hsl(var(--border))',
+                      borderRadius: '8px'
+                    }}
+                  />
+                  <Line 
+                    yAxisId="power"
+                    type="monotone" 
+                    dataKey="power" 
+                    stroke="#f59e0b" 
+                    strokeWidth={2}
+                    dot={false}
+                    name="Power (W)"
+                  />
+                  <Line 
+                    yAxisId="latency"
+                    type="monotone" 
+                    dataKey="latency" 
+                    stroke="#06b6d4" 
+                    strokeWidth={2}
+                    dot={false}
+                    name="Latency (ms)"
+                  />
+                </LineChart>
+              </ResponsiveContainer>
+            </CardContent>
+          </Card>
+        )}
+
+        {/* System Summary Card */}
+        <Card className="glass-card border-border/50">
+          <CardHeader className="pb-3">
+            <CardTitle className="text-sm font-medium flex items-center gap-2">
+              <Server className="w-4 h-4 text-emerald-400" />
+              System Summary
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="grid grid-cols-2 gap-3">
+              <div className="p-3 rounded-lg bg-muted/30 border border-border/30">
+                <div className="flex items-center gap-2 mb-1">
+                  <Database className="w-4 h-4 text-cyan-400" />
+                  <span className="text-xs text-muted-foreground">Readings Size</span>
+                </div>
+                <p className="text-lg font-semibold">{storage?.readings_size ?? '--'}</p>
+              </div>
+              <div className="p-3 rounded-lg bg-muted/30 border border-border/30">
+                <div className="flex items-center gap-2 mb-1">
+                  <BarChart3 className="w-4 h-4 text-violet-400" />
+                  <span className="text-xs text-muted-foreground">Batches Size</span>
+                </div>
+                <p className="text-lg font-semibold">{storage?.batches_size ?? '--'}</p>
+              </div>
+              <div className="p-3 rounded-lg bg-muted/30 border border-border/30">
+                <div className="flex items-center gap-2 mb-1">
+                  <Cpu className="w-4 h-4 text-amber-400" />
+                  <span className="text-xs text-muted-foreground">LoRa Devices</span>
+                </div>
+                <p className="text-lg font-semibold">{loraDevicesCount}</p>
+                <p className="text-xs text-muted-foreground">{loraDetections} detections</p>
+              </div>
+              <div className="p-3 rounded-lg bg-muted/30 border border-border/30">
+                <div className="flex items-center gap-2 mb-1">
+                  <ThermometerSun className="w-4 h-4 text-rose-400" />
+                  <span className="text-xs text-muted-foreground">Sensor Types</span>
+                </div>
+                <p className="text-lg font-semibold">{sensorItems.length}</p>
+                <p className="text-xs text-muted-foreground">Active types</p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
       </div>
 
       {/* ===== CHARTS SECTION - LAZY LOADED ===== */}
       <div className="space-y-6">
-        {/* Hourly Client Readings */}
-        <Suspense fallback={<ChartSkeleton />}>
-          <HourlyClientTrendChart />
-        </Suspense>
-
         {/* Hourly Sensor Type Readings */}
         <Suspense fallback={<ChartSkeleton />}>
           <HourlyTrendChart />
@@ -406,26 +609,6 @@ const DashboardContent = () => {
         <Suspense fallback={<ChartSkeleton height="h-[300px]" />}>
           <SensorTypeStatsSection periodHours={periodHours} />
         </Suspense>
-
-        {/* Power History */}
-        <Suspense fallback={<ChartSkeleton />}>
-          <PowerHistoryChart hours={periodHours} />
-        </Suspense>
-
-        {/* Starlink Overview */}
-        <Card className="glass-card border-border/50">
-          <CardHeader className="pb-2">
-            <CardTitle className="text-lg flex items-center gap-2">
-              <Satellite className="w-5 h-5 text-violet-500" />
-              Starlink Connectivity
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <Suspense fallback={<Skeleton className="w-full h-[200px]" />}>
-              <StarlinkCharts hours={periodHours} />
-            </Suspense>
-          </CardContent>
-        </Card>
       </div>
     </div>
   );
