@@ -101,45 +101,50 @@ function extractNumber(data: Record<string, unknown>, ...paths: string[]): numbe
 
 /**
  * Format timestamp to time bucket key based on time range
- * Returns a sortable key (ISO prefix) and a display label
+ * Returns a sortable key with appropriate granularity
  */
 function formatTimeBucket(timestamp: string, hours: number): string {
   const date = new Date(timestamp);
   if (isNaN(date.getTime())) return '';
   
-  // Adaptive bucket size based on time range
-  let bucketMinutes: number;
+  // Adaptive bucket size based on time range - use finer granularity for more data points
+  let bucketSeconds: number;
   let includeDate = false;
   
   if (hours <= 1) {
-    bucketMinutes = 5;
+    bucketSeconds = 30; // 30-second buckets = up to 120 points per hour
   } else if (hours <= 6) {
-    bucketMinutes = 10;
+    bucketSeconds = 60; // 1-minute buckets = up to 360 points for 6 hours
   } else if (hours <= 24) {
-    bucketMinutes = 15;
+    bucketSeconds = 300; // 5-minute buckets = up to 288 points for 24 hours
     includeDate = true;
   } else {
-    bucketMinutes = 60;
+    bucketSeconds = 900; // 15-minute buckets for longer ranges
     includeDate = true;
   }
   
-  // Round to bucket
-  const bucketDate = new Date(date);
-  bucketDate.setMinutes(Math.floor(date.getMinutes() / bucketMinutes) * bucketMinutes, 0, 0);
+  // Round timestamp to bucket
+  const bucketMs = Math.floor(date.getTime() / (bucketSeconds * 1000)) * (bucketSeconds * 1000);
+  const bucketDate = new Date(bucketMs);
   
-  // Use ISO-like sortable format: YYYY-MM-DD HH:MM for multi-day, or just HH:MM for single day
+  // Use ISO-like sortable format
   const year = bucketDate.getFullYear();
   const month = (bucketDate.getMonth() + 1).toString().padStart(2, '0');
   const day = bucketDate.getDate().toString().padStart(2, '0');
   const hour = bucketDate.getHours().toString().padStart(2, '0');
   const min = bucketDate.getMinutes().toString().padStart(2, '0');
+  const sec = bucketDate.getSeconds().toString().padStart(2, '0');
   
   if (includeDate) {
     // Sortable format: YYYY-MM-DD HH:MM
     return `${year}-${month}-${day} ${hour}:${min}`;
   }
   
-  // For short timeframes (same day), just use time but prepend hour for sortability
+  // For short timeframes, include seconds for finer granularity
+  if (bucketSeconds < 60) {
+    return `${hour}:${min}:${sec}`;
+  }
+  
   return `${hour}:${min}`;
 }
 
