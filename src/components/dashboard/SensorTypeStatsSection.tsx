@@ -2,7 +2,7 @@ import { useMemo } from "react";
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell, PieChart, Pie, Legend } from "recharts";
 import { Radio, Loader2, Database, Activity, TrendingUp } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
-import { useStatsBySensor } from "@/hooks/aurora";
+import { useStatsBySensor, useGlobalStats } from "@/hooks/aurora";
 
 interface SensorTypeStatsSectionProps {
   periodHours?: number;
@@ -10,14 +10,22 @@ interface SensorTypeStatsSectionProps {
 
 const SENSOR_COLORS: Record<string, string> = {
   arduino_sensor_kit: '#f97316',
+  arduino: '#f97316',
+  arduino_1: '#f97316',
   thermal_probe: '#f59e0b',
+  thermal_probe_1: '#f59e0b',
   wifi_scanner: '#3b82f6',
+  wifi_scanner_1: '#3b82f6',
   bluetooth_scanner: '#6366f1',
+  bluetooth_scanner_1: '#6366f1',
   adsb_detector: '#06b6d4',
+  adsb_rtlsdr_1: '#06b6d4',
   lora_detector: '#ef4444',
   starlink_dish_comprehensive: '#8b5cf6',
   starlink_dish: '#a78bfa',
+  starlink_dish_1: '#a78bfa',
   system_monitor: '#64748b',
+  system_monitor_1: '#64748b',
   aht_sensor: '#ec4899',
   bmt_sensor: '#14b8a6',
   power_monitor: '#10b981',
@@ -27,11 +35,15 @@ const SENSOR_COLORS: Record<string, string> = {
 };
 
 const getSensorColor = (sensorType: string): string => {
-  return SENSOR_COLORS[sensorType] || SENSOR_COLORS.default;
+  // Normalize the sensor type for matching
+  const normalized = sensorType.toLowerCase().replace(/_\d+$/, '');
+  return SENSOR_COLORS[sensorType] || SENSOR_COLORS[normalized] || SENSOR_COLORS.default;
 };
 
 const formatSensorName = (sensorType: string): string => {
-  return sensorType.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+  // Remove trailing _1, _2 etc for display
+  const cleaned = sensorType.replace(/_\d+$/, '');
+  return cleaned.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
 };
 
 const formatNumber = (num: number | undefined | null): string => {
@@ -42,45 +54,68 @@ const formatNumber = (num: number | undefined | null): string => {
 };
 
 const SensorTypeStatsSection = ({ periodHours = 24 }: SensorTypeStatsSectionProps) => {
-  const { data: sensorStats, isLoading } = useStatsBySensor({ hours: periodHours });
+  const { data: sensorStats, isLoading: sensorStatsLoading } = useStatsBySensor({ hours: periodHours });
+  const { data: globalStats, isLoading: globalStatsLoading } = useGlobalStats();
 
+  const isLoading = sensorStatsLoading && globalStatsLoading;
+
+  // Build chart data from primary endpoint or fallback to global stats device_breakdown
   const chartData = useMemo(() => {
-    if (!sensorStats?.sensors) return [];
-    return sensorStats.sensors
-      .sort((a, b) => b.reading_count - a.reading_count)
-      .slice(0, 10)
-      .map(sensor => ({
-        name: formatSensorName(sensor.sensor_type),
-        rawName: sensor.sensor_type,
-        readings: sensor.reading_count,
-        devices: sensor.device_count,
-        clients: sensor.client_count,
-        color: getSensorColor(sensor.sensor_type),
-      }));
-  }, [sensorStats?.sensors]);
+    // Primary: use by-sensor endpoint
+    if (sensorStats?.sensors && sensorStats.sensors.length > 0) {
+      return sensorStats.sensors
+        .sort((a, b) => b.reading_count - a.reading_count)
+        .slice(0, 10)
+        .map(sensor => ({
+          name: formatSensorName(sensor.sensor_type),
+          rawName: sensor.sensor_type,
+          readings: sensor.reading_count,
+          devices: sensor.device_count,
+          clients: sensor.client_count,
+          color: getSensorColor(sensor.sensor_type),
+        }));
+    }
+    
+    // Fallback: use global stats device_breakdown
+    const deviceBreakdown = globalStats?.device_breakdown;
+    if (deviceBreakdown && deviceBreakdown.length > 0) {
+      return deviceBreakdown
+        .sort((a, b) => (b.count || 0) - (a.count || 0))
+        .slice(0, 10)
+        .map(device => ({
+          name: formatSensorName(device.device_type),
+          rawName: device.device_type,
+          readings: device.count || 0,
+          devices: 1, // Each device_type entry is one device
+          clients: 1, // From context we know there's 1 client
+          color: getSensorColor(device.device_type),
+        }));
+    }
+    
+    return [];
+  }, [sensorStats?.sensors, globalStats?.device_breakdown]);
 
   const pieData = useMemo(() => {
-    if (!sensorStats?.sensors) return [];
-    const totalReadings = sensorStats.sensors.reduce((sum, s) => sum + s.reading_count, 0);
-    return sensorStats.sensors
-      .sort((a, b) => b.reading_count - a.reading_count)
+    if (chartData.length === 0) return [];
+    const totalReadings = chartData.reduce((sum, s) => sum + s.readings, 0);
+    return chartData
       .slice(0, 8)
       .map(sensor => ({
-        name: formatSensorName(sensor.sensor_type),
-        value: sensor.reading_count,
-        percent: totalReadings > 0 ? ((sensor.reading_count / totalReadings) * 100).toFixed(1) : '0',
-        color: getSensorColor(sensor.sensor_type),
+        name: sensor.name,
+        value: sensor.readings,
+        percent: totalReadings > 0 ? ((sensor.readings / totalReadings) * 100).toFixed(1) : '0',
+        color: sensor.color,
       }));
-  }, [sensorStats?.sensors]);
+  }, [chartData]);
 
   const totalStats = useMemo(() => {
-    if (!sensorStats?.sensors) return { readings: 0, devices: 0, clients: 0 };
-    return sensorStats.sensors.reduce((acc, s) => ({
-      readings: acc.readings + s.reading_count,
-      devices: acc.devices + s.device_count,
-      clients: Math.max(acc.clients, s.client_count),
+    if (chartData.length === 0) return { readings: 0, devices: 0, clients: 0 };
+    return chartData.reduce((acc, s) => ({
+      readings: acc.readings + s.readings,
+      devices: acc.devices + s.devices,
+      clients: Math.max(acc.clients, s.clients),
     }), { readings: 0, devices: 0, clients: 0 });
-  }, [sensorStats?.sensors]);
+  }, [chartData]);
 
   if (isLoading) {
     return (
@@ -117,7 +152,7 @@ const SensorTypeStatsSection = ({ periodHours = 24 }: SensorTypeStatsSectionProp
         <TrendingUp className="w-5 h-5 text-primary" />
         Sensor Type Statistics ({periodHours}h)
         <Badge variant="outline" className="ml-2 text-xs">
-          {sensorStats?.total ?? chartData.length} types
+          {chartData.length} types
         </Badge>
       </h2>
 

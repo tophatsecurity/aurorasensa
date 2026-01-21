@@ -1,22 +1,15 @@
 import { useMemo } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Loader2, Zap, Wifi, Radio, Battery, Activity, Signal, TrendingUp } from "lucide-react";
+import { Loader2, Zap, Wifi, Radio, Battery, Activity } from "lucide-react";
 import {
   usePowerSummary,
   usePowerCurrent,
   useBluetoothStats,
   useWifiStats,
   useBatteryStats,
+  useGlobalStats,
 } from "@/hooks/aurora";
-import {
-  AreaChart,
-  Area,
-  XAxis,
-  YAxis,
-  Tooltip,
-  ResponsiveContainer,
-} from "recharts";
 
 interface ConnectivityStatsSectionProps {
   periodHours?: number;
@@ -44,19 +37,32 @@ const ConnectivityStatsSection = ({ periodHours = 24, clientId }: ConnectivitySt
   const { data: wifiStats, isLoading: wifiLoading } = useWifiStats(effectiveClientId);
   const { data: bluetoothStats, isLoading: btLoading } = useBluetoothStats(effectiveClientId);
   const { data: batteryStats, isLoading: batteryLoading } = useBatteryStats(effectiveClientId);
+  
+  // Fallback data sources
+  const { data: globalStats } = useGlobalStats();
 
-  const isLoading = powerLoading || wifiLoading || btLoading;
+  const isLoading = powerLoading && wifiLoading && btLoading;
 
-  // Process power data
+  // Process power data with fallback from global stats
   const powerMetrics = useMemo(() => {
     const currentPower = powerCurrent?.[0]?.power_watts ?? powerSummary?.total_power_watts ?? null;
     const avgPower = powerSummary?.avg_power_watts ?? null;
     const maxPower = powerSummary?.max_power_watts ?? null;
     const minPower = powerSummary?.min_power_watts ?? null;
-    const deviceCount = powerSummary?.total_devices ?? 0;
+    
+    // Fallback device count from global stats
+    let deviceCount = powerSummary?.total_devices ?? 0;
+    if (deviceCount === 0 && globalStats?.device_breakdown) {
+      // Count power-related devices from breakdown
+      const powerDevices = globalStats.device_breakdown.filter(d => 
+        d.device_type?.toLowerCase().includes('power') ||
+        d.device_type?.toLowerCase().includes('starlink')
+      );
+      deviceCount = powerDevices.length;
+    }
     
     return { currentPower, avgPower, maxPower, minPower, deviceCount };
-  }, [powerCurrent, powerSummary]);
+  }, [powerCurrent, powerSummary, globalStats?.device_breakdown]);
 
   // Process battery data
   const batteryMetrics = useMemo(() => {
@@ -69,23 +75,59 @@ const ConnectivityStatsSection = ({ periodHours = 24, clientId }: ConnectivitySt
     return { avgCharge, chargingCount, dischargingCount, total: batteryStats.length };
   }, [batteryStats]);
 
-  // WiFi metrics
-  const wifiMetrics = useMemo(() => ({
-    totalNetworks: wifiStats?.total_networks_discovered ?? 0,
-    uniqueNetworks: wifiStats?.unique_networks_24h ?? 0,
-    scanCount: wifiStats?.scan_count_24h ?? 0,
-    activeScanners: wifiStats?.active_scanners ?? 0,
-    avgNetworksPerScan: wifiStats?.avg_networks_per_scan ?? 0,
-  }), [wifiStats]);
+  // WiFi metrics with fallback from global stats
+  const wifiMetrics = useMemo(() => {
+    // If we have real wifi stats, use them
+    if (wifiStats && (wifiStats.total_scanners > 0 || wifiStats.total_networks_discovered > 0)) {
+      return {
+        totalNetworks: wifiStats.total_networks_discovered ?? 0,
+        uniqueNetworks: wifiStats.unique_networks_24h ?? 0,
+        scanCount: wifiStats.scan_count_24h ?? 0,
+        activeScanners: wifiStats.active_scanners ?? 0,
+        avgNetworksPerScan: wifiStats.avg_networks_per_scan ?? 0,
+      };
+    }
+    
+    // Fallback: check global stats for wifi_scanner devices
+    const wifiScannerDevice = globalStats?.device_breakdown?.find(d => 
+      d.device_type?.toLowerCase().includes('wifi_scanner')
+    );
+    
+    return {
+      totalNetworks: 0,
+      uniqueNetworks: 0,
+      scanCount: wifiScannerDevice?.count || 0,
+      activeScanners: wifiScannerDevice ? 1 : 0,
+      avgNetworksPerScan: 0,
+    };
+  }, [wifiStats, globalStats?.device_breakdown]);
 
-  // Bluetooth metrics
-  const btMetrics = useMemo(() => ({
-    totalDevices: bluetoothStats?.total_devices_discovered ?? 0,
-    uniqueDevices: bluetoothStats?.unique_devices_24h ?? 0,
-    scanCount: bluetoothStats?.scan_count_24h ?? 0,
-    activeScanners: bluetoothStats?.active_scanners ?? 0,
-    avgDevicesPerScan: bluetoothStats?.avg_devices_per_scan ?? 0,
-  }), [bluetoothStats]);
+  // Bluetooth metrics with fallback from global stats
+  const btMetrics = useMemo(() => {
+    // If we have real bluetooth stats, use them
+    if (bluetoothStats && (bluetoothStats.total_scanners > 0 || bluetoothStats.total_devices_discovered > 0)) {
+      return {
+        totalDevices: bluetoothStats.total_devices_discovered ?? 0,
+        uniqueDevices: bluetoothStats.unique_devices_24h ?? 0,
+        scanCount: bluetoothStats.scan_count_24h ?? 0,
+        activeScanners: bluetoothStats.active_scanners ?? 0,
+        avgDevicesPerScan: bluetoothStats.avg_devices_per_scan ?? 0,
+      };
+    }
+    
+    // Fallback: check global stats for bluetooth_scanner devices
+    const btScannerDevice = globalStats?.device_breakdown?.find(d => 
+      d.device_type?.toLowerCase().includes('bluetooth_scanner')
+    );
+    
+    return {
+      totalDevices: 0,
+      uniqueDevices: 0,
+      scanCount: btScannerDevice?.count || 0,
+      activeScanners: btScannerDevice ? 1 : 0,
+      avgDevicesPerScan: 0,
+    };
+  }, [bluetoothStats, globalStats?.device_breakdown]);
 
   if (isLoading) {
     return (
