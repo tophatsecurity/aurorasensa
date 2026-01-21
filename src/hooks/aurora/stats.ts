@@ -1279,16 +1279,23 @@ export function useClientTimeseries(clientId: string | null, hours: number = 24)
         return { client_id: '', hours, timeseries: [] };
       }
       try {
-        const response = await callAuroraApi<ClientTimeseriesResponse | { data: ClientTimeseriesResponse }>(
+        const response = await callAuroraApi<ClientTimeseriesResponse | { data: ClientTimeseriesResponse } | null>(
           `${TIMESERIES.CLIENT(clientId)}?hours=${hours}`
         );
+        // Handle null/undefined response
+        if (!response) {
+          return { client_id: clientId, hours, timeseries: [] };
+        }
         // Handle both direct response and nested data structure
-        const data = 'data' in response ? response.data : response;
+        const data = (typeof response === 'object' && 'data' in response && response.data) ? response.data : response;
+        if (!data || typeof data !== 'object') {
+          return { client_id: clientId, hours, timeseries: [] };
+        }
         return {
-          client_id: data.client_id || clientId,
-          hours: data.hours || hours,
-          timeseries: data.timeseries || [],
-          summary: data.summary,
+          client_id: (data as ClientTimeseriesResponse).client_id || clientId,
+          hours: (data as ClientTimeseriesResponse).hours || hours,
+          timeseries: (data as ClientTimeseriesResponse).timeseries || [],
+          summary: (data as ClientTimeseriesResponse).summary,
         };
       } catch (error) {
         console.warn(`Client timeseries endpoint failed:`, error);
