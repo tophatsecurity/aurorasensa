@@ -9,7 +9,7 @@ import { mapIcons, IconType, createAircraftIcon, getAircraftType, getAircraftCol
 import { formatDateTime } from "@/utils/dateUtils";
 import { spreadOverlappingPoints, COVERAGE_RANGES, ONE_MILE_METERS } from "@/utils/geoUtils";
 // Custom hooks
-import { useMapData, AircraftTrailData } from "@/hooks/useMapData";
+import { useOptimizedMapData } from "@/hooks/useOptimizedMapData";
 import { useGpsHistory } from "@/hooks/useGpsHistory";
 import { useAdsbHistory, AircraftTrail } from "@/hooks/useAdsbHistory";
 import { useClientContext } from "@/contexts/ClientContext";
@@ -110,17 +110,30 @@ const MapContent = () => {
     allPositions: baseAllPositions,
     stats: baseStats,
     isLoading,
-    timeAgo,
+    lastUpdate,
     handleRefresh,
     adsbIsHistorical,
     adsbSource,
     wifiDetectionMarkers,
     bluetoothDetectionMarkers,
-  } = useMapData({ 
+    locationSummary,
+  } = useOptimizedMapData({ 
     adsbHistoryMinutes: timeframeToMinutes(timeframe),
     refetchInterval: mapRefetchInterval,
     clientId: selectedClient,
   });
+  
+  // Calculate time ago from lastUpdate
+  const timeAgo = useMemo(() => {
+    const now = new Date();
+    const diff = now.getTime() - lastUpdate.getTime();
+    const seconds = Math.floor(diff / 1000);
+    if (seconds < 60) return `${seconds}s ago`;
+    const minutes = Math.floor(seconds / 60);
+    if (minutes < 60) return `${minutes}m ago`;
+    const hours = Math.floor(minutes / 60);
+    return `${hours}h ago`;
+  }, [lastUpdate]);
   
   // Merge SSE real-time updates with base map data
   // Use base data directly (no SSE merging)
