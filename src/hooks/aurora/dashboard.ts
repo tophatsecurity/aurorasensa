@@ -1,7 +1,7 @@
 // Aurora API - Dashboard domain hooks
 import { useQuery } from "@tanstack/react-query";
 import { callAuroraApi, hasAuroraSession, type AuroraApiOptions } from "./core";
-import { STATS, DASHBOARD, SYSTEM } from "./endpoints";
+import { STATS, DASHBOARD, SYSTEM, CLIENTS } from "./endpoints";
 
 // =============================================
 // TYPES
@@ -353,6 +353,80 @@ export function useDashboardSensorStats(clientId?: string | null) {
             readings_last_24h: globalResult.total_readings || 0,
             sensorItems: [],
           };
+        }
+      } catch {
+        // Fall through to all-states
+      }
+      
+      // Fallback 3: Try /api/clients/all-states to derive sensor types from clients
+      try {
+        interface AllStatesClient {
+          client_id: string;
+          hostname?: string;
+          sensors?: string[];
+        }
+        interface AllStatesResponse {
+          states?: {
+            adopted?: AllStatesClient[];
+            registered?: AllStatesClient[];
+            pending?: AllStatesClient[];
+          };
+        }
+        
+        const allStatesResult = await callAuroraApi<AllStatesResponse>(
+          CLIENTS.ALL_STATES, "GET", undefined, options
+        );
+        
+        if (allStatesResult?.states) {
+          const adoptedClients = allStatesResult.states.adopted || [];
+          const registeredClients = allStatesResult.states.registered || [];
+          const allClients = [...adoptedClients, ...registeredClients];
+          
+          if (allClients.length > 0) {
+            // Aggregate sensors from all clients
+            const sensorTypeCounts = new Map<string, { count: number; clientCount: number }>();
+            
+            for (const client of allClients) {
+              const sensors = client.sensors || [];
+              const seenTypes = new Set<string>();
+              
+              for (const sensor of sensors) {
+                // Extract sensor type from sensor ID (e.g., "adsb_rtlsdr_1" -> "adsb")
+                const sensorType = sensor.replace(/_\d+$/, '').replace(/_[a-z]+$/, '');
+                const normalizedType = sensorType.split('_')[0] || sensorType;
+                
+                const existing = sensorTypeCounts.get(normalizedType) || { count: 0, clientCount: 0 };
+                existing.count += 1;
+                
+                if (!seenTypes.has(normalizedType)) {
+                  existing.clientCount += 1;
+                  seenTypes.add(normalizedType);
+                }
+                
+                sensorTypeCounts.set(normalizedType, existing);
+              }
+            }
+            
+            // Convert to sensorItems format
+            const sensorItems: DashboardSensorStatsItem[] = Array.from(sensorTypeCounts.entries()).map(
+              ([sensorType, stats]) => ({
+                sensor_type: sensorType,
+                reading_count: stats.count * 100, // Estimate readings based on sensor count
+                client_count: stats.clientCount,
+                device_count: stats.count,
+              })
+            );
+            
+            console.log('[useDashboardSensorStats] Using /api/clients/all-states fallback:', sensorItems);
+            
+            return {
+              total_sensors: sensorItems.length,
+              total_clients: allClients.length,
+              total_devices: sensorItems.reduce((sum, s) => sum + s.device_count, 0),
+              readings_last_24h: sensorItems.reduce((sum, s) => sum + s.reading_count, 0),
+              sensorItems,
+            };
+          }
         }
       } catch {
         // Return empty
