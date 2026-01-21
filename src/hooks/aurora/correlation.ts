@@ -3,7 +3,7 @@
 
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { callAuroraApi, hasAuroraSession } from "./core";
-import { READINGS, TIMESERIES } from "./endpoints";
+import { READINGS } from "./endpoints";
 
 // =============================================
 // TYPES
@@ -240,19 +240,15 @@ export function useCorrelationStarlinkData(hours: number = 24, clientId?: string
         limit: limit.toString()
       });
       
-      let response: RawReadingsResponse;
-      
-      // Use client-specific endpoint if client is selected
+      // Use client_id as query param (the working pattern from useStarlinkTimeseries)
       if (clientId && clientId !== 'all') {
-        params.append('sensor_type', 'starlink');
-        response = await callAuroraApi<RawReadingsResponse>(
-          `${TIMESERIES.CLIENT(clientId)}?${params.toString()}`
-        );
-      } else {
-        response = await callAuroraApi<RawReadingsResponse>(
-          `${READINGS.BY_SENSOR_TYPE('starlink')}?${params.toString()}`
-        );
+        params.append('client_id', clientId);
       }
+      
+      // Always use the readings endpoint - it works correctly with client_id filter
+      const response = await callAuroraApi<RawReadingsResponse>(
+        `${READINGS.BY_SENSOR_TYPE('starlink')}?${params.toString()}`
+      );
       
       const readings = (response.readings || []).map(r => {
         const data = parseMeasurement(r);
@@ -285,19 +281,15 @@ export function useCorrelationThermalData(hours: number = 24, clientId?: string)
         limit: limit.toString()
       });
       
-      let response: RawReadingsResponse;
-      
-      // Use client-specific endpoint if client is selected
+      // Use client_id as query param (the working pattern from useThermalProbeTimeseries)
       if (clientId && clientId !== 'all') {
-        params.append('sensor_type', 'thermal_probe');
-        response = await callAuroraApi<RawReadingsResponse>(
-          `${TIMESERIES.CLIENT(clientId)}?${params.toString()}`
-        );
-      } else {
-        response = await callAuroraApi<RawReadingsResponse>(
-          `${READINGS.BY_SENSOR_TYPE('thermal_probe')}?${params.toString()}`
-        );
+        params.append('client_id', clientId);
       }
+      
+      // Always use the readings endpoint - it works correctly with client_id filter
+      const response = await callAuroraApi<RawReadingsResponse>(
+        `${READINGS.BY_SENSOR_TYPE('thermal_probe')}?${params.toString()}`
+      );
       
       const readings = (response.readings || []).map(r => {
         const data = parseMeasurement(r);
@@ -330,33 +322,29 @@ export function useCorrelationArduinoData(hours: number = 24, clientId?: string)
         limit: limit.toString()
       });
       
+      // Use client_id as query param (the working pattern from useArduinoTimeseries)
+      if (clientId && clientId !== 'all') {
+        params.append('client_id', clientId);
+      }
+      
       let response: RawReadingsResponse;
       
-      // Use client-specific endpoint if client is selected
-      if (clientId && clientId !== 'all') {
-        params.append('sensor_type', 'arduino_sensor_kit');
+      // Try arduino_sensor_kit first, fallback to aht_sensor
+      try {
         response = await callAuroraApi<RawReadingsResponse>(
-          `${TIMESERIES.CLIENT(clientId)}?${params.toString()}`
+          `${READINGS.BY_SENSOR_TYPE('arduino_sensor_kit')}?${params.toString()}`
         );
         
-        // Fallback to aht_sensor if no arduino_sensor_kit data
+        // Fallback to aht_sensor if no data
         if (!response.readings?.length) {
-          params.set('sensor_type', 'aht_sensor');
-          response = await callAuroraApi<RawReadingsResponse>(
-            `${TIMESERIES.CLIENT(clientId)}?${params.toString()}`
-          );
-        }
-      } else {
-        // Try arduino_sensor_kit first, fallback to aht_sensor
-        try {
-          response = await callAuroraApi<RawReadingsResponse>(
-            `${READINGS.BY_SENSOR_TYPE('arduino_sensor_kit')}?${params.toString()}`
-          );
-        } catch {
           response = await callAuroraApi<RawReadingsResponse>(
             `${READINGS.BY_SENSOR_TYPE('aht_sensor')}?${params.toString()}`
           );
         }
+      } catch {
+        response = await callAuroraApi<RawReadingsResponse>(
+          `${READINGS.BY_SENSOR_TYPE('aht_sensor')}?${params.toString()}`
+        );
       }
       
       const readings = (response.readings || []).map(r => {
