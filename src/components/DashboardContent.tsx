@@ -46,6 +46,7 @@ import SystemMonitorCharts from "./SystemMonitorCharts";
 
 import { AdsbSection, LoRaSection, WifiBluetoothSection, GpsSection, AlertsSection, BatchesSection, MaritimeSection, DashboardStatsHeader, DashboardSensorSummary, DashboardDeviceActivity, ClientReadingsBreakdown, ClientSensorMeasurements, SensorTypeStatsSection, ConnectivityStatsSection, PowerHistoryChart } from "./dashboard";
 import HourlyTrendChart from "./dashboard/HourlyTrendChart";
+import HourlyClientTrendChart from "./dashboard/HourlyClientTrendChart";
 
 import { timePeriodLabel } from "@/components/ui/context-selectors";
 import { 
@@ -486,7 +487,12 @@ const DashboardContent = () => {
       </div>
 
 
-      {/* Hourly Readings Trend Chart */}
+      {/* Hourly Readings by Client */}
+      <div className="mb-8">
+        <HourlyClientTrendChart />
+      </div>
+
+      {/* Hourly Readings by Sensor Type */}
       <div className="mb-8">
         <HourlyTrendChart />
       </div>

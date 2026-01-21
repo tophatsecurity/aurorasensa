@@ -9,6 +9,7 @@ export { default as DashboardStatsHeader } from './DashboardStatsHeader';
 export { default as DashboardSensorSummary } from './DashboardSensorSummary';
 export { default as DashboardDeviceActivity } from './DashboardDeviceActivity';
 export { default as HourlyTrendChart } from './HourlyTrendChart';
+export { default as HourlyClientTrendChart } from './HourlyClientTrendChart';
 export { default as ClientReadingsBreakdown } from './ClientReadingsBreakdown';
 export { default as ClientSensorMeasurements } from './ClientSensorMeasurements';
 export { default as StarlinkPowerSection } from './StarlinkPowerSection';
