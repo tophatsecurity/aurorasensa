@@ -1,3 +1,4 @@
+import { useMemo } from "react";
 import { 
   Activity, 
   Database, 
@@ -10,110 +11,114 @@ import {
 } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { formatDistanceToNow } from "date-fns";
+import {
+  useGlobalStats,
+  useComprehensiveStats,
+  use1hrStats,
+  use24hrStats,
+  useClients,
+  useAlertStats,
+  useDashboardSensorStats,
+} from "@/hooks/aurora";
 
 interface GlobalStatsCardsProps {
-  comprehensiveStats?: {
-    global?: {
-      // New flat structure
-      total_readings?: number;
-      total_batches?: number;
-      total_clients?: number;
-      total_devices?: number;
-      sensor_types_count?: number;
-      active_clients_24h?: number;
-      device_breakdown?: Array<{ device_type: string; count: number }>;
-      time_ranges?: {
-        latest_reading?: string;
-        data_span_days?: number;
-      };
-      // Legacy nested (backward compatibility)
-      database?: {
-        total_readings?: number;
-        total_batches?: number;
-        total_clients?: number;
-        active_alerts?: number;
-      };
-      devices?: {
-        total_unique_devices?: number;
-        total_device_types?: number;
-      };
-      activity?: {
-        avg_readings_per_hour?: number;
-        last_1_hour?: {
-          readings_1h?: number;
-          batches_1h?: number;
-          active_devices_1h?: number;
-        };
-        last_24_hours?: {
-          readings_24h?: number;
-          batches_24h?: number;
-          active_devices_24h?: number;
-        };
-      };
-    };
-  } | null;
-  stats1hr?: {
-    readings?: number;
-    devices?: number;
-    clients?: number;
-  } | null;
-  stats24hr?: {
-    readings?: number;
-    devices?: number;
-    clients?: number;
-  } | null;
-  // Fallback values from clients list
-  clientsCount?: number;
-  sensorsCount?: number;
+  periodHours?: number;
+  clientId?: string | null;
 }
 
 function formatNumber(num?: number): string {
-  if (num === undefined || num === null) return "N/A";
+  if (num === undefined || num === null) return "—";
   if (num >= 1000000) return `${(num / 1000000).toFixed(1)}M`;
   if (num >= 1000) return `${(num / 1000).toFixed(1)}K`;
   return num.toLocaleString();
 }
 
-export default function GlobalStatsCards({ comprehensiveStats, stats1hr, stats24hr, clientsCount, sensorsCount }: GlobalStatsCardsProps) {
+export default function GlobalStatsCards({ periodHours = 24, clientId }: GlobalStatsCardsProps) {
+  const effectiveClientId = clientId === "all" ? undefined : clientId;
+  
+  // Fetch real data from multiple endpoints
+  const { data: globalStats, isLoading: globalLoading } = useGlobalStats(effectiveClientId);
+  const { data: comprehensiveStats, isLoading: comprehensiveLoading } = useComprehensiveStats(effectiveClientId);
+  const { data: stats1hr, isLoading: stats1hrLoading } = use1hrStats(effectiveClientId);
+  const { data: stats24hr } = use24hrStats(effectiveClientId);
+  const { data: clients } = useClients();
+  const { data: alertStats } = useAlertStats();
+  const { data: dashboardSensorStats } = useDashboardSensorStats(effectiveClientId);
+  
   const global = comprehensiveStats?.global;
   
-  // Use flat structure first, fallback to nested, then fallback to props
-  const totalReadings = global?.total_readings ?? global?.database?.total_readings;
-  const totalBatches = global?.total_batches ?? global?.database?.total_batches;
-  const totalClients = global?.total_clients ?? global?.database?.total_clients ?? clientsCount;
-  const totalDevices = global?.total_devices ?? global?.devices?.total_unique_devices ?? sensorsCount;
-  const deviceTypes = global?.sensor_types_count ?? global?.device_breakdown?.length ?? global?.devices?.total_device_types;
-  const activeDevices1h = global?.activity?.last_1_hour?.active_devices_1h;
+  // Derive values with multiple fallbacks for real data
+  const totalReadings = useMemo(() => {
+    return globalStats?.total_readings ?? 
+           (dashboardSensorStats as { readings_last_24h?: number })?.readings_last_24h ?? 
+           global?.total_readings ?? 
+           global?.database?.total_readings ?? 
+           0;
+  }, [globalStats, dashboardSensorStats, global]);
+
+  const totalBatches = useMemo(() => {
+    return globalStats?.total_batches ?? 
+           global?.total_batches ?? 
+           global?.database?.total_batches ?? 
+           0;
+  }, [globalStats, global]);
+
+  const totalClients = useMemo(() => {
+    return globalStats?.total_clients ?? 
+           global?.total_clients ?? 
+           clients?.length ?? 
+           0;
+  }, [globalStats, global, clients]);
+
+  const totalDevices = useMemo(() => {
+    return globalStats?.total_devices ?? 
+           (dashboardSensorStats as { total_devices?: number })?.total_devices ?? 
+           global?.total_devices ?? 
+           0;
+  }, [globalStats, dashboardSensorStats, global]);
+
+  const sensorTypesCount = useMemo(() => {
+    return globalStats?.sensor_types_count ?? 
+           (dashboardSensorStats as { total_sensors?: number })?.total_sensors ?? 
+           global?.sensor_types_count ?? 
+           globalStats?.device_breakdown?.length ?? 
+           0;
+  }, [globalStats, dashboardSensorStats, global]);
+
+  const activeDevices1h = stats1hr?.devices ?? global?.activity?.last_1_hour?.active_devices_1h ?? 0;
+  const readings1h = stats1hr?.readings ?? global?.activity?.last_1_hour?.readings_1h ?? 0;
   const avgReadingsPerHour = global?.activity?.avg_readings_per_hour;
-  const activeAlerts = global?.database?.active_alerts;
+  const activeAlerts = alertStats?.active ?? global?.database?.active_alerts ?? 0;
   const timeRanges = global?.time_ranges;
+
+  const isLoading = globalLoading || comprehensiveLoading || stats1hrLoading;
 
   const stats = [
     {
       title: "Total Readings",
-      value: formatNumber(totalReadings),
+      value: isLoading ? "..." : formatNumber(totalReadings),
       icon: Database,
       color: "text-cyan-400",
       bgColor: "bg-cyan-500/20",
     },
     {
       title: "Total Devices",
-      value: formatNumber(totalDevices),
-      subtitle: deviceTypes ? `${deviceTypes} types` : undefined,
+      value: isLoading ? "..." : formatNumber(totalDevices),
+      subtitle: sensorTypesCount > 0 ? `${sensorTypesCount} types` : undefined,
       icon: Cpu,
       color: "text-violet-400",
       bgColor: "bg-violet-500/20",
     },
     {
       title: "Active Clients",
-      value: formatNumber(totalClients),
+      value: isLoading ? "..." : formatNumber(totalClients),
       icon: Users,
       color: "text-emerald-400",
       bgColor: "bg-emerald-500/20",
     },
     {
       title: "Data Batches",
-      value: formatNumber(totalBatches),
+      value: isLoading ? "..." : formatNumber(totalBatches),
       icon: Layers,
       color: "text-blue-400",
       bgColor: "bg-blue-500/20",
@@ -122,13 +127,13 @@ export default function GlobalStatsCards({ comprehensiveStats, stats1hr, stats24
       title: "Active Alerts",
       value: formatNumber(activeAlerts),
       icon: AlertTriangle,
-      color: activeAlerts && activeAlerts > 0 ? "text-amber-400" : "text-green-400",
-      bgColor: activeAlerts && activeAlerts > 0 ? "bg-amber-500/20" : "bg-green-500/20",
+      color: activeAlerts > 0 ? "text-amber-400" : "text-green-400",
+      bgColor: activeAlerts > 0 ? "bg-amber-500/20" : "bg-green-500/20",
     },
     {
       title: "Readings/Hour",
-      value: formatNumber(avgReadingsPerHour),
-      subtitle: stats1hr?.readings ? `${formatNumber(stats1hr.readings)} last hr` : undefined,
+      value: formatNumber(avgReadingsPerHour ?? Math.round(readings1h)),
+      subtitle: readings1h > 0 ? `${formatNumber(readings1h)} last hr` : undefined,
       icon: BarChart3,
       color: "text-orange-400",
       bgColor: "bg-orange-500/20",
@@ -145,7 +150,7 @@ export default function GlobalStatsCards({ comprehensiveStats, stats1hr, stats24
       title: "Last Update",
       value: timeRanges?.latest_reading 
         ? formatDistanceToNow(new Date(timeRanges.latest_reading), { addSuffix: true })
-        : "N/A",
+        : "Now",
       subtitle: timeRanges?.data_span_days ? `${timeRanges.data_span_days.toFixed(0)} days of data` : undefined,
       icon: Clock,
       color: "text-teal-400",
