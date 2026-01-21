@@ -229,10 +229,17 @@ function extractArduinoMetrics(data: Record<string, unknown>): ArduinoMetrics {
 // =============================================
 
 export function useCorrelationStarlinkData(hours: number = 24, clientId?: string) {
+  // Calculate appropriate limit based on time range
+  // Shorter timeframes need more granular data
+  const limit = hours <= 1 ? 500 : hours <= 6 ? 300 : hours <= 24 ? 200 : 100;
+  
   return useQuery({
-    queryKey: ["aurora", "correlation", "starlink", hours, clientId],
+    queryKey: ["aurora", "correlation", "starlink", hours, clientId, limit],
     queryFn: async () => {
-      const params = new URLSearchParams({ hours: hours.toString() });
+      const params = new URLSearchParams({ 
+        hours: hours.toString(),
+        limit: limit.toString()
+      });
       if (clientId && clientId !== 'all') {
         params.append('client_id', clientId);
       }
@@ -257,14 +264,20 @@ export function useCorrelationStarlinkData(hours: number = 24, clientId?: string
     enabled: hasAuroraSession(),
     staleTime: 30000,
     retry: 1,
+    refetchOnMount: true,
   });
 }
 
 export function useCorrelationThermalData(hours: number = 24, clientId?: string) {
+  const limit = hours <= 1 ? 500 : hours <= 6 ? 300 : hours <= 24 ? 200 : 100;
+  
   return useQuery({
-    queryKey: ["aurora", "correlation", "thermal", hours, clientId],
+    queryKey: ["aurora", "correlation", "thermal", hours, clientId, limit],
     queryFn: async () => {
-      const params = new URLSearchParams({ hours: hours.toString() });
+      const params = new URLSearchParams({ 
+        hours: hours.toString(),
+        limit: limit.toString()
+      });
       if (clientId && clientId !== 'all') {
         params.append('client_id', clientId);
       }
@@ -289,14 +302,20 @@ export function useCorrelationThermalData(hours: number = 24, clientId?: string)
     enabled: hasAuroraSession(),
     staleTime: 30000,
     retry: 1,
+    refetchOnMount: true,
   });
 }
 
 export function useCorrelationArduinoData(hours: number = 24, clientId?: string) {
+  const limit = hours <= 1 ? 500 : hours <= 6 ? 300 : hours <= 24 ? 200 : 100;
+  
   return useQuery({
-    queryKey: ["aurora", "correlation", "arduino", hours, clientId],
+    queryKey: ["aurora", "correlation", "arduino", hours, clientId, limit],
     queryFn: async () => {
-      const params = new URLSearchParams({ hours: hours.toString() });
+      const params = new URLSearchParams({ 
+        hours: hours.toString(),
+        limit: limit.toString()
+      });
       if (clientId && clientId !== 'all') {
         params.append('client_id', clientId);
       }
@@ -329,6 +348,7 @@ export function useCorrelationArduinoData(hours: number = 24, clientId?: string)
     enabled: hasAuroraSession(),
     staleTime: 30000,
     retry: 1,
+    refetchOnMount: true,
   });
 }
 
