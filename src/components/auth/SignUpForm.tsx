@@ -47,7 +47,7 @@ export function SignUpForm({ onSwitchToLogin }: SignUpFormProps) {
       <CardHeader className="text-center">
         <CardTitle className="text-2xl text-cyan-400">Create Account</CardTitle>
         <CardDescription className="text-slate-400">
-          Join Aurora Sense to start monitoring
+          Join AuroraSENSE to start monitoring
         </CardDescription>
       </CardHeader>
       <CardContent>
