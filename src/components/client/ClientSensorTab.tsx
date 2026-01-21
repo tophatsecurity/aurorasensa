@@ -182,7 +182,14 @@ const formatLabel = (key: string): string => {
 };
 
 // Categorize data fields
-const categorizeFields = (data: Record<string, unknown>): Record<string, [string, unknown][]> => {
+const categorizeFields = (data: Record<string, unknown>, sensorType?: string): Record<string, [string, unknown][]> => {
+  const isStarlink = sensorType?.toLowerCase().includes('starlink');
+  
+  // Starlink-specific categories
+  if (isStarlink) {
+    return categorizeStarlinkFields(data);
+  }
+  
   const categories: Record<string, [string, unknown][]> = {
     location: [],
     environmental: [],
@@ -223,6 +230,94 @@ const categorizeFields = (data: Record<string, unknown>): Record<string, [string
   return categories;
 };
 
+// Starlink-specific categorization
+const categorizeStarlinkFields = (data: Record<string, unknown>): Record<string, [string, unknown][]> => {
+  const categories: Record<string, [string, unknown][]> = {
+    'Signal Quality': [],
+    'Throughput': [],
+    'Latency': [],
+    'Power': [],
+    'Obstruction': [],
+    'GPS Location': [],
+    'Device Status': [],
+    'Network': [],
+    'Other': []
+  };
+  
+  // Flatten nested objects like ping_latency, dish_gps
+  const flattenedData: Record<string, unknown> = {};
+  
+  Object.entries(data).forEach(([key, value]) => {
+    if (typeof value === 'object' && value !== null && !Array.isArray(value)) {
+      // Flatten nested objects with prefix
+      Object.entries(value as Record<string, unknown>).forEach(([nestedKey, nestedValue]) => {
+        flattenedData[`${key}_${nestedKey}`] = nestedValue;
+      });
+    } else {
+      flattenedData[key] = value;
+    }
+  });
+  
+  Object.entries(flattenedData).forEach(([key, value]) => {
+    if (key.includes('_id') || key === 'timestamp' || value === null || value === undefined) return;
+    
+    const lowerKey = key.toLowerCase();
+    
+    // Signal Quality
+    if (lowerKey.includes('snr') || lowerKey.includes('signal') || lowerKey.includes('noise') ||
+        lowerKey.includes('phy_rate') || lowerKey.includes('carrier') || lowerKey.includes('rssi') ||
+        lowerKey.includes('currently_obstructed') || lowerKey.includes('wedge_abs') || lowerKey.includes('wedge_fraction')) {
+      categories['Signal Quality'].push([key, value]);
+    }
+    // Throughput
+    else if (lowerKey.includes('throughput') || lowerKey.includes('downlink') || lowerKey.includes('uplink') ||
+             lowerKey.includes('bps') || lowerKey.includes('bandwidth') || lowerKey.includes('mbps')) {
+      categories['Throughput'].push([key, value]);
+    }
+    // Latency
+    else if (lowerKey.includes('latency') || lowerKey.includes('ping') || lowerKey.includes('pop_') ||
+             lowerKey.includes('ms') && (lowerKey.includes('round') || lowerKey.includes('trip'))) {
+      categories['Latency'].push([key, value]);
+    }
+    // Power
+    else if (lowerKey.includes('power') || lowerKey.includes('watt') || lowerKey.includes('voltage') ||
+             lowerKey.includes('current') || lowerKey.includes('energy') || lowerKey.includes('consumption')) {
+      categories['Power'].push([key, value]);
+    }
+    // Obstruction
+    else if (lowerKey.includes('obstruct') || lowerKey.includes('blocked') || lowerKey.includes('occlusion') ||
+             lowerKey.includes('fraction_obstructed') || lowerKey.includes('outage') || lowerKey.includes('no_sats') ||
+             lowerKey.includes('stow') || lowerKey.includes('thermal_shutdown')) {
+      categories['Obstruction'].push([key, value]);
+    }
+    // GPS/Location
+    else if (lowerKey.includes('lat') || lowerKey.includes('lng') || lowerKey.includes('lon') ||
+             lowerKey.includes('altitude') || lowerKey.includes('heading') || lowerKey.includes('gps') ||
+             lowerKey.includes('azimuth') || lowerKey.includes('tilt') || lowerKey.includes('elevation') ||
+             lowerKey.includes('direction')) {
+      categories['GPS Location'].push([key, value]);
+    }
+    // Device Status
+    else if (lowerKey.includes('uptime') || lowerKey.includes('state') || lowerKey.includes('status') ||
+             lowerKey.includes('ready') || lowerKey.includes('alert') || lowerKey.includes('reboot') ||
+             lowerKey.includes('software') || lowerKey.includes('hardware') || lowerKey.includes('version') ||
+             lowerKey.includes('connected') || lowerKey.includes('seconds_to') || lowerKey.includes('mobility')) {
+      categories['Device Status'].push([key, value]);
+    }
+    // Network
+    else if (lowerKey.includes('ip') || lowerKey.includes('router') || lowerKey.includes('ethernet') ||
+             lowerKey.includes('pop_rack') || lowerKey.includes('cell') || lowerKey.includes('satellite')) {
+      categories['Network'].push([key, value]);
+    }
+    // Other
+    else {
+      categories['Other'].push([key, value]);
+    }
+  });
+  
+  return categories;
+};
+
 const CHART_COLORS = ['#8b5cf6', '#f97316', '#22c55e', '#3b82f6', '#ef4444', '#06b6d4', '#f59e0b', '#ec4899'];
 
 export function ClientSensorTab({ sensorType, readings, isLoading }: ClientSensorTabProps) {
@@ -238,11 +333,11 @@ export function ClientSensorTab({ sensorType, readings, isLoading }: ClientSenso
     return [...new Set(readings.map(r => r.device_id))];
   }, [readings]);
   
-  // Categorize latest data
+  // Categorize latest data (with special handling for Starlink)
   const categorizedData = useMemo(() => {
     if (!latestReading?.data) return {};
-    return categorizeFields(latestReading.data);
-  }, [latestReading]);
+    return categorizeFields(latestReading.data, sensorType);
+  }, [latestReading, sensorType]);
   
   // Extract all numeric keys for charting
   const { chartData, numericKeys, allNumericKeys } = useMemo(() => {
@@ -343,25 +438,37 @@ export function ClientSensorTab({ sensorType, readings, isLoading }: ClientSenso
   }
 
   const getCategoryIcon = (category: string) => {
-    switch (category) {
-      case 'location': return <MapPin className="w-4 h-4" />;
-      case 'environmental': return <Thermometer className="w-4 h-4" />;
-      case 'network': return <Signal className="w-4 h-4" />;
-      case 'power': return <Zap className="w-4 h-4" />;
-      case 'system': return <Monitor className="w-4 h-4" />;
-      default: return <Eye className="w-4 h-4" />;
-    }
+    const cat = category.toLowerCase();
+    // Standard categories
+    if (cat === 'location' || cat === 'gps location') return <MapPin className="w-4 h-4" />;
+    if (cat === 'environmental') return <Thermometer className="w-4 h-4" />;
+    if (cat === 'network') return <Signal className="w-4 h-4" />;
+    if (cat === 'power') return <Zap className="w-4 h-4" />;
+    if (cat === 'system') return <Monitor className="w-4 h-4" />;
+    // Starlink-specific categories
+    if (cat === 'signal quality') return <Signal className="w-4 h-4" />;
+    if (cat === 'throughput') return <Gauge className="w-4 h-4" />;
+    if (cat === 'latency') return <Clock className="w-4 h-4" />;
+    if (cat === 'obstruction') return <Eye className="w-4 h-4" />;
+    if (cat === 'device status') return <Activity className="w-4 h-4" />;
+    return <Eye className="w-4 h-4" />;
   };
 
   const getCategoryColor = (category: string) => {
-    switch (category) {
-      case 'location': return 'text-green-400';
-      case 'environmental': return 'text-amber-400';
-      case 'network': return 'text-blue-400';
-      case 'power': return 'text-yellow-400';
-      case 'system': return 'text-slate-400';
-      default: return 'text-purple-400';
-    }
+    const cat = category.toLowerCase();
+    // Standard categories
+    if (cat === 'location' || cat === 'gps location') return 'text-success';
+    if (cat === 'environmental') return 'text-warning';
+    if (cat === 'network') return 'text-primary';
+    if (cat === 'power') return 'text-chart-3';
+    if (cat === 'system') return 'text-muted-foreground';
+    // Starlink-specific categories
+    if (cat === 'signal quality') return 'text-chart-1';
+    if (cat === 'throughput') return 'text-chart-2';
+    if (cat === 'latency') return 'text-chart-4';
+    if (cat === 'obstruction') return 'text-destructive';
+    if (cat === 'device status') return 'text-success';
+    return 'text-primary';
   };
 
   return (
@@ -420,7 +527,7 @@ export function ClientSensorTab({ sensorType, readings, isLoading }: ClientSenso
         <Card className="bg-card/50 border-border/50">
           <CardHeader className="pb-2">
             <CardTitle className="text-sm flex items-center gap-2">
-              <MapPin className="w-4 h-4 text-green-400" />
+              <MapPin className="w-4 h-4 text-success" />
               Location
             </CardTitle>
           </CardHeader>
@@ -534,11 +641,11 @@ export function ClientSensorTab({ sensorType, readings, isLoading }: ClientSenso
                     </div>
                     <div className="flex justify-between">
                       <span className="text-muted-foreground">Avg:</span>
-                      <span className="text-blue-400">{formatValue(key, stat.avg).display}</span>
+                      <span className="text-primary">{formatValue(key, stat.avg).display}</span>
                     </div>
                     <div className="flex justify-between">
                       <span className="text-muted-foreground">Range:</span>
-                      <span className="text-green-400">{formatValue(key, stat.min).display} - {formatValue(key, stat.max).display}</span>
+                      <span className="text-success">{formatValue(key, stat.min).display} - {formatValue(key, stat.max).display}</span>
                     </div>
                   </div>
                 </div>
