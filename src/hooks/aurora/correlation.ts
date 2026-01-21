@@ -3,7 +3,7 @@
 
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { callAuroraApi, hasAuroraSession } from "./core";
-import { READINGS } from "./endpoints";
+import { READINGS, TIMESERIES } from "./endpoints";
 
 // =============================================
 // TYPES
@@ -230,7 +230,6 @@ function extractArduinoMetrics(data: Record<string, unknown>): ArduinoMetrics {
 
 export function useCorrelationStarlinkData(hours: number = 24, clientId?: string) {
   // Calculate appropriate limit based on time range
-  // Shorter timeframes need more granular data
   const limit = hours <= 1 ? 500 : hours <= 6 ? 300 : hours <= 24 ? 200 : 100;
   
   return useQuery({
@@ -240,13 +239,20 @@ export function useCorrelationStarlinkData(hours: number = 24, clientId?: string
         hours: hours.toString(),
         limit: limit.toString()
       });
-      if (clientId && clientId !== 'all') {
-        params.append('client_id', clientId);
-      }
       
-      const response = await callAuroraApi<RawReadingsResponse>(
-        `${READINGS.BY_SENSOR_TYPE('starlink')}?${params.toString()}`
-      );
+      let response: RawReadingsResponse;
+      
+      // Use client-specific endpoint if client is selected
+      if (clientId && clientId !== 'all') {
+        params.append('sensor_type', 'starlink');
+        response = await callAuroraApi<RawReadingsResponse>(
+          `${TIMESERIES.CLIENT(clientId)}?${params.toString()}`
+        );
+      } else {
+        response = await callAuroraApi<RawReadingsResponse>(
+          `${READINGS.BY_SENSOR_TYPE('starlink')}?${params.toString()}`
+        );
+      }
       
       const readings = (response.readings || []).map(r => {
         const data = parseMeasurement(r);
@@ -254,7 +260,7 @@ export function useCorrelationStarlinkData(hours: number = 24, clientId?: string
         return {
           timestamp: r.timestamp,
           time: formatTimeBucket(r.timestamp, hours),
-          client_id: r.client_id,
+          client_id: r.client_id || clientId,
           ...metrics,
         };
       }).filter(r => r.time);
@@ -278,13 +284,20 @@ export function useCorrelationThermalData(hours: number = 24, clientId?: string)
         hours: hours.toString(),
         limit: limit.toString()
       });
-      if (clientId && clientId !== 'all') {
-        params.append('client_id', clientId);
-      }
       
-      const response = await callAuroraApi<RawReadingsResponse>(
-        `${READINGS.BY_SENSOR_TYPE('thermal_probe')}?${params.toString()}`
-      );
+      let response: RawReadingsResponse;
+      
+      // Use client-specific endpoint if client is selected
+      if (clientId && clientId !== 'all') {
+        params.append('sensor_type', 'thermal_probe');
+        response = await callAuroraApi<RawReadingsResponse>(
+          `${TIMESERIES.CLIENT(clientId)}?${params.toString()}`
+        );
+      } else {
+        response = await callAuroraApi<RawReadingsResponse>(
+          `${READINGS.BY_SENSOR_TYPE('thermal_probe')}?${params.toString()}`
+        );
+      }
       
       const readings = (response.readings || []).map(r => {
         const data = parseMeasurement(r);
@@ -292,7 +305,7 @@ export function useCorrelationThermalData(hours: number = 24, clientId?: string)
         return {
           timestamp: r.timestamp,
           time: formatTimeBucket(r.timestamp, hours),
-          client_id: r.client_id,
+          client_id: r.client_id || clientId,
           ...metrics,
         };
       }).filter(r => r.time);
@@ -316,20 +329,34 @@ export function useCorrelationArduinoData(hours: number = 24, clientId?: string)
         hours: hours.toString(),
         limit: limit.toString()
       });
-      if (clientId && clientId !== 'all') {
-        params.append('client_id', clientId);
-      }
       
-      // Try arduino_sensor_kit first, fallback to aht_sensor
       let response: RawReadingsResponse;
-      try {
+      
+      // Use client-specific endpoint if client is selected
+      if (clientId && clientId !== 'all') {
+        params.append('sensor_type', 'arduino_sensor_kit');
         response = await callAuroraApi<RawReadingsResponse>(
-          `${READINGS.BY_SENSOR_TYPE('arduino_sensor_kit')}?${params.toString()}`
+          `${TIMESERIES.CLIENT(clientId)}?${params.toString()}`
         );
-      } catch {
-        response = await callAuroraApi<RawReadingsResponse>(
-          `${READINGS.BY_SENSOR_TYPE('aht_sensor')}?${params.toString()}`
-        );
+        
+        // Fallback to aht_sensor if no arduino_sensor_kit data
+        if (!response.readings?.length) {
+          params.set('sensor_type', 'aht_sensor');
+          response = await callAuroraApi<RawReadingsResponse>(
+            `${TIMESERIES.CLIENT(clientId)}?${params.toString()}`
+          );
+        }
+      } else {
+        // Try arduino_sensor_kit first, fallback to aht_sensor
+        try {
+          response = await callAuroraApi<RawReadingsResponse>(
+            `${READINGS.BY_SENSOR_TYPE('arduino_sensor_kit')}?${params.toString()}`
+          );
+        } catch {
+          response = await callAuroraApi<RawReadingsResponse>(
+            `${READINGS.BY_SENSOR_TYPE('aht_sensor')}?${params.toString()}`
+          );
+        }
       }
       
       const readings = (response.readings || []).map(r => {
@@ -338,7 +365,7 @@ export function useCorrelationArduinoData(hours: number = 24, clientId?: string)
         return {
           timestamp: r.timestamp,
           time: formatTimeBucket(r.timestamp, hours),
-          client_id: r.client_id,
+          client_id: r.client_id || clientId,
           ...metrics,
         };
       }).filter(r => r.time);
