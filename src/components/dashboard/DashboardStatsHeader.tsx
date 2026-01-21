@@ -79,16 +79,23 @@ const DashboardStatsHeader = ({ periodHours = 24, clientId }: DashboardStatsHead
     );
   }, [allClientsFromState, clients]);
 
-  // Total readings - prioritize statsOverview (from /api/stats/overview), then dashboardSensorStats
-  // API returns: {"total_readings":364273,"total_batches":6908,"timestamp":"..."}
+  // Total readings - prioritize globalStats (from /api/stats/global auto-unwrapped)
+  // API returns: {"data": {...}, "status": "success"} which core.ts auto-unwraps to just the data object
+  const totalReadingsFromGlobal = globalStats?.total_readings;
   const totalReadingsFromOverview = statsOverview?.total_readings;
   const totalReadingsFromDashboard = (dashboardSensorStats as { readings_last_24h?: number })?.readings_last_24h;
-  const totalReadingsFromGlobal = globalStats?.total_readings ?? global?.total_readings;
+  const totalReadingsFromComprehensive = global?.total_readings;
+  
+  console.log('[DashboardStatsHeader] Reading sources:', {
+    globalStats, statsOverview, 
+    totalReadingsFromGlobal, totalReadingsFromOverview, totalReadingsFromDashboard
+  });
   
   const totalReadings = 
+    totalReadingsFromGlobal ??
     totalReadingsFromOverview ??
     totalReadingsFromDashboard ??
-    totalReadingsFromGlobal ?? 
+    totalReadingsFromComprehensive ?? 
     0;
   
   // Client count - prioritize dashboardClientStats (from /api/stats/by-client)

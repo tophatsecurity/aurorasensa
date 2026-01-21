@@ -333,28 +333,41 @@ export function useDashboardSensorStats(clientId?: string | null) {
         // Fall through to global stats
       }
       
-      // Fallback 2: Try /api/stats/global (returns wrapped object)
+      // Fallback 2: Try /api/stats/global (returns wrapped object with device_breakdown)
       try {
-        const globalResult = await callAuroraApi<{
+        interface GlobalStatsResponse {
           total_readings?: number;
           total_batches?: number;
           total_clients?: number;
           total_devices?: number;
           sensor_types_count?: number;
+          active_clients_24h?: number;
           device_breakdown?: Array<{ device_type: string; count: number }>;
-        }>(STATS.GLOBAL, "GET", undefined, options);
+        }
         
-        if (globalResult && (globalResult.total_readings || globalResult.total_devices)) {
-          console.log('[useDashboardSensorStats] Using /api/stats/global fallback:', globalResult);
+        const globalResult = await callAuroraApi<GlobalStatsResponse>(STATS.GLOBAL, "GET", undefined, options);
+        
+        console.log('[useDashboardSensorStats] /api/stats/global result:', globalResult);
+        
+        if (globalResult && (globalResult.total_readings || globalResult.total_devices || globalResult.device_breakdown)) {
+          // Build sensorItems from device_breakdown if available
+          const sensorItems: DashboardSensorStatsItem[] = (globalResult.device_breakdown || []).map(d => ({
+            sensor_type: d.device_type,
+            reading_count: d.count,
+            client_count: globalResult.total_clients || 1,
+            device_count: 1,
+          }));
+          
           return {
             total_sensors: globalResult.sensor_types_count || globalResult.device_breakdown?.length || 0,
             total_clients: globalResult.total_clients || 0,
             total_devices: globalResult.total_devices || 0,
             readings_last_24h: globalResult.total_readings || 0,
-            sensorItems: [],
+            sensorItems,
           };
         }
-      } catch {
+      } catch (err) {
+        console.warn('[useDashboardSensorStats] /api/stats/global fallback failed:', err);
         // Fall through to all-states
       }
       
