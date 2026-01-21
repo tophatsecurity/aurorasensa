@@ -475,15 +475,68 @@ export function useGlobalStats(clientId?: string | null) {
   return useQuery({
     queryKey: ["aurora", "stats", "global", clientId],
     queryFn: async () => {
-      // Core now auto-unwraps { data: {...}, status: 'success' } responses
-      const result = await callAuroraApi<GlobalStats>(
-        STATS.GLOBAL, "GET", undefined, { clientId }
-      );
-      return result || {};
+      // Try /api/stats/global first - returns { data: {...}, status: 'success' } which core auto-unwraps
+      try {
+        const result = await callAuroraApi<GlobalStats>(
+          STATS.GLOBAL, "GET", undefined, { clientId }
+        );
+        if (result && (result.total_readings || result.total_devices || result.total_clients)) {
+          console.log('[useGlobalStats] Primary endpoint returned data:', result);
+          return result;
+        }
+      } catch {
+        // Fall through to fallback
+      }
+      
+      // Fallback to /api/stats/overview - direct response format
+      try {
+        const overview = await callAuroraApi<{
+          total_readings?: number;
+          total_batches?: number;
+          total_clients?: number;
+          total_devices?: number;
+        }>(STATS.OVERVIEW, "GET", undefined, { clientId });
+        
+        if (overview && (overview.total_readings || overview.total_devices)) {
+          console.log('[useGlobalStats] Using /api/stats/overview fallback:', overview);
+          return {
+            total_readings: overview.total_readings,
+            total_batches: overview.total_batches,
+            total_clients: overview.total_clients,
+            total_devices: overview.total_devices,
+          } as GlobalStats;
+        }
+      } catch {
+        // Fall through
+      }
+      
+      // Fallback to /api/stats/comprehensive
+      try {
+        const comprehensive = await callAuroraApi<{ 
+          global?: GlobalStats;
+          database?: { total_readings?: number; total_batches?: number; total_clients?: number };
+        }>(STATS.COMPREHENSIVE, "GET", undefined, { clientId });
+        
+        if (comprehensive?.global) {
+          console.log('[useGlobalStats] Using /api/stats/comprehensive fallback:', comprehensive.global);
+          return comprehensive.global;
+        }
+        if (comprehensive?.database) {
+          return {
+            total_readings: comprehensive.database.total_readings,
+            total_batches: comprehensive.database.total_batches,
+            total_clients: comprehensive.database.total_clients,
+          } as GlobalStats;
+        }
+      } catch {
+        // Return empty
+      }
+      
+      return {} as GlobalStats;
     },
     enabled: hasAuroraSession(),
     staleTime: 60000,
-    refetchInterval: 180000,
+    refetchInterval: 120000,
     retry: 1,
   });
 }
@@ -1101,10 +1154,38 @@ export function usePerformanceStats() {
 export function useStatsOverview(clientId?: string | null) {
   return useQuery({
     queryKey: ["aurora", "stats", "overview", clientId],
-    queryFn: () => callAuroraApi<StatsOverview>(STATS.OVERVIEW, "GET", undefined, { clientId }),
+    queryFn: async () => {
+      // /api/stats/overview returns DIRECT response - no wrapper
+      // Format: { total_readings: number, total_batches: number, timestamp: string }
+      try {
+        const result = await callAuroraApi<StatsOverview>(STATS.OVERVIEW, "GET", undefined, { clientId });
+        if (result && (result.total_readings || result.total_batches)) {
+          return result;
+        }
+      } catch {
+        // Fall through
+      }
+      
+      // Fallback to global stats
+      try {
+        const global = await callAuroraApi<GlobalStats>(STATS.GLOBAL, "GET", undefined, { clientId });
+        if (global) {
+          return {
+            total_readings: global.total_readings ?? 0,
+            total_batches: global.total_batches ?? 0,
+            total_devices: global.total_devices ?? 0,
+            total_clients: global.total_clients ?? 0,
+          } as StatsOverview;
+        }
+      } catch {
+        // Return empty
+      }
+      
+      return { total_readings: 0, total_batches: 0 } as StatsOverview;
+    },
     enabled: hasAuroraSession(),
     staleTime: 60000,
-    refetchInterval: 180000,
+    refetchInterval: 120000,
     retry: 1,
   });
 }
