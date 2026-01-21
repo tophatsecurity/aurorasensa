@@ -136,9 +136,9 @@ function SensorMetricsCharts({ readings, sensorType }: SensorMetricsChartsProps)
                   dataKey={key}
                   name={`${formatKey(key)} ${getMetricUnit(key)}`}
                   stroke={COLORS[idx % COLORS.length]}
-                  strokeWidth={2}
+                  strokeWidth={3}
                   dot={false}
-                  activeDot={{ r: 4 }}
+                  activeDot={{ r: 5 }}
                 />
               ))}
             </LineChart>

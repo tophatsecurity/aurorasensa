@@ -127,16 +127,16 @@ const StatCardWithChart = ({
               />
               {uniqueDevices.length > 0 ? (
                 uniqueDevices.map((deviceId, idx) => (
-                  <Area
-                    key={deviceId}
-                    type="monotone"
-                    dataKey={deviceId}
-                    stackId={uniqueDevices.length > 1 ? "1" : undefined}
-                    stroke={devices.find(d => d.device_id === deviceId)?.color || CHART_COLORS[idx % CHART_COLORS.length]}
-                    fill={devices.find(d => d.device_id === deviceId)?.color || CHART_COLORS[idx % CHART_COLORS.length]}
-                    fillOpacity={0.4}
-                    strokeWidth={1.5}
-                  />
+                    <Area
+                      key={deviceId}
+                      type="monotone"
+                      dataKey={deviceId}
+                      stackId={uniqueDevices.length > 1 ? "1" : undefined}
+                      stroke={devices.find(d => d.device_id === deviceId)?.color || CHART_COLORS[idx % CHART_COLORS.length]}
+                      fill={devices.find(d => d.device_id === deviceId)?.color || CHART_COLORS[idx % CHART_COLORS.length]}
+                      fillOpacity={0.4}
+                      strokeWidth={2.5}
+                    />
                 ))
               ) : (
                 <Area
@@ -145,7 +145,7 @@ const StatCardWithChart = ({
                   stroke={CHART_COLORS[0]}
                   fill={CHART_COLORS[0]}
                   fillOpacity={0.4}
-                  strokeWidth={1.5}
+                  strokeWidth={2.5}
                 />
               )}
             </AreaChart>
