@@ -2159,7 +2159,29 @@ export function useGeoLocations() {
     queryKey: ["aurora", "geo", "locations"],
     queryFn: async () => {
       try {
-        return await callAuroraApi<GeoLocation[]>("/api/geo/locations");
+        // API returns { status: "success", count: N, data: [...] }
+        interface GeoLocationResponse {
+          status?: string;
+          count?: number;
+          data?: GeoLocation[];
+        }
+        const response = await callAuroraApi<GeoLocationResponse | GeoLocation[]>("/api/geo/locations");
+        
+        // Handle wrapped response format
+        if (response && typeof response === 'object' && !Array.isArray(response)) {
+          const wrapped = response as GeoLocationResponse;
+          if (wrapped.data && Array.isArray(wrapped.data)) {
+            console.log('[GeoLocations] Extracted', wrapped.data.length, 'locations from wrapped response');
+            return wrapped.data;
+          }
+        }
+        
+        // Handle direct array response
+        if (Array.isArray(response)) {
+          return response;
+        }
+        
+        return [];
       } catch (error) {
         // Backend may fail if some locations have null lat/lng values
         console.warn("Failed to fetch geo locations:", error);
