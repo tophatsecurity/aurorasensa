@@ -26,7 +26,9 @@ import {
   ArrowUp,
   ArrowDown,
   Minus,
-  RefreshCw
+  RefreshCw,
+  Users,
+  Gauge
 } from "lucide-react";
 import ConnectionStatusIndicator from "./ConnectionStatusIndicator";
 import { Badge } from "@/components/ui/badge";
@@ -486,6 +488,82 @@ const DashboardContent = () => {
         </div>
       </div>
 
+      {/* Top Summary Stats */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
+        {/* Number of Clients */}
+        <div className="glass-card rounded-xl p-6 border border-border/50">
+          <div className="flex items-center gap-3 mb-2">
+            <div className="p-2 rounded-lg bg-emerald-500/20">
+              <Users className="w-5 h-5 text-emerald-400" />
+            </div>
+            <span className="text-sm text-muted-foreground font-medium">CLIENTS</span>
+          </div>
+          <p className="text-3xl font-bold text-foreground">
+            {clientsLoading || clientsByStateLoading ? (
+              <Loader2 className="w-6 h-6 animate-spin" />
+            ) : (
+              totalClients.toLocaleString()
+            )}
+          </p>
+          <p className="text-xs text-muted-foreground mt-1">
+            {activeClients.length > 0 && activeClients.length !== totalClients 
+              ? `${activeClients.length} active` 
+              : 'Total registered'}
+          </p>
+        </div>
+
+        {/* Readings Per Day */}
+        <div className="glass-card rounded-xl p-6 border border-border/50">
+          <div className="flex items-center gap-3 mb-2">
+            <div className="p-2 rounded-lg bg-cyan-500/20">
+              <Database className="w-5 h-5 text-cyan-400" />
+            </div>
+            <span className="text-sm text-muted-foreground font-medium">READINGS / DAY</span>
+          </div>
+          <p className="text-3xl font-bold text-foreground">
+            {statsLoading ? (
+              <Loader2 className="w-6 h-6 animate-spin" />
+            ) : (
+              totalReadings >= 1000000 
+                ? `${(totalReadings / 1000000).toFixed(1)}M`
+                : totalReadings >= 1000 
+                  ? `${(totalReadings / 1000).toFixed(1)}K`
+                  : totalReadings.toLocaleString()
+            )}
+          </p>
+          <p className="text-xs text-muted-foreground mt-1">
+            {readings1h > 0 ? `${readings1h.toLocaleString()} last hour` : 'Last 24 hours'}
+          </p>
+        </div>
+
+        {/* Measurements Per Day */}
+        <div className="glass-card rounded-xl p-6 border border-border/50">
+          <div className="flex items-center gap-3 mb-2">
+            <div className="p-2 rounded-lg bg-violet-500/20">
+              <Gauge className="w-5 h-5 text-violet-400" />
+            </div>
+            <span className="text-sm text-muted-foreground font-medium">MEASUREMENTS / DAY</span>
+          </div>
+          <p className="text-3xl font-bold text-foreground">
+            {statsLoading ? (
+              <Loader2 className="w-6 h-6 animate-spin" />
+            ) : (
+              // Measurements = readings * avg sensors per reading (estimate ~5 fields per reading)
+              (() => {
+                const measurements = totalReadings * 5;
+                return measurements >= 1000000 
+                  ? `${(measurements / 1000000).toFixed(1)}M`
+                  : measurements >= 1000 
+                    ? `${(measurements / 1000).toFixed(1)}K`
+                    : measurements.toLocaleString();
+              })()
+            )}
+          </p>
+          <p className="text-xs text-muted-foreground mt-1">
+            {totalSensorTypes > 0 ? `Across ${totalSensorTypes} sensor types` : 'Estimated from readings'}
+          </p>
+        </div>
+      </div>
 
       {/* Hourly Readings by Client */}
       <div className="mb-8">
