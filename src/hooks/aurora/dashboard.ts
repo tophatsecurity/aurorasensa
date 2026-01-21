@@ -124,21 +124,80 @@ export function useDashboardStats(clientId?: string | null) {
     queryFn: async () => {
       const options: AuroraApiOptions = { clientId };
       
-      // Try stats/by-client first (now returns rich data)
+      // Try 1: /api/stats/global (most reliable, auto-unwrapped by core)
+      try {
+        const globalResult = await callAuroraApi<{
+          total_readings?: number;
+          total_batches?: number;
+          total_clients?: number;
+          total_devices?: number;
+          sensor_types_count?: number;
+          device_breakdown?: Array<{ device_type: string; count: number }>;
+        }>(STATS.GLOBAL, "GET", undefined, options);
+        
+        if (globalResult && (globalResult.total_readings || globalResult.total_devices || globalResult.total_clients)) {
+          console.log('[useDashboardStats] Using /api/stats/global:', globalResult);
+          return {
+            avg_humidity: null,
+            avg_power_w: null,
+            avg_signal_dbm: null,
+            avg_temp_aht: null,
+            avg_temp_bmt: null,
+            avg_temp_c: null,
+            avg_temp_f: null,
+            total_clients: globalResult.total_clients ?? 0,
+            total_sensors: globalResult.sensor_types_count ?? globalResult.device_breakdown?.length ?? 0,
+            total_readings: globalResult.total_readings ?? 0,
+            total_devices: globalResult.total_devices ?? 0,
+          };
+        }
+      } catch {
+        // Fall through
+      }
+      
+      // Try 2: /api/stats/overview (direct response)
+      try {
+        const overviewResult = await callAuroraApi<{
+          total_readings?: number;
+          total_batches?: number;
+          total_clients?: number;
+          total_devices?: number;
+        }>(STATS.OVERVIEW, "GET", undefined, options);
+        
+        if (overviewResult && (overviewResult.total_readings || overviewResult.total_devices)) {
+          console.log('[useDashboardStats] Using /api/stats/overview:', overviewResult);
+          return {
+            avg_humidity: null,
+            avg_power_w: null,
+            avg_signal_dbm: null,
+            avg_temp_aht: null,
+            avg_temp_bmt: null,
+            avg_temp_c: null,
+            avg_temp_f: null,
+            total_clients: overviewResult.total_clients ?? 0,
+            total_sensors: 0,
+            total_readings: overviewResult.total_readings ?? 0,
+            total_devices: overviewResult.total_devices ?? 0,
+          };
+        }
+      } catch {
+        // Fall through
+      }
+      
+      // Try 3: /api/stats/by-client to aggregate
       try {
         const byClientResult = await callAuroraApi<ClientStatsItem[]>(
           STATS.BY_CLIENT, "GET", undefined, options
         );
         
-        // API now returns flat array
         const clients = Array.isArray(byClientResult) ? byClientResult : [];
         
         if (clients.length > 0) {
-          // Aggregate stats from all clients
           const totalReadings = clients.reduce((sum, c) => sum + (c.reading_count || 0), 0);
           const totalDevices = clients.reduce((sum, c) => sum + (c.device_count || 0), 0);
           const allSensorTypes = new Set(clients.flatMap(c => c.sensor_types || []));
           
+          console.log('[useDashboardStats] Using /api/stats/by-client:', { clients: clients.length, totalReadings });
           return {
             avg_humidity: null,
             avg_power_w: null,
@@ -154,26 +213,45 @@ export function useDashboardStats(clientId?: string | null) {
           };
         }
       } catch {
-        // Fall through to other endpoints
+        // Fall through
       }
       
-      // Fallback to other endpoints
-      const endpoints = [
-        STATS.OVERVIEW,
-        STATS.GLOBAL, 
-        STATS.SUMMARY,
-        DASHBOARD.SENSOR_STATS,
-      ];
-      
-      for (const endpoint of endpoints) {
-        try {
-          const result = await callAuroraApi<DashboardStats>(endpoint, "GET", undefined, options);
-          if (result && Object.keys(result).length > 0) {
-            return result;
-          }
-        } catch {
-          // Try next endpoint
+      // Try 4: /api/clients/all-states for client count
+      try {
+        interface AllStatesResponse {
+          states?: {
+            adopted?: Array<{ client_id: string }>;
+            registered?: Array<{ client_id: string }>;
+            pending?: Array<{ client_id: string }>;
+          };
         }
+        const allStatesResult = await callAuroraApi<AllStatesResponse>(
+          CLIENTS.ALL_STATES, "GET", undefined, options
+        );
+        
+        if (allStatesResult?.states) {
+          const totalClients = 
+            (allStatesResult.states.adopted?.length ?? 0) + 
+            (allStatesResult.states.registered?.length ?? 0) + 
+            (allStatesResult.states.pending?.length ?? 0);
+          
+          console.log('[useDashboardStats] Using /api/clients/all-states for client count:', totalClients);
+          return {
+            avg_humidity: null,
+            avg_power_w: null,
+            avg_signal_dbm: null,
+            avg_temp_aht: null,
+            avg_temp_bmt: null,
+            avg_temp_c: null,
+            avg_temp_f: null,
+            total_clients: totalClients,
+            total_sensors: 0,
+            total_readings: 0,
+            total_devices: 0,
+          };
+        }
+      } catch {
+        // Return default
       }
       
       return {
