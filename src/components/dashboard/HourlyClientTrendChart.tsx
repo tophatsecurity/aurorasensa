@@ -1,7 +1,7 @@
 import { useMemo } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Loader2, Server } from "lucide-react";
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from "recharts";
+import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from "recharts";
 import { useDashboardClientStats, useClientsWithHostnames } from "@/hooks/aurora";
 import { format, subHours } from "date-fns";
 
@@ -192,7 +192,7 @@ export default function HourlyClientTrendChart({ clientId }: HourlyClientTrendCh
       <CardContent className="pt-0">
         <div className="h-[260px]">
           <ResponsiveContainer width="100%" height="100%">
-            <BarChart data={chartData} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
+            <LineChart data={chartData} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
               <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" opacity={0.3} />
               <XAxis 
                 dataKey="hour" 
@@ -229,14 +229,17 @@ export default function HourlyClientTrendChart({ clientId }: HourlyClientTrendCh
                 wrapperStyle={{ fontSize: '11px' }}
               />
               {clientNames.map((clientName, idx) => (
-                <Bar
+                <Line
                   key={clientName}
+                  type="monotone"
                   dataKey={clientName}
-                  fill={getClientColor(idx)}
-                  radius={[4, 4, 0, 0]}
+                  stroke={getClientColor(idx)}
+                  strokeWidth={2}
+                  dot={false}
+                  activeDot={{ r: 4, strokeWidth: 0 }}
                 />
               ))}
-            </BarChart>
+            </LineChart>
           </ResponsiveContainer>
         </div>
       </CardContent>
