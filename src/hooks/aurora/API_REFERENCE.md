@@ -139,6 +139,10 @@ Based on the official API documentation at http://aurora.tophatsecurity.com:9151
 ## Starlink
 - `GET /api/starlink/devices` - Get Starlink Devices
 - `GET /api/starlink/devices/{device_id}` - Get Starlink Device
+- `GET /api/starlink/status/{device_id}` - Get Real-time Status (NEW)
+- `GET /api/starlink/history/{device_id}` - Get Historical Telemetry (NEW)
+  - Query params: `hours` (default: 24)
+- `GET /api/starlink/obstructions/{device_id}` - Get Detailed Obstruction Map (NEW)
 - `GET /api/starlink/stats` - Get Starlink Stats
 - `GET /api/starlink/stats/global` - Get Global Starlink Stats
 - `GET /api/starlink/stats/device/{device_id}` - Get Device Starlink Stats
@@ -146,6 +150,19 @@ Based on the official API documentation at http://aurora.tophatsecurity.com:9151
 - `GET /api/starlink/performance` - Get Performance
 - `GET /api/starlink/power` - Get Power
 - `GET /api/starlink/connectivity` - Get Connectivity
+- `GET /api/starlink/timeseries` - Get Starlink Timeseries (NEW)
+  - Query params: `hours` (default: 24)
+- `GET /api/starlink/timeseries/{device_id}` - Get Device Starlink Timeseries (NEW)
+  - Query params: `hours` (default: 24)
+
+## Location (New Unified API)
+- `GET /api/location/client/{client_id}/latest` - Get Latest Location for Client
+- `GET /api/location/client/{client_id}/history` - Get Location History
+  - Query params: `hours` (default: 24)
+- `GET /api/location/summary` - Get System-wide Location Statistics
+  - Query params: `hours` (default: 24)
+- `GET /api/location/track/{client_id}` - Get GeoJSON Track for Mapping
+  - Query params: `hours` (default: 24)
 
 ## LoRa
 - `GET /api/lora/devices` - Get LoRa Devices

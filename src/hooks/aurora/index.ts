@@ -104,6 +104,12 @@ export {
   useStarlinkDashboard,
   useStarlinkDevicesFromReadings,
   useStarlinkDeviceMetrics,
+  // NEW: Extended Starlink endpoints
+  useStarlinkStatus,
+  useStarlinkHistory,
+  useStarlinkObstructions,
+  useStarlinkTimeseriesDedicated,
+  useStarlinkEnhancedDashboard,
   type StarlinkDeviceWithMetrics,
 } from "./starlink";
 
