@@ -274,14 +274,14 @@ export function useDashboardSystemStats(clientId?: string | null) {
   });
 }
 
-// NEW: Fetch sensor stats from /api/dashboard/sensor-stats (now returns rich data)
+// NEW: Fetch sensor stats from /api/dashboard/sensor-stats with proper fallback chain
 export function useDashboardSensorStats(clientId?: string | null) {
   return useQuery({
     queryKey: ["aurora", "dashboard", "sensor-stats", clientId],
     queryFn: async () => {
       const options: AuroraApiOptions = { clientId };
       
-      // Try the dashboard/sensor-stats endpoint first (now returns rich data)
+      // Try the dashboard/sensor-stats endpoint first
       try {
         const result = await callAuroraApi<DashboardSensorStatsResponse | DashboardSensorStatsItem[]>(
           DASHBOARD.SENSOR_STATS, "GET", undefined, options
@@ -292,7 +292,7 @@ export function useDashboardSensorStats(clientId?: string | null) {
           const items = Array.isArray(result) ? result : result.data || [];
           const summary = !Array.isArray(result) ? result.summary : null;
           
-          if (items.length > 0 || summary) {
+          if (items.length > 0 || (summary && summary.total_readings > 0)) {
             const totalReadings = summary?.total_readings || items.reduce((sum, s) => sum + (s.reading_count || 0), 0);
             const totalSensorTypes = summary?.total_sensor_types || items.length;
             const totalClients = Math.max(...items.map(s => s.client_count || 0), 0);
@@ -303,7 +303,7 @@ export function useDashboardSensorStats(clientId?: string | null) {
               total_clients: totalClients,
               total_devices: totalDevices,
               readings_last_24h: totalReadings,
-              sensorItems: items, // Include raw items for detailed display
+              sensorItems: items,
             };
           }
         }
@@ -311,21 +311,53 @@ export function useDashboardSensorStats(clientId?: string | null) {
         // Fall through to other endpoints
       }
       
-      // Fallback endpoints
-      const endpoints = [
-        STATS.OVERVIEW,
-        STATS.GLOBAL,
-      ];
-      
-      for (const endpoint of endpoints) {
-        try {
-          const result = await callAuroraApi<DashboardSensorStats>(endpoint, "GET", undefined, options);
-          if (result && Object.keys(result).length > 0) {
-            return result;
-          }
-        } catch {
-          // Try next endpoint
+      // Fallback 1: Try /api/stats/overview (returns flat object with total_readings)
+      try {
+        const overviewResult = await callAuroraApi<{
+          total_readings?: number;
+          total_batches?: number;
+          total_clients?: number;
+          total_devices?: number;
+          timestamp?: string;
+        }>(STATS.OVERVIEW, "GET", undefined, options);
+        
+        if (overviewResult && (overviewResult.total_readings || overviewResult.total_devices)) {
+          console.log('[useDashboardSensorStats] Using /api/stats/overview fallback:', overviewResult);
+          return {
+            total_sensors: 0,
+            total_clients: overviewResult.total_clients || 0,
+            total_devices: overviewResult.total_devices || 0,
+            readings_last_24h: overviewResult.total_readings || 0,
+            sensorItems: [],
+          };
         }
+      } catch {
+        // Fall through to global stats
+      }
+      
+      // Fallback 2: Try /api/stats/global (returns wrapped object)
+      try {
+        const globalResult = await callAuroraApi<{
+          total_readings?: number;
+          total_batches?: number;
+          total_clients?: number;
+          total_devices?: number;
+          sensor_types_count?: number;
+          device_breakdown?: Array<{ device_type: string; count: number }>;
+        }>(STATS.GLOBAL, "GET", undefined, options);
+        
+        if (globalResult && (globalResult.total_readings || globalResult.total_devices)) {
+          console.log('[useDashboardSensorStats] Using /api/stats/global fallback:', globalResult);
+          return {
+            total_sensors: globalResult.sensor_types_count || globalResult.device_breakdown?.length || 0,
+            total_clients: globalResult.total_clients || 0,
+            total_devices: globalResult.total_devices || 0,
+            readings_last_24h: globalResult.total_readings || 0,
+            sensorItems: [],
+          };
+        }
+      } catch {
+        // Return empty
       }
       
       return {};
