@@ -138,107 +138,109 @@ interface CorrelationChartProps {
   hours: number;
 }
 
-const CorrelationChart = ({ 
+function CorrelationChart({ 
   data, xLabel, yLabel, xUnit, yUnit, xColor, yColor, isLoading, hours 
-}: CorrelationChartProps) => (
-  <div className="glass-card rounded-xl border border-border/50">
-    <div className="p-4 border-b border-border/30 flex items-center justify-between">
-      <div className="flex items-center gap-3">
-        <div className="w-8 h-8 rounded-lg bg-primary/20 flex items-center justify-center">
-          <GitCompare className="w-4 h-4 text-primary" />
+}: CorrelationChartProps) {
+  return (
+    <div className="glass-card rounded-xl border border-border/50">
+      <div className="p-4 border-b border-border/30 flex items-center justify-between">
+        <div className="flex items-center gap-3">
+          <div className="w-8 h-8 rounded-lg bg-primary/20 flex items-center justify-center">
+            <GitCompare className="w-4 h-4 text-primary" />
+          </div>
+          <div>
+            <h4 className="font-semibold text-sm">{xLabel} vs {yLabel}</h4>
+            <p className="text-xs text-muted-foreground">Last {hours} hours</p>
+          </div>
         </div>
-        <div>
-          <h4 className="font-semibold text-sm">{xLabel} vs {yLabel}</h4>
-          <p className="text-xs text-muted-foreground">Last {hours} hours</p>
-        </div>
+        <span className="text-xs px-2 py-1 rounded bg-muted text-muted-foreground">
+          {data.length} samples
+        </span>
       </div>
-      <Badge variant="outline" className="text-xs">
-        {data.length} samples
-      </Badge>
+      <div className="p-4">
+        {isLoading ? (
+          <div className="h-[350px] flex items-center justify-center">
+            <Loader2 className="w-8 h-8 animate-spin text-muted-foreground" />
+          </div>
+        ) : data.length === 0 ? (
+          <div className="h-[350px] flex items-center justify-center text-muted-foreground">
+            No data available
+          </div>
+        ) : (
+          <div className="h-[350px]">
+            <ResponsiveContainer width="100%" height="100%">
+              <ComposedChart data={data} margin={{ top: 20, right: 30, left: 0, bottom: 0 }}>
+                <defs>
+                  <linearGradient id={`gradient-${xLabel.replace(/\s+/g, '-')}`} x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="5%" stopColor={xColor} stopOpacity={0.3} />
+                    <stop offset="95%" stopColor={xColor} stopOpacity={0} />
+                  </linearGradient>
+                </defs>
+                <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" opacity={0.3} />
+                <XAxis
+                  dataKey="time"
+                  tick={{ fontSize: 10, fill: 'hsl(var(--muted-foreground))' }}
+                  tickLine={false}
+                  axisLine={false}
+                  interval="preserveStartEnd"
+                />
+                <YAxis
+                  yAxisId="x"
+                  tick={{ fontSize: 10, fill: 'hsl(var(--muted-foreground))' }}
+                  tickLine={false}
+                  axisLine={false}
+                  tickFormatter={(v) => `${v}${xUnit}`}
+                />
+                <YAxis
+                  yAxisId="y"
+                  orientation="right"
+                  tick={{ fontSize: 10, fill: 'hsl(var(--muted-foreground))' }}
+                  tickLine={false}
+                  axisLine={false}
+                  tickFormatter={(v) => `${v}${yUnit}`}
+                />
+                <Tooltip
+                  contentStyle={{
+                    backgroundColor: 'hsl(var(--card))',
+                    border: '1px solid hsl(var(--border))',
+                    borderRadius: '8px',
+                    fontSize: '12px',
+                  }}
+                  formatter={(value: number, name: string) => {
+                    if (name === 'x') return [`${value?.toFixed(1)}${xUnit}`, xLabel];
+                    if (name === 'y') return [`${value?.toFixed(1)}${yUnit}`, yLabel];
+                    return [value, name];
+                  }}
+                />
+                <Legend formatter={(value) => value === 'x' ? xLabel : yLabel} />
+                <Area
+                  yAxisId="x"
+                  type="monotone"
+                  dataKey="x"
+                  name="x"
+                  stroke={xColor}
+                  strokeWidth={2}
+                  fill={`url(#gradient-${xLabel.replace(/\s+/g, '-')})`}
+                  connectNulls
+                />
+                <Line
+                  yAxisId="y"
+                  type="monotone"
+                  dataKey="y"
+                  name="y"
+                  stroke={yColor}
+                  strokeWidth={2}
+                  dot={false}
+                  connectNulls
+                />
+              </ComposedChart>
+            </ResponsiveContainer>
+          </div>
+        )}
+      </div>
     </div>
-    <div className="p-4">
-      {isLoading ? (
-        <div className="h-[350px] flex items-center justify-center">
-          <Loader2 className="w-8 h-8 animate-spin text-muted-foreground" />
-        </div>
-      ) : data.length === 0 ? (
-        <div className="h-[350px] flex items-center justify-center text-muted-foreground">
-          No data available
-        </div>
-      ) : (
-        <div className="h-[350px]">
-          <ResponsiveContainer width="100%" height="100%">
-            <ComposedChart data={data} margin={{ top: 20, right: 30, left: 0, bottom: 0 }}>
-              <defs>
-                <linearGradient id={`gradient-${xLabel}`} x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="5%" stopColor={xColor} stopOpacity={0.3} />
-                  <stop offset="95%" stopColor={xColor} stopOpacity={0} />
-                </linearGradient>
-              </defs>
-              <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" opacity={0.3} />
-              <XAxis
-                dataKey="time"
-                tick={{ fontSize: 10, fill: 'hsl(var(--muted-foreground))' }}
-                tickLine={false}
-                axisLine={false}
-                interval="preserveStartEnd"
-              />
-              <YAxis
-                yAxisId="x"
-                tick={{ fontSize: 10, fill: 'hsl(var(--muted-foreground))' }}
-                tickLine={false}
-                axisLine={false}
-                tickFormatter={(v) => `${v}${xUnit}`}
-              />
-              <YAxis
-                yAxisId="y"
-                orientation="right"
-                tick={{ fontSize: 10, fill: 'hsl(var(--muted-foreground))' }}
-                tickLine={false}
-                axisLine={false}
-                tickFormatter={(v) => `${v}${yUnit}`}
-              />
-              <Tooltip
-                contentStyle={{
-                  backgroundColor: 'hsl(var(--card))',
-                  border: '1px solid hsl(var(--border))',
-                  borderRadius: '8px',
-                  fontSize: '12px',
-                }}
-                formatter={(value: number, name: string) => {
-                  if (name === 'x') return [`${value?.toFixed(1)}${xUnit}`, xLabel];
-                  if (name === 'y') return [`${value?.toFixed(1)}${yUnit}`, yLabel];
-                  return [value, name];
-                }}
-              />
-              <Legend formatter={(value) => value === 'x' ? xLabel : yLabel} />
-              <Area
-                yAxisId="x"
-                type="monotone"
-                dataKey="x"
-                name="x"
-                stroke={xColor}
-                strokeWidth={2}
-                fill={`url(#gradient-${xLabel})`}
-                connectNulls
-              />
-              <Line
-                yAxisId="y"
-                type="monotone"
-                dataKey="y"
-                name="y"
-                stroke={yColor}
-                strokeWidth={2}
-                dot={false}
-                connectNulls
-              />
-            </ComposedChart>
-          </ResponsiveContainer>
-        </div>
-      )}
-    </div>
-  </div>
-);
+  );
+}
 
 type TempMeasurement = 'thermal-probe' | 'arduino-dht' | 'arduino-bmp' | 'humidity';
 
@@ -474,12 +476,12 @@ const CorrelationContent = () => {
   const thermalArduinoStats = useMemo(() => calculateCorrelation(thermalArduinoData), [thermalArduinoData]);
   const latencyThroughputStats = useMemo(() => calculateCorrelation(latencyThroughputData), [latencyThroughputData]);
 
-  // Data availability summary for debugging
+  // Data availability summary for debugging - use exact activeTab keys
   const dataSummary = useMemo(() => ({
-    powerThermal: { total: powerThermalData.length, paired: powerThermalData.filter(d => d.x !== undefined && d.y !== undefined).length },
-    powerArduino: { total: powerArduinoData.length, paired: powerArduinoData.filter(d => d.x !== undefined && d.y !== undefined).length },
-    thermalArduino: { total: thermalArduinoData.length, paired: thermalArduinoData.filter(d => d.x !== undefined && d.y !== undefined).length },
-    latencyThroughput: { total: latencyThroughputData.length, paired: latencyThroughputData.filter(d => d.x !== undefined && d.y !== undefined).length },
+    'power-thermal': { total: powerThermalData.length, paired: powerThermalData.filter(d => d.x !== undefined && d.y !== undefined).length },
+    'power-arduino': { total: powerArduinoData.length, paired: powerArduinoData.filter(d => d.x !== undefined && d.y !== undefined).length },
+    'thermal-arduino': { total: thermalArduinoData.length, paired: thermalArduinoData.filter(d => d.x !== undefined && d.y !== undefined).length },
+    'latency-throughput': { total: latencyThroughputData.length, paired: latencyThroughputData.filter(d => d.x !== undefined && d.y !== undefined).length },
   }), [powerThermalData, powerArduinoData, thermalArduinoData, latencyThroughputData]);
 
   const tempConfig = getTempConfig(tempMeasurement);
@@ -541,9 +543,9 @@ const CorrelationContent = () => {
           >
             <RefreshCw className={`h-4 w-4 ${isLoading ? 'animate-spin' : ''}`} />
           </Button>
-          <Badge className="bg-primary/20 text-primary border-primary/30">
-            {isLoading ? 'Loading...' : `${dataSummary[activeTab.replace('-', '') as keyof typeof dataSummary]?.paired || 0} paired`}
-          </Badge>
+          <span className="px-2 py-1 text-xs rounded bg-primary/20 text-primary border border-primary/30">
+            {isLoading ? 'Loading...' : `${dataSummary[activeTab as keyof typeof dataSummary]?.paired || 0} paired`}
+          </span>
         </div>
       </div>
 
