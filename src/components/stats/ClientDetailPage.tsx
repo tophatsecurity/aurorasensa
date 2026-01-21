@@ -386,11 +386,31 @@ export function ClientDetailPage({ clientId, onBack }: ClientDetailPageProps) {
           </TabsContent>
 
           {/* Dynamic Sensor Tabs */}
-          {sensorTypes.map((type) => (
-            <TabsContent key={type} value={`sensor-${type}`} className="m-0">
-              <ClientSensorTab clientId={clientId} sensorType={type} batchReadings={batchReadings} />
-            </TabsContent>
-          ))}
+          {sensorTypes.map((type) => {
+            // Transform batch readings to the format ClientSensorTab expects
+            const sensorReadings = batchReadings
+              .filter((r: any) => {
+                const sensors = r.sensors as Record<string, any> | undefined;
+                return sensors && Object.keys(sensors).some(k => k.includes(type));
+              })
+              .map((r: any) => {
+                const sensors = r.sensors as Record<string, any> | undefined;
+                const sensorKey = Object.keys(sensors || {}).find(k => k.includes(type));
+                const sensorData = sensorKey ? sensors?.[sensorKey] : {};
+                return {
+                  device_id: sensorKey || type,
+                  device_type: type,
+                  timestamp: r.device_timestamp || new Date().toISOString(),
+                  data: sensorData || {},
+                };
+              });
+
+            return (
+              <TabsContent key={type} value={`sensor-${type}`} className="m-0">
+                <ClientSensorTab sensorType={type} readings={sensorReadings} />
+              </TabsContent>
+            );
+          })}
 
           {/* Raw Data Tab */}
           <TabsContent value="raw" className="m-0">
