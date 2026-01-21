@@ -79,6 +79,8 @@ export interface AdsbMarker extends SensorMarker {
   messages?: number;
 }
 
+export type LocationSourceType = 'starlink' | 'gps' | 'sensor' | 'ip-geo' | 'unknown';
+
 export interface ClientMarker {
   client_id: string;
   hostname: string;
@@ -86,6 +88,9 @@ export interface ClientMarker {
     lat: number;
     lng: number;
   };
+  locationSource: LocationSourceType;
+  city?: string;
+  country?: string;
 }
 
 // Wireless detection marker (WiFi/Bluetooth devices detected by clients)
