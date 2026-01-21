@@ -586,6 +586,11 @@ const DashboardContent = () => {
         </div>
       </div>
 
+      {/* Alerts Summary */}
+      <div className="mb-8">
+        <AlertsSection limit={5} />
+      </div>
+
       {/* Hourly Readings by Client */}
       <div className="mb-8">
         <HourlyClientTrendChart />
