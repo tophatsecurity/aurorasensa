@@ -135,7 +135,9 @@ export function ClientDetailPage({ clientId, onBack }: ClientDetailPageProps) {
     return latestBatchData?.batch?.json_content?.readings || [];
   }, [latestBatchData]);
 
+  // Extract system metrics from various sources with better fallbacks
   const systemMetrics = useMemo(() => {
+    // First try direct system info API
     if (systemInfo) {
       const info = systemInfo as SystemInfo;
       return {
@@ -152,29 +154,56 @@ export function ClientDetailPage({ clientId, onBack }: ClientDetailPageProps) {
       };
     }
     
-    // Try extracting from batch readings
+    // Try extracting from batch readings (system_monitor sensor)
     for (const reading of batchReadings) {
       const sensors = reading.sensors as Record<string, any> | undefined;
-      const sysMonitor = sensors?.['system_monitor_1'];
-      if (sysMonitor?.system) {
-        const sys = sysMonitor.system;
-        const perf = sysMonitor.performance || {};
-        return {
-          hostname: sys.hostname,
-          platform: sys.platform || sys.os,
-          uptime_seconds: sys.uptime_seconds || perf.uptime,
-          cpu_load: perf.cpu_percent ? [perf.cpu_percent] : undefined,
-          cpu_count: sys.cpu_count,
-          memory: { percent: perf.memory_percent || 0, total: perf.memory_total, used: perf.memory_used },
-          disk: { percent: perf.disk_percent || 0, total: perf.disk_total, used: perf.disk_used },
-          network_interfaces: sys.network_interfaces,
-          usb_devices: sysMonitor.usb_devices,
-          version: sys.version,
-        };
+      if (!sensors) continue;
+      
+      // Look for system_monitor sensor (can have different naming conventions)
+      const sysMonitorKey = Object.keys(sensors).find(k => 
+        k.toLowerCase().includes('system_monitor') || k.toLowerCase().includes('system')
+      );
+      
+      if (sysMonitorKey) {
+        const sysMonitor = sensors[sysMonitorKey];
+        if (sysMonitor?.system) {
+          const sys = sysMonitor.system;
+          const perf = sysMonitor.performance || {};
+          return {
+            hostname: sys.hostname,
+            platform: sys.platform || sys.os,
+            uptime_seconds: sys.uptime_seconds || perf.uptime,
+            cpu_load: perf.cpu_percent ? [perf.cpu_percent] : undefined,
+            cpu_count: sys.cpu_count,
+            memory: { percent: perf.memory_percent || 0, total: perf.memory_total, used: perf.memory_used },
+            disk: { percent: perf.disk_percent || 0, total: perf.disk_total, used: perf.disk_used },
+            network_interfaces: sys.network_interfaces,
+            usb_devices: sysMonitor.usb_devices,
+            version: sys.version,
+          };
+        }
       }
     }
+    
+    // Fallback: create minimal metrics from client data
+    const clientData = client as any;
+    if (clientData) {
+      return {
+        hostname: clientData.hostname || clientId,
+        platform: clientData.metadata?.platform || null,
+        uptime_seconds: null,
+        cpu_load: null,
+        cpu_count: null,
+        memory: { percent: 0, total: 0, used: 0 },
+        disk: { percent: 0, total: 0, used: 0 },
+        network_interfaces: clientData.metadata?.network_interfaces || null,
+        usb_devices: null,
+        version: clientData.metadata?.version || null,
+      };
+    }
+    
     return null;
-  }, [systemInfo, batchReadings]);
+  }, [systemInfo, batchReadings, client, clientId]);
 
   // Define preferred tab order for sensors
   const SENSOR_ORDER = [
@@ -349,15 +378,61 @@ export function ClientDetailPage({ clientId, onBack }: ClientDetailPageProps) {
               <CardContent>
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
                   <div><p className="text-muted-foreground text-xs">Hostname</p><p className="font-medium">{displayHostname}</p></div>
+                  <div><p className="text-muted-foreground text-xs">Client ID</p><p className="font-mono text-xs truncate">{clientId}</p></div>
+                  <div><p className="text-muted-foreground text-xs">IP Address</p><p className="font-mono">{(client as any)?.ip_address || '—'}</p></div>
+                  <div><p className="text-muted-foreground text-xs">MAC Address</p><p className="font-mono text-xs">{(client as any)?.mac_address || '—'}</p></div>
                   <div><p className="text-muted-foreground text-xs">Platform</p><p>{systemMetrics?.platform || '—'}</p></div>
                   <div><p className="text-muted-foreground text-xs">CPU Cores</p><p>{systemMetrics?.cpu_count || '—'}</p></div>
                   <div><p className="text-muted-foreground text-xs">Version</p><p>{systemMetrics?.version || '—'}</p></div>
-                  <div><p className="text-muted-foreground text-xs">IP Address</p><p className="font-mono">{(client as any)?.ip_address || '—'}</p></div>
-                  <div><p className="text-muted-foreground text-xs">State</p><Badge variant="outline" className={`text-xs ${(client as any)?.state === 'adopted' ? 'bg-success/20 text-success border-success/30' : 'bg-muted text-muted-foreground'}`}>{(client as any)?.state || 'unknown'}</Badge></div>
+                  <div>
+                    <p className="text-muted-foreground text-xs">State</p>
+                    <Badge 
+                      variant="outline" 
+                      className={`text-xs ${
+                        (client as any)?.state === 'adopted' 
+                          ? 'bg-success/20 text-success border-success/30' 
+                          : (client as any)?.state === 'pending'
+                          ? 'bg-warning/20 text-warning border-warning/30'
+                          : 'bg-muted text-muted-foreground'
+                      }`}
+                    >
+                      {(client as any)?.state || 'unknown'}
+                    </Badge>
+                  </div>
                   <div><p className="text-muted-foreground text-xs">Last Seen</p><p>{(client as any)?.last_seen ? formatLastSeen((client as any).last_seen) : '—'}</p></div>
+                  <div><p className="text-muted-foreground text-xs">Batches Received</p><p className="font-semibold">{((client as any)?.batches_received || (client as any)?.batch_count || 0).toLocaleString()}</p></div>
                 </div>
               </CardContent>
             </Card>
+
+            {/* Sensor Quick Stats - Only show if we have batch data */}
+            {batchReadings.length > 0 && (
+              <Card className="bg-card/50 border-border/50">
+                <CardHeader className="pb-3">
+                  <CardTitle className="text-sm flex items-center gap-2"><Activity className="w-4 h-4 text-primary" />Latest Batch Summary</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
+                    <div>
+                      <p className="text-muted-foreground text-xs">Batch ID</p>
+                      <p className="font-mono text-xs truncate">{latestBatchData?.batch?.batch_id?.split('_').slice(-2).join('_') || '—'}</p>
+                    </div>
+                    <div>
+                      <p className="text-muted-foreground text-xs">Readings</p>
+                      <p className="font-semibold">{latestBatchData?.batch?.reading_count || batchReadings.length}</p>
+                    </div>
+                    <div>
+                      <p className="text-muted-foreground text-xs">Sensors Active</p>
+                      <p className="font-semibold">{sensorTypes.length}</p>
+                    </div>
+                    <div>
+                      <p className="text-muted-foreground text-xs">Batch Time</p>
+                      <p>{latestBatchData?.batch?.batch_timestamp ? formatLastSeen(latestBatchData.batch.batch_timestamp) : '—'}</p>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            )}
 
             {/* Network Interfaces */}
             <Card className="bg-card/50 border-border/50">
