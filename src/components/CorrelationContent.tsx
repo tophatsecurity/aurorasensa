@@ -11,6 +11,7 @@ import {
   Legend,
   ScatterChart,
   Scatter,
+  Brush,
 } from "recharts";
 import { 
   Activity, 
@@ -150,9 +151,9 @@ function CorrelationChart({
             <p>No data available</p>
           </div>
         ) : (
-          <div className="h-[350px]">
+          <div className="h-[400px]">
             <ResponsiveContainer width="100%" height="100%">
-              <ComposedChart data={data} margin={{ top: 20, right: 30, left: 0, bottom: 0 }}>
+              <ComposedChart data={data} margin={{ top: 20, right: 30, left: 0, bottom: 40 }}>
                 <defs>
                   <linearGradient id={gradientId} x1="0" y1="0" x2="0" y2="1">
                     <stop offset="5%" stopColor={xColor} stopOpacity={0.3} />
@@ -196,17 +197,23 @@ function CorrelationChart({
                     fontSize: '12px',
                   }}
                   formatter={(value: number, name: string) => {
-                    if (name === 'x') return [`${value?.toFixed(1)}${xUnit}`, xLabel];
-                    if (name === 'y') return [`${value?.toFixed(1)}${yUnit}`, yLabel];
+                    if (name === xLabel) return [`${value?.toFixed(1)}${xUnit}`, xLabel];
+                    if (name === yLabel) return [`${value?.toFixed(1)}${yUnit}`, yLabel];
                     return [value, name];
                   }}
                 />
-                <Legend formatter={(value) => value === 'x' ? xLabel : yLabel} />
+                <Legend 
+                  wrapperStyle={{ paddingTop: '10px' }}
+                  payload={[
+                    { value: xLabel, type: 'square', color: xColor },
+                    { value: yLabel, type: 'line', color: yColor },
+                  ]}
+                />
                 <Area
                   yAxisId="x"
                   type="monotone"
                   dataKey="x"
-                  name="x"
+                  name={xLabel}
                   stroke={xColor}
                   strokeWidth={3}
                   fill={`url(#${gradientId})`}
@@ -216,11 +223,23 @@ function CorrelationChart({
                   yAxisId="y"
                   type="monotone"
                   dataKey="y"
-                  name="y"
+                  name={yLabel}
                   stroke={yColor}
                   strokeWidth={3}
                   dot={false}
                   connectNulls
+                />
+                <Brush 
+                  dataKey="time" 
+                  height={25} 
+                  stroke="hsl(var(--primary))"
+                  fill="hsl(var(--muted))"
+                  tickFormatter={(value) => {
+                    if (typeof value === 'string' && value.includes(' ')) {
+                      return value.split(' ')[1];
+                    }
+                    return value;
+                  }}
                 />
               </ComposedChart>
             </ResponsiveContainer>
