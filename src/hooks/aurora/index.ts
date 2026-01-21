@@ -564,3 +564,19 @@ export {
   // Rename client
   useRenameClient,
 } from "../useAuroraApi";
+
+// Correlation hooks
+export {
+  useCorrelationStarlinkData,
+  useCorrelationThermalData,
+  useCorrelationArduinoData,
+  useRefreshCorrelationData,
+  calculateCorrelation,
+  CORRELATION_PAIRS,
+  type CorrelationStats,
+  type CorrelationPairType,
+  type CorrelationPairConfig,
+  type StarlinkMetrics as CorrelationStarlinkMetrics,
+  type ThermalMetrics as CorrelationThermalMetrics,
+  type ArduinoMetrics as CorrelationArduinoMetrics,
+} from "./correlation";
