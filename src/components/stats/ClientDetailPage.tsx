@@ -198,14 +198,16 @@ export function ClientDetailPage({ clientId, onBack }: ClientDetailPageProps) {
     }).flat();
     const uniqueTypes = [...new Set(types.filter(Boolean))] as string[];
     
-    // Sort by preferred order, unknown types go to end
-    return uniqueTypes.sort((a, b) => {
-      const aIndex = SENSOR_ORDER.findIndex(s => a.toLowerCase().includes(s));
-      const bIndex = SENSOR_ORDER.findIndex(s => b.toLowerCase().includes(s));
-      const aOrder = aIndex >= 0 ? aIndex : 999;
-      const bOrder = bIndex >= 0 ? bIndex : 999;
-      return aOrder - bOrder;
-    });
+    // Filter out system_monitor (it's shown in overview) and sort by preferred order
+    return uniqueTypes
+      .filter(t => !t.toLowerCase().includes('system_monitor'))
+      .sort((a, b) => {
+        const aIndex = SENSOR_ORDER.findIndex(s => a.toLowerCase().includes(s));
+        const bIndex = SENSOR_ORDER.findIndex(s => b.toLowerCase().includes(s));
+        const aOrder = aIndex >= 0 ? aIndex : 999;
+        const bOrder = bIndex >= 0 ? bIndex : 999;
+        return aOrder - bOrder;
+      });
   }, [batchReadings]);
 
   const isLoading = clientLoading || systemLoading;
@@ -268,14 +270,12 @@ export function ClientDetailPage({ clientId, onBack }: ClientDetailPageProps) {
         <div className="px-6 pt-4 border-b border-border/30">
           <TabsList className="flex flex-wrap h-auto gap-1 p-1 bg-muted/50">
             <TabsTrigger value="overview" className="gap-2"><Activity className="w-4 h-4" />Overview</TabsTrigger>
-            <TabsTrigger value="network" className="gap-2"><Network className="w-4 h-4" />Network</TabsTrigger>
             {sensorTypes.map((type) => (
               <TabsTrigger key={type} value={`sensor-${type}`} className="gap-2 capitalize">
                 {getSensorIcon(type)}
                 {formatSensorLabel(type)}
               </TabsTrigger>
             ))}
-            <TabsTrigger value="system" className="gap-2"><Server className="w-4 h-4" />System</TabsTrigger>
             <TabsTrigger value="wifi" className="gap-2"><Wifi className="w-4 h-4" />WiFi Config</TabsTrigger>
             <TabsTrigger value="raw" className="gap-2"><FileJson className="w-4 h-4" />Raw Data</TabsTrigger>
           </TabsList>
@@ -284,6 +284,7 @@ export function ClientDetailPage({ clientId, onBack }: ClientDetailPageProps) {
         <ScrollArea className="flex-1 p-6">
           {/* Overview Tab */}
           <TabsContent value="overview" className="m-0 space-y-6">
+            {/* Resource Metrics */}
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
               <Card className="bg-card/50 border-border/50">
                 <CardContent className="p-4">
@@ -334,19 +335,54 @@ export function ClientDetailPage({ clientId, onBack }: ClientDetailPageProps) {
               </Card>
             </div>
 
-            {/* Client Info */}
+            {/* System Information */}
             <Card className="bg-card/50 border-border/50">
               <CardHeader className="pb-3">
-                <CardTitle className="text-sm flex items-center gap-2"><Server className="w-4 h-4 text-primary" />Client Information</CardTitle>
+                <CardTitle className="text-sm flex items-center gap-2"><Server className="w-4 h-4 text-primary" />System Information</CardTitle>
               </CardHeader>
               <CardContent>
-                <div className="grid grid-cols-2 md:grid-cols-3 gap-4 text-sm">
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
                   <div><p className="text-muted-foreground text-xs">Hostname</p><p className="font-medium">{displayHostname}</p></div>
                   <div><p className="text-muted-foreground text-xs">Platform</p><p>{systemMetrics?.platform || '—'}</p></div>
+                  <div><p className="text-muted-foreground text-xs">CPU Cores</p><p>{systemMetrics?.cpu_count || '—'}</p></div>
+                  <div><p className="text-muted-foreground text-xs">Version</p><p>{systemMetrics?.version || '—'}</p></div>
+                  <div><p className="text-muted-foreground text-xs">IP Address</p><p className="font-mono">{(client as any)?.ip_address || '—'}</p></div>
+                  <div><p className="text-muted-foreground text-xs">State</p><Badge variant="outline" className={`text-xs ${(client as any)?.state === 'adopted' ? 'bg-success/20 text-success border-success/30' : 'bg-muted text-muted-foreground'}`}>{(client as any)?.state || 'unknown'}</Badge></div>
                   <div><p className="text-muted-foreground text-xs">Last Seen</p><p>{(client as any)?.last_seen ? formatLastSeen((client as any).last_seen) : '—'}</p></div>
                 </div>
               </CardContent>
             </Card>
+
+            {/* Network Interfaces */}
+            <Card className="bg-card/50 border-border/50">
+              <CardHeader className="pb-3"><CardTitle className="text-sm flex items-center gap-2"><Network className="w-4 h-4 text-primary" />Network Interfaces</CardTitle></CardHeader>
+              <CardContent>{systemMetrics?.network_interfaces?.length ? (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-2">{(systemMetrics.network_interfaces as any[]).map((iface, idx) => (
+                  <div key={idx} className="flex items-center justify-between p-3 rounded-lg bg-muted/30 border border-border/30">
+                    <div className="flex items-center gap-3"><Network className="w-4 h-4 text-primary" /><p className="text-sm font-medium">{iface.name || iface.interface}</p></div>
+                    {iface.ip && <p className="text-sm font-mono">{iface.ip}</p>}
+                  </div>
+                ))}</div>
+              ) : <p className="text-sm text-muted-foreground text-center py-4">No network interfaces available</p>}</CardContent>
+            </Card>
+
+            {/* USB Devices */}
+            {systemMetrics?.usb_devices?.length > 0 && (
+              <Card className="bg-card/50 border-border/50">
+                <CardHeader className="pb-3"><CardTitle className="text-sm flex items-center gap-2"><Usb className="w-4 h-4 text-primary" />USB Devices ({systemMetrics.usb_devices.length})</CardTitle></CardHeader>
+                <CardContent>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-2">{(systemMetrics.usb_devices as any[]).map((device, idx) => (
+                    <div key={idx} className="flex items-center gap-3 p-3 rounded-lg bg-muted/30 border border-border/30">
+                      <Usb className="w-4 h-4 text-primary" />
+                      <div>
+                        <p className="text-sm font-medium">{device.product || device.name || 'Unknown Device'}</p>
+                        <p className="text-xs text-muted-foreground font-mono">{device.vendor_id}:{device.product_id}</p>
+                      </div>
+                    </div>
+                  ))}</div>
+                </CardContent>
+              </Card>
+            )}
 
             {/* Active Sensors */}
             {sensorTypes.length > 0 && (
@@ -359,7 +395,7 @@ export function ClientDetailPage({ clientId, onBack }: ClientDetailPageProps) {
                     {sensorTypes.map((type) => (
                       <button key={type} className="flex items-center gap-2 px-3 py-2 rounded-lg border border-border/50 hover:border-primary/50 transition-colors bg-muted/30" onClick={() => setActiveTab(`sensor-${type}`)}>
                         {getSensorIcon(type)}
-                        <span className="text-sm capitalize">{type.replace(/_/g, ' ').replace(/\d+$/, '')}</span>
+                        <span className="text-sm">{formatSensorLabel(type)}</span>
                         <ChevronRight className="w-3 h-3 text-muted-foreground" />
                       </button>
                     ))}
@@ -367,68 +403,6 @@ export function ClientDetailPage({ clientId, onBack }: ClientDetailPageProps) {
                 </CardContent>
               </Card>
             )}
-          </TabsContent>
-
-          {/* System Tab */}
-          <TabsContent value="system" className="m-0 space-y-4">
-            {systemMetrics ? (
-              <Card className="bg-card/50 border-border/50">
-                <CardHeader className="pb-3"><CardTitle className="text-sm flex items-center gap-2"><Server className="w-4 h-4 text-primary" />System Information</CardTitle></CardHeader>
-                <CardContent>
-                  <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
-                    <div><p className="text-muted-foreground text-xs">Hostname</p><p className="font-medium">{displayHostname}</p></div>
-                    <div><p className="text-muted-foreground text-xs">Platform</p><p>{systemMetrics.platform || '—'}</p></div>
-                    <div><p className="text-muted-foreground text-xs">CPU Cores</p><p>{systemMetrics.cpu_count || '—'}</p></div>
-                    <div><p className="text-muted-foreground text-xs">Version</p><p>{systemMetrics.version || '—'}</p></div>
-                  </div>
-                </CardContent>
-              </Card>
-            ) : (
-              <Card className="bg-card/50 border-border/50"><CardContent className="p-8 text-center"><Server className="w-12 h-12 mx-auto mb-4 text-muted-foreground opacity-50" /><p className="text-muted-foreground">System information unavailable</p></CardContent></Card>
-            )}
-          </TabsContent>
-
-          {/* WiFi Tab */}
-          <TabsContent value="wifi" className="m-0 space-y-4">
-            <Card className="bg-card/50 border-border/50">
-              <CardHeader className="pb-3"><CardTitle className="text-sm flex items-center gap-2"><Wifi className="w-4 h-4 text-primary" />WiFi Configuration</CardTitle></CardHeader>
-              <CardContent>
-                {wifiConfig ? (
-                  <div className="grid grid-cols-2 gap-4 text-sm">
-                    <div><p className="text-muted-foreground text-xs">SSID</p><p className="font-medium">{(wifiConfig as any).ssid || '—'}</p></div>
-                    <div><p className="text-muted-foreground text-xs">Mode</p><p>{(wifiConfig as any).mode || (wifiMode as any)?.mode || '—'}</p></div>
-                    <div><p className="text-muted-foreground text-xs">Channel</p><p>{(wifiConfig as any).channel || '—'}</p></div>
-                    <div><p className="text-muted-foreground text-xs">Status</p><Badge className={(wifiStatus as any)?.connected ? 'bg-success/20 text-success border-success/30' : 'bg-muted text-muted-foreground'}>{(wifiStatus as any)?.connected ? 'Connected' : 'Disconnected'}</Badge></div>
-                  </div>
-                ) : <p className="text-sm text-muted-foreground">WiFi configuration unavailable</p>}
-              </CardContent>
-            </Card>
-            <Card className="bg-card/50 border-border/50">
-              <CardHeader className="pb-3"><CardTitle className="text-sm flex items-center gap-2"><Users className="w-4 h-4 text-primary" />Connected Clients ({wifiClientsList.length})</CardTitle></CardHeader>
-              <CardContent>{wifiClientsList.length > 0 ? (
-                <div className="space-y-2">{wifiClientsList.map((wc: any, idx: number) => (
-                  <div key={idx} className="flex items-center justify-between p-3 rounded-lg bg-muted/30 border border-border/30">
-                    <div className="flex items-center gap-3"><Wifi className="w-4 h-4 text-primary" /><div><p className="text-sm font-medium">{wc.hostname || 'Unknown'}</p><p className="text-xs text-muted-foreground font-mono">{wc.mac}</p></div></div>
-                    {wc.ip && <p className="text-sm font-mono">{wc.ip}</p>}
-                  </div>
-                ))}</div>
-              ) : <p className="text-sm text-muted-foreground text-center py-4">No clients connected</p>}</CardContent>
-            </Card>
-          </TabsContent>
-
-          {/* Network Tab */}
-          <TabsContent value="network" className="m-0 space-y-4">
-            <Card className="bg-card/50 border-border/50">
-              <CardHeader className="pb-3"><CardTitle className="text-sm flex items-center gap-2"><Network className="w-4 h-4 text-primary" />Network Interfaces</CardTitle></CardHeader>
-              <CardContent>{systemMetrics?.network_interfaces?.length ? (
-                <div className="space-y-2">{(systemMetrics.network_interfaces as any[]).map((iface, idx) => (
-                  <div key={idx} className="flex items-center justify-between p-3 rounded-lg bg-muted/30 border border-border/30">
-                    <div className="flex items-center gap-3"><Network className="w-4 h-4 text-primary" /><p className="text-sm font-medium">{iface.name || iface.interface}</p></div>
-                    {iface.ip && <p className="text-sm font-mono">{iface.ip}</p>}
-                  </div>
-                ))}</div>
-              ) : <p className="text-sm text-muted-foreground text-center py-4">No network interfaces available</p>}</CardContent>
-            </Card>
           </TabsContent>
 
           {/* Dynamic Sensor Tabs */}
