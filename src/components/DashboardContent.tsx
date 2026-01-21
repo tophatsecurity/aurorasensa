@@ -485,8 +485,6 @@ const DashboardContent = () => {
         </div>
       </div>
 
-      {/* Key Stats - Refactored Component */}
-      <DashboardStatsHeader periodHours={periodHours} />
 
       {/* Hourly Readings Trend Chart */}
       <div className="mb-8">
@@ -504,10 +502,6 @@ const DashboardContent = () => {
         <PowerHistoryChart hours={periodHours} />
       </div>
 
-      {/* Client Readings Breakdown */}
-      <div className="mb-8">
-        <ClientReadingsBreakdown periodHours={periodHours} />
-      </div>
 
       {/* Starlink Power per Device */}
       <div className="mb-8">
