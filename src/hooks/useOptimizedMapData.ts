@@ -1,48 +1,33 @@
 /**
  * Optimized Map Data Hook
- * Uses new unified location API endpoints for better performance
- * Reduces API calls by consolidating location sources
+ * Uses unified /api/map/markers endpoint for primary data
+ * Dramatically reduces API calls by getting clients, Starlink, and ADS-B in one request
  */
 
 import { useMemo, useState, useCallback } from "react";
 import { useQueryClient } from "@tanstack/react-query";
-import type { MapStats, SensorMarker, ClientMarker, AdsbMarker, StarlinkMetrics, WirelessDetectionMarker, LocationSourceType } from "@/types/map";
+import type { MapStats, SensorMarker, ClientMarker, AdsbMarker, WirelessDetectionMarker, LocationSourceType } from "@/types/map";
 import {
-  // Core data hooks
-  useClients,
-  useLatestReadings,
-  // Unified location hooks
-  useLocationSummary,
-  useAllClientsLocations,
-  // Starlink hooks
-  useStarlinkDevicesFromReadings,
-  useStarlinkSignalStrength,
-  useStarlinkPerformance,
-  useStarlinkPower,
-  useStarlinkConnectivity,
-  // ADS-B hooks
-  useAdsbAircraftWithHistory,
+  // NEW: Unified map markers API
+  useMapMarkers,
+  type MapClientMarker,
+  type MapStarlinkMarker,
+  type MapAdsbMarker,
+  // Supplementary hooks (for data not in unified API)
   useAdsbHistorical,
+  useWifiScannerTimeseries,
+  useBluetoothScannerTimeseries,
   // Maritime hooks
   useAisVessels,
   useAprsStations,
   useEpirbBeacons,
-  // Wireless detection hooks
-  useWifiScannerTimeseries,
-  useBluetoothScannerTimeseries,
-  // GPS hooks
+  // GPS fallback
   useGpsdStatus,
   useGpsReadings,
-  // Geo locations
-  useGeoLocations,
   // Types
-  type AdsbAircraft,
   type AisVessel,
   type AprsStation,
   type EpirbBeacon,
-  type StarlinkDeviceWithMetrics,
-  type GeoLocation,
-  type ClientLocation,
 } from "@/hooks/aurora";
 
 export interface UseOptimizedMapDataOptions {
@@ -93,53 +78,39 @@ const mapLocationSource = (source?: string): LocationSourceType => {
 };
 
 export function useOptimizedMapData(options: UseOptimizedMapDataOptions = {}) {
-  const { adsbHistoryMinutes = 60, refetchInterval, clientId } = options;
+  const { adsbHistoryMinutes = 60, clientId } = options;
   const [lastUpdate, setLastUpdate] = useState<Date>(new Date());
   const queryClient = useQueryClient();
 
-  // ===== CORE DATA SOURCES =====
-  const { data: clients, isLoading: clientsLoading } = useClients();
-  const { data: latestReadings, isLoading: readingsLoading } = useLatestReadings();
-  
-  // Extract client IDs for bulk location fetch
-  const clientIds = useMemo(() => 
-    clients?.map(c => c.client_id) || [], 
-    [clients]
-  );
-  
-  // ===== UNIFIED LOCATION API =====
-  const { data: locationSummary, isLoading: locationSummaryLoading } = useLocationSummary(48);
-  const { data: geoLocations, isLoading: geoLoading } = useGeoLocations();
-  const { data: clientLocationsMap, isLoading: clientLocationsLoading } = useAllClientsLocations(clientIds);
+  // ===== PRIMARY DATA SOURCE: UNIFIED MAP MARKERS API =====
+  // This single call replaces 10+ individual API calls
+  const { 
+    data: mapMarkersData, 
+    isLoading: mapMarkersLoading,
+  } = useMapMarkers({
+    includeClients: true,
+    includeStarlink: true,
+    includeAircraft: true,
+    clientId: clientId === 'all' ? undefined : clientId,
+    hours: Math.ceil(adsbHistoryMinutes / 60),
+  });
 
-  // ===== STARLINK DATA =====
-  const { data: starlinkDevices, isLoading: starlinkLoading } = useStarlinkDevicesFromReadings();
-  const { data: starlinkSignal } = useStarlinkSignalStrength();
-  const { data: starlinkPerformance } = useStarlinkPerformance();
-  const { data: starlinkPower } = useStarlinkPower();
-  const { data: starlinkConnectivity } = useStarlinkConnectivity();
-
-  // ===== GPS DATA =====
+  // ===== SUPPLEMENTARY DATA SOURCES =====
+  // GPS daemon status (local device)
   const { data: gpsdStatus } = useGpsdStatus();
   const { data: gpsReadings } = useGpsReadings(24);
-
-  // ===== ADS-B DATA =====
-  const { 
-    aircraft: adsbAircraft, 
-    isLoading: adsbLoading,
-    isHistorical: adsbIsHistorical,
-    source: adsbSource 
-  } = useAdsbAircraftWithHistory(adsbHistoryMinutes);
+  
+  // Historical ADS-B for trails
   const { data: adsbHistoricalData } = useAdsbHistorical(adsbHistoryMinutes);
-
-  // ===== MARITIME DATA =====
+  
+  // Maritime data (not in unified API yet)
   const { data: aisVessels, isLoading: aisLoading } = useAisVessels();
   const { data: aprsStations, isLoading: aprsLoading } = useAprsStations();
   const { data: epirbBeacons, isLoading: epirbLoading } = useEpirbBeacons();
 
-  // ===== WIRELESS DETECTION DATA =====
-  const { data: wifiData, isLoading: wifiLoading } = useWifiScannerTimeseries(1);
-  const { data: bluetoothData, isLoading: bluetoothLoading } = useBluetoothScannerTimeseries(1);
+  // Wireless detection data
+  const { data: wifiData } = useWifiScannerTimeseries(1);
+  const { data: bluetoothData } = useBluetoothScannerTimeseries(1);
 
   // Handle refresh
   const handleRefresh = useCallback(() => {
@@ -147,169 +118,93 @@ export function useOptimizedMapData(options: UseOptimizedMapDataOptions = {}) {
     setLastUpdate(new Date());
   }, [queryClient]);
 
-  // ===== BUILD STARLINK MARKERS =====
+  // ===== BUILD STARLINK MARKERS FROM UNIFIED API =====
   const starlinkMarkers = useMemo<SensorMarker[]>(() => {
-    if (!starlinkDevices?.length) return [];
+    const dishes = mapMarkersData?.starlink_dishes || [];
+    if (!dishes.length) return [];
 
-    const starlinkMetrics: StarlinkMetrics = {
-      connected: starlinkConnectivity?.connected,
-      signalStrength: starlinkSignal?.signal_strength_dbm,
-      snr: starlinkSignal?.snr,
-      obstructionPercent: starlinkConnectivity?.obstruction_percent,
-      uptimeSeconds: starlinkConnectivity?.uptime_seconds,
-      downlinkThroughputBps: starlinkPerformance?.downlink_throughput_bps,
-      uplinkThroughputBps: starlinkPerformance?.uplink_throughput_bps,
-      latencyMs: starlinkPerformance?.pop_ping_latency_ms,
-      powerWatts: starlinkPower?.device_summaries?.[0]?.overall?.avg_watts,
-    };
-
-    return starlinkDevices
-      .filter((device: StarlinkDeviceWithMetrics) => 
-        isValidCoordinate(device.latitude, device.longitude)
-      )
-      .map((device: StarlinkDeviceWithMetrics) => {
+    return dishes
+      .filter((dish: MapStarlinkMarker) => isValidCoordinate(dish.latitude, dish.longitude))
+      .map((dish: MapStarlinkMarker) => {
         // Format display name
         let displayName = 'Starlink Dish';
-        if (device.device_id && device.device_id !== 'starlink_dish_1') {
-          if (device.device_id.toLowerCase().startsWith('ut')) {
-            const parts = device.device_id.split('-');
-            displayName = `Starlink ${parts[0].substring(0, 8)}...${parts[parts.length - 1]?.slice(-6) || ''}`;
+        if (dish.device_id && dish.device_id !== 'starlink_dish_1') {
+          if (dish.device_id.toLowerCase().startsWith('ut')) {
+            const parts = dish.device_id.split('-');
+            displayName = `Starlink ${parts[0].substring(0, 8)}…${parts[parts.length - 1]?.slice(-6) || ''}`;
           } else {
-            displayName = `Starlink ${device.device_id.replace(/_/g, ' ').replace(/starlink/i, '').trim() || 'Dish'}`;
+            displayName = `Starlink ${dish.device_id.replace(/_/g, ' ').replace(/starlink/i, '').trim() || 'Dish'}`;
           }
         }
-        if (device.client_id) {
-          displayName += ` (${device.client_id.substring(0, 6)}...)`;
+        if (dish.client_id) {
+          displayName += ` (${dish.client_id.substring(0, 6)}…)`;
         }
 
         return {
-          id: device.composite_key || `${device.client_id}:${device.device_id}`,
+          id: `${dish.client_id}:${dish.device_id}`,
           name: displayName,
           type: 'starlink',
-          value: device.altitude || 0,
+          value: 0,
           unit: 'm',
-          status: starlinkMetrics.connected ? 'active' : 'warning',
-          lastUpdate: device.last_seen || new Date().toISOString(),
-          location: { lat: device.latitude!, lng: device.longitude! },
+          status: dish.connected ? 'active' : 'warning',
+          lastUpdate: dish.last_seen || new Date().toISOString(),
+          location: { lat: dish.latitude, lng: dish.longitude },
           starlinkData: {
-            ...starlinkMetrics,
-            altitude: device.altitude,
-            deviceId: device.device_id,
+            connected: dish.connected,
+            signalStrength: dish.signal_strength ?? undefined,
+            snr: dish.snr ?? undefined,
+            obstructionPercent: dish.obstruction_percent,
+            downlinkThroughputBps: dish.downlink_mbps ? dish.downlink_mbps * 1_000_000 : undefined,
+            uplinkThroughputBps: dish.uplink_mbps ? dish.uplink_mbps * 1_000_000 : undefined,
+            latencyMs: dish.ping_ms,
+            deviceId: dish.device_id,
           },
         };
       });
-  }, [starlinkDevices, starlinkSignal, starlinkPerformance, starlinkPower, starlinkConnectivity]);
+  }, [mapMarkersData?.starlink_dishes]);
 
-  // ===== BUILD CLIENT MARKERS WITH RESOLVED LOCATIONS =====
+  // ===== BUILD CLIENT MARKERS FROM UNIFIED API =====
   const clientMarkers = useMemo<ClientMarker[]>(() => {
-    if (!clients?.length) return [];
+    const clients = mapMarkersData?.clients || [];
+    if (!clients.length) return [];
 
-    const markers: ClientMarker[] = [];
-    const processedIds = new Set<string>();
+    return clients
+      .filter((client: MapClientMarker) => isValidCoordinate(client.latitude, client.longitude))
+      .map((client: MapClientMarker) => ({
+        client_id: client.client_id,
+        hostname: client.hostname || client.client_id,
+        location: { lat: client.latitude, lng: client.longitude },
+        locationSource: mapLocationSource(client.source),
+        city: client.metadata?.city,
+        country: client.metadata?.country,
+      }));
+  }, [mapMarkersData?.clients]);
 
-    // Build lookup for Starlink device locations by client_id
-    const starlinkByClient = new Map<string, StarlinkDeviceWithMetrics>();
-    starlinkDevices?.forEach((device: StarlinkDeviceWithMetrics) => {
-      if (device.client_id && isValidCoordinate(device.latitude, device.longitude)) {
-        starlinkByClient.set(device.client_id, device);
-      }
-    });
+  // ===== BUILD ADS-B MARKERS FROM UNIFIED API =====
+  const adsbMarkers = useMemo<AdsbMarker[]>(() => {
+    const aircraft = mapMarkersData?.adsb_aircraft || [];
+    if (!aircraft.length) return [];
 
-    // Build lookup for GPS readings by client_id
-    const gpsReadingsByClient = new Map<string, { lat: number; lng: number }>();
-    gpsReadings?.readings?.forEach((reading: { client_id?: string; latitude?: number; longitude?: number }) => {
-      if (reading.client_id && isValidCoordinate(reading.latitude, reading.longitude)) {
-        gpsReadingsByClient.set(reading.client_id, { 
-          lat: reading.latitude!, 
-          lng: reading.longitude! 
-        });
-      }
-    });
+    return aircraft
+      .filter((ac: MapAdsbMarker) => isValidCoordinate(ac.latitude, ac.longitude))
+      .map((ac: MapAdsbMarker) => ({
+        id: ac.hex,
+        hex: ac.hex,
+        name: ac.flight?.trim() || `Aircraft ${ac.hex}`,
+        type: 'adsb',
+        value: ac.altitude || 0,
+        unit: 'ft',
+        status: 'active',
+        lastUpdate: ac.last_seen || new Date().toISOString(),
+        location: { lat: ac.latitude, lng: ac.longitude },
+        speed: ac.speed,
+        track: ac.track,
+        squawk: ac.squawk,
+        category: ac.category,
+      } as AdsbMarker));
+  }, [mapMarkersData?.adsb_aircraft]);
 
-    // Build lookup for geo locations
-    const geoLocationsByDevice = new Map<string, GeoLocation>();
-    if (Array.isArray(geoLocations)) {
-      geoLocations.forEach((geo: GeoLocation) => {
-        if (geo.device_id && isValidCoordinate(geo.lat, geo.lng)) {
-          geoLocationsByDevice.set(geo.device_id, geo);
-        }
-      });
-    }
-
-    clients.forEach(client => {
-      if (processedIds.has(client.client_id)) return;
-
-      let location: { lat: number; lng: number } | null = null;
-      let locationSource: LocationSourceType = 'unknown';
-      let city: string | undefined;
-      let country: string | undefined;
-
-      // Priority 0: Use unified location API (server-resolved location with priority)
-      const apiLocation = clientLocationsMap?.get(client.client_id);
-      if (apiLocation && isValidCoordinate(apiLocation.latitude, apiLocation.longitude)) {
-        location = { lat: apiLocation.latitude!, lng: apiLocation.longitude! };
-        locationSource = mapLocationSource(apiLocation.source);
-        city = apiLocation.city;
-        country = apiLocation.country;
-      }
-
-      // Priority 1: Starlink dish GPS (highest accuracy - override if available)
-      if (!location) {
-        const starlinkDevice = starlinkByClient.get(client.client_id);
-        if (starlinkDevice) {
-          location = { lat: starlinkDevice.latitude!, lng: starlinkDevice.longitude! };
-          locationSource = 'starlink';
-        }
-      }
-
-      // Priority 2: Hardware GPS readings
-      if (!location) {
-        const gpsReading = gpsReadingsByClient.get(client.client_id);
-        if (gpsReading) {
-          location = gpsReading;
-          locationSource = 'gps';
-        }
-      }
-
-      // Priority 3: Geo locations from sensors
-      if (!location) {
-        const geoLoc = geoLocationsByDevice.get(client.client_id);
-        if (geoLoc) {
-          location = { lat: geoLoc.lat, lng: geoLoc.lng };
-          locationSource = 'sensor';
-        }
-      }
-
-      // Priority 4: IP Geolocation fallback from client object
-      if (!location && client.location) {
-        const lat = client.location.latitude;
-        const lng = client.location.longitude;
-        if (isValidCoordinate(lat, lng)) {
-          location = { lat: lat!, lng: lng! };
-          locationSource = 'ip-geo';
-          city = client.location.city;
-          country = client.location.country;
-        }
-      }
-
-      if (location) {
-        markers.push({
-          client_id: client.client_id,
-          hostname: client.hostname || client.client_id,
-          location,
-          locationSource,
-          city,
-          country,
-        });
-        processedIds.add(client.client_id);
-      }
-    });
-
-    console.log(`[ClientMarkers] Built ${markers.length} client markers from ${clients.length} clients`);
-    return markers;
-  }, [clients, starlinkDevices, gpsReadings, geoLocations, clientLocationsMap]);
-
-  // ===== BUILD SENSOR MARKERS (GPS, LoRa, etc.) =====
+  // ===== BUILD SENSOR MARKERS (GPS, Maritime, etc.) =====
   const sensorMarkers = useMemo<SensorMarker[]>(() => {
     const markers: SensorMarker[] = [];
     const addedIds = new Set<string>();
@@ -346,8 +241,8 @@ export function useOptimizedMapData(options: UseOptimizedMapDataOptions = {}) {
 
     // Add GPS reading markers
     if (gpsReadings?.readings) {
-      const latestByDevice = new Map<string, typeof gpsReadings.readings[0]>();
-      gpsReadings.readings.forEach((reading: typeof gpsReadings.readings[0]) => {
+      const latestByDevice = new Map<string, (typeof gpsReadings.readings)[0]>();
+      gpsReadings.readings.forEach((reading: (typeof gpsReadings.readings)[0]) => {
         const deviceId = reading.device_id || 'gps_device';
         const existing = latestByDevice.get(deviceId);
         if (!existing || (reading.timestamp && existing.timestamp && 
@@ -372,31 +267,6 @@ export function useOptimizedMapData(options: UseOptimizedMapDataOptions = {}) {
             });
             addedIds.add(id);
           }
-        }
-      });
-    }
-
-    // Add geo location markers
-    if (Array.isArray(geoLocations)) {
-      geoLocations.forEach((geo: GeoLocation & { device_name?: string; device_type?: string; status?: string }) => {
-        if (!isValidCoordinate(geo.lat, geo.lng)) return;
-        
-        // Skip if it's a Starlink device (already added)
-        if (geo.device_id?.toLowerCase().includes('starlink')) return;
-        
-        const id = `geo-${geo.device_id}`;
-        if (!addedIds.has(id)) {
-          markers.push({
-            id,
-            name: geo.device_name || geo.device_id,
-            type: geo.device_type || 'gps',
-            value: geo.altitude || 0,
-            unit: 'm',
-            status: geo.status || 'active',
-            lastUpdate: geo.timestamp || new Date().toISOString(),
-            location: { lat: geo.lat, lng: geo.lng },
-          });
-          addedIds.add(id);
         }
       });
     }
@@ -465,51 +335,7 @@ export function useOptimizedMapData(options: UseOptimizedMapDataOptions = {}) {
     }
 
     return markers;
-  }, [starlinkMarkers, gpsdStatus, gpsReadings, geoLocations, aisVessels, aprsStations, epirbBeacons]);
-
-  // ===== BUILD ADS-B MARKERS =====
-  const adsbMarkers = useMemo<AdsbMarker[]>(() => {
-    if (!adsbAircraft?.length) return [];
-
-    return adsbAircraft
-      .filter((aircraft: AdsbAircraft) => isValidCoordinate(aircraft.lat, aircraft.lon))
-      .map((aircraft: AdsbAircraft) => {
-        let status = 'active';
-        if (adsbIsHistorical) {
-          status = 'historical';
-        } else if (aircraft.seen !== undefined && aircraft.seen >= 60) {
-          status = 'stale';
-        }
-
-        return {
-          id: aircraft.hex,
-          hex: aircraft.hex,
-          name: aircraft.flight?.trim() || `Aircraft ${aircraft.hex}`,
-          type: 'adsb',
-          value: aircraft.alt_baro || aircraft.alt_geom || 0,
-          unit: 'ft',
-          status,
-          lastUpdate: new Date().toISOString(),
-          location: { lat: aircraft.lat!, lng: aircraft.lon! },
-          speed: aircraft.gs,
-          track: aircraft.track,
-          squawk: aircraft.squawk,
-          rssi: aircraft.rssi,
-          category: aircraft.category,
-          registration: aircraft.registration,
-          operator: aircraft.operator,
-          aircraftType: aircraft.description, // Use description as aircraft type
-          country: aircraft.country,
-          military: aircraft.military,
-          altGeom: aircraft.alt_geom,
-          baroRate: aircraft.baro_rate,
-          ias: aircraft.ias,
-          tas: aircraft.tas,
-          emergency: aircraft.emergency,
-          messages: aircraft.messages,
-        } as AdsbMarker;
-      });
-  }, [adsbAircraft, adsbIsHistorical]);
+  }, [starlinkMarkers, gpsdStatus, gpsReadings, aisVessels, aprsStations, epirbBeacons]);
 
   // ===== BUILD WIRELESS DETECTION MARKERS =====
   const wifiDetectionMarkers = useMemo<WirelessDetectionMarker[]>(() => {
@@ -519,8 +345,8 @@ export function useOptimizedMapData(options: UseOptimizedMapDataOptions = {}) {
     const seenNetworks = new Set<string>();
 
     wifiData.readings.forEach((reading, index) => {
-      const clientId = reading.client_id;
-      const client = clientMarkers.find(c => c.client_id === clientId);
+      const readingClientId = reading.client_id;
+      const client = clientMarkers.find(c => c.client_id === readingClientId);
       if (!client) return;
 
       const networkId = reading.bssid || reading.ssid || `wifi-${index}`;
@@ -534,7 +360,7 @@ export function useOptimizedMapData(options: UseOptimizedMapDataOptions = {}) {
         id: `wifi-det-${networkId}`,
         type: 'wifi',
         name: reading.ssid || 'Unknown Network',
-        client_id: clientId || '',
+        client_id: readingClientId || '',
         location: {
           lat: client.location.lat + offsetLat,
           lng: client.location.lng + offsetLng,
@@ -557,8 +383,8 @@ export function useOptimizedMapData(options: UseOptimizedMapDataOptions = {}) {
     const seenDevices = new Set<string>();
 
     bluetoothData.readings.forEach((reading, index) => {
-      const clientId = reading.client_id;
-      const client = clientMarkers.find(c => c.client_id === clientId);
+      const readingClientId = reading.client_id;
+      const client = clientMarkers.find(c => c.client_id === readingClientId);
       if (!client) return;
 
       const deviceId = reading.mac_address || `bt-${index}`;
@@ -572,7 +398,7 @@ export function useOptimizedMapData(options: UseOptimizedMapDataOptions = {}) {
         id: `bt-det-${deviceId}`,
         type: 'bluetooth',
         name: reading.name || 'Unknown Device',
-        client_id: clientId || '',
+        client_id: readingClientId || '',
         location: {
           lat: client.location.lat + offsetLat,
           lng: client.location.lng + offsetLng,
@@ -631,36 +457,25 @@ export function useOptimizedMapData(options: UseOptimizedMapDataOptions = {}) {
 
   // ===== COMPUTE STATS =====
   const stats = useMemo<MapStats>(() => {
-    // Apply client filter if specified
-    const filterByClient = (markers: SensorMarker[]) => {
-      if (!clientId || clientId === 'all') return markers;
-      return markers.filter(m => 
-        m.id.includes(clientId) || 
-        (m as unknown as { client_id?: string }).client_id === clientId
-      );
-    };
-
-    const filteredSensors = filterByClient(sensorMarkers);
-    const filteredClients = clientId && clientId !== 'all' 
-      ? clientMarkers.filter(c => c.client_id === clientId)
-      : clientMarkers;
-
+    // Use counts from unified API if available
+    const counts = mapMarkersData?.counts;
+    
     return {
-      total: filteredSensors.length + filteredClients.length + adsbMarkers.length,
-      gps: filteredSensors.filter(s => s.type === 'gps').length,
-      starlink: filteredSensors.filter(s => s.type === 'starlink').length,
-      clients: filteredClients.length,
-      lora: filteredSensors.filter(s => s.type === 'lora').length,
-      adsb: adsbMarkers.length,
-      wifi: filteredSensors.filter(s => s.type === 'wifi').length,
-      bluetooth: filteredSensors.filter(s => s.type === 'bluetooth').length,
-      aprs: filteredSensors.filter(s => s.type === 'aprs').length,
-      ais: filteredSensors.filter(s => s.type === 'ais').length,
-      epirb: filteredSensors.filter(s => s.type === 'epirb').length,
+      total: (counts?.total_markers || 0) + sensorMarkers.length - starlinkMarkers.length,
+      gps: sensorMarkers.filter(s => s.type === 'gps').length,
+      starlink: counts?.starlink_dishes || starlinkMarkers.length,
+      clients: counts?.clients || clientMarkers.length,
+      lora: sensorMarkers.filter(s => s.type === 'lora').length,
+      adsb: counts?.adsb_aircraft || adsbMarkers.length,
+      wifi: sensorMarkers.filter(s => s.type === 'wifi').length,
+      bluetooth: sensorMarkers.filter(s => s.type === 'bluetooth').length,
+      aprs: sensorMarkers.filter(s => s.type === 'aprs').length,
+      ais: sensorMarkers.filter(s => s.type === 'ais').length,
+      epirb: sensorMarkers.filter(s => s.type === 'epirb').length,
       wifiDetections: wifiDetectionMarkers.length,
       bluetoothDetections: bluetoothDetectionMarkers.length,
     };
-  }, [sensorMarkers, clientMarkers, adsbMarkers, wifiDetectionMarkers, bluetoothDetectionMarkers, clientId]);
+  }, [mapMarkersData?.counts, sensorMarkers, starlinkMarkers, clientMarkers, adsbMarkers, wifiDetectionMarkers, bluetoothDetectionMarkers]);
 
   // ===== ALL POSITIONS FOR MAP BOUNDS =====
   const allPositions = useMemo(() => {
@@ -687,8 +502,8 @@ export function useOptimizedMapData(options: UseOptimizedMapDataOptions = {}) {
     return positions;
   }, [sensorMarkers, clientMarkers, adsbMarkers]);
 
-  // Loading state
-  const isLoading = clientsLoading || readingsLoading || starlinkLoading || adsbLoading || geoLoading || clientLocationsLoading;
+  // Loading state - primarily depends on unified API
+  const isLoading = mapMarkersLoading || aisLoading || aprsLoading || epirbLoading;
 
   return {
     // Markers
@@ -703,7 +518,7 @@ export function useOptimizedMapData(options: UseOptimizedMapDataOptions = {}) {
     trails: [], // Legacy - GPS trails (implement if needed)
     // Stats
     stats,
-    locationSummary,
+    locationSummary: null, // Deprecated - use stats from unified API
     // Positions
     allPositions,
     // State
@@ -712,7 +527,7 @@ export function useOptimizedMapData(options: UseOptimizedMapDataOptions = {}) {
     // Actions
     handleRefresh,
     // ADS-B metadata
-    adsbSource,
-    adsbIsHistorical,
+    adsbSource: 'live' as const,
+    adsbIsHistorical: false,
   };
 }
