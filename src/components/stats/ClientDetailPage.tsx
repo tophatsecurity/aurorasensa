@@ -191,16 +191,23 @@ export function ClientDetailPage({ clientId, onBack }: ClientDetailPageProps) {
   ];
 
   const sensorTypes = useMemo((): string[] => {
-    const types = batchReadings.map((r: any) => {
+    // First, try to get sensor types from batch readings
+    const batchTypes = batchReadings.map((r: any) => {
       const sensors = r.sensors as Record<string, any> | undefined;
       if (sensors) return Object.keys(sensors);
       return [r.device_type || 'unknown'];
-    }).flat();
-    const uniqueTypes = [...new Set(types.filter(Boolean))] as string[];
+    }).flat().filter(Boolean);
+
+    // Also check client.sensors array if available
+    const clientSensors = (client as any)?.sensors || [];
+    
+    // Combine both sources
+    const allTypes = [...batchTypes, ...clientSensors];
+    const uniqueTypes = [...new Set(allTypes)] as string[];
     
     // Filter out system_monitor (it's shown in overview) and sort by preferred order
     return uniqueTypes
-      .filter(t => !t.toLowerCase().includes('system_monitor'))
+      .filter(t => t && !t.toLowerCase().includes('system_monitor'))
       .sort((a, b) => {
         const aIndex = SENSOR_ORDER.findIndex(s => a.toLowerCase().includes(s));
         const bIndex = SENSOR_ORDER.findIndex(s => b.toLowerCase().includes(s));
@@ -208,7 +215,7 @@ export function ClientDetailPage({ clientId, onBack }: ClientDetailPageProps) {
         const bOrder = bIndex >= 0 ? bIndex : 999;
         return aOrder - bOrder;
       });
-  }, [batchReadings]);
+  }, [batchReadings, client]);
 
   const isLoading = clientLoading || systemLoading;
   const wifiClientsList = (wifiClients as any)?.clients || [];
@@ -276,7 +283,6 @@ export function ClientDetailPage({ clientId, onBack }: ClientDetailPageProps) {
                 {formatSensorLabel(type)}
               </TabsTrigger>
             ))}
-            <TabsTrigger value="wifi" className="gap-2"><Wifi className="w-4 h-4" />WiFi Config</TabsTrigger>
             <TabsTrigger value="raw" className="gap-2"><FileJson className="w-4 h-4" />Raw Data</TabsTrigger>
           </TabsList>
         </div>
