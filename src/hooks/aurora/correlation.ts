@@ -170,12 +170,25 @@ export interface StarlinkMetrics {
   uplink_throughput_bps?: number;
   obstruction_percent?: number;
   snr?: number;
+  heater_on?: boolean;
 }
 
 function extractStarlinkMetrics(data: Record<string, unknown>): StarlinkMetrics {
   const starlink = (data.starlink || data) as Record<string, unknown>;
   const pingLatency = (starlink?.ping_latency || data?.ping_latency) as Record<string, number> | undefined;
   const powerStats = data?.power_stats as Record<string, number> | undefined;
+  const alerts = (starlink?.alerts || data?.alerts) as Record<string, unknown> | undefined;
+  
+  // Extract heater status from various possible field locations
+  const heaterOn = 
+    (alerts?.heater_on as boolean | undefined) ??
+    (starlink?.heater_on as boolean | undefined) ?? 
+    (data?.heater_on as boolean | undefined) ??
+    (starlink?.dish_heater as boolean | undefined) ??
+    (data?.dish_heater as boolean | undefined) ??
+    // Check for thermal_shutdown which often indicates heater activity
+    (alerts?.thermal_shutdown as boolean | undefined) ??
+    (starlink?.thermal_shutdown as boolean | undefined);
   
   return {
     power_w: extractNumber(starlink, 'power_watts') ?? 
@@ -192,6 +205,7 @@ function extractStarlinkMetrics(data: Record<string, unknown>): StarlinkMetrics 
     obstruction_percent: extractNumber(starlink, 'obstruction_percent') ??
                           extractNumber(data, 'obstruction_percent'),
     snr: extractNumber(starlink, 'snr') ?? extractNumber(data, 'snr'),
+    heater_on: heaterOn,
   };
 }
 

@@ -12,6 +12,7 @@ import {
   ScatterChart,
   Scatter,
   Brush,
+  ReferenceArea,
 } from "recharts";
 import { 
   Activity, 
@@ -24,6 +25,7 @@ import {
   Cpu,
   RefreshCw,
   AlertCircle,
+  Flame,
 } from "lucide-react";
 import {
   Select,
@@ -109,7 +111,7 @@ function StatCard({ icon, label, value, subValue, colorClass = "text-foreground"
 // =============================================
 
 interface CorrelationChartProps {
-  data: Array<{ time: string; x?: number; y?: number }>;
+  data: Array<{ time: string; x?: number; y?: number; heater_on?: boolean }>;
   xLabel: string;
   yLabel: string;
   xUnit: string;
@@ -118,12 +120,17 @@ interface CorrelationChartProps {
   yColor: string;
   isLoading: boolean;
   hours: number;
+  heaterRegions?: Array<{ start: string; end: string }>;
+  showHeaterOverlay?: boolean;
 }
 
 function CorrelationChart({ 
-  data, xLabel, yLabel, xUnit, yUnit, xColor, yColor, isLoading, hours 
+  data, xLabel, yLabel, xUnit, yUnit, xColor, yColor, isLoading, hours, heaterRegions = [], showHeaterOverlay = false 
 }: CorrelationChartProps) {
   const gradientId = `gradient-${xLabel.replace(/\s+/g, '-')}`;
+  
+  // Count heater active periods
+  const heaterActiveCount = heaterRegions.length;
   
   return (
     <div className="glass-card rounded-xl border border-border/50">
@@ -137,9 +144,17 @@ function CorrelationChart({
             <p className="text-xs text-muted-foreground">Last {hours} hours</p>
           </div>
         </div>
-        <span className="text-xs px-2 py-1 rounded bg-muted text-muted-foreground">
-          {data.length} samples
-        </span>
+        <div className="flex items-center gap-2">
+          {showHeaterOverlay && heaterActiveCount > 0 && (
+            <span className="text-xs px-2 py-1 rounded bg-destructive/20 text-destructive flex items-center gap-1">
+              <Flame className="w-3 h-3" />
+              {heaterActiveCount} heater events
+            </span>
+          )}
+          <span className="text-xs px-2 py-1 rounded bg-muted text-muted-foreground">
+            {data.length} samples
+          </span>
+        </div>
       </div>
       <div className="p-4">
         {isLoading ? (
@@ -203,6 +218,7 @@ function CorrelationChart({
                   payload={[
                     { value: xLabel, type: 'square', color: xColor },
                     { value: yLabel, type: 'line', color: yColor },
+                    ...(showHeaterOverlay && heaterActiveCount > 0 ? [{ value: 'Dish Heater Active', type: 'rect' as const, color: 'hsl(var(--destructive))' }] : []),
                   ]}
                 />
                 <Area
@@ -225,6 +241,19 @@ function CorrelationChart({
                   dot={false}
                   connectNulls
                 />
+                {/* Heater active regions overlay */}
+                {showHeaterOverlay && heaterRegions.map((region, idx) => (
+                  <ReferenceArea
+                    key={`heater-${idx}`}
+                    x1={region.start}
+                    x2={region.end}
+                    fill="hsl(var(--destructive))"
+                    fillOpacity={0.15}
+                    stroke="hsl(var(--destructive))"
+                    strokeOpacity={0.3}
+                    strokeWidth={1}
+                  />
+                ))}
                 <Brush 
                   dataKey="time" 
                   height={25} 
@@ -450,13 +479,14 @@ export default function CorrelationContent() {
 
   // Build correlation datasets
   const powerThermalData = useMemo(() => {
-    const dataMap = new Map<string, { time: string; x?: number; y?: number }>();
+    const dataMap = new Map<string, { time: string; x?: number; y?: number; heater_on?: boolean }>();
 
     // Starlink power
     starlinkData?.readings?.forEach(r => {
       if (r.time && r.power_w !== undefined) {
         const existing = dataMap.get(r.time) || { time: r.time };
         existing.x = r.power_w;
+        existing.heater_on = r.heater_on;
         dataMap.set(r.time, existing);
       }
     });
@@ -501,13 +531,43 @@ export default function CorrelationContent() {
       .sort((a, b) => a.time.localeCompare(b.time));
   }, [starlinkData, thermalData, arduinoData, tempMeasurement]);
 
+  // Calculate heater active regions from sorted data
+  const heaterRegions = useMemo(() => {
+    const regions: Array<{ start: string; end: string }> = [];
+    let currentRegion: { start: string; end: string } | null = null;
+
+    // Use powerThermalData since it has heater_on from starlink
+    powerThermalData.forEach((point, idx) => {
+      if (point.heater_on) {
+        if (!currentRegion) {
+          currentRegion = { start: point.time, end: point.time };
+        } else {
+          currentRegion.end = point.time;
+        }
+      } else {
+        if (currentRegion) {
+          regions.push(currentRegion);
+          currentRegion = null;
+        }
+      }
+    });
+    
+    // Close any open region at the end
+    if (currentRegion) {
+      regions.push(currentRegion);
+    }
+
+    return regions;
+  }, [powerThermalData]);
+
   const powerArduinoData = useMemo(() => {
-    const dataMap = new Map<string, { time: string; x?: number; y?: number }>();
+    const dataMap = new Map<string, { time: string; x?: number; y?: number; heater_on?: boolean }>();
 
     starlinkData?.readings?.forEach(r => {
       if (r.time && r.power_w !== undefined) {
         const existing = dataMap.get(r.time) || { time: r.time };
         existing.x = r.power_w;
+        existing.heater_on = r.heater_on;
         dataMap.set(r.time, existing);
       }
     });
@@ -527,6 +587,33 @@ export default function CorrelationContent() {
       .filter(d => d.x !== undefined || d.y !== undefined)
       .sort((a, b) => a.time.localeCompare(b.time));
   }, [starlinkData, arduinoData]);
+
+  // Calculate heater regions for power-arduino chart
+  const powerArduinoHeaterRegions = useMemo(() => {
+    const regions: Array<{ start: string; end: string }> = [];
+    let currentRegion: { start: string; end: string } | null = null;
+
+    powerArduinoData.forEach((point) => {
+      if (point.heater_on) {
+        if (!currentRegion) {
+          currentRegion = { start: point.time, end: point.time };
+        } else {
+          currentRegion.end = point.time;
+        }
+      } else {
+        if (currentRegion) {
+          regions.push(currentRegion);
+          currentRegion = null;
+        }
+      }
+    });
+    
+    if (currentRegion) {
+      regions.push(currentRegion);
+    }
+
+    return regions;
+  }, [powerArduinoData]);
 
   const thermalArduinoData = useMemo(() => {
     const dataMap = new Map<string, { time: string; x?: number; y?: number }>();
@@ -605,7 +692,9 @@ export default function CorrelationContent() {
           xUnit: "W", 
           yUnit: tempConfig.unit, 
           xColor: MEASUREMENT_COLORS.starlinkPower, 
-          yColor: tempConfig.color 
+          yColor: tempConfig.color,
+          heaterRegions: heaterRegions,
+          showHeater: true,
         };
       case "power-arduino": 
         return { 
@@ -616,7 +705,9 @@ export default function CorrelationContent() {
           xUnit: "W", 
           yUnit: "°C", 
           xColor: MEASUREMENT_COLORS.starlinkPower, 
-          yColor: MEASUREMENT_COLORS.arduinoDht 
+          yColor: MEASUREMENT_COLORS.arduinoDht,
+          heaterRegions: powerArduinoHeaterRegions,
+          showHeater: true,
         };
       case "thermal-arduino": 
         return { 
@@ -627,7 +718,9 @@ export default function CorrelationContent() {
           xUnit: "°C", 
           yUnit: "°C", 
           xColor: MEASUREMENT_COLORS.thermalProbe, 
-          yColor: MEASUREMENT_COLORS.arduinoDht 
+          yColor: MEASUREMENT_COLORS.arduinoDht,
+          heaterRegions: [],
+          showHeater: false,
         };
       case "latency-throughput": 
         return { 
@@ -638,7 +731,9 @@ export default function CorrelationContent() {
           xUnit: "ms", 
           yUnit: "Mbps", 
           xColor: MEASUREMENT_COLORS.latency, 
-          yColor: MEASUREMENT_COLORS.download 
+          yColor: MEASUREMENT_COLORS.download,
+          heaterRegions: [],
+          showHeater: false,
         };
       default: 
         return { 
@@ -649,7 +744,9 @@ export default function CorrelationContent() {
           xUnit: "W", 
           yUnit: tempConfig.unit, 
           xColor: MEASUREMENT_COLORS.starlinkPower, 
-          yColor: tempConfig.color 
+          yColor: tempConfig.color,
+          heaterRegions: heaterRegions,
+          showHeater: true,
         };
     }
   };
@@ -806,6 +903,8 @@ export default function CorrelationContent() {
         yColor={current.yColor}
         isLoading={isLoading}
         hours={timeRange}
+        heaterRegions={current.heaterRegions}
+        showHeaterOverlay={current.showHeater}
       />
 
       {/* Scatter Plot */}
