@@ -143,38 +143,6 @@ const StarlinkPowerSection = ({ hours = 24 }: StarlinkPowerSectionProps) => {
         </Card>
       ) : (
         <>
-          {/* Historical Power Trend Charts */}
-          <Collapsible open={showTrendCharts} onOpenChange={setShowTrendCharts}>
-            <Card className="bg-card/50 border-border/50">
-              <CollapsibleTrigger asChild>
-                <CardHeader className="cursor-pointer hover:bg-muted/20 transition-colors pb-3">
-                  <div className="flex items-center justify-between">
-                    <CardTitle className="text-sm font-medium flex items-center gap-2">
-                      <TrendingUp className="w-4 h-4 text-primary" />
-                      Power Consumption Trends ({hours}h)
-                    </CardTitle>
-                    <Button variant="ghost" size="icon" className="h-6 w-6">
-                      {showTrendCharts ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
-                    </Button>
-                  </div>
-                </CardHeader>
-              </CollapsibleTrigger>
-              <CollapsibleContent>
-                <CardContent className="pt-0">
-                  <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-                    {powerStats.devices.map((device) => (
-                      <StarlinkPowerTrendChart 
-                        key={device.composite_key} 
-                        device={device} 
-                        hours={hours} 
-                      />
-                    ))}
-                  </div>
-                </CardContent>
-              </CollapsibleContent>
-            </Card>
-          </Collapsible>
-
           {/* Device Cards */}
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
             {powerStats.devices.map((device) => (
