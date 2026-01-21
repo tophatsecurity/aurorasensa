@@ -557,6 +557,11 @@ export interface ClientLocation {
   accuracy?: number;
   source?: string;
   timestamp?: string;
+  // Location metadata
+  city?: string;
+  country?: string;
+  region?: string;
+  isp?: string;
   // Additional metadata
   speed?: number;
   heading?: number;
@@ -720,6 +725,74 @@ export function useLocationSummary(hours: number = 48) {
     enabled: hasAuroraSession(),
     staleTime: 60000, // 1 minute
     refetchInterval: 300000, // 5 minutes
+    retry: 1,
+  });
+}
+
+/**
+ * Fetch locations for multiple clients in bulk
+ * Makes parallel requests to get latest location for each client
+ */
+export interface AllClientsLocations {
+  locations: Map<string, ClientLocation>;
+  loading: boolean;
+  error: Error | null;
+}
+
+export function useAllClientsLocations(clientIds: string[]) {
+  return useQuery({
+    queryKey: ["aurora", "location", "clients", "bulk", clientIds.sort().join(",")],
+    queryFn: async (): Promise<Map<string, ClientLocation>> => {
+      if (!clientIds.length) return new Map();
+      
+      const locations = new Map<string, ClientLocation>();
+      
+      // Fetch locations in parallel batches of 10
+      const batchSize = 10;
+      for (let i = 0; i < clientIds.length; i += batchSize) {
+        const batch = clientIds.slice(i, i + batchSize);
+        const results = await Promise.allSettled(
+          batch.map(async (clientId) => {
+            try {
+              const result = await callAuroraApi<ClientLocation | { data: ClientLocation; location?: ClientLocation }>(
+                LOCATION.CLIENT_LATEST(clientId)
+              );
+              
+              if (result && typeof result === 'object') {
+                let loc: ClientLocation | null = null;
+                
+                // Handle nested data structure
+                if ('location' in result && result.location) {
+                  loc = result.location;
+                } else if ('data' in result && result.data) {
+                  loc = result.data;
+                } else if ('latitude' in result && 'longitude' in result) {
+                  loc = result as ClientLocation;
+                }
+                
+                if (loc && typeof loc.latitude === 'number' && typeof loc.longitude === 'number') {
+                  return { clientId, location: loc };
+                }
+              }
+            } catch (e) {
+              console.warn(`[useAllClientsLocations] Failed to get location for ${clientId}:`, e);
+            }
+            return null;
+          })
+        );
+        
+        results.forEach((result) => {
+          if (result.status === 'fulfilled' && result.value) {
+            locations.set(result.value.clientId, result.value.location);
+          }
+        });
+      }
+      
+      return locations;
+    },
+    enabled: hasAuroraSession() && clientIds.length > 0,
+    staleTime: 30000, // 30 seconds
+    refetchInterval: 60000, // 1 minute
     retry: 1,
   });
 }

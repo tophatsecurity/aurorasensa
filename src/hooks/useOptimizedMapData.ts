@@ -4,7 +4,7 @@
  * Reduces API calls by consolidating location sources
  */
 
-import { useMemo, useState, useEffect, useCallback } from "react";
+import { useMemo, useState, useCallback } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import type { MapStats, SensorMarker, ClientMarker, AdsbMarker, StarlinkMetrics, WirelessDetectionMarker, LocationSourceType } from "@/types/map";
 import {
@@ -13,7 +13,7 @@ import {
   useLatestReadings,
   // Unified location hooks
   useLocationSummary,
-  useClientLatestLocation,
+  useAllClientsLocations,
   // Starlink hooks
   useStarlinkDevicesFromReadings,
   useStarlinkSignalStrength,
@@ -42,6 +42,7 @@ import {
   type EpirbBeacon,
   type StarlinkDeviceWithMetrics,
   type GeoLocation,
+  type ClientLocation,
 } from "@/hooks/aurora";
 
 export interface UseOptimizedMapDataOptions {
@@ -100,9 +101,16 @@ export function useOptimizedMapData(options: UseOptimizedMapDataOptions = {}) {
   const { data: clients, isLoading: clientsLoading } = useClients();
   const { data: latestReadings, isLoading: readingsLoading } = useLatestReadings();
   
+  // Extract client IDs for bulk location fetch
+  const clientIds = useMemo(() => 
+    clients?.map(c => c.client_id) || [], 
+    [clients]
+  );
+  
   // ===== UNIFIED LOCATION API =====
   const { data: locationSummary, isLoading: locationSummaryLoading } = useLocationSummary(48);
   const { data: geoLocations, isLoading: geoLoading } = useGeoLocations();
+  const { data: clientLocationsMap, isLoading: clientLocationsLoading } = useAllClientsLocations(clientIds);
 
   // ===== STARLINK DATA =====
   const { data: starlinkDevices, isLoading: starlinkLoading } = useStarlinkDevicesFromReadings();
@@ -236,11 +244,22 @@ export function useOptimizedMapData(options: UseOptimizedMapDataOptions = {}) {
       let city: string | undefined;
       let country: string | undefined;
 
-      // Priority 1: Starlink dish GPS (highest accuracy)
-      const starlinkDevice = starlinkByClient.get(client.client_id);
-      if (starlinkDevice) {
-        location = { lat: starlinkDevice.latitude!, lng: starlinkDevice.longitude! };
-        locationSource = 'starlink';
+      // Priority 0: Use unified location API (server-resolved location with priority)
+      const apiLocation = clientLocationsMap?.get(client.client_id);
+      if (apiLocation && isValidCoordinate(apiLocation.latitude, apiLocation.longitude)) {
+        location = { lat: apiLocation.latitude!, lng: apiLocation.longitude! };
+        locationSource = mapLocationSource(apiLocation.source);
+        city = apiLocation.city;
+        country = apiLocation.country;
+      }
+
+      // Priority 1: Starlink dish GPS (highest accuracy - override if available)
+      if (!location) {
+        const starlinkDevice = starlinkByClient.get(client.client_id);
+        if (starlinkDevice) {
+          location = { lat: starlinkDevice.latitude!, lng: starlinkDevice.longitude! };
+          locationSource = 'starlink';
+        }
       }
 
       // Priority 2: Hardware GPS readings
@@ -261,7 +280,7 @@ export function useOptimizedMapData(options: UseOptimizedMapDataOptions = {}) {
         }
       }
 
-      // Priority 4: IP Geolocation fallback
+      // Priority 4: IP Geolocation fallback from client object
       if (!location && client.location) {
         const lat = client.location.latitude;
         const lng = client.location.longitude;
@@ -286,8 +305,9 @@ export function useOptimizedMapData(options: UseOptimizedMapDataOptions = {}) {
       }
     });
 
+    console.log(`[ClientMarkers] Built ${markers.length} client markers from ${clients.length} clients`);
     return markers;
-  }, [clients, starlinkDevices, gpsReadings, geoLocations]);
+  }, [clients, starlinkDevices, gpsReadings, geoLocations, clientLocationsMap]);
 
   // ===== BUILD SENSOR MARKERS (GPS, LoRa, etc.) =====
   const sensorMarkers = useMemo<SensorMarker[]>(() => {
@@ -668,7 +688,7 @@ export function useOptimizedMapData(options: UseOptimizedMapDataOptions = {}) {
   }, [sensorMarkers, clientMarkers, adsbMarkers]);
 
   // Loading state
-  const isLoading = clientsLoading || readingsLoading || starlinkLoading || adsbLoading || geoLoading;
+  const isLoading = clientsLoading || readingsLoading || starlinkLoading || adsbLoading || geoLoading || clientLocationsLoading;
 
   return {
     // Markers
