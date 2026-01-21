@@ -156,42 +156,6 @@ const SensorTypeStatsSection = ({ periodHours = 24 }: SensorTypeStatsSectionProp
         </Badge>
       </h2>
 
-      {/* Summary Stats */}
-      <div className="grid grid-cols-3 gap-4 mb-6">
-        <div className="glass-card rounded-lg p-4 border border-border/50">
-          <div className="flex items-center gap-2 mb-2">
-            <div className="w-8 h-8 rounded-lg bg-primary/20 flex items-center justify-center">
-              <Database className="w-4 h-4 text-primary" />
-            </div>
-            <span className="text-xs text-muted-foreground">Total Readings</span>
-          </div>
-          <div className="text-2xl font-bold text-foreground">
-            {formatNumber(totalStats.readings)}
-          </div>
-        </div>
-        <div className="glass-card rounded-lg p-4 border border-border/50">
-          <div className="flex items-center gap-2 mb-2">
-            <div className="w-8 h-8 rounded-lg bg-cyan-500/20 flex items-center justify-center">
-              <Activity className="w-4 h-4 text-cyan-400" />
-            </div>
-            <span className="text-xs text-muted-foreground">Total Devices</span>
-          </div>
-          <div className="text-2xl font-bold text-foreground">
-            {totalStats.devices}
-          </div>
-        </div>
-        <div className="glass-card rounded-lg p-4 border border-border/50">
-          <div className="flex items-center gap-2 mb-2">
-            <div className="w-8 h-8 rounded-lg bg-violet-500/20 flex items-center justify-center">
-              <Radio className="w-4 h-4 text-violet-400" />
-            </div>
-            <span className="text-xs text-muted-foreground">Sensor Types</span>
-          </div>
-          <div className="text-2xl font-bold text-foreground">
-            {sensorStats?.total ?? chartData.length}
-          </div>
-        </div>
-      </div>
 
       {/* Charts Grid */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
