@@ -2604,13 +2604,16 @@ export function useStarlinkTimeseries(hours: number = 24, clientId?: string, dev
     queryKey: ["aurora", "starlink", "timeseries", hours, clientId, deviceId],
     queryFn: async () => {
       try {
-        // The API returns data in a nested structure: readings[].data.starlink.{field}
-        // We need to extract the starlink object and flatten it
+        // The API returns data with `measurement` as a JSON STRING that needs parsing
+        // Format: readings[].measurement = "{\"starlink\": {...}}"
         interface RawReading {
           timestamp: string;
+          sensor?: string;
+          measurement?: string; // JSON string that needs parsing
+          batch_id?: string;
+          client_id?: string;
           device_id?: string;
           device_type?: string;
-          client_id?: string;
           data?: {
             starlink?: {
               downlink_throughput_bps?: number;
@@ -2663,31 +2666,54 @@ export function useStarlinkTimeseries(hours: number = 24, clientId?: string, dev
         const response = await callAuroraApi<RawResponse>(`/api/readings/sensor/starlink?${params.toString()}`);
         
         // Transform nested data structure to flat structure
-        // Starlink data is nested under data.starlink.{field}
+        // API returns measurement as JSON string - need to parse it
         const transformedReadings: StarlinkTimeseriesPoint[] = (response.readings || []).map(r => {
-          const starlinkData = r.data?.starlink;
-          const pingLatency = starlinkData?.ping_latency;
+          // Parse measurement JSON string if present
+          let parsedData: Record<string, unknown> = {};
+          if (r.measurement && typeof r.measurement === 'string') {
+            try {
+              parsedData = JSON.parse(r.measurement);
+            } catch {
+              console.warn('Failed to parse starlink measurement JSON');
+            }
+          } else if (r.data) {
+            parsedData = r.data as Record<string, unknown>;
+          }
+          
+          const starlinkData = (parsedData.starlink || parsedData) as Record<string, unknown>;
+          const pingLatency = (starlinkData?.ping_latency || parsedData?.ping_latency) as Record<string, number> | undefined;
+          const powerStats = parsedData?.power_stats as Record<string, number> | undefined;
           
           return {
             timestamp: r.timestamp,
-            client_id: r.client_id,
-            device_id: r.device_id,
-            // Power from nested starlink object (power_watts is the correct field)
-            power_w: starlinkData?.power_watts ?? r.data?.power_watts ?? r.data?.power_w ?? r.power_w,
+            client_id: r.client_id || (parsedData.client_id as string),
+            device_id: r.device_id || (starlinkData?.device_id as string),
+            // Power from nested starlink object or power_stats
+            power_w: (starlinkData?.power_watts as number) ?? 
+                     (powerStats?.latest_power as number) ?? 
+                     (powerStats?.mean_power as number) ??
+                     (parsedData?.power_watts as number) ?? 
+                     (parsedData?.power_w as number) ?? 
+                     r.power_w,
             // Signal from starlink object
-            signal_dbm: r.data?.signal_dbm ?? r.signal_dbm,
-            snr: starlinkData?.snr ?? r.data?.snr ?? r.snr,
+            signal_dbm: (parsedData?.signal_dbm as number) ?? r.signal_dbm,
+            snr: (starlinkData?.snr as number) ?? (parsedData?.snr as number) ?? r.snr,
             // Throughput from nested starlink object
-            downlink_throughput_bps: starlinkData?.downlink_throughput_bps ?? r.data?.downlink_throughput_bps ?? r.downlink_throughput_bps,
-            uplink_throughput_bps: starlinkData?.uplink_throughput_bps ?? r.data?.uplink_throughput_bps ?? r.uplink_throughput_bps,
+            downlink_throughput_bps: (starlinkData?.downlink_throughput_bps as number) ?? 
+                                     (parsedData?.downlink_throughput_bps as number) ?? 
+                                     r.downlink_throughput_bps,
+            uplink_throughput_bps: (starlinkData?.uplink_throughput_bps as number) ?? 
+                                   (parsedData?.uplink_throughput_bps as number) ?? 
+                                   r.uplink_throughput_bps,
             // Latency from nested ping_latency object or direct field
-            pop_ping_latency_ms: starlinkData?.pop_ping_latency_ms ?? 
+            pop_ping_latency_ms: (starlinkData?.pop_ping_latency_ms as number) ?? 
                                   pingLatency?.['Mean RTT, drop == 0'] ?? 
                                   pingLatency?.['Mean RTT, drop < 1'] ?? 
-                                  r.data?.pop_ping_latency_ms ?? 
+                                  (parsedData?.pop_ping_latency_ms as number) ?? 
                                   r.pop_ping_latency_ms,
             // Obstruction
-            obstruction_percent: starlinkData?.obstruction_percent ?? r.data?.obstruction_percent,
+            obstruction_percent: (starlinkData?.obstruction_percent as number) ?? 
+                                (parsedData?.obstruction_percent as number),
           };
         });
         
@@ -2832,10 +2858,12 @@ export function useThermalProbeTimeseries(hours: number = 24, clientId?: string)
     queryKey: ["aurora", "thermal_probe", "timeseries", hours, clientId],
     queryFn: async () => {
       try {
-        // The API returns data in a nested structure: readings[].data.temperature_c
-        // We need to transform it to our flat structure
+        // The API returns data with `measurement` as a JSON STRING that needs parsing
         interface RawReading {
           timestamp: string;
+          sensor?: string;
+          measurement?: string; // JSON string that needs parsing
+          batch_id?: string;
           device_id?: string;
           device_type?: string;
           client_id?: string;
@@ -2867,16 +2895,33 @@ export function useThermalProbeTimeseries(hours: number = 24, clientId?: string)
         const response = await callAuroraApi<RawResponse>(`/api/readings/sensor/thermal_probe?${params.toString()}`);
         
         // Transform nested data structure to flat structure
-        const transformedReadings: ThermalProbeTimeseriesPoint[] = (response.readings || []).map(r => ({
-          timestamp: r.timestamp,
-          device_id: r.device_id,
-          client_id: r.client_id,
-          // Try nested data first, then fall back to direct properties
-          temp_c: r.data?.temperature_c ?? r.data?.temp_c ?? r.temp_c,
-          temp_f: r.data?.temperature_f ?? r.data?.temp_f ?? r.temp_f,
-          ambient_c: r.data?.ambient_c ?? r.ambient_c,
-          probe_c: r.data?.probe_c ?? r.probe_c,
-        }));
+        // API returns measurement as JSON string - need to parse it
+        const transformedReadings: ThermalProbeTimeseriesPoint[] = (response.readings || []).map(r => {
+          // Parse measurement JSON string if present
+          let parsedData: Record<string, unknown> = {};
+          if (r.measurement && typeof r.measurement === 'string') {
+            try {
+              parsedData = JSON.parse(r.measurement);
+            } catch {
+              console.warn('Failed to parse thermal probe measurement JSON');
+            }
+          } else if (r.data) {
+            parsedData = r.data as Record<string, unknown>;
+          }
+          
+          return {
+            timestamp: r.timestamp,
+            device_id: r.device_id || (parsedData.device_id as string),
+            client_id: r.client_id,
+            // Try parsed data first, then nested data, then fall back to direct properties
+            temp_c: (parsedData?.temperature_c as number) ?? (parsedData?.temp_c as number) ?? 
+                    r.data?.temperature_c ?? r.data?.temp_c ?? r.temp_c,
+            temp_f: (parsedData?.temperature_f as number) ?? (parsedData?.temp_f as number) ?? 
+                    r.data?.temperature_f ?? r.data?.temp_f ?? r.temp_f,
+            ambient_c: (parsedData?.ambient_c as number) ?? r.data?.ambient_c ?? r.ambient_c,
+            probe_c: (parsedData?.probe_c as number) ?? r.data?.probe_c ?? r.probe_c,
+          };
+        });
         
         return { 
           count: response.count ?? transformedReadings.length, 
@@ -2933,6 +2978,9 @@ export function useArduinoSensorTimeseries(hours: number = 24, clientId?: string
       try {
         interface RawReading {
           timestamp: string;
+          sensor?: string;
+          measurement?: string; // JSON string that needs parsing
+          batch_id?: string;
           device_id?: string;
           device_type?: string;
           client_id?: string;
@@ -2972,9 +3020,20 @@ export function useArduinoSensorTimeseries(hours: number = 24, clientId?: string
         }
         
         const transformedReadings: ArduinoSensorReading[] = (response.readings || []).map(r => {
-          const data = r.data;
+          // Parse measurement JSON string if present
+          let parsedData: Record<string, unknown> = {};
+          if (r.measurement && typeof r.measurement === 'string') {
+            try {
+              parsedData = JSON.parse(r.measurement);
+            } catch {
+              console.warn('Failed to parse arduino measurement JSON');
+            }
+          } else if (r.data) {
+            parsedData = r.data as Record<string, unknown>;
+          }
+          
           // Type-safe extraction with additional fallback paths
-          const anyData = data as Record<string, unknown> | undefined;
+          const anyData = parsedData as Record<string, unknown>;
           const anyReading = r as unknown as Record<string, unknown>;
           
           // Extract nested objects safely
@@ -2985,7 +3044,7 @@ export function useArduinoSensorTimeseries(hours: number = 24, clientId?: string
           
           return {
             timestamp: r.timestamp,
-            device_id: r.device_id,
+            device_id: r.device_id || (parsedData?.device_id as string),
             client_id: r.client_id,
             // DHT/AHT temperature from nested or legacy format (with root-level fallbacks)
             th_temp_c: th?.temp_c ?? 
