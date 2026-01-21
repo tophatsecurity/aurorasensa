@@ -169,24 +169,73 @@ export default function ClientDetailsPage() {
     };
   }, [systemInfo]);
 
-  // Build sensor list from client sensors array
+  // Define preferred tab order for sensors
+  const SENSOR_ORDER = [
+    'starlink_dish', 'starlink', 
+    'thermal_probe', 
+    'arduino_sensor_kit', 'arduino',
+    'wifi_scanner', 'wifi',
+    'bluetooth_scanner', 'bluetooth',
+    'adsb', 'adsb_receiver',
+    'lora', 'lora_detector',
+    'gps', 'gps_receiver',
+    'aht_sensor', 'bmt_sensor',
+  ];
+
+  // Format sensor type label for display
+  const formatSensorLabel = (sensorType: string): string => {
+    const type = sensorType.toLowerCase();
+    
+    // Custom labels for specific sensors
+    if (type.includes('starlink_dish') || type === 'starlink') return 'Starlink Dish';
+    if (type.includes('thermal_probe')) return 'Thermal Probe';
+    if (type.includes('arduino_sensor_kit') || type === 'arduino') return 'Arduino Sensor Kit';
+    if (type.includes('wifi_scanner')) return 'WiFi Scanner';
+    if (type.includes('bluetooth_scanner')) return 'Bluetooth Scanner';
+    if (type.includes('adsb')) return 'ADS-B Receiver';
+    if (type.includes('lora')) return 'LoRa Detector';
+    if (type.includes('gps')) return 'GPS';
+    if (type.includes('aht_sensor')) return 'AHT Sensor';
+    if (type.includes('bmt_sensor')) return 'BMT Sensor';
+    
+    // Default: clean up the type name
+    return sensorType
+      .replace(/_/g, ' ')
+      .replace(/\d+$/, '')
+      .replace(/^\w/, c => c.toUpperCase())
+      .trim();
+  };
+
+  // Build sensor list from both client.sensors array AND batch readings
   const sensorTypes: string[] = useMemo(() => {
-    if (!client?.sensors) return [];
-    const types = client.sensors.map((s: string) => {
-      const parts = s.toLowerCase().split('_');
-      if (parts.includes('arduino')) return 'arduino';
-      if (parts.includes('lora')) return 'lora';
-      if (parts.includes('starlink')) return 'starlink';
-      if (parts.includes('wifi')) return 'wifi';
-      if (parts.includes('bluetooth') || parts.includes('ble')) return 'bluetooth';
-      if (parts.includes('adsb')) return 'adsb';
-      if (parts.includes('gps')) return 'gps';
-      if (parts.includes('thermal')) return 'thermal_probe';
-      if (parts.includes('system')) return 'system_monitor';
-      return parts[0];
+    const allTypes: string[] = [];
+    
+    // From client.sensors array
+    if (client?.sensors) {
+      allTypes.push(...client.sensors);
+    }
+    
+    // From batch readings
+    const readings = batchReadingsData?.readings || [];
+    readings.forEach((r: { device_type?: string }) => {
+      if (r.device_type) {
+        allTypes.push(r.device_type);
+      }
     });
-    return [...new Set(types)];
-  }, [client?.sensors]);
+    
+    // Get unique types, filter out system_monitor, and sort by priority
+    const uniqueTypes = [...new Set(allTypes.filter(Boolean))];
+    
+    return uniqueTypes
+      .filter(t => !t.toLowerCase().includes('system_monitor'))
+      .sort((a, b) => {
+        const aIndex = SENSOR_ORDER.findIndex(s => a.toLowerCase().includes(s));
+        const bIndex = SENSOR_ORDER.findIndex(s => b.toLowerCase().includes(s));
+        const aOrder = aIndex >= 0 ? aIndex : 999;
+        const bOrder = bIndex >= 0 ? bIndex : 999;
+        return aOrder - bOrder;
+      });
+  }, [client?.sensors, batchReadingsData]);
 
   const isLoading = clientsLoading || systemLoading || wifiStatusLoading || batchesLoading;
 
@@ -305,10 +354,10 @@ export default function ClientDetailsPage() {
                   <TabsTrigger 
                     key={type} 
                     value={`sensor-${type}`} 
-                    className="gap-2 capitalize"
+                    className="gap-2"
                   >
                     {getSensorIcon(type)}
-                    {type.replace(/_/g, ' ')}
+                    {formatSensorLabel(type)}
                   </TabsTrigger>
                 ))}
                 <TabsTrigger value="raw" className="gap-2">
