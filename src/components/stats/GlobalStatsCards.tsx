@@ -49,10 +49,7 @@ export default function GlobalStatsCards({ periodHours = 24, clientId }: GlobalS
   
   const global = comprehensiveStats?.global;
   
-  // Debug: Log API response data
-  // console.log('[GlobalStatsCards] statsOverview:', statsOverview);
-  // console.log('[GlobalStatsCards] globalStats:', globalStats);
-  
+  // Derive values with multiple fallbacks - prioritize statsOverview (from /api/stats/overview)
   // Derive values with multiple fallbacks - prioritize statsOverview (from /api/stats/overview)
   // API returns: {"total_readings":364273,"total_batches":6908,"timestamp":"..."}
   const totalReadings = useMemo(() => {
