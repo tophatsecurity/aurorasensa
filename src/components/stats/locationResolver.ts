@@ -2,14 +2,21 @@
  * Location Resolver Utility
  * 
  * Resolves client location by checking all sensor data sources with priority:
- * 1. Starlink (most accurate for remote/maritime)
- * 2. GPS (precise coordinates)
- * 3. LoRa (if GPS-enabled LoRa device)
- * 4. Arduino (if GPS-equipped Arduino)
- * 5. Thermal/System/WiFi/Bluetooth (if location embedded)
- * 6. Client IP geolocation
  * 
- * NOTE: ADS-B is excluded as it reports aircraft positions, not receiver location
+ * PRIMARY SOURCES (Hardware GPS):
+ * 1. Starlink - GPS from Starlink dish (most accurate for remote/maritime)
+ * 2. GPS/GNSS - Dedicated GPS hardware (precise coordinates)
+ * 3. LoRa - GPS-enabled LoRa devices
+ * 4. Arduino - GPS-equipped Arduino sensors
+ * 
+ * SECONDARY SOURCES (Embedded location):
+ * 5. Thermal/System/WiFi/Bluetooth - If location embedded in sensor data
+ * 
+ * FALLBACK SOURCES:
+ * 6. IP Geolocation - Lookup based on client's external IP address
+ * 
+ * EXCLUDED:
+ * - ADS-B: Reports aircraft positions, NOT receiver location
  */
 
 import type { DeviceGroup, ClientInfo } from "./types";
@@ -173,9 +180,10 @@ function extractLocationFromData(data: Record<string, unknown>): LocationData | 
 
 /**
  * Extract location from Starlink-specific data structures
+ * Starlink dishes report GPS coordinates in various nested structures
  */
 function extractStarlinkLocation(data: Record<string, unknown>): LocationData | null {
-  // Check starlink nested object
+  // Check starlink nested object first
   const starlinkData = data.starlink as Record<string, unknown> | undefined;
   if (starlinkData) {
     // Direct coordinates in starlink object
@@ -189,9 +197,56 @@ function extractStarlinkLocation(data: Record<string, unknown>): LocationData | 
       };
     }
     
+    // Check gps_* fields (common in Starlink data)
+    if (typeof starlinkData.gps_latitude === 'number' && typeof starlinkData.gps_longitude === 'number') {
+      return {
+        lat: starlinkData.gps_latitude,
+        lng: starlinkData.gps_longitude,
+        altitude: typeof starlinkData.gps_altitude === 'number' ? starlinkData.gps_altitude : undefined,
+      };
+    }
+    
+    // Check dish_gps or device_gps nested object
+    const dishGps = starlinkData.dish_gps as Record<string, unknown> | undefined;
+    if (dishGps) {
+      const loc = extractLocationFromData(dishGps);
+      if (loc) return loc;
+    }
+    
     // Check nested structures
     const nestedLocation = extractLocationFromData(starlinkData);
     if (nestedLocation) return nestedLocation;
+  }
+  
+  // Check for starlink_dish_* patterns at top level
+  if (typeof data.starlink_latitude === 'number' && typeof data.starlink_longitude === 'number') {
+    return {
+      lat: data.starlink_latitude,
+      lng: data.starlink_longitude,
+    };
+  }
+  
+  // Check gps_* fields at top level (Starlink often reports this way)
+  if (typeof data.gps_latitude === 'number' && typeof data.gps_longitude === 'number') {
+    return {
+      lat: data.gps_latitude,
+      lng: data.gps_longitude,
+      altitude: typeof data.gps_altitude === 'number' ? data.gps_altitude : undefined,
+    };
+  }
+  
+  // Check dish_location object
+  const dishLocation = data.dish_location as Record<string, unknown> | undefined;
+  if (dishLocation) {
+    const loc = extractLocationFromData(dishLocation);
+    if (loc) return loc;
+  }
+  
+  // Check device_info for location
+  const deviceInfo = data.device_info as Record<string, unknown> | undefined;
+  if (deviceInfo) {
+    const loc = extractLocationFromData(deviceInfo);
+    if (loc) return loc;
   }
 
   // Check top-level starlink fields
