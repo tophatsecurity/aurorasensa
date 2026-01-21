@@ -1774,11 +1774,15 @@ export function useMapData(options: UseMapDataOptions = {}) {
       const data = reading.data;
       const timestamp = reading.timestamp;
       
+      // Skip if data is undefined or null
+      if (!data || typeof data !== 'object') return;
+      
       // Check if aircraft_list exists (new format)
       const aircraftList = (data as { aircraft_list?: Array<Record<string, unknown>> }).aircraft_list;
       
       if (aircraftList && Array.isArray(aircraftList)) {
         aircraftList.forEach(ac => {
+          if (!ac) return;
           const hex = String(ac.icao || ac.hex || '');
           if (!hex) return;
           
@@ -1797,13 +1801,13 @@ export function useMapData(options: UseMapDataOptions = {}) {
         });
       } else {
         // Old format: aircraft data directly in data object
-        const hex = String(data.hex || data.flight || '');
+        const hex = String((data as Record<string, unknown>).hex || (data as Record<string, unknown>).flight || '');
         if (!hex) return;
         
-        const lat = data.lat as number;
-        const lon = data.lon as number;
-        const alt = data.alt_baro as number;
-        const flight = data.flight as string;
+        const lat = (data as Record<string, unknown>).lat as number;
+        const lon = (data as Record<string, unknown>).lon as number;
+        const alt = (data as Record<string, unknown>).alt_baro as number;
+        const flight = (data as Record<string, unknown>).flight as string;
         
         if (lat !== undefined && lon !== undefined && 
             lat >= -90 && lat <= 90 && lon >= -180 && lon <= 180) {
