@@ -1,13 +1,11 @@
 import { useMemo } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Loader2, Zap, TrendingUp } from "lucide-react";
-import { usePowerHistory } from "@/hooks/aurora";
+import { usePowerHistory, useStarlinkTimeseries } from "@/hooks/aurora";
 import { format, parseISO } from "date-fns";
 import {
   AreaChart,
   Area,
-  LineChart,
-  Line,
   XAxis,
   YAxis,
   Tooltip,
@@ -23,47 +21,91 @@ interface PowerHistoryChartProps {
 const PowerHistoryChart = ({ hours = 24, clientId }: PowerHistoryChartProps) => {
   const effectiveClientId = clientId === "all" ? undefined : clientId;
   
-  const { data: powerHistory, isLoading } = usePowerHistory({
+  const { data: powerHistory, isLoading: powerLoading } = usePowerHistory({
     clientId: effectiveClientId,
     hours,
     limit: 200,
   });
+  
+  // Fallback: use Starlink timeseries for power data
+  const { data: starlinkTimeseries, isLoading: starlinkLoading } = useStarlinkTimeseries(hours);
+  
+  const isLoading = powerLoading && starlinkLoading;
 
-  // Process power history data for charting
+  // Process power history data for charting with fallback
   const chartData = useMemo(() => {
-    if (!powerHistory || powerHistory.length === 0) return [];
+    // First try power history
+    if (powerHistory && powerHistory.length > 0) {
+      const hourlyData: Record<string, { power: number[]; voltage: number[] }> = {};
 
-    // Group by hour for cleaner visualization
-    const hourlyData: Record<string, { power: number[]; voltage: number[] }> = {};
+      powerHistory.forEach((point) => {
+        try {
+          const timestamp = parseISO(point.timestamp);
+          const hourKey = format(timestamp, 'HH:00');
+          
+          if (!hourlyData[hourKey]) {
+            hourlyData[hourKey] = { power: [], voltage: [] };
+          }
+          
+          if (point.power_watts !== undefined && point.power_watts !== null) {
+            hourlyData[hourKey].power.push(point.power_watts);
+          }
+          if (point.voltage_v !== undefined && point.voltage_v !== null) {
+            hourlyData[hourKey].voltage.push(point.voltage_v);
+          }
+        } catch { /* ignore invalid timestamps */ }
+      });
 
-    powerHistory.forEach((point) => {
-      try {
-        const timestamp = parseISO(point.timestamp);
-        const hourKey = format(timestamp, 'HH:00');
-        
-        if (!hourlyData[hourKey]) {
-          hourlyData[hourKey] = { power: [], voltage: [] };
-        }
-        
-        if (point.power_watts !== undefined && point.power_watts !== null) {
-          hourlyData[hourKey].power.push(point.power_watts);
-        }
-        if (point.voltage_v !== undefined && point.voltage_v !== null) {
-          hourlyData[hourKey].voltage.push(point.voltage_v);
-        }
-      } catch { /* ignore invalid timestamps */ }
-    });
-
-    return Object.entries(hourlyData).map(([hour, data]) => ({
-      time: hour,
-      power: data.power.length > 0 
-        ? data.power.reduce((a, b) => a + b, 0) / data.power.length 
-        : 0,
-      voltage: data.voltage.length > 0
-        ? data.voltage.reduce((a, b) => a + b, 0) / data.voltage.length
-        : 0,
-    })).sort((a, b) => a.time.localeCompare(b.time));
-  }, [powerHistory]);
+      const result = Object.entries(hourlyData).map(([hour, data]) => ({
+        time: hour,
+        power: data.power.length > 0 
+          ? data.power.reduce((a, b) => a + b, 0) / data.power.length 
+          : 0,
+        voltage: data.voltage.length > 0
+          ? data.voltage.reduce((a, b) => a + b, 0) / data.voltage.length
+          : 0,
+      })).sort((a, b) => a.time.localeCompare(b.time));
+      
+      if (result.some(d => d.power > 0)) {
+        return result;
+      }
+    }
+    
+    // Fallback: try Starlink timeseries for power data
+    const readings = starlinkTimeseries?.readings;
+    if (readings && Array.isArray(readings) && readings.length > 0) {
+      const hourlyData: Record<string, { power: number[] }> = {};
+      
+      readings.forEach((point: { timestamp?: string; power_w?: number; data?: { power_w?: number } }) => {
+        try {
+          const ts = point.timestamp;
+          if (!ts) return;
+          
+          const timestamp = parseISO(ts);
+          const hourKey = format(timestamp, 'HH:00');
+          
+          if (!hourlyData[hourKey]) {
+            hourlyData[hourKey] = { power: [] };
+          }
+          
+          const powerValue = point.power_w ?? point.data?.power_w;
+          if (powerValue !== undefined && powerValue !== null) {
+            hourlyData[hourKey].power.push(powerValue);
+          }
+        } catch { /* ignore invalid timestamps */ }
+      });
+      
+      return Object.entries(hourlyData).map(([hour, data]) => ({
+        time: hour,
+        power: data.power.length > 0 
+          ? data.power.reduce((a, b) => a + b, 0) / data.power.length 
+          : 0,
+        voltage: 0,
+      })).sort((a, b) => a.time.localeCompare(b.time));
+    }
+    
+    return [];
+  }, [powerHistory, starlinkTimeseries]);
 
   // Calculate stats
   const stats = useMemo(() => {
