@@ -24,7 +24,7 @@ import {
   Cpu,
   RefreshCw,
 } from "lucide-react";
-import { Badge } from "@/components/ui/badge";
+
 import {
   Select,
   SelectContent,
@@ -554,7 +554,7 @@ const CorrelationContent = () => {
         <div className="mb-4 text-xs text-muted-foreground flex items-center gap-4">
           <span>Data Sources: Starlink ({starlinkData?.readings?.length || 0}), Thermal ({thermalData?.readings?.length || 0}), Arduino ({arduinoData?.readings?.length || 0})</span>
           {selectedClient && selectedClient !== 'all' && (
-            <Badge variant="outline" className="text-xs">Client: {selectedClient.slice(0, 8)}...</Badge>
+            <span className="px-2 py-0.5 text-xs rounded border border-border bg-muted">Client: {selectedClient.slice(0, 8)}...</span>
           )}
         </div>
       )}
