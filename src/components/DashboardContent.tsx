@@ -188,6 +188,16 @@ const DashboardContent = () => {
   const totalDevices = dashboardStats?.total_devices ?? sensorStats?.total_devices ?? 0;
   const sensorTypesCount = dashboardStats?.total_sensors ?? sensorStats?.total_sensors ?? 0;
   const activeClients24h = (dashboardStats as Record<string, unknown>)?.active_clients_24h as number ?? totalClients;
+  
+  // Total measurements from device breakdown (sum of all sensor type readings)
+  const totalMeasurements = useMemo(() => {
+    const breakdown = (dashboardStats as Record<string, unknown>)?.device_breakdown as Array<{ device_type: string; count: number }> | undefined;
+    if (breakdown && Array.isArray(breakdown)) {
+      return breakdown.reduce((sum, d) => sum + (d.count || 0), 0);
+    }
+    // Fallback to total readings
+    return totalReadings;
+  }, [dashboardStats, totalReadings]);
 
   // Device breakdown from /api/stats/global
   const deviceBreakdown = useMemo(() => {
@@ -308,10 +318,10 @@ const DashboardContent = () => {
         />
         <PrimaryStat
           label="Measurements"
-          value={formatNumber(totalBatches)}
+          value={formatNumber(totalMeasurements)}
           icon={BarChart3}
           iconColor="bg-amber-500/20 text-amber-400"
-          subtitle={storage?.total_db_size ? `DB: ${storage.total_db_size}` : undefined}
+          subtitle={`${formatNumber(totalBatches)} batches`}
           isLoading={dashboardStatsLoading}
         />
       </div>
