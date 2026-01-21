@@ -316,287 +316,32 @@ const DashboardContent = () => {
         />
       </div>
 
-      {/* ===== READINGS TREND + DEVICE BREAKDOWN ROW ===== */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-6">
-        {/* Daily Readings Trend - Bar Chart */}
-        <Card className="glass-card border-border/50">
-          <CardHeader className="pb-3">
-            <CardTitle className="text-sm font-medium flex items-center gap-2">
-              <TrendingUp className="w-4 h-4 text-cyan-400" />
-              Daily Readings (Last 7 Days)
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            {readingsByDay.length > 0 ? (
-              <ResponsiveContainer width="100%" height={180}>
-                <BarChart data={readingsByDay}>
-                  <XAxis 
-                    dataKey="shortDate" 
-                    tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 11 }}
-                    axisLine={false}
-                    tickLine={false}
-                  />
-                  <YAxis 
-                    tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 11 }}
-                    axisLine={false}
-                    tickLine={false}
-                    tickFormatter={(v) => formatNumber(v)}
-                    width={50}
-                  />
-                  <Tooltip 
-                    contentStyle={{ 
-                      backgroundColor: 'hsl(var(--card))', 
-                      border: '1px solid hsl(var(--border))',
-                      borderRadius: '8px'
-                    }}
-                    formatter={(value: number) => [formatNumber(value), 'Readings']}
-                    labelFormatter={(label, payload) => payload?.[0]?.payload?.date || label}
-                  />
-                  <Bar dataKey="count" radius={[4, 4, 0, 0]}>
-                    {readingsByDay.map((_, index) => (
-                      <Cell key={`cell-${index}`} fill={chartColors[index % chartColors.length]} />
-                    ))}
-                  </Bar>
-                </BarChart>
-              </ResponsiveContainer>
-            ) : (
-              <div className="h-[180px] flex items-center justify-center text-muted-foreground">
-                No data available
-              </div>
-            )}
-          </CardContent>
-        </Card>
-
-        {/* Device Breakdown */}
-        <Card className="glass-card border-border/50">
-          <CardHeader className="pb-3">
-            <CardTitle className="text-sm font-medium flex items-center gap-2">
-              <Radio className="w-4 h-4 text-violet-400" />
-              Device Activity Breakdown
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-3">
-            {deviceBreakdown.length > 0 ? (
-              deviceBreakdown.map((device, idx) => (
-                <DeviceBar 
-                  key={device.device_type}
-                  name={device.device_type.replace(/_/g, ' ')}
-                  count={device.count}
-                  maxCount={maxDeviceCount}
-                  color={barColors[idx % barColors.length]}
-                />
-              ))
-            ) : (
-              <p className="text-sm text-muted-foreground">No device data available</p>
-            )}
-          </CardContent>
-        </Card>
-      </div>
-
-      {/* ===== SENSOR TYPES + STARLINK ROW ===== */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-6">
-        {/* Sensor Types */}
-        <Card className="glass-card border-border/50">
-          <CardHeader className="pb-3">
-            <CardTitle className="text-sm font-medium flex items-center gap-2">
-              <Gauge className="w-4 h-4 text-cyan-400" />
-              Top Sensor Types (7 days)
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-3">
-            {topSensorTypes.length > 0 ? (
-              topSensorTypes.map((sensor, idx) => (
-                <DeviceBar 
-                  key={sensor.sensor_type}
-                  name={sensor.sensor_type.replace(/_/g, ' ')}
-                  count={sensor.reading_count}
-                  maxCount={topSensorTypes[0]?.reading_count ?? 0}
-                  color={barColors[idx % barColors.length]}
-                />
-              ))
-            ) : (
-              <p className="text-sm text-muted-foreground">No sensor data available</p>
-            )}
-          </CardContent>
-        </Card>
-
-        {/* Starlink Live Status - from /api/readings/sensor/starlink */}
-        <Card className="glass-card border-border/50">
-          <CardHeader className="pb-3">
-            <CardTitle className="text-sm font-medium flex items-center gap-2">
-              <Satellite className="w-4 h-4 text-violet-400" />
-              Starlink Live Status
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            {starlinkData ? (
-              <div className="space-y-4">
-                {/* Status indicators */}
-                <div className="grid grid-cols-2 gap-3">
-                  <div className="flex items-center gap-2 p-2 rounded-lg bg-muted/30">
-                    <div className={`w-2 h-2 rounded-full ${starlinkData.state === 'CONNECTED' ? 'bg-emerald-500' : 'bg-amber-500'}`} />
-                    <span className="text-xs text-muted-foreground">Status</span>
-                    <span className="text-sm font-medium ml-auto">{starlinkData.state}</span>
-                  </div>
-                  <div className="flex items-center gap-2 p-2 rounded-lg bg-muted/30">
-                    <Zap className="w-3 h-3 text-amber-400" />
-                    <span className="text-xs text-muted-foreground">Power</span>
-                    <span className="text-sm font-medium ml-auto">{starlinkData.powerWatts?.toFixed(1) ?? '--'}W</span>
-                  </div>
-                  <div className="flex items-center gap-2 p-2 rounded-lg bg-muted/30">
-                    <Activity className="w-3 h-3 text-cyan-400" />
-                    <span className="text-xs text-muted-foreground">Latency</span>
-                    <span className="text-sm font-medium ml-auto">{starlinkData.latencyMs?.toFixed(0) ?? '--'}ms</span>
-                  </div>
-                  <div className="flex items-center gap-2 p-2 rounded-lg bg-muted/30">
-                    <TrendingUp className="w-3 h-3 text-emerald-400" />
-                    <span className="text-xs text-muted-foreground">Download</span>
-                    <span className="text-sm font-medium ml-auto">{starlinkData.downlinkBps ? formatNumber(starlinkData.downlinkBps / 1000) + ' kbps' : '--'}</span>
-                  </div>
-                  <div className="flex items-center gap-2 p-2 rounded-lg bg-muted/30">
-                    <Radio className="w-3 h-3 text-blue-400" />
-                    <span className="text-xs text-muted-foreground">Upload</span>
-                    <span className="text-sm font-medium ml-auto">{starlinkData.uplinkBps ? formatNumber(starlinkData.uplinkBps / 1000) + ' kbps' : '--'}</span>
-                  </div>
-                  <div className="flex items-center gap-2 p-2 rounded-lg bg-muted/30">
-                    <Wifi className="w-3 h-3 text-violet-400" />
-                    <span className="text-xs text-muted-foreground">Signal</span>
-                    <span className="text-sm font-medium ml-auto">{starlinkData.signalDbm?.toFixed(0) ?? '--'} dBm</span>
-                  </div>
-                  <div className="flex items-center gap-2 p-2 rounded-lg bg-muted/30">
-                    <Gauge className="w-3 h-3 text-rose-400" />
-                    <span className="text-xs text-muted-foreground">SNR</span>
-                    <span className="text-sm font-medium ml-auto">{starlinkData.snr?.toFixed(1) ?? '--'}</span>
-                  </div>
-                </div>
-              </div>
-            ) : (
-              <div className="h-[140px] flex items-center justify-center text-muted-foreground">
-                <div className="text-center">
-                  <Satellite className="w-8 h-8 mx-auto mb-2 opacity-50" />
-                  <p className="text-sm">No Starlink data available</p>
-                </div>
-              </div>
-            )}
-          </CardContent>
-        </Card>
-      </div>
-
-      {/* ===== STARLINK POWER/LATENCY CHART + SYSTEM INFO ===== */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-6">
-        {/* Starlink Power & Latency Trend */}
-        {starlinkTimeseries.length > 0 && (
+      {/* ===== SENSOR TYPES SECTION ===== */}
+      {topSensorTypes.length > 0 && (
+        <div className="mb-6">
           <Card className="glass-card border-border/50">
             <CardHeader className="pb-3">
               <CardTitle className="text-sm font-medium flex items-center gap-2">
-                <Zap className="w-4 h-4 text-amber-400" />
-                Starlink Power & Latency (24h)
+                <Gauge className="w-4 h-4 text-cyan-400" />
+                Top Sensor Types (7 days)
               </CardTitle>
             </CardHeader>
             <CardContent>
-              <ResponsiveContainer width="100%" height={180}>
-                <LineChart data={starlinkTimeseries}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" opacity={0.3} />
-                  <XAxis 
-                    dataKey="time" 
-                    tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 10 }}
-                    axisLine={false}
-                    tickLine={false}
-                    interval="preserveStartEnd"
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                {topSensorTypes.map((sensor, idx) => (
+                  <DeviceBar 
+                    key={sensor.sensor_type}
+                    name={sensor.sensor_type.replace(/_/g, ' ')}
+                    count={sensor.reading_count}
+                    maxCount={topSensorTypes[0]?.reading_count ?? 0}
+                    color={barColors[idx % barColors.length]}
                   />
-                  <YAxis 
-                    yAxisId="power"
-                    orientation="left"
-                    tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 10 }}
-                    axisLine={false}
-                    tickLine={false}
-                    tickFormatter={(v) => `${v}W`}
-                    width={40}
-                  />
-                  <YAxis 
-                    yAxisId="latency"
-                    orientation="right"
-                    tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 10 }}
-                    axisLine={false}
-                    tickLine={false}
-                    tickFormatter={(v) => `${v}ms`}
-                    width={45}
-                  />
-                  <Tooltip 
-                    contentStyle={{ 
-                      backgroundColor: 'hsl(var(--card))', 
-                      border: '1px solid hsl(var(--border))',
-                      borderRadius: '8px'
-                    }}
-                  />
-                  <Line 
-                    yAxisId="power"
-                    type="monotone" 
-                    dataKey="power" 
-                    stroke="#f59e0b" 
-                    strokeWidth={2}
-                    dot={false}
-                    name="Power (W)"
-                  />
-                  <Line 
-                    yAxisId="latency"
-                    type="monotone" 
-                    dataKey="latency" 
-                    stroke="#06b6d4" 
-                    strokeWidth={2}
-                    dot={false}
-                    name="Latency (ms)"
-                  />
-                </LineChart>
-              </ResponsiveContainer>
+                ))}
+              </div>
             </CardContent>
           </Card>
-        )}
-
-        {/* System Summary Card */}
-        <Card className="glass-card border-border/50">
-          <CardHeader className="pb-3">
-            <CardTitle className="text-sm font-medium flex items-center gap-2">
-              <Server className="w-4 h-4 text-emerald-400" />
-              System Summary
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="grid grid-cols-2 gap-3">
-              <div className="p-3 rounded-lg bg-muted/30 border border-border/30">
-                <div className="flex items-center gap-2 mb-1">
-                  <Database className="w-4 h-4 text-cyan-400" />
-                  <span className="text-xs text-muted-foreground">Readings Size</span>
-                </div>
-                <p className="text-lg font-semibold">{storage?.readings_size ?? '--'}</p>
-              </div>
-              <div className="p-3 rounded-lg bg-muted/30 border border-border/30">
-                <div className="flex items-center gap-2 mb-1">
-                  <BarChart3 className="w-4 h-4 text-violet-400" />
-                  <span className="text-xs text-muted-foreground">Batches Size</span>
-                </div>
-                <p className="text-lg font-semibold">{storage?.batches_size ?? '--'}</p>
-              </div>
-              <div className="p-3 rounded-lg bg-muted/30 border border-border/30">
-                <div className="flex items-center gap-2 mb-1">
-                  <Cpu className="w-4 h-4 text-amber-400" />
-                  <span className="text-xs text-muted-foreground">LoRa Devices</span>
-                </div>
-                <p className="text-lg font-semibold">{loraDevicesCount}</p>
-                <p className="text-xs text-muted-foreground">{loraDetections} detections</p>
-              </div>
-              <div className="p-3 rounded-lg bg-muted/30 border border-border/30">
-                <div className="flex items-center gap-2 mb-1">
-                  <ThermometerSun className="w-4 h-4 text-rose-400" />
-                  <span className="text-xs text-muted-foreground">Sensor Types</span>
-                </div>
-                <p className="text-lg font-semibold">{sensorItems.length}</p>
-                <p className="text-xs text-muted-foreground">Active types</p>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-      </div>
+        </div>
+      )}
 
       {/* ===== CHARTS SECTION - LAZY LOADED ===== */}
       <div className="space-y-6">
