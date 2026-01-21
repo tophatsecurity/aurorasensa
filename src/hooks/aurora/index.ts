@@ -582,3 +582,16 @@ export {
   type ThermalMetrics as CorrelationThermalMetrics,
   type ArduinoMetrics as CorrelationArduinoMetrics,
 } from "./correlation";
+
+// Map hooks (unified map markers API)
+export {
+  useMapMarkers,
+  useMapClientMarkers,
+  useMapStarlinkMarkers,
+  useMapAircraftMarkers,
+  type MapClientMarker,
+  type MapStarlinkMarker,
+  type MapAdsbMarker,
+  type MapMarkersResponse,
+  type MapMarkersOptions,
+} from "./map";

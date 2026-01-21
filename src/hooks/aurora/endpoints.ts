@@ -456,6 +456,15 @@ export const LOCATION = {
 } as const;
 
 // =============================================
+// MAP (Unified map markers API)
+// =============================================
+export const MAP = {
+  // Unified endpoint for all map markers (clients, Starlink, aircraft)
+  // Query params: include_clients, include_starlink, include_aircraft, client_id, hours
+  MARKERS: '/api/map/markers',
+} as const;
+
+// =============================================
 // GPS
 // =============================================
 export const GPS = {
