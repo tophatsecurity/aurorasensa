@@ -1667,42 +1667,76 @@ export function useMapData(options: UseMapDataOptions = {}) {
     return markers;
   }, [sensors, clients, gpsCoordinates, geoLocations, starlinkGps, starlinkDevices, gpsdGps, gpsdStatus, gpsReadings, starlinkSignal, starlinkPerformance, starlinkPower, starlinkConnectivity, aisVessels, aprsStations, epirbBeacons]);
 
-  // Get client markers for the clients filter
+  // Get client markers for the clients filter - include ALL geo-located clients
   const clientMarkers = useMemo<ClientMarker[]>(() => {
     if (!clients) return [];
     
-    return clients
-      .map(c => {
-        // Try to find GPS coordinates for this client
-        let clientGps: { lat: number; lng: number } | null = null;
-        
-        // Check geo locations API first
-        if (gpsCoordinates[c.client_id]) {
-          clientGps = gpsCoordinates[c.client_id];
-        }
-        
-        // Look for GPS coordinates in any of the client's sensor readings
-        if (!clientGps) {
-          const clientSensors = c.sensors || [];
-          for (const sensorId of clientSensors) {
-            if (gpsCoordinates[sensorId]) {
-              clientGps = gpsCoordinates[sensorId];
-              break;
-            }
+    const markers: ClientMarker[] = [];
+    const addedClientIds = new Set<string>();
+    
+    clients.forEach(c => {
+      if (addedClientIds.has(c.client_id)) return;
+      
+      let clientGps: { lat: number; lng: number } | null = null;
+      let locationSource: string = '';
+      
+      // Priority 1: Check Starlink devices with GPS for this client
+      const clientStarlinkDevice = starlinkDevices.find(d => d.client_id === c.client_id);
+      if (clientStarlinkDevice) {
+        clientGps = { lat: clientStarlinkDevice.lat, lng: clientStarlinkDevice.lng };
+        locationSource = 'starlink';
+      }
+      
+      // Priority 2: Check gpsCoordinates map (from geo API, readings, etc.)
+      if (!clientGps && gpsCoordinates[c.client_id]) {
+        clientGps = gpsCoordinates[c.client_id];
+        locationSource = 'gps';
+      }
+      
+      // Priority 3: Look for GPS coordinates in any of the client's sensor readings
+      if (!clientGps) {
+        const clientSensors = c.sensors || [];
+        for (const sensorId of clientSensors) {
+          if (gpsCoordinates[sensorId]) {
+            clientGps = gpsCoordinates[sensorId];
+            locationSource = 'sensor';
+            break;
+          }
+          // Also check composite key format
+          const compositeKey = `${c.client_id}:${sensorId}`;
+          if (gpsCoordinates[compositeKey]) {
+            clientGps = gpsCoordinates[compositeKey];
+            locationSource = 'sensor-composite';
+            break;
           }
         }
-        
-        // Only include clients with actual GPS coordinates
-        if (!clientGps) return null;
-        
-        return {
+      }
+      
+      // Priority 4: Check client's IP-based geolocation
+      if (!clientGps && c.location?.latitude && c.location?.longitude) {
+        const lat = c.location.latitude;
+        const lng = c.location.longitude;
+        if (lat >= -90 && lat <= 90 && lng >= -180 && lng <= 180 && !(lat === 0 && lng === 0)) {
+          clientGps = { lat, lng };
+          locationSource = 'ip-geo';
+        }
+      }
+      
+      // Add client marker if we found any location
+      if (clientGps) {
+        markers.push({
           client_id: c.client_id,
-          hostname: c.hostname,
+          hostname: c.hostname || c.client_id,
           location: clientGps
-        };
-      })
-      .filter((c): c is ClientMarker => c !== null);
-  }, [clients, gpsCoordinates]);
+        });
+        addedClientIds.add(c.client_id);
+        console.log(`[MapData] Client marker added: ${c.client_id} (${locationSource})`, clientGps);
+      }
+    });
+    
+    console.log(`[MapData] Total client markers: ${markers.length} of ${clients.length} clients`);
+    return markers;
+  }, [clients, gpsCoordinates, starlinkDevices]);
 
   // Build ADS-B aircraft markers
   const adsbMarkers = useMemo<AdsbMarker[]>(() => {
