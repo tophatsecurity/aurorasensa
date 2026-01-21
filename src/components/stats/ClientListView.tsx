@@ -144,14 +144,12 @@ export function ClientListView({ onClientSelect }: ClientListViewProps) {
               <div className="flex items-start justify-between gap-4">
                 {/* Client Info */}
                 <div className="flex items-start gap-3 min-w-0 flex-1">
-                  <div className="w-10 h-10 rounded-lg bg-primary/20 flex items-center justify-center shrink-0">
-                    <Cpu className="w-5 h-5 text-primary" />
+                  <div className="w-12 h-12 rounded-xl bg-chart-2/10 border border-chart-2/20 flex items-center justify-center shrink-0">
+                    <Cpu className="w-6 h-6 text-chart-2" />
                   </div>
                   <div className="min-w-0 flex-1">
                     <div className="flex items-center gap-2">
-                      <h3 className="font-medium truncate">
-                        {client.hostname || client.displayName}
-                      </h3>
+                      <span className="text-[11px] text-muted-foreground uppercase tracking-wide">Hostname</span>
                       <Badge 
                         variant={client.state === 'adopted' ? 'default' : 'secondary'}
                         className="text-[10px] px-1.5 py-0 shrink-0"
@@ -159,8 +157,11 @@ export function ClientListView({ onClientSelect }: ClientListViewProps) {
                         {client.state}
                       </Badge>
                     </div>
+                    <h3 className="font-semibold text-foreground truncate mt-0.5">
+                      {client.hostname || client.displayName}
+                    </h3>
                     <p className="text-xs text-muted-foreground truncate mt-0.5">
-                      {client.client_id}
+                      {client.systemInfo?.platform || client.systemInfo?.version || client.client_id}
                     </p>
                     
                     {/* Location & Stats Row */}
