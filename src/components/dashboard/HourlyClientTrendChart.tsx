@@ -2,7 +2,7 @@ import { useMemo } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Loader2, Server } from "lucide-react";
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from "recharts";
-import { useDashboardClientStats, useClientsWithHostnames } from "@/hooks/aurora";
+import { useDashboardClientStats } from "@/hooks/aurora";
 import { format, subHours } from "date-fns";
 
 interface HourlyClientTrendChartProps {
@@ -38,24 +38,10 @@ export default function HourlyClientTrendChart({ clientId }: HourlyClientTrendCh
   // Normalize clientId - "all" or empty means global view (no filter)
   const effectiveClientId = clientId && clientId !== "all" ? clientId : undefined;
   
-  // Fetch client stats
+  // Fetch client stats - this now includes hostname enrichment from the hook
   const { data: clientStats, isLoading, isError } = useDashboardClientStats(effectiveClientId, 24);
-  const { data: clientsWithHostnames } = useClientsWithHostnames();
 
-  // Build hostname map
-  const hostnameMap = useMemo(() => {
-    const map: Record<string, string> = {};
-    if (clientsWithHostnames) {
-      clientsWithHostnames.forEach(c => {
-        if (c.client_id && c.hostname && c.hostname !== 'unknown') {
-          map[c.client_id] = c.hostname;
-        }
-      });
-    }
-    return map;
-  }, [clientsWithHostnames]);
-
-  // Generate chart data
+  // Generate chart data with hostnames directly from enriched client stats
   const { chartData, clientNames, stats } = useMemo(() => {
     const clients = clientStats?.clients || [];
     
@@ -68,10 +54,13 @@ export default function HourlyClientTrendChart({ clientId }: HourlyClientTrendCh
       .sort((a, b) => (b.reading_count || 0) - (a.reading_count || 0))
       .slice(0, 8);
 
-    // Build client name list with hostnames
+    // Build client name list - use hostname from enriched data (already resolved by useDashboardClientStats)
     const names = topClients.map(c => {
-      const hostname = hostnameMap[c.client_id];
-      return hostname || c.client_id?.slice(0, 10) || 'Unknown';
+      // Priority: hostname from enriched data, then truncated client_id
+      if (c.hostname && c.hostname !== 'unknown' && c.hostname !== c.client_id) {
+        return c.hostname;
+      }
+      return c.client_id?.slice(0, 12) || 'Unknown';
     });
 
     // Calculate totals
@@ -115,7 +104,7 @@ export default function HourlyClientTrendChart({ clientId }: HourlyClientTrendCh
         totalClients: clients.length 
       } 
     };
-  }, [clientStats, hostnameMap]);
+  }, [clientStats]);
 
   if (isLoading) {
     return (
