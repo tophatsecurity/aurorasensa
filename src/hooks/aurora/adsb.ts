@@ -149,6 +149,8 @@ export function useAdsbAircraftWithHistory(historyMinutes: number = 60) {
       
       historicalQuery.data.readings.forEach(reading => {
         const data = reading.data;
+        if (!data) return; // Skip readings without data
+        
         const aircraftList = (data as { aircraft_list?: Array<Record<string, unknown>> }).aircraft_list;
         
         if (aircraftList && Array.isArray(aircraftList)) {
