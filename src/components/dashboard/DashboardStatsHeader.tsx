@@ -78,11 +78,11 @@ const DashboardStatsHeader = ({ periodHours = 24, clientId }: DashboardStatsHead
     );
   }, [allClientsFromState, clients]);
 
-  // Total readings - prefer dashboardSensorStats (from /api/dashboard/sensor-stats), then globalStats
+  // Total readings - prioritize statsOverview (from /api/stats/overview), then dashboardSensorStats
   const totalReadings = 
+    statsOverview?.total_readings ??
     dashboardSensorStats?.readings_last_24h ??
     globalStats?.total_readings ??
-    statsOverview?.total_readings ?? 
     global?.total_readings ?? 
     0;
   

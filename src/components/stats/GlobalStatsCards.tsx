@@ -19,6 +19,7 @@ import {
   useClients,
   useAlertStats,
   useDashboardSensorStats,
+  useStatsOverview,
 } from "@/hooks/aurora";
 
 interface GlobalStatsCardsProps {
@@ -36,7 +37,8 @@ function formatNumber(num?: number): string {
 export default function GlobalStatsCards({ periodHours = 24, clientId }: GlobalStatsCardsProps) {
   const effectiveClientId = clientId === "all" ? undefined : clientId;
   
-  // Fetch real data from multiple endpoints
+  // Fetch real data from multiple endpoints - useStatsOverview is the most reliable
+  const { data: statsOverview, isLoading: overviewLoading } = useStatsOverview(effectiveClientId);
   const { data: globalStats, isLoading: globalLoading } = useGlobalStats(effectiveClientId);
   const { data: comprehensiveStats, isLoading: comprehensiveLoading } = useComprehensiveStats(effectiveClientId);
   const { data: stats1hr, isLoading: stats1hrLoading } = use1hrStats(effectiveClientId);
@@ -47,21 +49,23 @@ export default function GlobalStatsCards({ periodHours = 24, clientId }: GlobalS
   
   const global = comprehensiveStats?.global;
   
-  // Derive values with multiple fallbacks for real data
+  // Derive values with multiple fallbacks - prioritize statsOverview (from /api/stats/overview)
   const totalReadings = useMemo(() => {
-    return globalStats?.total_readings ?? 
+    return statsOverview?.total_readings ?? 
+           globalStats?.total_readings ?? 
            (dashboardSensorStats as { readings_last_24h?: number })?.readings_last_24h ?? 
            global?.total_readings ?? 
            global?.database?.total_readings ?? 
            0;
-  }, [globalStats, dashboardSensorStats, global]);
+  }, [statsOverview, globalStats, dashboardSensorStats, global]);
 
   const totalBatches = useMemo(() => {
-    return globalStats?.total_batches ?? 
+    return statsOverview?.total_batches ?? 
+           globalStats?.total_batches ?? 
            global?.total_batches ?? 
            global?.database?.total_batches ?? 
            0;
-  }, [globalStats, global]);
+  }, [statsOverview, globalStats, global]);
 
   const totalClients = useMemo(() => {
     return globalStats?.total_clients ?? 
@@ -91,7 +95,7 @@ export default function GlobalStatsCards({ periodHours = 24, clientId }: GlobalS
   const activeAlerts = alertStats?.active ?? global?.database?.active_alerts ?? 0;
   const timeRanges = global?.time_ranges;
 
-  const isLoading = globalLoading || comprehensiveLoading || stats1hrLoading;
+  const isLoading = overviewLoading || globalLoading || comprehensiveLoading || stats1hrLoading;
 
   const stats = [
     {
