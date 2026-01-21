@@ -49,22 +49,27 @@ export default function GlobalStatsCards({ periodHours = 24, clientId }: GlobalS
   
   const global = comprehensiveStats?.global;
   
+  // Debug: Log API response data
+  // console.log('[GlobalStatsCards] statsOverview:', statsOverview);
+  // console.log('[GlobalStatsCards] globalStats:', globalStats);
+  
   // Derive values with multiple fallbacks - prioritize statsOverview (from /api/stats/overview)
+  // API returns: {"total_readings":364273,"total_batches":6908,"timestamp":"..."}
   const totalReadings = useMemo(() => {
-    return statsOverview?.total_readings ?? 
-           globalStats?.total_readings ?? 
-           (dashboardSensorStats as { readings_last_24h?: number })?.readings_last_24h ?? 
-           global?.total_readings ?? 
-           global?.database?.total_readings ?? 
-           0;
+    const fromOverview = statsOverview?.total_readings;
+    const fromGlobal = globalStats?.total_readings;
+    const fromDashboard = (dashboardSensorStats as { readings_last_24h?: number })?.readings_last_24h;
+    const fromComprehensive = global?.total_readings ?? global?.database?.total_readings;
+    
+    return fromOverview ?? fromGlobal ?? fromDashboard ?? fromComprehensive ?? 0;
   }, [statsOverview, globalStats, dashboardSensorStats, global]);
 
   const totalBatches = useMemo(() => {
-    return statsOverview?.total_batches ?? 
-           globalStats?.total_batches ?? 
-           global?.total_batches ?? 
-           global?.database?.total_batches ?? 
-           0;
+    const fromOverview = statsOverview?.total_batches;
+    const fromGlobal = globalStats?.total_batches;
+    const fromComprehensive = global?.total_batches ?? global?.database?.total_batches;
+    
+    return fromOverview ?? fromGlobal ?? fromComprehensive ?? 0;
   }, [statsOverview, globalStats, global]);
 
   const totalClients = useMemo(() => {
