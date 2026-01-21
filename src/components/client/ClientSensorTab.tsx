@@ -880,19 +880,40 @@ const ArduinoMeasurementCard = ({ title, value, unit, icon, bgColor, iconColor }
 
 // Arduino Sensor View Component (individual cards for each measurement)
 const ArduinoSensorView = ({ readings, latestReading }: { readings: SensorReading[]; latestReading: SensorReading }) => {
+  // Helper to safely extract a primitive value (handles nested objects like {light_raw, sound_raw, pot_raw})
+  const extractPrimitive = (value: unknown): number | string | undefined => {
+    if (value === null || value === undefined) return undefined;
+    if (typeof value === 'number' || typeof value === 'string') return value;
+    if (typeof value === 'object' && value !== null) {
+      // Try to extract a meaningful value from nested objects
+      const obj = value as Record<string, unknown>;
+      // Look for common value keys
+      const valueKeys = ['value', 'raw', 'reading', 'level', 'percent', 'avg', 'current'];
+      for (const key of valueKeys) {
+        if (key in obj && (typeof obj[key] === 'number' || typeof obj[key] === 'string')) {
+          return obj[key] as number | string;
+        }
+      }
+      // If it's an object with numeric values, return the first one
+      const numericValue = Object.values(obj).find(v => typeof v === 'number');
+      if (numericValue !== undefined) return numericValue as number;
+    }
+    return undefined;
+  };
+
   const sensorData = useMemo(() => {
     const data = latestReading?.data || {};
     return {
-      temperature: data.temperature ?? data.temp_c ?? data.temp,
-      humidity: data.humidity ?? data.hum,
-      pressure: data.pressure ?? data.bmp_pressure,
-      bmpTemp: data.bmp_temp ?? data.bmp_temperature,
-      light: data.light ?? data.lux ?? data.ambient_light,
-      sound: data.sound ?? data.sound_level ?? data.noise,
-      potentiometer: data.potentiometer ?? data.pot ?? data.analog,
-      accelX: data.accel_x ?? data.ax ?? data.accelerometer_x,
-      accelY: data.accel_y ?? data.ay ?? data.accelerometer_y,
-      accelZ: data.accel_z ?? data.az ?? data.accelerometer_z,
+      temperature: extractPrimitive(data.temperature ?? data.temp_c ?? data.temp),
+      humidity: extractPrimitive(data.humidity ?? data.hum),
+      pressure: extractPrimitive(data.pressure ?? data.bmp_pressure),
+      bmpTemp: extractPrimitive(data.bmp_temp ?? data.bmp_temperature),
+      light: extractPrimitive(data.light ?? data.lux ?? data.ambient_light ?? data.light_raw),
+      sound: extractPrimitive(data.sound ?? data.sound_level ?? data.noise ?? data.sound_raw),
+      potentiometer: extractPrimitive(data.potentiometer ?? data.pot ?? data.analog ?? data.pot_raw),
+      accelX: extractPrimitive(data.accel_x ?? data.ax ?? data.accelerometer_x),
+      accelY: extractPrimitive(data.accel_y ?? data.ay ?? data.accelerometer_y),
+      accelZ: extractPrimitive(data.accel_z ?? data.az ?? data.accelerometer_z),
     };
   }, [latestReading]);
 
