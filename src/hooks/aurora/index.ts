@@ -284,6 +284,8 @@ export {
   useStatsByClient,
   useStatsBySensor,
   useClientDetailStats,
+  useClientLatestStats,
+  useSensorsByClientLatest,
   useDeviceReadings,
   useDeviceDetailStats,
   usePeriodStats,
@@ -331,7 +333,56 @@ export {
   // NEW: Client timeseries types
   type ClientTimeseriesPoint,
   type ClientTimeseriesResponse,
+  // NEW: Client latest stats types
+  type ClientLatestStats,
+  type ClientSensorLatestReading,
+  type ClientSensorLatestResponse,
 } from "./stats";
+
+// Power domain hooks
+export {
+  usePowerCurrent,
+  usePowerSummary,
+  usePowerHistory,
+  usePowerDevices,
+  useBatteryStats,
+  useVoltageStats,
+  useUsbPower,
+  type PowerDevice,
+  type CurrentPowerStatus,
+  type PowerSummary,
+  type PowerHistoryPoint,
+  type BatteryStats,
+  type VoltageStats,
+  type UsbPowerStats,
+} from "./power";
+
+// Bluetooth domain hooks
+export {
+  useBluetoothScanners,
+  useBluetoothScan,
+  useBluetoothNearby,
+  useBluetoothStats,
+  useBluetoothHistory,
+  type BluetoothScanner,
+  type BluetoothDevice as BluetoothDeviceData,
+  type BluetoothStats,
+  type BluetoothHistoryPoint,
+} from "./bluetooth";
+
+// WiFi domain hooks
+export {
+  useWifiScanners,
+  useWifiScan as useWifiScanData,
+  useWifiNetworks,
+  useWifiNearby,
+  useWifiStats,
+  useWifiHistory,
+  type WifiScanner,
+  type WifiNetwork as WifiNetworkData,
+  type WifiStats,
+  type WifiHistoryPoint,
+} from "./wifi";
 
 // Client-specific sensor data hooks
 export {

@@ -712,6 +712,88 @@ export function useClientDetailStats(clientId: string | null, hours: number = 24
 }
 
 // =============================================
+// NEW: Client Latest Stats endpoint (most recent data regardless of time)
+// =============================================
+export interface ClientLatestStats {
+  client_id: string;
+  latest_batch?: {
+    batch_id: string;
+    timestamp: string;
+    reading_count: number;
+  };
+  time_since_last_data?: string;
+  time_since_last_data_seconds?: number;
+  current_sensor_status?: Array<{
+    sensor_type: string;
+    device_id?: string;
+    status: 'active' | 'stale' | 'inactive';
+    last_reading?: string;
+  }>;
+  most_recent_readings?: Array<{
+    sensor_type: string;
+    device_id?: string;
+    timestamp: string;
+    data: Record<string, unknown>;
+  }>;
+}
+
+export function useClientLatestStats(clientId: string | null) {
+  return useQuery({
+    queryKey: ["aurora", "stats", "client-latest", clientId],
+    queryFn: async () => {
+      if (!clientId || clientId === "all") return null;
+      const raw = await callAuroraApi<ClientLatestStats | { data: ClientLatestStats }>(
+        STATS.CLIENT_LATEST(clientId)
+      );
+      if (raw && 'data' in raw) return raw.data;
+      return raw as ClientLatestStats;
+    },
+    enabled: hasAuroraSession() && !!clientId && clientId !== "all",
+    staleTime: 15000, // Refresh more frequently for latest data
+    refetchInterval: 30000,
+    retry: 1,
+  });
+}
+
+// =============================================
+// NEW: Sensors by Client Latest (most recent sensor data for client)
+// =============================================
+export interface ClientSensorLatestReading {
+  sensor_type: string;
+  device_id?: string;
+  timestamp: string;
+  data: Record<string, unknown>;
+  measurement?: Record<string, unknown>;
+}
+
+export interface ClientSensorLatestResponse {
+  client_id: string;
+  sensor_count: number;
+  readings: ClientSensorLatestReading[];
+}
+
+export function useSensorsByClientLatest(clientId: string | null, limit: number = 10) {
+  return useQuery({
+    queryKey: ["aurora", "stats", "sensors", "by-client", "latest", clientId, limit],
+    queryFn: async () => {
+      if (!clientId || clientId === "all") return { client_id: '', sensor_count: 0, readings: [] };
+      const raw = await callAuroraApi<ClientSensorLatestResponse | { data: ClientSensorLatestReading[] }>(
+        `${STATS.SENSORS_BY_CLIENT_LATEST(clientId)}?limit=${limit}`
+      );
+      if (raw && 'readings' in raw) return raw;
+      if (raw && 'data' in raw && Array.isArray(raw.data)) {
+        return { client_id: clientId, sensor_count: raw.data.length, readings: raw.data };
+      }
+      return { client_id: clientId, sensor_count: 0, readings: [] };
+    },
+    enabled: hasAuroraSession() && !!clientId && clientId !== "all",
+    staleTime: 15000,
+    refetchInterval: 30000,
+    retry: 1,
+  });
+}
+
+// =============================================
 // NEW: Sensor Stats by Type endpoint (all sensor types with stats)
 // =============================================
 export interface SensorTypeByTypeStats {

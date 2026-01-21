@@ -306,12 +306,15 @@ export const STATS = {
   BY_SENSOR: '/api/stats/by-sensor',
   // Entity-specific stats
   CLIENT: (clientId: string) => `/api/stats/client/${clientId}`,
+  CLIENT_LATEST: (clientId: string) => `/api/stats/client/${clientId}/latest`,
   DEVICES: '/api/stats/devices',
   DEVICE: (deviceId: string) => `/api/stats/devices/${deviceId}`,
   SENSORS: '/api/stats/sensors',
   SENSOR_TYPE: (sensorType: string) => `/api/stats/sensors/${sensorType}`,
+  SENSOR_DETAIL: (sensorType: string) => `/api/stats/sensor/${sensorType}`,
   SENSORS_BY_TYPE: '/api/stats/sensors/by-type',
   SENSORS_BY_CLIENT: (clientId: string) => `/api/stats/sensors/by-client/${clientId}`,
+  SENSORS_BY_CLIENT_LATEST: (clientId: string) => `/api/stats/sensors/by-client/${clientId}/latest`,
   AIRCRAFT: '/api/stats/aircraft',
   ENDPOINTS: '/api/stats/endpoints',
   ENDPOINTS_HISTORY: '/api/stats/endpoints/history',
@@ -323,6 +326,42 @@ export const STATS = {
   HISTORY_DEVICES: '/api/stats/history/devices',
   HISTORY_ALERTS: '/api/stats/history/alerts',
   HISTORY_SYSTEM: '/api/stats/history/system',
+} as const;
+
+// =============================================
+// POWER
+// =============================================
+export const POWER = {
+  CURRENT: '/api/power/current',
+  SUMMARY: '/api/power/summary',
+  HISTORY: '/api/power/history',
+  DEVICES: '/api/power/devices',
+  BATTERY: '/api/power/battery',
+  VOLTAGE: '/api/power/voltage',
+  USB: '/api/power/usb',
+} as const;
+
+// =============================================
+// BLUETOOTH
+// =============================================
+export const BLUETOOTH = {
+  DEVICES: '/api/bluetooth/devices',
+  SCAN: '/api/bluetooth/scan',
+  NEARBY: '/api/bluetooth/nearby',
+  STATS: '/api/bluetooth/stats',
+  HISTORY: (macAddress: string) => `/api/bluetooth/history/${macAddress}`,
+} as const;
+
+// =============================================
+// WIFI
+// =============================================
+export const WIFI = {
+  DEVICES: '/api/wifi/devices',
+  SCAN: '/api/wifi/scan',
+  NETWORKS: '/api/wifi/networks',
+  NEARBY: '/api/wifi/nearby',
+  STATS: '/api/wifi/stats',
+  HISTORY: (bssid: string) => `/api/wifi/history/${bssid}`,
 } as const;
 
 // =============================================
