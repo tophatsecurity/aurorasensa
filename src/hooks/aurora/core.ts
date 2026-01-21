@@ -384,8 +384,22 @@ export async function callAuroraApi<T>(
           throw new Error(errorStr);
         }
 
-        // API responses are now flat (no wrapper) - use data directly
-        const result = data;
+        // Auto-unwrap { status: "success", data: {...} } responses
+        // Only unwrap when `data` contains the primary content (no other meaningful fields)
+        // This handles patterns like: { status: "success", data: { total_readings: 123 } }
+        // But NOT patterns like: { status: "success", data: [], summary: {...}, timestamp: "..." }
+        let result = data;
+        if (data && typeof data === 'object' && 'status' in data && 'data' in data) {
+          const wrappedData = data as { status: string; data: unknown; timestamp?: string };
+          const dataKeys = Object.keys(data).filter(k => k !== 'status' && k !== 'timestamp');
+          // Only unwrap if 'data' is the only meaningful field (besides status/timestamp)
+          // AND data is not an empty array (which means we should keep the full response)
+          const isDataOnly = dataKeys.length === 1 && dataKeys[0] === 'data';
+          const dataIsEmptyArray = Array.isArray(wrappedData.data) && wrappedData.data.length === 0;
+          if (wrappedData.status === 'success' && wrappedData.data !== undefined && isDataOnly && !dataIsEmptyArray) {
+            result = wrappedData.data;
+          }
+        }
         
         // Cache successful GET responses
         if (method === 'GET' && !options?.skipCache) {
