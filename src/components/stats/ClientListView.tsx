@@ -1,5 +1,5 @@
 import { useMemo } from "react";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { 
   MapPin, 
@@ -13,7 +13,9 @@ import {
   ChevronRight,
   Globe,
   Server,
-  Database
+  Database,
+  Clock,
+  Signal
 } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
 import { useClientsWithHostnames, useAllClientsSystemInfo, useStatsByClient, useAllClientsLatestBatch } from "@/hooks/aurora";
@@ -37,13 +39,29 @@ function getSensorIcon(sensorType: string) {
 // Get color for sensor type
 function getSensorColor(sensorType: string): string {
   const type = sensorType.toLowerCase();
-  if (type.includes('thermal') || type.includes('probe')) return 'bg-chart-1/20 text-chart-1';
-  if (type.includes('starlink')) return 'bg-chart-2/20 text-chart-2';
-  if (type.includes('gps')) return 'bg-chart-3/20 text-chart-3';
-  if (type.includes('lora')) return 'bg-chart-4/20 text-chart-4';
-  if (type.includes('wifi')) return 'bg-chart-5/20 text-chart-5';
-  if (type.includes('arduino')) return 'bg-primary/20 text-primary';
-  return 'bg-muted text-muted-foreground';
+  if (type.includes('thermal') || type.includes('probe')) return 'bg-rose-500/15 text-rose-400 border-rose-500/20';
+  if (type.includes('starlink')) return 'bg-violet-500/15 text-violet-400 border-violet-500/20';
+  if (type.includes('gps')) return 'bg-emerald-500/15 text-emerald-400 border-emerald-500/20';
+  if (type.includes('lora')) return 'bg-amber-500/15 text-amber-400 border-amber-500/20';
+  if (type.includes('wifi')) return 'bg-sky-500/15 text-sky-400 border-sky-500/20';
+  if (type.includes('arduino')) return 'bg-cyan-500/15 text-cyan-400 border-cyan-500/20';
+  return 'bg-muted/50 text-muted-foreground border-border/50';
+}
+
+// Get state badge styling
+function getStateBadge(state: string) {
+  switch (state) {
+    case 'adopted':
+      return { bg: 'bg-emerald-500/15', text: 'text-emerald-400', border: 'border-emerald-500/30', dot: 'bg-emerald-400' };
+    case 'registered':
+      return { bg: 'bg-sky-500/15', text: 'text-sky-400', border: 'border-sky-500/30', dot: 'bg-sky-400' };
+    case 'pending':
+      return { bg: 'bg-amber-500/15', text: 'text-amber-400', border: 'border-amber-500/30', dot: 'bg-amber-400' };
+    case 'disabled':
+      return { bg: 'bg-zinc-500/15', text: 'text-zinc-400', border: 'border-zinc-500/30', dot: 'bg-zinc-400' };
+    default:
+      return { bg: 'bg-muted/50', text: 'text-muted-foreground', border: 'border-border/50', dot: 'bg-muted-foreground' };
+  }
 }
 
 export function ClientListView({ onClientSelect }: ClientListViewProps) {
@@ -120,137 +138,167 @@ export function ClientListView({ onClientSelect }: ClientListViewProps) {
 
   if (clientsLoading) {
     return (
-      <Card className="border-border/50">
-        <CardContent className="p-8 text-center text-muted-foreground">
-          Loading clients...
-        </CardContent>
-      </Card>
+      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+        {[1, 2, 3].map((i) => (
+          <Card key={i} className="border-border/50 animate-pulse">
+            <CardContent className="p-6">
+              <div className="flex items-start gap-4">
+                <div className="w-14 h-14 rounded-2xl bg-muted" />
+                <div className="flex-1 space-y-3">
+                  <div className="h-4 bg-muted rounded w-3/4" />
+                  <div className="h-3 bg-muted rounded w-1/2" />
+                  <div className="h-3 bg-muted rounded w-2/3" />
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        ))}
+      </div>
     );
   }
 
   if (!enrichedClients || enrichedClients.length === 0) {
     return (
-      <Card className="border-border/50">
-        <CardContent className="p-8 text-center text-muted-foreground">
-          <Server className="w-12 h-12 mx-auto mb-4 opacity-50" />
-          <p className="text-lg font-medium">No Clients Found</p>
-          <p className="text-sm mt-1">Clients will appear here when they connect to Aurora</p>
+      <Card className="border-border/50 bg-card/50 backdrop-blur-sm">
+        <CardContent className="p-12 text-center">
+          <div className="w-20 h-20 rounded-3xl bg-muted/50 flex items-center justify-center mx-auto mb-6">
+            <Server className="w-10 h-10 text-muted-foreground/50" />
+          </div>
+          <p className="text-xl font-semibold text-foreground mb-2">No Clients Found</p>
+          <p className="text-sm text-muted-foreground max-w-sm mx-auto">
+            Clients will appear here when they connect to Aurora and start sending data
+          </p>
         </CardContent>
       </Card>
     );
   }
 
   return (
-    <Card className="border-border/50">
-      <CardHeader className="pb-3">
-        <CardTitle className="text-sm flex items-center gap-2">
-          <Server className="w-4 h-4 text-primary" />
-          Clients ({enrichedClients.length})
-        </CardTitle>
-      </CardHeader>
-      <CardContent className="p-0">
-        <div className="divide-y divide-border/50">
-          {enrichedClients.map((client: any) => (
-            <div
+    <div className="space-y-4">
+      {/* Header */}
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-3">
+          <div className="w-10 h-10 rounded-xl bg-primary/10 border border-primary/20 flex items-center justify-center">
+            <Server className="w-5 h-5 text-primary" />
+          </div>
+          <div>
+            <h2 className="text-lg font-semibold">Connected Clients</h2>
+            <p className="text-sm text-muted-foreground">{enrichedClients.length} client{enrichedClients.length !== 1 ? 's' : ''} available</p>
+          </div>
+        </div>
+        <Badge variant="outline" className="text-xs px-3 py-1.5 bg-primary/5 border-primary/20 text-primary">
+          <Signal className="w-3 h-3 mr-1.5" />
+          Live
+        </Badge>
+      </div>
+
+      {/* Client Grid */}
+      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+        {enrichedClients.map((client: any) => {
+          const stateStyle = getStateBadge(client.state);
+          
+          return (
+            <Card
               key={client.client_id}
               onClick={() => onClientSelect(client.client_id)}
-              className="p-4 hover:bg-muted/50 cursor-pointer transition-colors group"
+              className="group border-border/50 bg-card/50 backdrop-blur-sm hover:bg-card/80 hover:border-primary/30 cursor-pointer transition-all duration-300 hover:shadow-lg hover:shadow-primary/5"
             >
-              <div className="flex items-start justify-between gap-4">
-                {/* Client Info */}
-                <div className="flex items-start gap-3 min-w-0 flex-1">
-                  <div className="w-12 h-12 rounded-xl bg-chart-2/10 border border-chart-2/20 flex items-center justify-center shrink-0">
-                    <Cpu className="w-6 h-6 text-chart-2" />
+              <CardContent className="p-5">
+                <div className="flex items-start gap-4">
+                  {/* Icon */}
+                  <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-cyan-500/20 to-cyan-600/10 border border-cyan-500/20 flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform duration-300">
+                    <Cpu className="w-7 h-7 text-cyan-400" />
                   </div>
-                  <div className="min-w-0 flex-1">
-                    <div className="flex items-center gap-2">
-                      <span className="text-[11px] text-muted-foreground uppercase tracking-wide">Hostname</span>
-                      <Badge 
-                        variant={client.state === 'adopted' ? 'default' : 'secondary'}
-                        className="text-[10px] px-1.5 py-0 shrink-0"
-                      >
-                        {client.state}
-                      </Badge>
+                  
+                  {/* Content */}
+                  <div className="flex-1 min-w-0">
+                    {/* Header Row */}
+                    <div className="flex items-start justify-between gap-2 mb-1">
+                      <div className="min-w-0 flex-1">
+                        <p className="text-[10px] uppercase tracking-wider text-muted-foreground/70 font-medium mb-0.5">Hostname</p>
+                        <h3 className="font-semibold text-foreground truncate text-base group-hover:text-primary transition-colors">
+                          {client.hostname || client.displayName}
+                        </h3>
+                      </div>
+                      <ChevronRight className="w-5 h-5 text-muted-foreground/50 group-hover:text-primary group-hover:translate-x-0.5 transition-all shrink-0 mt-3" />
                     </div>
-                    <h3 className="font-semibold text-foreground truncate mt-0.5">
-                      {client.hostname || client.displayName}
-                    </h3>
-                    <p className="text-xs text-muted-foreground truncate mt-0.5">
+                    
+                    {/* Hardware Model */}
+                    <p className="text-xs text-muted-foreground truncate mb-3">
                       {client.hardwareModel || client.systemInfo?.platform || client.client_id}
                     </p>
                     
-                    {/* Location & Stats Row */}
-                    <div className="flex flex-wrap items-center gap-3 mt-2 text-xs text-muted-foreground">
-                      {/* Location */}
+                    {/* Stats Row */}
+                    <div className="flex items-center gap-4 text-xs mb-3">
+                      {/* Reading Count */}
+                      <div className="flex items-center gap-1.5 text-primary">
+                        <Database className="w-3.5 h-3.5" />
+                        <span className="font-semibold">{client.reading_count.toLocaleString()}</span>
+                      </div>
+                      
+                      {/* Location or IP */}
                       {client.location?.city || client.location?.country ? (
-                        <div className="flex items-center gap-1">
-                          <MapPin className="w-3 h-3" />
-                          <span>
-                            {[client.location.city, client.location.country]
-                              .filter(Boolean)
-                              .join(', ')}
+                        <div className="flex items-center gap-1.5 text-muted-foreground">
+                          <MapPin className="w-3.5 h-3.5" />
+                          <span className="truncate">
+                            {[client.location.city, client.location.country].filter(Boolean).join(', ')}
                           </span>
                         </div>
                       ) : client.ip_address ? (
-                        <div className="flex items-center gap-1">
-                          <Globe className="w-3 h-3" />
+                        <div className="flex items-center gap-1.5 text-muted-foreground">
+                          <Globe className="w-3.5 h-3.5" />
                           <span>{client.ip_address}</span>
                         </div>
-                      ) : (
-                        <div className="flex items-center gap-1 opacity-50">
-                          <MapPin className="w-3 h-3" />
-                          <span>No location</span>
-                        </div>
-                      )}
-
-                      {/* Reading Count */}
-                      <div className="flex items-center gap-1 text-primary">
-                        <Database className="w-3 h-3" />
-                        <span className="font-medium">{client.reading_count.toLocaleString()} readings</span>
+                      ) : null}
+                    </div>
+                    
+                    {/* Footer Row - State & Last Seen */}
+                    <div className="flex items-center justify-between gap-2">
+                      {/* State Badge */}
+                      <div className={`inline-flex items-center gap-1.5 px-2 py-1 rounded-full text-[10px] font-medium uppercase tracking-wide ${stateStyle.bg} ${stateStyle.text} border ${stateStyle.border}`}>
+                        <span className={`w-1.5 h-1.5 rounded-full ${stateStyle.dot}`} />
+                        {client.state}
                       </div>
                       
                       {/* Last Seen */}
                       {client.last_seen && !isNaN(new Date(client.last_seen).getTime()) && (
-                        <span className="text-muted-foreground/70">
-                          • {formatDistanceToNow(new Date(client.last_seen), { addSuffix: true })}
-                        </span>
+                        <div className="flex items-center gap-1 text-[10px] text-muted-foreground/70">
+                          <Clock className="w-3 h-3" />
+                          <span>{formatDistanceToNow(new Date(client.last_seen), { addSuffix: true })}</span>
+                        </div>
                       )}
                     </div>
                     
                     {/* Sensors */}
                     {client.sensors && client.sensors.length > 0 && (
-                      <div className="flex flex-wrap items-center gap-1.5 mt-3">
-                        {client.sensors.slice(0, 6).map((sensor: string) => {
+                      <div className="flex flex-wrap items-center gap-1.5 mt-3 pt-3 border-t border-border/50">
+                        {client.sensors.slice(0, 4).map((sensor: string) => {
                           const SensorIcon = getSensorIcon(sensor);
                           const colorClass = getSensorColor(sensor);
                           return (
-                            <Badge 
+                            <div 
                               key={sensor} 
-                              variant="outline" 
-                              className={`text-[10px] px-1.5 py-0.5 ${colorClass} border-0`}
+                              className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-medium border ${colorClass}`}
                             >
-                              <SensorIcon className="w-3 h-3 mr-1" />
-                              {sensor.replace(/_/g, ' ')}
-                            </Badge>
+                              <SensorIcon className="w-3 h-3" />
+                              <span className="truncate max-w-[60px]">{sensor.replace(/_/g, ' ')}</span>
+                            </div>
                           );
                         })}
-                        {client.sensors.length > 6 && (
-                          <Badge variant="outline" className="text-[10px] px-1.5 py-0.5">
-                            +{client.sensors.length - 6} more
-                          </Badge>
+                        {client.sensors.length > 4 && (
+                          <div className="text-[10px] text-muted-foreground px-1.5">
+                            +{client.sensors.length - 4}
+                          </div>
                         )}
                       </div>
                     )}
                   </div>
                 </div>
-                
-                {/* Arrow */}
-                <ChevronRight className="w-5 h-5 text-muted-foreground group-hover:text-primary transition-colors shrink-0 mt-2" />
-              </div>
-            </div>
-          ))}
-        </div>
-      </CardContent>
-    </Card>
+              </CardContent>
+            </Card>
+          );
+        })}
+      </div>
+    </div>
   );
 }
