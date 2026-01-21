@@ -307,7 +307,7 @@ const DashboardContent = () => {
           isLoading={dashboardStatsLoading}
         />
         <PrimaryStat
-          label="Data Batches"
+          label="Measurements"
           value={formatNumber(totalBatches)}
           icon={BarChart3}
           iconColor="bg-amber-500/20 text-amber-400"
