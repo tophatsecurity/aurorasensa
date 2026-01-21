@@ -49,6 +49,7 @@ import {
   calculateCorrelation,
   CORRELATION_PAIRS,
   useClientsWithHostnames,
+  formatTimeBucketDisplay,
   type CorrelationPairType,
   type CorrelationStats,
   type Client,
@@ -167,12 +168,7 @@ function CorrelationChart({
                   tickLine={false}
                   axisLine={false}
                   interval="preserveStartEnd"
-                  tickFormatter={(value) => {
-                    if (typeof value === 'string' && value.includes(' ')) {
-                      return value.split(' ')[1];
-                    }
-                    return value;
-                  }}
+                  tickFormatter={(value) => formatTimeBucketDisplay(value)}
                 />
                 <YAxis
                   yAxisId="x"

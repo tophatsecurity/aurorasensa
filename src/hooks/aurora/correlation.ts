@@ -101,6 +101,7 @@ function extractNumber(data: Record<string, unknown>, ...paths: string[]): numbe
 
 /**
  * Format timestamp to time bucket key based on time range
+ * Returns a sortable key (ISO prefix) and a display label
  */
 function formatTimeBucket(timestamp: string, hours: number): string {
   const date = new Date(timestamp);
@@ -122,16 +123,35 @@ function formatTimeBucket(timestamp: string, hours: number): string {
     includeDate = true;
   }
   
-  const minutes = Math.floor(date.getMinutes() / bucketMinutes) * bucketMinutes;
-  const timeStr = `${date.getHours().toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}`;
+  // Round to bucket
+  const bucketDate = new Date(date);
+  bucketDate.setMinutes(Math.floor(date.getMinutes() / bucketMinutes) * bucketMinutes, 0, 0);
+  
+  // Use ISO-like sortable format: YYYY-MM-DD HH:MM for multi-day, or just HH:MM for single day
+  const year = bucketDate.getFullYear();
+  const month = (bucketDate.getMonth() + 1).toString().padStart(2, '0');
+  const day = bucketDate.getDate().toString().padStart(2, '0');
+  const hour = bucketDate.getHours().toString().padStart(2, '0');
+  const min = bucketDate.getMinutes().toString().padStart(2, '0');
   
   if (includeDate) {
-    const month = (date.getMonth() + 1).toString().padStart(2, '0');
-    const day = date.getDate().toString().padStart(2, '0');
-    return `${month}-${day} ${timeStr}`;
+    // Sortable format: YYYY-MM-DD HH:MM
+    return `${year}-${month}-${day} ${hour}:${min}`;
   }
   
-  return timeStr;
+  // For short timeframes (same day), just use time but prepend hour for sortability
+  return `${hour}:${min}`;
+}
+
+/**
+ * Format time bucket for display (strip year for cleaner labels)
+ */
+export function formatTimeBucketDisplay(bucket: string): string {
+  // If it's a full date-time format like "2026-01-21 16:30", strip the year
+  if (bucket.match(/^\d{4}-\d{2}-\d{2}\s/)) {
+    return bucket.substring(5); // Returns "01-21 16:30"
+  }
+  return bucket;
 }
 
 // =============================================

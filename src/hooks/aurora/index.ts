@@ -572,6 +572,7 @@ export {
   useCorrelationArduinoData,
   useRefreshCorrelationData,
   calculateCorrelation,
+  formatTimeBucketDisplay,
   CORRELATION_PAIRS,
   type CorrelationStats,
   type CorrelationPairType,
