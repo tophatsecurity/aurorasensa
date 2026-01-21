@@ -317,7 +317,7 @@ const DashboardContent = () => {
           isLoading={dashboardStatsLoading}
         />
         <PrimaryStat
-          label="Measurements"
+          label="Data Points"
           value={formatNumber(totalMeasurements)}
           icon={BarChart3}
           iconColor="bg-amber-500/20 text-amber-400"
