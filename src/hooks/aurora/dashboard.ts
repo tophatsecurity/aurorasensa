@@ -240,7 +240,7 @@ export function useDashboardSystemStats(clientId?: string | null) {
       
       // Try individual system endpoints
       const [cpu, memory, disk, load, uptime] = await Promise.all([
-        callAuroraApi<{ data?: { cpu_usage_percent?: number; cpu_temp_celsius?: number } }>(
+        callAuroraApi<{ cpu_usage_percent?: number; cpu_temp_celsius?: number }>(
           SYSTEM.ALL, "GET", undefined, options
         ).catch(() => null),
         callAuroraApi<{ total: number; used: number; percent: number }>(
@@ -258,7 +258,7 @@ export function useDashboardSystemStats(clientId?: string | null) {
       ]);
       
       return {
-        cpu_percent: cpu?.data?.cpu_usage_percent,
+        cpu_percent: cpu?.cpu_usage_percent,
         memory_percent: memory?.percent,
         disk_percent: disk?.percent,
         load_average: load?.load,
