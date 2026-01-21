@@ -221,23 +221,44 @@ const DashboardContent = () => {
     return [...pending, ...registered, ...adopted, ...disabled, ...suspended];
   }, [clientsByState]);
 
+  // Extract unique clients from comprehensive stats hourly data (more reliable)
+  const uniqueClientsFromStats = useMemo(() => {
+    const clientIds = new Set<string>();
+    
+    // Extract from hourly statistics which contains data from all active clients
+    // The API response includes hourly data but TypeScript type doesn't define it
+    const statsWithHourly = stats as { hourly?: { statistics?: Array<{ client_id?: string }> } } | undefined;
+    if (statsWithHourly?.hourly?.statistics && Array.isArray(statsWithHourly.hourly.statistics)) {
+      statsWithHourly.hourly.statistics.forEach((stat) => {
+        if (stat.client_id && stat.client_id !== 'unknown' && stat.client_id !== 'null') {
+          clientIds.add(stat.client_id);
+        }
+      });
+    }
+    
+    return Array.from(clientIds);
+  }, [stats]);
+
   // Use globalStats (from /api/stats/global) as primary source, fallback to comprehensive stats
   // API returns { data: { total_readings: 183249, ... }, status: "success" }
   const totalReadings = globalStats?.total_readings ?? statsOverview?.total_readings ?? global?.total_readings ?? global?.database?.total_readings ?? 0;
   
-  // Get client counts - prefer globalStats, then comprehensive stats
+  // Get client counts - prefer the highest count from various sources
   const comprehensiveClientCount = globalStats?.total_clients ?? global?.total_clients ?? global?.database?.total_clients ?? 0;
   // API returns { status, statistics: { total, by_state, summary } }
   const clientStatsTotal = clientStatistics?.statistics?.total ?? clientStatistics?.total ?? 0;
   const aggregatedClientCount = allClientsFromState.length;
   const clientsArrayCount = clients?.length ?? 0;
+  const statsClientCount = uniqueClientsFromStats.length;
   
-  // Use the best available client count (prefer clientsByState which is most reliable)
-  // Note: globalStats may return empty {}, so prioritize aggregatedClientCount
-  const effectiveClients = aggregatedClientCount > 0 ? aggregatedClientCount :
-                          comprehensiveClientCount > 0 ? comprehensiveClientCount :
-                          clientStatsTotal > 0 ? clientStatsTotal : 
-                          clientsArrayCount;
+  // Use the HIGHEST available client count since some sources may be incomplete
+  const effectiveClients = Math.max(
+    aggregatedClientCount,
+    comprehensiveClientCount,
+    clientStatsTotal,
+    clientsArrayCount,
+    statsClientCount
+  );
 
   // Filter out deleted/disabled/suspended clients for dashboard display
   const activeClients = useMemo(() => {
@@ -253,7 +274,7 @@ const DashboardContent = () => {
     );
   }, [allClientsFromState, clients]);
 
-  // totalClients should reflect the actual count from clientsByState or other sources
+  // totalClients should reflect the best available count
   const totalClients = effectiveClients > 0 ? effectiveClients : (activeClients.length > 0 ? activeClients.length : clientsArrayCount);
   const activeDevices1h = global?.activity?.last_1_hour?.active_devices_1h ?? 0;
   const readings1h = global?.activity?.last_1_hour?.readings_1h ?? 0;
