@@ -37,9 +37,10 @@ function formatNumber(num?: number): string {
 export default function GlobalStatsCards({ periodHours = 24, clientId }: GlobalStatsCardsProps) {
   const effectiveClientId = clientId === "all" ? undefined : clientId;
   
-  // Fetch real data from multiple endpoints - useStatsOverview is the most reliable
-  const { data: statsOverview, isLoading: overviewLoading } = useStatsOverview(effectiveClientId);
+  // Fetch real data from multiple endpoints - useGlobalStats is now the primary source
+  // API returns: {"data": {...}, "status": "success"} which gets auto-unwrapped by core.ts
   const { data: globalStats, isLoading: globalLoading } = useGlobalStats(effectiveClientId);
+  const { data: statsOverview, isLoading: overviewLoading } = useStatsOverview(effectiveClientId);
   const { data: comprehensiveStats, isLoading: comprehensiveLoading } = useComprehensiveStats(effectiveClientId);
   const { data: stats1hr, isLoading: stats1hrLoading } = use1hrStats(effectiveClientId);
   const { data: stats24hr } = use24hrStats(effectiveClientId);
@@ -49,39 +50,52 @@ export default function GlobalStatsCards({ periodHours = 24, clientId }: GlobalS
   
   const global = comprehensiveStats?.global;
   
-  // Derive values with multiple fallbacks - prioritize statsOverview (from /api/stats/overview)
-  // Derive values with multiple fallbacks - prioritize statsOverview (from /api/stats/overview)
-  // API returns: {"total_readings":364273,"total_batches":6908,"timestamp":"..."}
+  // Log data sources for debugging
+  console.log('[GlobalStatsCards] Data sources:', {
+    globalStats,
+    statsOverview,
+    dashboardSensorStats,
+    global,
+    clients: clients?.length
+  });
+  
+  // Derive values with multiple fallbacks - prioritize globalStats (from /api/stats/global)
+  // The API returns wrapped data which is auto-unwrapped by core.ts
   const totalReadings = useMemo(() => {
-    const fromOverview = statsOverview?.total_readings;
+    // globalStats is the unwrapped 'data' object from the API response
     const fromGlobal = globalStats?.total_readings;
+    const fromOverview = statsOverview?.total_readings;
     const fromDashboard = (dashboardSensorStats as { readings_last_24h?: number })?.readings_last_24h;
     const fromComprehensive = global?.total_readings ?? global?.database?.total_readings;
     
-    return fromOverview ?? fromGlobal ?? fromDashboard ?? fromComprehensive ?? 0;
-  }, [statsOverview, globalStats, dashboardSensorStats, global]);
+    const result = fromGlobal ?? fromOverview ?? fromDashboard ?? fromComprehensive ?? 0;
+    console.log('[GlobalStatsCards] totalReadings derivation:', { fromGlobal, fromOverview, fromDashboard, fromComprehensive, result });
+    return result;
+  }, [globalStats, statsOverview, dashboardSensorStats, global]);
 
   const totalBatches = useMemo(() => {
-    const fromOverview = statsOverview?.total_batches;
     const fromGlobal = globalStats?.total_batches;
+    const fromOverview = statsOverview?.total_batches;
     const fromComprehensive = global?.total_batches ?? global?.database?.total_batches;
     
-    return fromOverview ?? fromGlobal ?? fromComprehensive ?? 0;
-  }, [statsOverview, globalStats, global]);
+    return fromGlobal ?? fromOverview ?? fromComprehensive ?? 0;
+  }, [globalStats, statsOverview, global]);
 
   const totalClients = useMemo(() => {
     return globalStats?.total_clients ?? 
            global?.total_clients ?? 
+           statsOverview?.total_clients ??
            clients?.length ?? 
            0;
-  }, [globalStats, global, clients]);
+  }, [globalStats, global, statsOverview, clients]);
 
   const totalDevices = useMemo(() => {
     return globalStats?.total_devices ?? 
            (dashboardSensorStats as { total_devices?: number })?.total_devices ?? 
+           statsOverview?.total_devices ??
            global?.total_devices ?? 
            0;
-  }, [globalStats, dashboardSensorStats, global]);
+  }, [globalStats, dashboardSensorStats, statsOverview, global]);
 
   const sensorTypesCount = useMemo(() => {
     return globalStats?.sensor_types_count ?? 
@@ -95,9 +109,9 @@ export default function GlobalStatsCards({ periodHours = 24, clientId }: GlobalS
   const readings1h = stats1hr?.readings ?? global?.activity?.last_1_hour?.readings_1h ?? 0;
   const avgReadingsPerHour = global?.activity?.avg_readings_per_hour;
   const activeAlerts = alertStats?.active ?? global?.database?.active_alerts ?? 0;
-  const timeRanges = global?.time_ranges;
+  const timeRanges = global?.time_ranges ?? globalStats?.time_ranges;
 
-  const isLoading = overviewLoading || globalLoading || comprehensiveLoading || stats1hrLoading;
+  const isLoading = globalLoading || overviewLoading || comprehensiveLoading || stats1hrLoading;
 
   const stats = [
     {
