@@ -54,7 +54,7 @@ export interface BluetoothHistoryPoint {
 }
 
 // =============================================
-// QUERY HOOKS
+// QUERY HOOKS - API responses are now flat
 // =============================================
 
 export function useBluetoothScanners(clientId?: string | null) {
@@ -62,10 +62,8 @@ export function useBluetoothScanners(clientId?: string | null) {
     queryKey: ["aurora", "bluetooth", "devices", clientId],
     queryFn: async () => {
       const path = clientId ? `${BLUETOOTH.DEVICES}?client_id=${clientId}` : BLUETOOTH.DEVICES;
-      const raw = await callAuroraApi<BluetoothScanner[] | { data: BluetoothScanner[] }>(path);
-      if (Array.isArray(raw)) return raw;
-      if (raw && 'data' in raw) return raw.data;
-      return [];
+      const result = await callAuroraApi<BluetoothScanner[]>(path);
+      return Array.isArray(result) ? result : [];
     },
     enabled: hasAuroraSession(),
     staleTime: 60000,
@@ -90,10 +88,8 @@ export function useBluetoothScan(options?: {
       params.set('hours', String(hours));
       params.set('limit', String(limit));
       const path = `${BLUETOOTH.SCAN}?${params.toString()}`;
-      const raw = await callAuroraApi<BluetoothDevice[] | { data: BluetoothDevice[] }>(path);
-      if (Array.isArray(raw)) return raw;
-      if (raw && 'data' in raw) return raw.data;
-      return [];
+      const result = await callAuroraApi<BluetoothDevice[]>(path);
+      return Array.isArray(result) ? result : [];
     },
     enabled: hasAuroraSession(),
     staleTime: 30000,
@@ -116,10 +112,8 @@ export function useBluetoothNearby(options?: {
       params.set('rssi_threshold', String(rssiThreshold));
       params.set('limit', String(limit));
       const path = `${BLUETOOTH.NEARBY}?${params.toString()}`;
-      const raw = await callAuroraApi<BluetoothDevice[] | { data: BluetoothDevice[] }>(path);
-      if (Array.isArray(raw)) return raw;
-      if (raw && 'data' in raw) return raw.data;
-      return [];
+      const result = await callAuroraApi<BluetoothDevice[]>(path);
+      return Array.isArray(result) ? result : [];
     },
     enabled: hasAuroraSession(),
     staleTime: 30000,
@@ -133,9 +127,7 @@ export function useBluetoothStats(clientId?: string | null) {
     queryKey: ["aurora", "bluetooth", "stats", clientId],
     queryFn: async () => {
       const path = clientId ? `${BLUETOOTH.STATS}?client_id=${clientId}` : BLUETOOTH.STATS;
-      const raw = await callAuroraApi<BluetoothStats | { data: BluetoothStats }>(path);
-      if (raw && 'data' in raw) return raw.data;
-      return raw as BluetoothStats;
+      return callAuroraApi<BluetoothStats>(path);
     },
     enabled: hasAuroraSession(),
     staleTime: 60000,
@@ -161,10 +153,8 @@ export function useBluetoothHistory(macAddress: string | null, options?: {
       params.set('hours', String(hours));
       params.set('limit', String(limit));
       const path = `${BLUETOOTH.HISTORY(macAddress)}?${params.toString()}`;
-      const raw = await callAuroraApi<BluetoothHistoryPoint[] | { data: BluetoothHistoryPoint[] }>(path);
-      if (Array.isArray(raw)) return raw;
-      if (raw && 'data' in raw) return raw.data;
-      return [];
+      const result = await callAuroraApi<BluetoothHistoryPoint[]>(path);
+      return Array.isArray(result) ? result : [];
     },
     enabled: hasAuroraSession() && !!macAddress,
     staleTime: 60000,

@@ -412,13 +412,7 @@ interface PaginatedApiResponse<T> {
   timestamp?: string;
 }
 
-// Helper to unwrap API responses that have a data wrapper
-function unwrapApiResponse<T>(response: T | ApiResponse<T>): T {
-  if (response && typeof response === 'object' && 'data' in response && response.data !== undefined) {
-    return response.data as T;
-  }
-  return response as T;
-}
+// API responses are now flat - no wrapper handling needed
 
 export function useComprehensiveStats(clientId?: string | null) {
   return useQuery({
@@ -742,11 +736,7 @@ export function useClientLatestStats(clientId: string | null) {
     queryKey: ["aurora", "stats", "client-latest", clientId],
     queryFn: async () => {
       if (!clientId || clientId === "all") return null;
-      const raw = await callAuroraApi<ClientLatestStats | { data: ClientLatestStats }>(
-        STATS.CLIENT_LATEST(clientId)
-      );
-      if (raw && 'data' in raw) return raw.data;
-      return raw as ClientLatestStats;
+      return callAuroraApi<ClientLatestStats>(STATS.CLIENT_LATEST(clientId));
     },
     enabled: hasAuroraSession() && !!clientId && clientId !== "all",
     staleTime: 15000, // Refresh more frequently for latest data
@@ -777,14 +767,10 @@ export function useSensorsByClientLatest(clientId: string | null, limit: number 
     queryKey: ["aurora", "stats", "sensors", "by-client", "latest", clientId, limit],
     queryFn: async () => {
       if (!clientId || clientId === "all") return { client_id: '', sensor_count: 0, readings: [] };
-      const raw = await callAuroraApi<ClientSensorLatestResponse | { data: ClientSensorLatestReading[] }>(
+      const result = await callAuroraApi<ClientSensorLatestResponse>(
         `${STATS.SENSORS_BY_CLIENT_LATEST(clientId)}?limit=${limit}`
       );
-      if (raw && 'readings' in raw) return raw;
-      if (raw && 'data' in raw && Array.isArray(raw.data)) {
-        return { client_id: clientId, sensor_count: raw.data.length, readings: raw.data };
-      }
-      return { client_id: clientId, sensor_count: 0, readings: [] };
+      return result || { client_id: clientId, sensor_count: 0, readings: [] };
     },
     enabled: hasAuroraSession() && !!clientId && clientId !== "all",
     staleTime: 15000,
@@ -810,21 +796,13 @@ export function useSensorStatsByType(hours: number = 24) {
   return useQuery({
     queryKey: ["aurora", "stats", "sensors", "by-type", hours],
     queryFn: async () => {
-      const raw = await callAuroraApi<{ data: SensorTypeByTypeStats[]; status: string; time_window_hours: number }>(
+      const result = await callAuroraApi<SensorTypeByTypeStats[]>(
         STATS.SENSORS_BY_TYPE,
         "GET",
         undefined,
         { params: { hours } }
       );
-      // Handle wrapped response
-      if (raw && 'data' in raw && Array.isArray(raw.data)) {
-        return raw.data;
-      }
-      // Handle direct array
-      if (Array.isArray(raw)) {
-        return raw;
-      }
-      return [];
+      return Array.isArray(result) ? result : [];
     },
     enabled: hasAuroraSession(),
     staleTime: 60000,
@@ -867,17 +845,12 @@ export function useSensorTypeStats(sensorType: string | null, hours: number = 24
     queryKey: ["aurora", "stats", "sensors", sensorType, hours],
     queryFn: async () => {
       if (!sensorType) return null;
-      const raw = await callAuroraApi<{ data: SensorTypeDetailedStats; status: string } | SensorTypeDetailedStats>(
+      return callAuroraApi<SensorTypeDetailedStats>(
         STATS.SENSOR_TYPE(sensorType),
         "GET",
         undefined,
         { params: { hours } }
       );
-      // Handle wrapped response
-      if (raw && 'data' in raw && raw.data) {
-        return raw.data;
-      }
-      return raw as SensorTypeDetailedStats;
     },
     enabled: hasAuroraSession() && !!sensorType,
     staleTime: 60000,
@@ -902,11 +875,10 @@ export function useSensorsByClientId(clientId: string | null, hours: number = 24
     queryKey: ["aurora", "stats", "sensors", "by-client", clientId, hours],
     queryFn: async () => {
       if (!clientId || clientId === "all") return { sensors: [], sensor_count: 0 };
-      const raw = await callAuroraApi<{ 
-        data: ClientSensorTypeStats[]; 
+      const result = await callAuroraApi<{ 
+        sensors?: ClientSensorTypeStats[]; 
         client_id: string;
         sensor_count: number;
-        status: string;
         time_window_hours: number;
       }>(
         STATS.SENSORS_BY_CLIENT(clientId),
@@ -914,13 +886,8 @@ export function useSensorsByClientId(clientId: string | null, hours: number = 24
         undefined,
         { params: { hours } }
       );
-      // Handle wrapped response
-      if (raw && 'data' in raw && Array.isArray(raw.data)) {
-        return { sensors: raw.data, sensor_count: raw.sensor_count || raw.data.length };
-      }
-      // Handle direct array
-      if (Array.isArray(raw)) {
-        return { sensors: raw, sensor_count: raw.length };
+      if (result?.sensors) {
+        return { sensors: result.sensors, sensor_count: result.sensor_count || result.sensors.length };
       }
       return { sensors: [], sensor_count: 0 };
     },
@@ -1279,23 +1246,17 @@ export function useClientTimeseries(clientId: string | null, hours: number = 24)
         return { client_id: '', hours, timeseries: [] };
       }
       try {
-        const response = await callAuroraApi<ClientTimeseriesResponse | { data: ClientTimeseriesResponse } | null>(
+        const response = await callAuroraApi<ClientTimeseriesResponse | null>(
           `${TIMESERIES.CLIENT(clientId)}?hours=${hours}`
         );
-        // Handle null/undefined response
         if (!response) {
           return { client_id: clientId, hours, timeseries: [] };
         }
-        // Handle both direct response and nested data structure
-        const data = (typeof response === 'object' && 'data' in response && response.data) ? response.data : response;
-        if (!data || typeof data !== 'object') {
-          return { client_id: clientId, hours, timeseries: [] };
-        }
         return {
-          client_id: (data as ClientTimeseriesResponse).client_id || clientId,
-          hours: (data as ClientTimeseriesResponse).hours || hours,
-          timeseries: (data as ClientTimeseriesResponse).timeseries || [],
-          summary: (data as ClientTimeseriesResponse).summary,
+          client_id: response.client_id || clientId,
+          hours: response.hours || hours,
+          timeseries: response.timeseries || [],
+          summary: response.summary,
         };
       } catch (error) {
         console.warn(`Client timeseries endpoint failed:`, error);

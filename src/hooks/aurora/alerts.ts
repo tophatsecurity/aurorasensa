@@ -178,12 +178,10 @@ export function useAlertRules() {
     queryKey: ["aurora", "alerts", "rules"],
     queryFn: async () => {
       try {
-        const result = await callAuroraApi<{ rules: AlertRule[] } | AlertRule[]>(ALERTS.RULES);
-        // Handle array response (when auto-unwrapped)
-        if (Array.isArray(result)) {
-          return { rules: result };
-        }
-        return result?.rules ? result : { rules: [] };
+        // API now returns flat response
+        const result = await callAuroraApi<AlertRule[] | { rules: AlertRule[] }>(ALERTS.RULES);
+        const rules = Array.isArray(result) ? result : (result?.rules || []);
+        return { rules };
       } catch (error) {
         console.warn("Alert rules endpoint unavailable, returning empty rules");
         return { rules: [] };
