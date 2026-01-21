@@ -412,11 +412,23 @@ export const LOGS = {
 } as const;
 
 // =============================================
-// GEO
+// GEO & IP GEOLOCATION
 // =============================================
 export const GEO = {
   LOCATIONS: '/api/geo/locations',
   UPDATE: '/api/geo/update',
+  // IP Geolocation - lookup location by IP address
+  LOOKUP: '/api/geo/lookup',
+  LOOKUP_IP: (ip: string) => `/api/geo/lookup/${ip}`,
+} as const;
+
+// IP Geolocation (alternative endpoints)
+export const IP_GEO = {
+  // External IP with geolocation
+  LOCATE: '/api/ip/locate',
+  LOCATE_IP: (ip: string) => `/api/ip/locate/${ip}`,
+  // Client IP geolocation
+  CLIENT: (clientId: string) => `/api/clients/${clientId}/location`,
 } as const;
 
 // =============================================

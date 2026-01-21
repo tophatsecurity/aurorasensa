@@ -2,7 +2,7 @@
 // Updated to match actual available endpoints on Aurora server
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { callAuroraApi, hasAuroraSession } from "./core";
-import { SYSTEM, CONFIG } from "./endpoints";
+import { SYSTEM, CONFIG, GEO, IP_GEO } from "./endpoints";
 
 // =============================================
 // TYPES
@@ -400,5 +400,159 @@ export function useUpdateServerConfig() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["aurora", "config"] });
     },
+  });
+}
+
+// =============================================
+// IP GEOLOCATION HOOKS
+// =============================================
+
+export interface IpGeolocation {
+  ip?: string;
+  city?: string;
+  region?: string;
+  country?: string;
+  country_code?: string;
+  latitude?: number;
+  longitude?: number;
+  isp?: string;
+  org?: string;
+  timezone?: string;
+  source?: string;
+}
+
+/**
+ * Get geolocation for the current external IP
+ */
+export function useIpGeolocation() {
+  return useQuery({
+    queryKey: ["aurora", "geo", "ip-location"],
+    queryFn: async (): Promise<IpGeolocation> => {
+      try {
+        // Try dedicated IP locate endpoint first
+        const result = await callAuroraApi<IpGeolocation | { data: IpGeolocation }>(IP_GEO.LOCATE);
+        if (result && typeof result === 'object') {
+          const data = 'data' in result ? result.data : result;
+          if (data.latitude && data.longitude) {
+            return data;
+          }
+        }
+      } catch {
+        // Fall through to geo/lookup
+      }
+      
+      try {
+        // Try geo/lookup endpoint
+        const result = await callAuroraApi<IpGeolocation | { data: IpGeolocation }>(GEO.LOOKUP);
+        if (result && typeof result === 'object') {
+          const data = 'data' in result ? result.data : result;
+          if (data.latitude && data.longitude) {
+            return data;
+          }
+        }
+      } catch {
+        // Fall through to external-ip with geo
+      }
+      
+      try {
+        // Fall back to external-ip which may include geo data
+        const ipResult = await callAuroraApi<{ 
+          ip: string; 
+          city?: string; 
+          country?: string;
+          latitude?: number;
+          longitude?: number;
+        }>(SYSTEM.EXTERNAL_IP);
+        if (ipResult?.latitude && ipResult?.longitude) {
+          return {
+            ip: ipResult.ip,
+            city: ipResult.city,
+            country: ipResult.country,
+            latitude: ipResult.latitude,
+            longitude: ipResult.longitude,
+            source: 'external-ip',
+          };
+        }
+      } catch {
+        // All fallbacks failed
+      }
+      
+      return {};
+    },
+    enabled: hasAuroraSession(),
+    staleTime: 600000, // 10 minutes
+    refetchInterval: 1800000, // 30 minutes
+    retry: 1,
+  });
+}
+
+/**
+ * Get geolocation for a specific IP address
+ */
+export function useIpGeolocationByIp(ip: string | null) {
+  return useQuery({
+    queryKey: ["aurora", "geo", "ip-location", ip],
+    queryFn: async (): Promise<IpGeolocation> => {
+      if (!ip) return {};
+      
+      try {
+        const result = await callAuroraApi<IpGeolocation | { data: IpGeolocation }>(IP_GEO.LOCATE_IP(ip));
+        if (result && typeof result === 'object') {
+          const data = 'data' in result ? result.data : result;
+          return data;
+        }
+      } catch {
+        // Try geo lookup endpoint
+      }
+      
+      try {
+        const result = await callAuroraApi<IpGeolocation | { data: IpGeolocation }>(GEO.LOOKUP_IP(ip));
+        if (result && typeof result === 'object') {
+          const data = 'data' in result ? result.data : result;
+          return data;
+        }
+      } catch {
+        // All fallbacks failed
+      }
+      
+      return {};
+    },
+    enabled: hasAuroraSession() && !!ip,
+    staleTime: 3600000, // 1 hour
+    retry: 1,
+  });
+}
+
+/**
+ * Get geolocation for a specific client
+ */
+export function useClientGeolocation(clientId: string | null) {
+  return useQuery({
+    queryKey: ["aurora", "client", clientId, "location"],
+    queryFn: async (): Promise<IpGeolocation> => {
+      if (!clientId) return {};
+      
+      try {
+        const result = await callAuroraApi<IpGeolocation | { data: IpGeolocation; location?: IpGeolocation }>(
+          IP_GEO.CLIENT(clientId)
+        );
+        if (result && typeof result === 'object') {
+          // Handle nested data structure
+          if ('location' in result && result.location) {
+            return result.location;
+          }
+          const data = 'data' in result ? result.data : result;
+          return data;
+        }
+      } catch {
+        // Client location endpoint not available
+      }
+      
+      return {};
+    },
+    enabled: hasAuroraSession() && !!clientId,
+    staleTime: 300000, // 5 minutes
+    refetchInterval: 600000, // 10 minutes
+    retry: 1,
   });
 }

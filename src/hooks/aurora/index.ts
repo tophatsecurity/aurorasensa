@@ -209,6 +209,11 @@ export {
   useAuroraServices,
   useServerConfig,
   useUpdateServerConfig,
+  // IP Geolocation
+  useIpGeolocation,
+  useIpGeolocationByIp,
+  useClientGeolocation,
+  type IpGeolocation,
 } from "./system";
 
 export {
