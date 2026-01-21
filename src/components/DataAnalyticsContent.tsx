@@ -809,7 +809,7 @@ const DataAnalyticsContent = () => {
         </div>
       ) : (
         <Tabs defaultValue="overview" className="space-y-6">
-          <TabsList>
+          <TabsList className="flex flex-wrap h-auto gap-1">
             <TabsTrigger value="overview">Overview</TabsTrigger>
             <TabsTrigger value="sensors">By Sensor</TabsTrigger>
             <TabsTrigger value="trends">Trends</TabsTrigger>
