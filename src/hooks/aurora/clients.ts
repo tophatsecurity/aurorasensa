@@ -318,7 +318,31 @@ export function useClientSystemInfo(clientId: string) {
 export function useAllClientsSystemInfo() {
   return useQuery({
     queryKey: ["aurora", "clients", "system-info", "all"],
-    queryFn: () => callAuroraApi<{ clients: Record<string, SystemInfo> }>(CLIENTS.SYSTEM_INFO_ALL),
+    queryFn: async () => {
+      const response = await callAuroraApi<any>(CLIENTS.SYSTEM_INFO_ALL);
+      
+      // Handle different response formats
+      // API may return { clients: [...] } as array or { clients: { client_id: info } } as record
+      const clientsData = response?.clients || response || [];
+      
+      // If it's already a record/object, return as-is
+      if (clientsData && typeof clientsData === 'object' && !Array.isArray(clientsData)) {
+        return { clients: clientsData as Record<string, SystemInfo> };
+      }
+      
+      // If it's an array, convert to a map keyed by client_id
+      if (Array.isArray(clientsData)) {
+        const clientsMap: Record<string, SystemInfo> = {};
+        clientsData.forEach((item: any) => {
+          if (item.client_id) {
+            clientsMap[item.client_id] = item;
+          }
+        });
+        return { clients: clientsMap };
+      }
+      
+      return { clients: {} };
+    },
     enabled: hasAuroraSession(),
     ...defaultQueryOptions,
   });
