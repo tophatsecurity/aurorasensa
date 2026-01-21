@@ -1718,9 +1718,11 @@ export function useMapData(options: UseMapDataOptions = {}) {
       if (addedClientIds.has(c.client_id)) return;
       
       let clientGps: { lat: number; lng: number } | null = null;
-      let locationSource: string = '';
+      let locationSource: 'starlink' | 'gps' | 'sensor' | 'ip-geo' | 'unknown' = 'unknown';
+      let city: string | undefined;
+      let country: string | undefined;
       
-      // Priority 1: Check Starlink devices with GPS for this client
+      // Priority 1: Check Starlink devices with GPS for this client (high accuracy from dish)
       const clientStarlinkDevice = starlinkDevices.find(d => d.client_id === c.client_id);
       if (clientStarlinkDevice) {
         clientGps = { lat: clientStarlinkDevice.lat, lng: clientStarlinkDevice.lng };
@@ -1746,7 +1748,7 @@ export function useMapData(options: UseMapDataOptions = {}) {
           const compositeKey = `${c.client_id}:${sensorId}`;
           if (gpsCoordinates[compositeKey]) {
             clientGps = gpsCoordinates[compositeKey];
-            locationSource = 'sensor-composite';
+            locationSource = 'sensor';
             break;
           }
         }
@@ -1759,6 +1761,8 @@ export function useMapData(options: UseMapDataOptions = {}) {
         if (lat >= -90 && lat <= 90 && lng >= -180 && lng <= 180 && !(lat === 0 && lng === 0)) {
           clientGps = { lat, lng };
           locationSource = 'ip-geo';
+          city = c.location.city;
+          country = c.location.country;
         }
       }
       
@@ -1767,7 +1771,10 @@ export function useMapData(options: UseMapDataOptions = {}) {
         markers.push({
           client_id: c.client_id,
           hostname: c.hostname || c.client_id,
-          location: clientGps
+          location: clientGps,
+          locationSource,
+          city,
+          country,
         });
         addedClientIds.add(c.client_id);
         console.log(`[MapData] Client marker added: ${c.client_id} (${locationSource})`, clientGps);

@@ -392,12 +392,53 @@ const MapContent = () => {
         const markerId = `client-${client.client_id}`;
         existingMarkerIds.add(markerId);
         
+        // Format location source with icon and label
+        const getLocationSourceInfo = (source: string) => {
+          switch (source) {
+            case 'starlink':
+              return { icon: '📡', label: 'Starlink Dish GPS', color: 'text-violet-400' };
+            case 'gps':
+              return { icon: '🛰️', label: 'Hardware GPS', color: 'text-green-400' };
+            case 'sensor':
+              return { icon: '📍', label: 'Sensor GPS', color: 'text-blue-400' };
+            case 'ip-geo':
+              return { icon: '🌐', label: 'IP Geolocation', color: 'text-cyan-400' };
+            default:
+              return { icon: '❓', label: 'Unknown', color: 'text-gray-400' };
+          }
+        };
+        
+        const sourceInfo = getLocationSourceInfo(client.locationSource);
+        const locationDetails = client.city || client.country 
+          ? `${client.city ? client.city : ''}${client.city && client.country ? ', ' : ''}${client.country || ''}`
+          : '';
+        
         const popupContent = `
-          <div class="p-2 min-w-[180px]">
-            <div class="font-bold mb-2">${client.hostname}</div>
-            <div class="text-sm space-y-1">
-              <div><span class="text-gray-500">Client ID:</span> ${client.client_id.substring(0, 8)}...</div>
-              <div><span class="text-gray-500">Type:</span> Client Device</div>
+          <div class="p-3 min-w-[220px]">
+            <div class="font-bold mb-2 text-base border-b pb-2">🖥️ ${client.hostname}</div>
+            <div class="text-sm space-y-1.5">
+              <div class="flex justify-between">
+                <span class="text-gray-500">Client ID:</span>
+                <span class="font-mono text-xs">${client.client_id.substring(0, 12)}...</span>
+              </div>
+              <div class="flex justify-between">
+                <span class="text-gray-500">Type:</span>
+                <span class="font-medium">Client Device</span>
+              </div>
+              <div class="flex justify-between pt-1 border-t mt-1">
+                <span class="text-gray-500">Location Source:</span>
+                <span class="${sourceInfo.color} font-medium">${sourceInfo.icon} ${sourceInfo.label}</span>
+              </div>
+              ${locationDetails ? `
+              <div class="flex justify-between">
+                <span class="text-gray-500">Location:</span>
+                <span class="font-medium">${locationDetails}</span>
+              </div>
+              ` : ''}
+              <div class="flex justify-between">
+                <span class="text-gray-500">Coordinates:</span>
+                <span class="font-mono text-xs">${client.location.lat.toFixed(5)}, ${client.location.lng.toFixed(5)}</span>
+              </div>
             </div>
           </div>
         `;
