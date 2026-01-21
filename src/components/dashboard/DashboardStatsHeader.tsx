@@ -28,7 +28,8 @@ const DashboardStatsHeader = ({ periodHours = 24, clientId }: DashboardStatsHead
   // Core stats hooks with client filtering
   const { data: stats, isLoading: statsLoading } = useComprehensiveStats(effectiveClientId);
   const { data: globalStats, isLoading: globalStatsLoading } = useGlobalStats(effectiveClientId);
-  const { data: statsOverview, isLoading: overviewLoading } = useStatsOverview();
+  // useStatsOverview is the most reliable source for total_readings and total_batches
+  const { data: statsOverview, isLoading: overviewLoading } = useStatsOverview(effectiveClientId);
   
   // Dashboard client stats (uses /api/stats/by-client) - most accurate for reading counts
   const { data: dashboardClientStats, isLoading: dashboardClientStatsLoading } = useDashboardClientStats(
@@ -79,11 +80,15 @@ const DashboardStatsHeader = ({ periodHours = 24, clientId }: DashboardStatsHead
   }, [allClientsFromState, clients]);
 
   // Total readings - prioritize statsOverview (from /api/stats/overview), then dashboardSensorStats
+  // API returns: {"total_readings":364273,"total_batches":6908,"timestamp":"..."}
+  const totalReadingsFromOverview = statsOverview?.total_readings;
+  const totalReadingsFromDashboard = (dashboardSensorStats as { readings_last_24h?: number })?.readings_last_24h;
+  const totalReadingsFromGlobal = globalStats?.total_readings ?? global?.total_readings;
+  
   const totalReadings = 
-    statsOverview?.total_readings ??
-    dashboardSensorStats?.readings_last_24h ??
-    globalStats?.total_readings ??
-    global?.total_readings ?? 
+    totalReadingsFromOverview ??
+    totalReadingsFromDashboard ??
+    totalReadingsFromGlobal ?? 
     0;
   
   // Client count - prioritize dashboardClientStats (from /api/stats/by-client)
@@ -105,8 +110,8 @@ const DashboardStatsHeader = ({ periodHours = 24, clientId }: DashboardStatsHead
     return 0;
   }, [dashboardClientStats?.clients]);
 
-  // Use the more accurate reading count
-  const displayReadings = totalReadingsFromClients > 0 ? totalReadingsFromClients : totalReadings;
+  // Use the more accurate reading count - prefer overview total if available
+  const displayReadings = totalReadingsFromOverview ?? (totalReadingsFromClients > 0 ? totalReadingsFromClients : totalReadings);
 
   // Sensor types count - prefer dashboardSensorStats, then globalStats
   const sensorTypesFromDashboard = dashboardSensorStats?.total_sensors ?? 0;
