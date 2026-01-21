@@ -847,7 +847,38 @@ const AdsbReceiverView = ({ readings }: { readings: SensorReading[] }) => {
   );
 };
 
-// Arduino Sensor View Component (prettier display)
+// Arduino Measurement Card Component
+interface ArduinoMeasurementCardProps {
+  title: string;
+  value: number | string | undefined;
+  unit: string;
+  icon: React.ReactNode;
+  bgColor: string;
+  iconColor: string;
+}
+
+const ArduinoMeasurementCard = ({ title, value, unit, icon, bgColor, iconColor }: ArduinoMeasurementCardProps) => (
+  <Card className="glass-card border-border/50 hover:border-primary/30 transition-colors">
+    <CardContent className="p-4">
+      <div className="flex items-center gap-2 mb-2">
+        <div className={`w-8 h-8 rounded-lg ${bgColor} flex items-center justify-center`}>
+          <span className={iconColor}>{icon}</span>
+        </div>
+        <span className="text-xs text-muted-foreground font-medium">{title}</span>
+      </div>
+      <p className="text-2xl font-bold font-mono">
+        {value !== undefined ? (
+          typeof value === 'number' && !Number.isInteger(value) 
+            ? value.toFixed(2) 
+            : value
+        ) : '—'}
+        <span className="text-sm font-normal text-muted-foreground ml-1">{unit}</span>
+      </p>
+    </CardContent>
+  </Card>
+);
+
+// Arduino Sensor View Component (individual cards for each measurement)
 const ArduinoSensorView = ({ readings, latestReading }: { readings: SensorReading[]; latestReading: SensorReading }) => {
   const sensorData = useMemo(() => {
     const data = latestReading?.data || {};
@@ -865,65 +896,114 @@ const ArduinoSensorView = ({ readings, latestReading }: { readings: SensorReadin
     };
   }, [latestReading]);
 
-  const categories = [
-    {
-      title: 'Environmental',
-      icon: <Thermometer className="w-4 h-4" />,
-      color: 'text-amber-400',
-      metrics: [
-        { label: 'Temperature', value: sensorData.temperature, unit: '°C', icon: <Thermometer className="w-4 h-4" /> },
-        { label: 'Humidity', value: sensorData.humidity, unit: '%', icon: <Droplets className="w-4 h-4" /> },
-        { label: 'Pressure', value: sensorData.pressure, unit: 'hPa', icon: <Gauge className="w-4 h-4" /> },
-        { label: 'BMP Temp', value: sensorData.bmpTemp, unit: '°C', icon: <Thermometer className="w-4 h-4" /> },
-      ].filter(m => m.value !== undefined),
-    },
-    {
-      title: 'Light & Sound',
-      icon: <Sun className="w-4 h-4" />,
-      color: 'text-yellow-400',
-      metrics: [
-        { label: 'Light Level', value: sensorData.light, unit: '', icon: <Sun className="w-4 h-4" /> },
-        { label: 'Sound Level', value: sensorData.sound, unit: '', icon: <Volume2 className="w-4 h-4" /> },
-        { label: 'Potentiometer', value: sensorData.potentiometer, unit: '', icon: <Settings className="w-4 h-4" /> },
-      ].filter(m => m.value !== undefined),
-    },
-    {
-      title: 'Accelerometer',
-      icon: <Activity className="w-4 h-4" />,
-      color: 'text-blue-400',
-      metrics: [
-        { label: 'X-Axis', value: sensorData.accelX, unit: 'g', icon: <Activity className="w-4 h-4" /> },
-        { label: 'Y-Axis', value: sensorData.accelY, unit: 'g', icon: <Activity className="w-4 h-4" /> },
-        { label: 'Z-Axis', value: sensorData.accelZ, unit: 'g', icon: <Activity className="w-4 h-4" /> },
-      ].filter(m => m.value !== undefined),
-    },
-  ].filter(cat => cat.metrics.length > 0);
+  const allMeasurements: Array<{
+    title: string;
+    value: number | string | undefined;
+    unit: string;
+    icon: React.ReactNode;
+    bgColor: string;
+    iconColor: string;
+    category: string;
+  }> = [
+    // Environmental
+    { title: 'Temperature', value: sensorData.temperature as number | string | undefined, unit: '°C', icon: <Thermometer className="w-4 h-4" />, bgColor: 'bg-red-500/20', iconColor: 'text-red-400', category: 'environmental' },
+    { title: 'Humidity', value: sensorData.humidity as number | string | undefined, unit: '%', icon: <Droplets className="w-4 h-4" />, bgColor: 'bg-blue-500/20', iconColor: 'text-blue-400', category: 'environmental' },
+    { title: 'Pressure', value: sensorData.pressure as number | string | undefined, unit: 'hPa', icon: <Gauge className="w-4 h-4" />, bgColor: 'bg-purple-500/20', iconColor: 'text-purple-400', category: 'environmental' },
+    { title: 'BMP Temp', value: sensorData.bmpTemp as number | string | undefined, unit: '°C', icon: <Thermometer className="w-4 h-4" />, bgColor: 'bg-orange-500/20', iconColor: 'text-orange-400', category: 'environmental' },
+    // Light & Sound
+    { title: 'Light Level', value: sensorData.light as number | string | undefined, unit: '', icon: <Sun className="w-4 h-4" />, bgColor: 'bg-yellow-500/20', iconColor: 'text-yellow-400', category: 'analog' },
+    { title: 'Sound Level', value: sensorData.sound as number | string | undefined, unit: '', icon: <Volume2 className="w-4 h-4" />, bgColor: 'bg-cyan-500/20', iconColor: 'text-cyan-400', category: 'analog' },
+    { title: 'Potentiometer', value: sensorData.potentiometer as number | string | undefined, unit: '', icon: <Settings className="w-4 h-4" />, bgColor: 'bg-pink-500/20', iconColor: 'text-pink-400', category: 'analog' },
+    // Accelerometer
+    { title: 'Accel X', value: sensorData.accelX as number | string | undefined, unit: 'g', icon: <Activity className="w-4 h-4" />, bgColor: 'bg-emerald-500/20', iconColor: 'text-emerald-400', category: 'motion' },
+    { title: 'Accel Y', value: sensorData.accelY as number | string | undefined, unit: 'g', icon: <Activity className="w-4 h-4" />, bgColor: 'bg-teal-500/20', iconColor: 'text-teal-400', category: 'motion' },
+    { title: 'Accel Z', value: sensorData.accelZ as number | string | undefined, unit: 'g', icon: <Activity className="w-4 h-4" />, bgColor: 'bg-sky-500/20', iconColor: 'text-sky-400', category: 'motion' },
+  ].filter(m => m.value !== undefined);
+
+  // Group by category for section headers
+  const environmental = allMeasurements.filter(m => m.category === 'environmental');
+  const analog = allMeasurements.filter(m => m.category === 'analog');
+  const motion = allMeasurements.filter(m => m.category === 'motion');
 
   return (
-    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-      {categories.map((cat) => (
-        <Card key={cat.title} className="bg-card/50 border-border/50">
-          <CardHeader className="pb-2">
-            <CardTitle className={`text-sm flex items-center gap-2 ${cat.color}`}>
-              {cat.icon}
-              {cat.title}
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-3">
-            {cat.metrics.map((metric) => (
-              <div key={metric.label} className="flex items-center justify-between p-2 rounded-lg bg-muted/30">
-                <div className="flex items-center gap-2 text-muted-foreground">
-                  {metric.icon}
-                  <span className="text-sm">{metric.label}</span>
-                </div>
-                <span className="font-mono font-medium">
-                  {typeof metric.value === 'number' ? metric.value.toFixed(2) : String(metric.value)} {metric.unit}
-                </span>
-              </div>
+    <div className="space-y-6">
+      {/* Environmental Sensors */}
+      {environmental.length > 0 && (
+        <div>
+          <h3 className="text-sm font-medium text-muted-foreground mb-3 flex items-center gap-2">
+            <Thermometer className="w-4 h-4 text-amber-400" />
+            Environmental Sensors
+          </h3>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+            {environmental.map((m) => (
+              <ArduinoMeasurementCard
+                key={m.title}
+                title={m.title}
+                value={m.value}
+                unit={m.unit}
+                icon={m.icon}
+                bgColor={m.bgColor}
+                iconColor={m.iconColor}
+              />
             ))}
+          </div>
+        </div>
+      )}
+
+      {/* Analog Sensors */}
+      {analog.length > 0 && (
+        <div>
+          <h3 className="text-sm font-medium text-muted-foreground mb-3 flex items-center gap-2">
+            <Sun className="w-4 h-4 text-yellow-400" />
+            Analog Sensors
+          </h3>
+          <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+            {analog.map((m) => (
+              <ArduinoMeasurementCard
+                key={m.title}
+                title={m.title}
+                value={m.value}
+                unit={m.unit}
+                icon={m.icon}
+                bgColor={m.bgColor}
+                iconColor={m.iconColor}
+              />
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Motion Sensors */}
+      {motion.length > 0 && (
+        <div>
+          <h3 className="text-sm font-medium text-muted-foreground mb-3 flex items-center gap-2">
+            <Activity className="w-4 h-4 text-emerald-400" />
+            Motion Sensors (Accelerometer)
+          </h3>
+          <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+            {motion.map((m) => (
+              <ArduinoMeasurementCard
+                key={m.title}
+                title={m.title}
+                value={m.value}
+                unit={m.unit}
+                icon={m.icon}
+                bgColor={m.bgColor}
+                iconColor={m.iconColor}
+              />
+            ))}
+          </div>
+        </div>
+      )}
+
+      {allMeasurements.length === 0 && (
+        <Card className="glass-card border-border/50">
+          <CardContent className="p-8 text-center">
+            <Cpu className="w-12 h-12 mx-auto mb-3 text-muted-foreground/50" />
+            <p className="text-muted-foreground">No Arduino sensor measurements available</p>
           </CardContent>
         </Card>
-      ))}
+      )}
     </div>
   );
 };
