@@ -5,11 +5,10 @@ import {
   CartesianGrid,
   Tooltip,
   ResponsiveContainer,
-  LineChart,
-  Line,
-  Legend,
   ComposedChart,
   Area,
+  Line,
+  Legend,
   ScatterChart,
   Scatter,
 } from "recharts";
@@ -20,13 +19,12 @@ import {
   Loader2,
   TrendingUp,
   GitCompare,
-  Droplets,
   Radio,
   Wifi,
-  Cpu
+  Cpu,
+  RefreshCw,
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   Select,
   SelectContent,
@@ -41,15 +39,16 @@ import {
   DROPDOWN_CONTENT_STYLES,
   DROPDOWN_ITEM_STYLES,
 } from "@/components/ui/context-selectors";
+import { Button } from "@/components/ui/button";
 import { useClientContext } from "@/contexts/ClientContext";
 import { 
   useStarlinkTimeseries,
-  useDashboardTimeseries,
   useThermalProbeTimeseries,
   useArduinoSensorTimeseries,
   useClientsWithHostnames,
   Client,
 } from "@/hooks/aurora";
+import { useQueryClient } from "@tanstack/react-query";
 
 interface CorrelationStats {
   avgX: number;
@@ -61,7 +60,11 @@ interface CorrelationStats {
 const calculateCorrelation = (
   data: Array<{ x?: number; y?: number }>
 ): CorrelationStats => {
-  const validPoints = data.filter(d => d.x !== undefined && d.y !== undefined);
+  const validPoints = data.filter(d => 
+    d.x !== undefined && d.y !== undefined && 
+    !isNaN(d.x) && !isNaN(d.y) &&
+    isFinite(d.x) && isFinite(d.y)
+  );
   
   if (validPoints.length < 2) {
     return { avgX: 0, avgY: 0, correlation: 0, dataPoints: 0 };
@@ -254,6 +257,7 @@ const CorrelationContent = () => {
     setTimePeriod,
     periodHours: timeRange 
   } = useClientContext();
+  const queryClient = useQueryClient();
   const [activeTab, setActiveTab] = useState("power-thermal");
   const [tempMeasurement, setTempMeasurement] = useState<TempMeasurement>('thermal-probe');
   
@@ -261,9 +265,11 @@ const CorrelationContent = () => {
   const { data: clients } = useClientsWithHostnames();
   
   // Filter to active clients only
-  const activeClients = clients?.filter((c: Client) => 
-    c && c.client_id && !['deleted', 'disabled', 'suspended'].includes(c.state || '')
-  ) || [];
+  const activeClients = useMemo(() => 
+    clients?.filter((c: Client) => 
+      c && c.client_id && !['deleted', 'disabled', 'suspended'].includes(c.state || '')
+    ) || []
+  , [clients]);
   
   // Auto-select first client if "all" is selected or no client is selected
   useEffect(() => {
@@ -272,16 +278,30 @@ const CorrelationContent = () => {
     }
   }, [activeClients, selectedClient, setSelectedClient]);
   
-  const { data: starlinkData, isLoading: starlinkLoading } = useStarlinkTimeseries(timeRange, selectedClient);
-  const { data: dashboardData, isLoading: dashboardLoading } = useDashboardTimeseries(timeRange, selectedClient);
-  const { data: thermalData, isLoading: thermalLoading } = useThermalProbeTimeseries(timeRange, selectedClient);
-  const { data: arduinoData, isLoading: arduinoLoading } = useArduinoSensorTimeseries(timeRange, selectedClient);
+  // Pass clientId only if not 'all' - otherwise fetch globally
+  const effectiveClientId = selectedClient === 'all' ? undefined : selectedClient;
+  
+  const { data: starlinkData, isLoading: starlinkLoading, refetch: refetchStarlink } = useStarlinkTimeseries(timeRange, effectiveClientId);
+  const { data: thermalData, isLoading: thermalLoading, refetch: refetchThermal } = useThermalProbeTimeseries(timeRange, effectiveClientId);
+  const { data: arduinoData, isLoading: arduinoLoading, refetch: refetchArduino } = useArduinoSensorTimeseries(timeRange, effectiveClientId);
 
-  const isLoading = starlinkLoading || dashboardLoading || thermalLoading || arduinoLoading;
+  const isLoading = starlinkLoading || thermalLoading || arduinoLoading;
 
-  // Helper to format timestamp
-  const formatTime = (timestamp: string) => 
-    new Date(timestamp).toLocaleTimeString('en-US', { hour12: false, hour: '2-digit', minute: '2-digit' });
+  // Refresh all data
+  const handleRefresh = () => {
+    queryClient.invalidateQueries({ queryKey: ["aurora"] });
+    refetchStarlink();
+    refetchThermal();
+    refetchArduino();
+  };
+
+  // Helper to format timestamp - more granular for better correlation matching
+  const formatTime = (timestamp: string) => {
+    const date = new Date(timestamp);
+    // Round to 5-minute intervals for better data pairing
+    const minutes = Math.floor(date.getMinutes() / 5) * 5;
+    return `${date.getHours().toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}`;
+  };
 
   // Get temperature label and unit based on selected measurement
   const getTempConfig = (measurement: TempMeasurement) => {
@@ -293,46 +313,73 @@ const CorrelationContent = () => {
     }
   };
 
+  // Debug logging for data availability
+  useEffect(() => {
+    console.log('[Correlation] Data sources:', {
+      starlink: starlinkData?.readings?.length || 0,
+      thermal: thermalData?.readings?.length || 0,
+      arduino: arduinoData?.readings?.length || 0,
+      clientId: effectiveClientId,
+      timeRange
+    });
+  }, [starlinkData, thermalData, arduinoData, effectiveClientId, timeRange]);
+
   // Correlation 1: Starlink Power vs Selected Temperature Measurement
   const powerThermalData = useMemo(() => {
     const dataMap = new Map<string, { time: string; x?: number; y?: number }>();
 
-    // Get Starlink power data from timeseries
-    starlinkData?.readings?.forEach(r => {
+    // Get Starlink power data from timeseries - extract from various possible locations
+    starlinkData?.readings?.forEach((r: any) => {
       const time = formatTime(r.timestamp);
       const existing = dataMap.get(time) || { time };
-      existing.x = r.power_w ?? undefined;
-      dataMap.set(time, existing);
+      // Try multiple power field locations
+      const power = r.power_w ?? r.power_watts ?? r.data?.power_w ?? r.data?.starlink?.power_watts;
+      if (power !== undefined && !isNaN(power)) {
+        existing.x = power;
+        dataMap.set(time, existing);
+      }
     });
 
     // Get temperature based on selected measurement
     if (tempMeasurement === 'thermal-probe') {
-      thermalData?.readings?.forEach(r => {
+      thermalData?.readings?.forEach((r: any) => {
         const time = formatTime(r.timestamp);
         const existing = dataMap.get(time) || { time };
-        existing.y = r.temp_c ?? r.probe_c ?? r.ambient_c ?? undefined;
-        dataMap.set(time, existing);
+        const temp = r.temp_c ?? r.probe_c ?? r.ambient_c ?? r.data?.temperature_c ?? r.data?.temp_c;
+        if (temp !== undefined && !isNaN(temp)) {
+          existing.y = temp;
+          dataMap.set(time, existing);
+        }
       });
     } else if (tempMeasurement === 'arduino-dht') {
-      arduinoData?.readings?.forEach(r => {
+      arduinoData?.readings?.forEach((r: any) => {
         const time = formatTime(r.timestamp);
         const existing = dataMap.get(time) || { time };
-        existing.y = r.th_temp_c ?? undefined;
-        dataMap.set(time, existing);
+        const temp = r.th_temp_c ?? r.data?.th?.temp_c ?? r.data?.aht_temp_c;
+        if (temp !== undefined && !isNaN(temp)) {
+          existing.y = temp;
+          dataMap.set(time, existing);
+        }
       });
     } else if (tempMeasurement === 'arduino-bmp') {
-      arduinoData?.readings?.forEach(r => {
+      arduinoData?.readings?.forEach((r: any) => {
         const time = formatTime(r.timestamp);
         const existing = dataMap.get(time) || { time };
-        existing.y = r.bmp_temp_c ?? undefined;
-        dataMap.set(time, existing);
+        const temp = r.bmp_temp_c ?? r.data?.bmp?.temp_c ?? r.data?.bme280_temp_c;
+        if (temp !== undefined && !isNaN(temp)) {
+          existing.y = temp;
+          dataMap.set(time, existing);
+        }
       });
     } else if (tempMeasurement === 'humidity') {
-      arduinoData?.readings?.forEach(r => {
+      arduinoData?.readings?.forEach((r: any) => {
         const time = formatTime(r.timestamp);
         const existing = dataMap.get(time) || { time };
-        existing.y = r.th_humidity ?? undefined;
-        dataMap.set(time, existing);
+        const humidity = r.th_humidity ?? r.data?.th?.hum_pct ?? r.data?.aht_humidity;
+        if (humidity !== undefined && !isNaN(humidity)) {
+          existing.y = humidity;
+          dataMap.set(time, existing);
+        }
       });
     }
 
@@ -346,19 +393,25 @@ const CorrelationContent = () => {
     const dataMap = new Map<string, { time: string; x?: number; y?: number }>();
 
     // Get Starlink power data from timeseries
-    starlinkData?.readings?.forEach(r => {
+    starlinkData?.readings?.forEach((r: any) => {
       const time = formatTime(r.timestamp);
       const existing = dataMap.get(time) || { time };
-      existing.x = r.power_w ?? undefined;
-      dataMap.set(time, existing);
+      const power = r.power_w ?? r.power_watts ?? r.data?.power_w ?? r.data?.starlink?.power_watts;
+      if (power !== undefined && !isNaN(power)) {
+        existing.x = power;
+        dataMap.set(time, existing);
+      }
     });
 
     // Get Arduino sensor temperature (DHT/AHT or BMP)
-    arduinoData?.readings?.forEach(r => {
+    arduinoData?.readings?.forEach((r: any) => {
       const time = formatTime(r.timestamp);
       const existing = dataMap.get(time) || { time };
-      existing.y = r.th_temp_c ?? r.bmp_temp_c ?? undefined;
-      dataMap.set(time, existing);
+      const temp = r.th_temp_c ?? r.bmp_temp_c ?? r.data?.th?.temp_c ?? r.data?.bmp?.temp_c ?? r.data?.aht_temp_c ?? r.data?.bme280_temp_c;
+      if (temp !== undefined && !isNaN(temp)) {
+        existing.y = temp;
+        dataMap.set(time, existing);
+      }
     });
 
     return Array.from(dataMap.values())
@@ -371,19 +424,25 @@ const CorrelationContent = () => {
     const dataMap = new Map<string, { time: string; x?: number; y?: number }>();
 
     // Get thermal probe temperature
-    thermalData?.readings?.forEach(r => {
+    thermalData?.readings?.forEach((r: any) => {
       const time = formatTime(r.timestamp);
       const existing = dataMap.get(time) || { time };
-      existing.x = r.temp_c ?? r.probe_c ?? r.ambient_c ?? undefined;
-      dataMap.set(time, existing);
+      const temp = r.temp_c ?? r.probe_c ?? r.ambient_c ?? r.data?.temperature_c ?? r.data?.temp_c;
+      if (temp !== undefined && !isNaN(temp)) {
+        existing.x = temp;
+        dataMap.set(time, existing);
+      }
     });
 
     // Get Arduino sensor temperature
-    arduinoData?.readings?.forEach(r => {
+    arduinoData?.readings?.forEach((r: any) => {
       const time = formatTime(r.timestamp);
       const existing = dataMap.get(time) || { time };
-      existing.y = r.th_temp_c ?? r.bmp_temp_c ?? undefined;
-      dataMap.set(time, existing);
+      const temp = r.th_temp_c ?? r.bmp_temp_c ?? r.data?.th?.temp_c ?? r.data?.bmp?.temp_c ?? r.data?.aht_temp_c ?? r.data?.bme280_temp_c;
+      if (temp !== undefined && !isNaN(temp)) {
+        existing.y = temp;
+        dataMap.set(time, existing);
+      }
     });
 
     return Array.from(dataMap.values())
@@ -396,13 +455,17 @@ const CorrelationContent = () => {
     if (!starlinkData?.readings) return [];
 
     return starlinkData.readings
-      .filter(r => r.pop_ping_latency_ms !== undefined || r.downlink_throughput_bps !== undefined)
-      .map(r => ({
-        time: formatTime(r.timestamp),
-        x: r.pop_ping_latency_ms ?? undefined,
-        y: r.downlink_throughput_bps ? r.downlink_throughput_bps / 1e6 : undefined,
-      }))
-      .sort((a, b) => a.time.localeCompare(b.time));
+      .map((r: any) => {
+        const latency = r.pop_ping_latency_ms ?? r.data?.pop_ping_latency_ms ?? r.data?.starlink?.pop_ping_latency_ms;
+        const throughput = r.downlink_throughput_bps ?? r.data?.downlink_throughput_bps ?? r.data?.starlink?.downlink_throughput_bps;
+        return {
+          time: formatTime(r.timestamp),
+          x: latency !== undefined && !isNaN(latency) ? latency : undefined,
+          y: throughput !== undefined && !isNaN(throughput) ? throughput / 1e6 : undefined,
+        };
+      })
+      .filter((d: any) => d.x !== undefined || d.y !== undefined)
+      .sort((a: any, b: any) => a.time.localeCompare(b.time));
   }, [starlinkData]);
 
   // Calculate stats for each pair
@@ -411,22 +474,23 @@ const CorrelationContent = () => {
   const thermalArduinoStats = useMemo(() => calculateCorrelation(thermalArduinoData), [thermalArduinoData]);
   const latencyThroughputStats = useMemo(() => calculateCorrelation(latencyThroughputData), [latencyThroughputData]);
 
-  const correlationPairs = [
-    { id: "power-thermal", label: "Power vs Temp", icon: <Zap className="w-4 h-4" /> },
-    { id: "power-arduino", label: "Power vs Arduino", icon: <Cpu className="w-4 h-4" /> },
-    { id: "thermal-arduino", label: "Thermal vs Arduino", icon: <Thermometer className="w-4 h-4" /> },
-    { id: "latency-throughput", label: "Latency vs Throughput", icon: <Radio className="w-4 h-4" /> },
-  ];
+  // Data availability summary for debugging
+  const dataSummary = useMemo(() => ({
+    powerThermal: { total: powerThermalData.length, paired: powerThermalData.filter(d => d.x !== undefined && d.y !== undefined).length },
+    powerArduino: { total: powerArduinoData.length, paired: powerArduinoData.filter(d => d.x !== undefined && d.y !== undefined).length },
+    thermalArduino: { total: thermalArduinoData.length, paired: thermalArduinoData.filter(d => d.x !== undefined && d.y !== undefined).length },
+    latencyThroughput: { total: latencyThroughputData.length, paired: latencyThroughputData.filter(d => d.x !== undefined && d.y !== undefined).length },
+  }), [powerThermalData, powerArduinoData, thermalArduinoData, latencyThroughputData]);
 
   const tempConfig = getTempConfig(tempMeasurement);
 
   const getCurrentData = () => {
     switch (activeTab) {
-      case "power-thermal": return { data: powerThermalData, stats: powerThermalStats, xLabel: "Starlink Power", yLabel: tempConfig.label, xUnit: "W", yUnit: tempConfig.unit, xColor: "#f59e0b", yColor: tempConfig.color };
-      case "power-arduino": return { data: powerArduinoData, stats: powerArduinoStats, xLabel: "Starlink Power", yLabel: "Arduino Temp", xUnit: "W", yUnit: "°C", xColor: "#f59e0b", yColor: "#22c55e" };
-      case "thermal-arduino": return { data: thermalArduinoData, stats: thermalArduinoStats, xLabel: "Thermal Probe", yLabel: "Arduino Temp", xUnit: "°C", yUnit: "°C", xColor: "#ef4444", yColor: "#22c55e" };
-      case "latency-throughput": return { data: latencyThroughputData, stats: latencyThroughputStats, xLabel: "Latency", yLabel: "Download", xUnit: "ms", yUnit: "Mbps", xColor: "#8b5cf6", yColor: "#06b6d4" };
-      default: return { data: powerThermalData, stats: powerThermalStats, xLabel: "Starlink Power", yLabel: tempConfig.label, xUnit: "W", yUnit: tempConfig.unit, xColor: "#f59e0b", yColor: tempConfig.color };
+      case "power-thermal": return { data: powerThermalData, stats: powerThermalStats, xLabel: "Starlink Power", yLabel: tempConfig.label, xUnit: "W", yUnit: tempConfig.unit, xColor: "hsl(var(--chart-1))", yColor: tempConfig.color };
+      case "power-arduino": return { data: powerArduinoData, stats: powerArduinoStats, xLabel: "Starlink Power", yLabel: "Arduino Temp", xUnit: "W", yUnit: "°C", xColor: "hsl(var(--chart-1))", yColor: "hsl(var(--chart-2))" };
+      case "thermal-arduino": return { data: thermalArduinoData, stats: thermalArduinoStats, xLabel: "Thermal Probe", yLabel: "Arduino Temp", xUnit: "°C", yUnit: "°C", xColor: "hsl(var(--destructive))", yColor: "hsl(var(--chart-2))" };
+      case "latency-throughput": return { data: latencyThroughputData, stats: latencyThroughputStats, xLabel: "Latency", yLabel: "Download", xUnit: "ms", yUnit: "Mbps", xColor: "hsl(var(--chart-4))", yColor: "hsl(var(--chart-3))" };
+      default: return { data: powerThermalData, stats: powerThermalStats, xLabel: "Starlink Power", yLabel: tempConfig.label, xUnit: "W", yUnit: tempConfig.unit, xColor: "hsl(var(--chart-1))", yColor: tempConfig.color };
     }
   };
 
@@ -468,93 +532,112 @@ const CorrelationContent = () => {
             value={timePeriod} 
             onChange={setTimePeriod} 
           />
+          <Button
+            variant="outline"
+            size="icon"
+            onClick={handleRefresh}
+            disabled={isLoading}
+            className="h-9 w-9"
+          >
+            <RefreshCw className={`h-4 w-4 ${isLoading ? 'animate-spin' : ''}`} />
+          </Button>
           <Badge className="bg-primary/20 text-primary border-primary/30">
-            {isLoading ? 'Loading...' : 'Live'}
+            {isLoading ? 'Loading...' : `${dataSummary[activeTab.replace('-', '') as keyof typeof dataSummary]?.paired || 0} paired`}
           </Badge>
         </div>
       </div>
 
+      {/* Data availability info */}
+      {!isLoading && (
+        <div className="mb-4 text-xs text-muted-foreground flex items-center gap-4">
+          <span>Data Sources: Starlink ({starlinkData?.readings?.length || 0}), Thermal ({thermalData?.readings?.length || 0}), Arduino ({arduinoData?.readings?.length || 0})</span>
+          {selectedClient && selectedClient !== 'all' && (
+            <Badge variant="outline" className="text-xs">Client: {selectedClient.slice(0, 8)}...</Badge>
+          )}
+        </div>
+      )}
+
       {/* Correlation Summary Cards */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
         <div 
-          className={`glass-card rounded-xl p-4 border cursor-pointer transition-all ${activeTab === 'power-thermal' ? 'border-amber-500/50 bg-amber-500/10' : 'border-border/50 hover:border-border'}`}
+          className={`glass-card rounded-xl p-4 border cursor-pointer transition-all ${activeTab === 'power-thermal' ? 'border-primary/50 bg-primary/10' : 'border-border/50 hover:border-border'}`}
           onClick={() => setActiveTab('power-thermal')}
         >
           <div className="flex items-center gap-2 mb-2">
-            <Zap className="w-4 h-4 text-amber-400" />
-            <Thermometer className="w-4 h-4" style={{ color: tempConfig.color }} />
+            <Zap className="w-4 h-4 text-chart-1" />
+            <Thermometer className="w-4 h-4 text-destructive" />
           </div>
           <p className="text-xs text-muted-foreground">Starlink Power ↔ {tempConfig.label}</p>
           <p className={`text-lg font-bold ${getCorrelationColor(powerThermalStats.correlation)}`}>
             r = {powerThermalStats.correlation.toFixed(3)}
           </p>
-          <p className="text-xs text-muted-foreground">{getCorrelationLabel(powerThermalStats.correlation)}</p>
+          <p className="text-xs text-muted-foreground">{powerThermalStats.dataPoints} paired • {getCorrelationLabel(powerThermalStats.correlation)}</p>
         </div>
 
         <div 
-          className={`glass-card rounded-xl p-4 border cursor-pointer transition-all ${activeTab === 'power-arduino' ? 'border-amber-500/50 bg-amber-500/10' : 'border-border/50 hover:border-border'}`}
+          className={`glass-card rounded-xl p-4 border cursor-pointer transition-all ${activeTab === 'power-arduino' ? 'border-primary/50 bg-primary/10' : 'border-border/50 hover:border-border'}`}
           onClick={() => setActiveTab('power-arduino')}
         >
           <div className="flex items-center gap-2 mb-2">
-            <Zap className="w-4 h-4 text-amber-400" />
-            <Cpu className="w-4 h-4 text-emerald-400" />
+            <Zap className="w-4 h-4 text-chart-1" />
+            <Cpu className="w-4 h-4 text-chart-2" />
           </div>
           <p className="text-xs text-muted-foreground">Starlink Power ↔ Arduino</p>
           <p className={`text-lg font-bold ${getCorrelationColor(powerArduinoStats.correlation)}`}>
             r = {powerArduinoStats.correlation.toFixed(3)}
           </p>
-          <p className="text-xs text-muted-foreground">{getCorrelationLabel(powerArduinoStats.correlation)}</p>
+          <p className="text-xs text-muted-foreground">{powerArduinoStats.dataPoints} paired • {getCorrelationLabel(powerArduinoStats.correlation)}</p>
         </div>
 
         <div 
-          className={`glass-card rounded-xl p-4 border cursor-pointer transition-all ${activeTab === 'thermal-arduino' ? 'border-red-500/50 bg-red-500/10' : 'border-border/50 hover:border-border'}`}
+          className={`glass-card rounded-xl p-4 border cursor-pointer transition-all ${activeTab === 'thermal-arduino' ? 'border-destructive/50 bg-destructive/10' : 'border-border/50 hover:border-border'}`}
           onClick={() => setActiveTab('thermal-arduino')}
         >
           <div className="flex items-center gap-2 mb-2">
-            <Thermometer className="w-4 h-4 text-red-400" />
-            <Cpu className="w-4 h-4 text-emerald-400" />
+            <Thermometer className="w-4 h-4 text-destructive" />
+            <Cpu className="w-4 h-4 text-chart-2" />
           </div>
           <p className="text-xs text-muted-foreground">Thermal ↔ Arduino</p>
           <p className={`text-lg font-bold ${getCorrelationColor(thermalArduinoStats.correlation)}`}>
             r = {thermalArduinoStats.correlation.toFixed(3)}
           </p>
-          <p className="text-xs text-muted-foreground">{getCorrelationLabel(thermalArduinoStats.correlation)}</p>
+          <p className="text-xs text-muted-foreground">{thermalArduinoStats.dataPoints} paired • {getCorrelationLabel(thermalArduinoStats.correlation)}</p>
         </div>
 
         <div 
-          className={`glass-card rounded-xl p-4 border cursor-pointer transition-all ${activeTab === 'latency-throughput' ? 'border-violet-500/50 bg-violet-500/10' : 'border-border/50 hover:border-border'}`}
+          className={`glass-card rounded-xl p-4 border cursor-pointer transition-all ${activeTab === 'latency-throughput' ? 'border-chart-4/50 bg-chart-4/10' : 'border-border/50 hover:border-border'}`}
           onClick={() => setActiveTab('latency-throughput')}
         >
           <div className="flex items-center gap-2 mb-2">
-            <Activity className="w-4 h-4 text-violet-400" />
-            <Wifi className="w-4 h-4 text-cyan-400" />
+            <Activity className="w-4 h-4 text-chart-4" />
+            <Wifi className="w-4 h-4 text-chart-3" />
           </div>
           <p className="text-xs text-muted-foreground">Latency ↔ Throughput</p>
           <p className={`text-lg font-bold ${getCorrelationColor(latencyThroughputStats.correlation)}`}>
             r = {latencyThroughputStats.correlation.toFixed(3)}
           </p>
-          <p className="text-xs text-muted-foreground">{getCorrelationLabel(latencyThroughputStats.correlation)}</p>
+          <p className="text-xs text-muted-foreground">{latencyThroughputStats.dataPoints} paired • {getCorrelationLabel(latencyThroughputStats.correlation)}</p>
         </div>
       </div>
 
       {/* Stats for Selected Pair */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-8">
         <StatCard
-          icon={<div className="w-10 h-10 rounded-lg bg-amber-500/20 flex items-center justify-center"><TrendingUp className="w-5 h-5" style={{ color: current.xColor }} /></div>}
+          icon={<div className="w-10 h-10 rounded-lg bg-chart-1/20 flex items-center justify-center"><TrendingUp className="w-5 h-5 text-chart-1" /></div>}
           label={`Avg ${current.xLabel}`}
           value={`${current.stats.avgX.toFixed(1)} ${current.xUnit}`}
-          colorClass="text-amber-400"
+          colorClass="text-chart-1"
           isLoading={isLoading}
         />
         <StatCard
-          icon={<div className="w-10 h-10 rounded-lg bg-cyan-500/20 flex items-center justify-center"><TrendingUp className="w-5 h-5" style={{ color: current.yColor }} /></div>}
+          icon={<div className="w-10 h-10 rounded-lg bg-chart-3/20 flex items-center justify-center"><TrendingUp className="w-5 h-5 text-chart-3" /></div>}
           label={`Avg ${current.yLabel}`}
           value={`${current.stats.avgY.toFixed(1)} ${current.yUnit}`}
-          colorClass="text-cyan-400"
+          colorClass="text-chart-3"
           isLoading={isLoading}
         />
         <StatCard
-          icon={<div className="w-10 h-10 rounded-lg bg-violet-500/20 flex items-center justify-center"><GitCompare className="w-5 h-5 text-violet-400" /></div>}
+          icon={<div className="w-10 h-10 rounded-lg bg-chart-4/20 flex items-center justify-center"><GitCompare className="w-5 h-5 text-chart-4" /></div>}
           label="Correlation"
           value={current.stats.correlation.toFixed(3)}
           subValue={getCorrelationLabel(current.stats.correlation)}
@@ -562,10 +645,10 @@ const CorrelationContent = () => {
           isLoading={isLoading}
         />
         <StatCard
-          icon={<div className="w-10 h-10 rounded-lg bg-emerald-500/20 flex items-center justify-center"><Activity className="w-5 h-5 text-emerald-400" /></div>}
+          icon={<div className="w-10 h-10 rounded-lg bg-chart-2/20 flex items-center justify-center"><Activity className="w-5 h-5 text-chart-2" /></div>}
           label="Data Points"
           value={current.stats.dataPoints.toString()}
-          colorClass="text-emerald-400"
+          colorClass="text-chart-2"
           isLoading={isLoading}
         />
       </div>
