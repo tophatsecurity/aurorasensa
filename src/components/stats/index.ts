@@ -34,3 +34,4 @@ export { default as GlobalReadingsTrendChart } from "./GlobalReadingsTrendChart"
 export { default as ClientTrendChart } from "./ClientTrendChart";
 export { default as ClientSensorStats } from "./ClientSensorStats";
 export { ClientListView } from "./ClientListView";
+export { ClientDetailPage } from "./ClientDetailPage";
