@@ -432,6 +432,20 @@ export const IP_GEO = {
 } as const;
 
 // =============================================
+// LOCATION (New unified location API)
+// =============================================
+export const LOCATION = {
+  // Get latest location for a client
+  CLIENT_LATEST: (clientId: string) => `/api/location/client/${clientId}/latest`,
+  // Get location history for a client (supports ?hours= query param)
+  CLIENT_HISTORY: (clientId: string) => `/api/location/client/${clientId}/history`,
+  // Get summary stats (supports ?hours= query param)
+  SUMMARY: '/api/location/summary',
+  // Get GeoJSON track for mapping (supports ?hours= query param)
+  TRACK: (clientId: string) => `/api/location/track/${clientId}`,
+} as const;
+
+// =============================================
 // GPS
 // =============================================
 export const GPS = {

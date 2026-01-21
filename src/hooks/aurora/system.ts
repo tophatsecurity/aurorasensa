@@ -2,7 +2,7 @@
 // Updated to match actual available endpoints on Aurora server
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { callAuroraApi, hasAuroraSession } from "./core";
-import { SYSTEM, CONFIG, GEO, IP_GEO } from "./endpoints";
+import { SYSTEM, CONFIG, GEO, IP_GEO, LOCATION } from "./endpoints";
 
 // =============================================
 // TYPES
@@ -553,6 +553,230 @@ export function useClientGeolocation(clientId: string | null) {
     enabled: hasAuroraSession() && !!clientId,
     staleTime: 300000, // 5 minutes
     refetchInterval: 600000, // 10 minutes
+    retry: 1,
+  });
+}
+
+// =============================================
+// LOCATION API HOOKS (New unified location endpoints)
+// =============================================
+
+export interface ClientLocation {
+  client_id: string;
+  latitude: number;
+  longitude: number;
+  altitude?: number;
+  accuracy?: number;
+  source?: string;
+  timestamp?: string;
+  // Additional metadata
+  speed?: number;
+  heading?: number;
+  satellites?: number;
+  hdop?: number;
+  vdop?: number;
+  pdop?: number;
+  // Source-specific data
+  starlink_device_id?: string;
+  gps_device?: string;
+}
+
+export interface LocationHistoryPoint {
+  latitude: number;
+  longitude: number;
+  altitude?: number;
+  accuracy?: number;
+  source?: string;
+  timestamp: string;
+  speed?: number;
+  heading?: number;
+}
+
+export interface LocationSummary {
+  total_clients: number;
+  clients_with_location: number;
+  total_location_points: number;
+  sources: {
+    starlink: number;
+    gps: number;
+    lora: number;
+    ip_geolocation: number;
+  };
+  last_updated?: string;
+}
+
+export interface GeoJsonTrack {
+  type: 'FeatureCollection';
+  features: Array<{
+    type: 'Feature';
+    geometry: {
+      type: 'LineString' | 'Point';
+      coordinates: number[][] | number[];
+    };
+    properties: {
+      client_id: string;
+      start_time?: string;
+      end_time?: string;
+      point_count?: number;
+      source?: string;
+    };
+  }>;
+}
+
+/**
+ * Get the latest location for a specific client
+ * Prioritizes: Starlink GPS > Hardware GPS > LoRa > IP Geolocation
+ */
+export function useClientLatestLocation(clientId: string | null) {
+  return useQuery({
+    queryKey: ["aurora", "location", "client", clientId, "latest"],
+    queryFn: async (): Promise<ClientLocation | null> => {
+      if (!clientId) return null;
+      
+      try {
+        const result = await callAuroraApi<ClientLocation | { data: ClientLocation; location?: ClientLocation }>(
+          LOCATION.CLIENT_LATEST(clientId)
+        );
+        if (result && typeof result === 'object') {
+          // Handle nested data structure
+          if ('location' in result && result.location) {
+            return result.location;
+          }
+          if ('data' in result && result.data) {
+            return result.data;
+          }
+          // Direct response
+          if ('latitude' in result && 'longitude' in result) {
+            return result as ClientLocation;
+          }
+        }
+      } catch (e) {
+        console.warn(`[useClientLatestLocation] Failed to get location for ${clientId}:`, e);
+      }
+      
+      return null;
+    },
+    enabled: hasAuroraSession() && !!clientId,
+    staleTime: 30000, // 30 seconds
+    refetchInterval: 60000, // 1 minute
+    retry: 1,
+  });
+}
+
+/**
+ * Get location history for a specific client
+ */
+export function useClientLocationHistory(clientId: string | null, hours: number = 24) {
+  return useQuery({
+    queryKey: ["aurora", "location", "client", clientId, "history", hours],
+    queryFn: async (): Promise<LocationHistoryPoint[]> => {
+      if (!clientId) return [];
+      
+      try {
+        const result = await callAuroraApi<
+          LocationHistoryPoint[] | 
+          { data: LocationHistoryPoint[]; history?: LocationHistoryPoint[]; points?: LocationHistoryPoint[] }
+        >(`${LOCATION.CLIENT_HISTORY(clientId)}?hours=${hours}`);
+        
+        if (Array.isArray(result)) {
+          return result;
+        }
+        if (result && typeof result === 'object') {
+          if ('history' in result && Array.isArray(result.history)) {
+            return result.history;
+          }
+          if ('points' in result && Array.isArray(result.points)) {
+            return result.points;
+          }
+          if ('data' in result && Array.isArray(result.data)) {
+            return result.data;
+          }
+        }
+      } catch (e) {
+        console.warn(`[useClientLocationHistory] Failed to get history for ${clientId}:`, e);
+      }
+      
+      return [];
+    },
+    enabled: hasAuroraSession() && !!clientId,
+    staleTime: 60000, // 1 minute
+    refetchInterval: 300000, // 5 minutes
+    retry: 1,
+  });
+}
+
+/**
+ * Get location summary stats across all clients
+ */
+export function useLocationSummary(hours: number = 48) {
+  return useQuery({
+    queryKey: ["aurora", "location", "summary", hours],
+    queryFn: async (): Promise<LocationSummary | null> => {
+      try {
+        const result = await callAuroraApi<LocationSummary | { data: LocationSummary; summary?: LocationSummary }>(
+          `${LOCATION.SUMMARY}?hours=${hours}`
+        );
+        
+        if (result && typeof result === 'object') {
+          if ('summary' in result && result.summary) {
+            return result.summary;
+          }
+          if ('data' in result && result.data) {
+            return result.data;
+          }
+          // Direct response
+          if ('total_clients' in result || 'clients_with_location' in result) {
+            return result as LocationSummary;
+          }
+        }
+      } catch (e) {
+        console.warn('[useLocationSummary] Failed to get summary:', e);
+      }
+      
+      return null;
+    },
+    enabled: hasAuroraSession(),
+    staleTime: 60000, // 1 minute
+    refetchInterval: 300000, // 5 minutes
+    retry: 1,
+  });
+}
+
+/**
+ * Get GeoJSON track for a client (for map visualization)
+ */
+export function useClientLocationTrack(clientId: string | null, hours: number = 24) {
+  return useQuery({
+    queryKey: ["aurora", "location", "track", clientId, hours],
+    queryFn: async (): Promise<GeoJsonTrack | null> => {
+      if (!clientId) return null;
+      
+      try {
+        const result = await callAuroraApi<GeoJsonTrack | { data: GeoJsonTrack; track?: GeoJsonTrack }>(
+          `${LOCATION.TRACK(clientId)}?hours=${hours}`
+        );
+        
+        if (result && typeof result === 'object') {
+          if ('track' in result && result.track) {
+            return result.track;
+          }
+          if ('data' in result && result.data) {
+            return result.data;
+          }
+          // Direct GeoJSON response
+          if ('type' in result && result.type === 'FeatureCollection') {
+            return result as GeoJsonTrack;
+          }
+        }
+      } catch (e) {
+        console.warn(`[useClientLocationTrack] Failed to get track for ${clientId}:`, e);
+      }
+      
+      return null;
+    },
+    enabled: hasAuroraSession() && !!clientId,
+    staleTime: 60000, // 1 minute
+    refetchInterval: 300000, // 5 minutes
     retry: 1,
   });
 }
