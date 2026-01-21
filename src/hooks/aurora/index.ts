@@ -226,6 +226,7 @@ export {
   useClientLocationHistory,
   useLocationSummary,
   useClientLocationTrack,
+  useAllClientsLocations,
   type ClientLocation,
   type LocationHistoryPoint,
   type LocationSummary,
