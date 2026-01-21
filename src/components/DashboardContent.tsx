@@ -319,32 +319,6 @@ const DashboardContent = () => {
         />
       </div>
 
-      {/* ===== SENSOR TYPES SECTION ===== */}
-      {topSensorTypes.length > 0 && (
-        <div className="mb-6">
-          <Card className="glass-card border-border/50">
-            <CardHeader className="pb-3">
-              <CardTitle className="text-sm font-medium flex items-center gap-2">
-                <Gauge className="w-4 h-4 text-cyan-400" />
-                Top Sensor Types (7 days)
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                {topSensorTypes.map((sensor, idx) => (
-                  <DeviceBar 
-                    key={sensor.sensor_type}
-                    name={sensor.sensor_type.replace(/_/g, ' ')}
-                    count={sensor.reading_count}
-                    maxCount={topSensorTypes[0]?.reading_count ?? 0}
-                    color={barColors[idx % barColors.length]}
-                  />
-                ))}
-              </div>
-            </CardContent>
-          </Card>
-        </div>
-      )}
 
       {/* ===== CHARTS SECTION - LAZY LOADED ===== */}
       <div className="space-y-6">
