@@ -95,20 +95,37 @@ interface ClientSelectorProps {
   compact?: boolean;
 }
 
-// Helper to get a meaningful display name for a client
+// Helper to validate hostname
+const isValidHostname = (hostname: string | undefined | null): hostname is string => {
+  if (!hostname) return false;
+  const trimmed = hostname.trim().toLowerCase();
+  return trimmed !== '' && 
+         trimmed !== 'unknown' && 
+         trimmed !== 'undefined' && 
+         trimmed !== 'null' &&
+         !trimmed.startsWith('[object');
+};
+
+// Helper to get a meaningful display name for a client - prioritizes hostname
 const getClientDisplayName = (client: Client, index: number): string => {
-  // Use hostname if available and not empty/unknown
-  if (client.hostname && client.hostname !== 'unknown' && client.hostname.trim() !== '') {
+  // Priority 1: Use hostname if valid
+  if (isValidHostname(client.hostname)) {
     return client.hostname;
   }
-  // Use client_id if it's meaningful (not just "unknown")
+  
+  // Priority 2: Check for name field
+  if (isValidHostname((client as any).name)) {
+    return (client as any).name;
+  }
+  
+  // Priority 3: Truncated client_id with prefix
   if (client.client_id && client.client_id !== 'unknown' && client.client_id.trim() !== '') {
-    // If it looks like a UUID or hash, show a truncated version
-    if (client.client_id.length > 20) {
-      return `Client ${client.client_id.slice(0, 8)}...`;
+    if (client.client_id.length > 12) {
+      return `${client.client_id.slice(0, 8)}…`;
     }
     return client.client_id;
   }
+  
   // Fallback to indexed name
   return `Client ${index + 1}`;
 };
