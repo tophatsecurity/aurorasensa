@@ -297,10 +297,6 @@ export default function ClientDetailsPage() {
                   <Server className="w-4 h-4" />
                   System
                 </TabsTrigger>
-                <TabsTrigger value="wifi" className="gap-2">
-                  <Wifi className="w-4 h-4" />
-                  WiFi
-                </TabsTrigger>
                 <TabsTrigger value="network" className="gap-2">
                   <Network className="w-4 h-4" />
                   Network
@@ -715,100 +711,6 @@ export default function ClientDetailsPage() {
               )}
             </TabsContent>
 
-            {/* WiFi Tab */}
-            <TabsContent value="wifi" className="m-0 space-y-6">
-              {/* WiFi Status */}
-              <Card className="bg-card/50 border-border/50">
-                <CardHeader className="pb-3">
-                  <CardTitle className="text-sm flex items-center gap-2">
-                    <Wifi className="w-4 h-4 text-primary" />
-                    WiFi Configuration
-                  </CardTitle>
-                </CardHeader>
-                <CardContent>
-                  {wifiConfigLoading ? (
-                    <div className="space-y-2">
-                      <Skeleton className="h-4 w-full" />
-                      <Skeleton className="h-4 w-3/4" />
-                    </div>
-                  ) : wifiConfig ? (
-                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
-                      <div>
-                        <p className="text-muted-foreground text-xs">SSID</p>
-                        <p className="font-medium">{wifiConfig.ssid || '—'}</p>
-                      </div>
-                      <div>
-                        <p className="text-muted-foreground text-xs">Mode</p>
-                        <p>{wifiConfig.mode || wifiMode?.mode || '—'}</p>
-                      </div>
-                      <div>
-                        <p className="text-muted-foreground text-xs">Channel</p>
-                        <p>{wifiConfig.channel || '—'}</p>
-                      </div>
-                      <div>
-                        <p className="text-muted-foreground text-xs">Status</p>
-                        <Badge className={wifiStatus?.connected 
-                          ? 'bg-success/20 text-success border-success/30' 
-                          : 'bg-muted text-muted-foreground'
-                        }>
-                          {wifiStatus?.connected ? 'Connected' : 'Disconnected'}
-                        </Badge>
-                      </div>
-                    </div>
-                  ) : (
-                    <p className="text-sm text-muted-foreground">WiFi configuration unavailable</p>
-                  )}
-                </CardContent>
-              </Card>
-
-              {/* Connected Clients */}
-              <Card className="bg-card/50 border-border/50">
-                <CardHeader className="pb-3">
-                  <CardTitle className="text-sm flex items-center gap-2">
-                    <Users className="w-4 h-4 text-primary" />
-                    Connected Clients ({wifiClientsList.length})
-                  </CardTitle>
-                </CardHeader>
-                <CardContent>
-                  {wifiClientsLoading ? (
-                    <div className="space-y-2">
-                      <Skeleton className="h-12 w-full" />
-                      <Skeleton className="h-12 w-full" />
-                    </div>
-                  ) : wifiClientsList.length > 0 ? (
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
-                      {wifiClientsList.map((wifiClient, idx) => (
-                        <div key={idx} className="flex items-center justify-between p-3 rounded-lg bg-muted/30 border border-border/30">
-                          <div className="flex items-center gap-3">
-                            <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center">
-                              <Wifi className="w-4 h-4 text-primary" />
-                            </div>
-                            <div>
-                              <p className="text-sm font-medium">{wifiClient.hostname || 'Unknown Device'}</p>
-                              <p className="text-xs text-muted-foreground font-mono">{wifiClient.mac}</p>
-                            </div>
-                          </div>
-                          <div className="text-right">
-                            {wifiClient.ip && (
-                              <p className="text-sm font-mono">{wifiClient.ip}</p>
-                            )}
-                            {wifiClient.connected_at && (
-                              <p className="text-xs text-muted-foreground">
-                                Connected {formatLastSeen(wifiClient.connected_at)}
-                              </p>
-                            )}
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  ) : (
-                    <p className="text-sm text-muted-foreground text-center py-4">
-                      No clients connected
-                    </p>
-                  )}
-                </CardContent>
-              </Card>
-            </TabsContent>
 
             {/* Network Tab */}
             <TabsContent value="network" className="m-0 space-y-6">
