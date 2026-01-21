@@ -4,7 +4,6 @@ import {
   Zap, 
   Loader2,
   Database,
-  Server,
   Satellite,
   Plane,
   Radio,
@@ -16,7 +15,6 @@ import {
   RefreshCw
 } from "lucide-react";
 import ConnectionStatusIndicator from "./ConnectionStatusIndicator";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -28,21 +26,17 @@ const SensorTypeStatsSection = lazy(() => import("./dashboard/SensorTypeStatsSec
 const PowerHistoryChart = lazy(() => import("./dashboard/PowerHistoryChart"));
 const StarlinkCharts = lazy(() => import("./StarlinkCharts"));
 
+// Use dashboard-specific hooks that fetch from /api/dashboard/* and /api/stats/* endpoints
 import { 
-  useComprehensiveStats, 
-  useClients,
-  useClientsByState,
-  useClientStatistics,
-  useStatsOverview,
-  useGlobalStats,
-  useAlertStats,
+  useDashboardStats,
+  useDashboardSensorStats,
   useDashboardClientStats,
+  useAlertStats,
   usePowerSummary,
   useBluetoothStats,
   useWifiStats,
   useAdsbStats,
   useLoraGlobalStats,
-  type Client 
 } from "@/hooks/aurora";
 
 // Chart loading fallback
@@ -125,17 +119,15 @@ const DashboardContent = () => {
   const periodHours = 24;
   const [isRefreshing, setIsRefreshing] = useState(false);
   
-  // ===== CONSOLIDATED API CALLS =====
-  // Core stats - single comprehensive fetch
-  const { data: stats, isLoading: statsLoading, refetch: refetchStats } = useComprehensiveStats();
-  const { data: statsOverview, isLoading: overviewLoading } = useStatsOverview();
-  const { data: globalStats, isLoading: globalLoading } = useGlobalStats();
+  // ===== DASHBOARD STATS FROM API =====
+  // Primary dashboard stats from /api/stats/global, /api/stats/overview, /api/stats/by-client
+  const { data: dashboardStats, isLoading: dashboardStatsLoading, refetch: refetchDashboardStats } = useDashboardStats();
   
-  // Client data - consolidated
-  const { data: clients, isLoading: clientsLoading } = useClients();
-  const { data: clientsByState } = useClientsByState();
-  const { data: clientStatistics } = useClientStatistics();
-  const { data: dashboardClientStats } = useDashboardClientStats(undefined, periodHours);
+  // Sensor stats from /api/dashboard/sensor-stats with fallback chain
+  const { data: sensorStats, isLoading: sensorStatsLoading } = useDashboardSensorStats();
+  
+  // Client stats from /api/stats/by-client
+  const { data: clientStats, isLoading: clientStatsLoading } = useDashboardClientStats(undefined, periodHours);
   
   // Secondary stats - for quick metrics
   const { data: alertStats } = useAlertStats();
@@ -145,45 +137,26 @@ const DashboardContent = () => {
   const { data: adsbStats } = useAdsbStats();
   const { data: loraStats } = useLoraGlobalStats();
 
-  // ===== DERIVED METRICS =====
-  const global = stats?.global;
+  // ===== DERIVED METRICS FROM DASHBOARD API =====
+  // Total readings - from dashboard stats (already aggregated from best source)
+  const totalReadings = dashboardStats?.total_readings ?? 
+    sensorStats?.readings_last_24h ?? 0;
+
+  // Client count - from dashboard stats or client stats
+  const totalClients = dashboardStats?.total_clients ?? 
+    clientStats?.clients?.length ?? 
+    sensorStats?.total_clients ?? 0;
   
-  // Aggregate all clients from state
-  const allClientsFromState = useMemo(() => {
-    if (!clientsByState?.clients_by_state) return [];
-    const { pending = [], registered = [], adopted = [], disabled = [], suspended = [] } = clientsByState.clients_by_state;
-    return [...pending, ...registered, ...adopted, ...disabled, ...suspended];
-  }, [clientsByState]);
+  // Active clients (estimate from clientStats)
+  const activeClientCount = clientStats?.clients?.filter(c => c.reading_count > 0).length ?? totalClients;
 
-  // Active clients count
-  const activeClients = useMemo(() => {
-    const clientList = allClientsFromState.length > 0 ? allClientsFromState : (clients || []);
-    return clientList.filter((c: Client) => 
-      !['deleted', 'disabled', 'suspended'].includes(c.state || '')
-    );
-  }, [allClientsFromState, clients]);
+  // Sensor types count - from dashboard stats or sensor stats
+  const sensorTypesCount = dashboardStats?.total_sensors ?? 
+    sensorStats?.total_sensors ?? 0;
 
-  // Total readings - best available source
-  const totalReadings = statsOverview?.total_readings ?? 
-    globalStats?.total_readings ?? 
-    global?.total_readings ?? 0;
-
-  // Client count - highest available
-  const totalClients = Math.max(
-    allClientsFromState.length,
-    clientStatistics?.statistics?.total ?? 0,
-    globalStats?.total_clients ?? 0,
-    clients?.length ?? 0
-  );
-
-  // Sensor types count
-  const sensorTypesCount = globalStats?.sensor_types_count ?? 
-    global?.sensor_types_count ?? 
-    globalStats?.device_breakdown?.length ?? 0;
-
-  // Activity metrics
-  const readings1h = global?.activity?.last_1_hour?.readings_1h ?? 0;
-  const activeDevices1h = global?.activity?.last_1_hour?.active_devices_1h ?? 0;
+  // Device count
+  const totalDevices = dashboardStats?.total_devices ?? 
+    sensorStats?.total_devices ?? 0;
 
   // Power metrics
   const currentPower = powerSummary?.total_power_watts ?? powerSummary?.avg_power_watts;
@@ -199,12 +172,12 @@ const DashboardContent = () => {
   // Alerts
   const activeAlerts = alertStats?.active ?? 0;
 
-  const isLoading = statsLoading || overviewLoading || globalLoading;
+  const isLoading = dashboardStatsLoading || sensorStatsLoading || clientStatsLoading;
 
   // Refresh handler
   const handleRefresh = async () => {
     setIsRefreshing(true);
-    await refetchStats();
+    await refetchDashboardStats();
     setIsRefreshing(false);
   };
 
@@ -235,15 +208,15 @@ const DashboardContent = () => {
           value={totalClients}
           icon={Users}
           color="bg-emerald-500/20 text-emerald-400"
-          subtitle={`${activeClients.length} active`}
-          isLoading={clientsLoading}
+          subtitle={`${activeClientCount} active`}
+          isLoading={clientStatsLoading}
         />
         <QuickStat
           label="Readings / Day"
           value={formatNumber(totalReadings)}
           icon={Database}
           color="bg-cyan-500/20 text-cyan-400"
-          subtitle={readings1h > 0 ? `${formatNumber(readings1h)} last hour` : undefined}
+          subtitle={totalDevices > 0 ? `${totalDevices} devices` : undefined}
           isLoading={isLoading}
         />
         <QuickStat
@@ -251,8 +224,8 @@ const DashboardContent = () => {
           value={sensorTypesCount}
           icon={Radio}
           color="bg-violet-500/20 text-violet-400"
-          subtitle={`${activeDevices1h} devices active`}
-          isLoading={isLoading}
+          subtitle={`${sensorStats?.sensorItems?.length ?? 0} types tracked`}
+          isLoading={sensorStatsLoading}
         />
         <QuickStat
           label="Measurements"
