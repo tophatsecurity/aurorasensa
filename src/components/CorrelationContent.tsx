@@ -581,11 +581,22 @@ export default function CorrelationContent() {
 
   // Get current pair config and data
   const getCurrentData = () => {
+    // Distinct color palette for each measurement type
+    const MEASUREMENT_COLORS = {
+      starlinkPower: '#06b6d4',      // Cyan - Starlink Power
+      thermalProbe: '#ef4444',        // Red - Thermal Probe
+      arduinoDht: '#22c55e',          // Green - Arduino DHT/AHT
+      arduinoBmp: '#f59e0b',          // Amber - Arduino BMP
+      humidity: '#8b5cf6',            // Purple - Humidity
+      latency: '#ec4899',             // Pink - Latency
+      download: '#3b82f6',            // Blue - Download
+    };
+
     const tempConfig = {
-      'thermal-probe': { label: 'Thermal Probe', unit: '°C', color: 'hsl(var(--destructive))' },
-      'arduino-dht': { label: 'Arduino DHT/AHT', unit: '°C', color: 'hsl(var(--chart-2))' },
-      'arduino-bmp': { label: 'Arduino BMP', unit: '°C', color: 'hsl(var(--chart-3))' },
-      'humidity': { label: 'Humidity', unit: '%', color: 'hsl(var(--chart-4))' },
+      'thermal-probe': { label: 'Thermal Probe', unit: '°C', color: MEASUREMENT_COLORS.thermalProbe },
+      'arduino-dht': { label: 'Arduino DHT/AHT', unit: '°C', color: MEASUREMENT_COLORS.arduinoDht },
+      'arduino-bmp': { label: 'Arduino BMP', unit: '°C', color: MEASUREMENT_COLORS.arduinoBmp },
+      'humidity': { label: 'Humidity', unit: '%', color: MEASUREMENT_COLORS.humidity },
     }[tempMeasurement];
 
     switch (activeTab) {
@@ -597,7 +608,7 @@ export default function CorrelationContent() {
           yLabel: tempConfig.label, 
           xUnit: "W", 
           yUnit: tempConfig.unit, 
-          xColor: "hsl(var(--chart-1))", 
+          xColor: MEASUREMENT_COLORS.starlinkPower, 
           yColor: tempConfig.color 
         };
       case "power-arduino": 
@@ -608,8 +619,8 @@ export default function CorrelationContent() {
           yLabel: "Arduino Temp", 
           xUnit: "W", 
           yUnit: "°C", 
-          xColor: "hsl(var(--chart-1))", 
-          yColor: "hsl(var(--chart-2))" 
+          xColor: MEASUREMENT_COLORS.starlinkPower, 
+          yColor: MEASUREMENT_COLORS.arduinoDht 
         };
       case "thermal-arduino": 
         return { 
@@ -619,8 +630,8 @@ export default function CorrelationContent() {
           yLabel: "Arduino Temp", 
           xUnit: "°C", 
           yUnit: "°C", 
-          xColor: "hsl(var(--destructive))", 
-          yColor: "hsl(var(--chart-2))" 
+          xColor: MEASUREMENT_COLORS.thermalProbe, 
+          yColor: MEASUREMENT_COLORS.arduinoDht 
         };
       case "latency-throughput": 
         return { 
@@ -630,8 +641,8 @@ export default function CorrelationContent() {
           yLabel: "Download", 
           xUnit: "ms", 
           yUnit: "Mbps", 
-          xColor: "hsl(var(--chart-4))", 
-          yColor: "hsl(var(--chart-3))" 
+          xColor: MEASUREMENT_COLORS.latency, 
+          yColor: MEASUREMENT_COLORS.download 
         };
       default: 
         return { 
@@ -641,7 +652,7 @@ export default function CorrelationContent() {
           yLabel: tempConfig.label, 
           xUnit: "W", 
           yUnit: tempConfig.unit, 
-          xColor: "hsl(var(--chart-1))", 
+          xColor: MEASUREMENT_COLORS.starlinkPower, 
           yColor: tempConfig.color 
         };
     }
