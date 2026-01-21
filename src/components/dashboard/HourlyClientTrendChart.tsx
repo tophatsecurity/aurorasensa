@@ -233,8 +233,7 @@ export default function HourlyClientTrendChart({ clientId }: HourlyClientTrendCh
                   key={clientName}
                   dataKey={clientName}
                   fill={getClientColor(idx)}
-                  stackId="clients"
-                  radius={idx === clientNames.length - 1 ? [4, 4, 0, 0] : [0, 0, 0, 0]}
+                  radius={[4, 4, 0, 0]}
                 />
               ))}
             </BarChart>
