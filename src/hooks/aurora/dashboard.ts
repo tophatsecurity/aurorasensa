@@ -69,6 +69,7 @@ export interface DashboardSensorStatsResponse {
 // New types matching actual API response from /api/stats/by-client
 export interface ClientStatsItem {
   client_id: string;
+  hostname?: string; // Enriched by useDashboardClientStats
   device_count: number;
   sensor_type_count: number;
   sensor_types: string[];
@@ -614,7 +615,7 @@ export function useDashboardSensorStats(clientId?: string | null) {
   });
 }
 
-// NEW: Fetch client stats from /api/stats/by-client (now returns rich data)
+// NEW: Fetch client stats from /api/stats/by-client with hostname enrichment
 export function useDashboardClientStats(clientId?: string | null, hours: number = 24) {
   return useQuery({
     queryKey: ["aurora", "dashboard", "client-stats", clientId, hours],
@@ -622,18 +623,60 @@ export function useDashboardClientStats(clientId?: string | null, hours: number 
       const options: AuroraApiOptions = { clientId, params: { hours } };
       
       try {
-        const result = await callAuroraApi<ClientStatsResponse | ClientStatsItem[]>(
-          STATS.BY_CLIENT, "GET", undefined, options
-        );
+        // Fetch client stats and all-states in parallel for hostname enrichment
+        const [statsResult, allStatesResult] = await Promise.all([
+          callAuroraApi<ClientStatsResponse | ClientStatsItem[]>(
+            STATS.BY_CLIENT, "GET", undefined, options
+          ),
+          callAuroraApi<{
+            states?: {
+              adopted?: Array<{ client_id: string; hostname?: string }>;
+              registered?: Array<{ client_id: string; hostname?: string }>;
+              pending?: Array<{ client_id: string; hostname?: string }>;
+            };
+            clients_by_state?: {
+              adopted?: Array<{ client_id: string; hostname?: string }>;
+              registered?: Array<{ client_id: string; hostname?: string }>;
+              pending?: Array<{ client_id: string; hostname?: string }>;
+            };
+          }>(CLIENTS.ALL_STATES, "GET").catch(() => null),
+        ]);
+        
+        // Build hostname map from all-states
+        const hostnameMap = new Map<string, string>();
+        if (allStatesResult) {
+          const statesData = allStatesResult.states || allStatesResult.clients_by_state;
+          if (statesData) {
+            const allClients = [
+              ...(statesData.adopted || []),
+              ...(statesData.registered || []),
+              ...(statesData.pending || []),
+            ];
+            for (const client of allClients) {
+              if (client.client_id && client.hostname && client.hostname !== 'unknown') {
+                hostnameMap.set(client.client_id, client.hostname);
+              }
+            }
+          }
+        }
         
         // Handle both wrapped and unwrapped responses
-        const clients = Array.isArray(result) ? result : result?.data || [];
-        const pagination = !Array.isArray(result) ? result?.pagination : null;
+        const clients = Array.isArray(statsResult) ? statsResult : statsResult?.data || [];
+        const pagination = !Array.isArray(statsResult) ? statsResult?.pagination : null;
+        
+        // Enrich clients with hostnames
+        const enrichedClients = clients.map(c => ({
+          ...c,
+          hostname: hostnameMap.get(c.client_id) || c.client_id,
+        }));
+        
+        console.log('[useDashboardClientStats] Enriched clients with hostnames:', 
+          enrichedClients.map(c => ({ id: c.client_id, hostname: c.hostname })));
         
         return {
-          clients,
+          clients: enrichedClients,
           total: pagination?.total || clients.length,
-          timeWindowHours: !Array.isArray(result) ? result?.time_window_hours : hours,
+          timeWindowHours: !Array.isArray(statsResult) ? statsResult?.time_window_hours : hours,
         };
       } catch {
         return { clients: [], total: 0, timeWindowHours: hours };
