@@ -885,18 +885,25 @@ const ArduinoSensorView = ({ readings, latestReading }: { readings: SensorReadin
     if (value === null || value === undefined) return undefined;
     if (typeof value === 'number' || typeof value === 'string') return value;
     if (typeof value === 'object' && value !== null) {
-      // Try to extract a meaningful value from nested objects
       const obj = value as Record<string, unknown>;
-      // Look for common value keys
       const valueKeys = ['value', 'raw', 'reading', 'level', 'percent', 'avg', 'current'];
       for (const key of valueKeys) {
         if (key in obj && (typeof obj[key] === 'number' || typeof obj[key] === 'string')) {
           return obj[key] as number | string;
         }
       }
-      // If it's an object with numeric values, return the first one
       const numericValue = Object.values(obj).find(v => typeof v === 'number');
       if (numericValue !== undefined) return numericValue as number;
+    }
+    return undefined;
+  };
+
+  const extractNumeric = (value: unknown): number | undefined => {
+    const primitive = extractPrimitive(value);
+    if (typeof primitive === 'number') return primitive;
+    if (typeof primitive === 'string') {
+      const parsed = parseFloat(primitive);
+      return isNaN(parsed) ? undefined : parsed;
     }
     return undefined;
   };
@@ -916,6 +923,51 @@ const ArduinoSensorView = ({ readings, latestReading }: { readings: SensorReadin
       accelZ: extractPrimitive(data.accel_z ?? data.az ?? data.accelerometer_z),
     };
   }, [latestReading]);
+
+  // Process historical data for trend charts
+  const chartData = useMemo(() => {
+    if (!readings || readings.length === 0) return { environmental: [], analog: [], motion: [] };
+    
+    // Take last 50 readings for charts, sorted by timestamp
+    const sortedReadings = [...readings]
+      .sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime())
+      .slice(-50);
+    
+    const envData: Array<{ time: string; temperature?: number; humidity?: number; pressure?: number }> = [];
+    const analogData: Array<{ time: string; light?: number; sound?: number; potentiometer?: number }> = [];
+    const motionData: Array<{ time: string; accelX?: number; accelY?: number; accelZ?: number }> = [];
+    
+    sortedReadings.forEach((reading) => {
+      const data = reading.data || {};
+      const time = new Date(reading.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+      
+      // Environmental
+      const temp = extractNumeric(data.temperature ?? data.temp_c ?? data.temp);
+      const hum = extractNumeric(data.humidity ?? data.hum);
+      const press = extractNumeric(data.pressure ?? data.bmp_pressure);
+      if (temp !== undefined || hum !== undefined || press !== undefined) {
+        envData.push({ time, temperature: temp, humidity: hum, pressure: press });
+      }
+      
+      // Analog
+      const light = extractNumeric(data.light ?? data.lux ?? data.ambient_light ?? data.light_raw);
+      const sound = extractNumeric(data.sound ?? data.sound_level ?? data.noise ?? data.sound_raw);
+      const pot = extractNumeric(data.potentiometer ?? data.pot ?? data.analog ?? data.pot_raw);
+      if (light !== undefined || sound !== undefined || pot !== undefined) {
+        analogData.push({ time, light, sound, potentiometer: pot });
+      }
+      
+      // Motion
+      const ax = extractNumeric(data.accel_x ?? data.ax ?? data.accelerometer_x);
+      const ay = extractNumeric(data.accel_y ?? data.ay ?? data.accelerometer_y);
+      const az = extractNumeric(data.accel_z ?? data.az ?? data.accelerometer_z);
+      if (ax !== undefined || ay !== undefined || az !== undefined) {
+        motionData.push({ time, accelX: ax, accelY: ay, accelZ: az });
+      }
+    });
+    
+    return { environmental: envData, analog: analogData, motion: motionData };
+  }, [readings]);
 
   const allMeasurements: Array<{
     title: string;
@@ -946,6 +998,11 @@ const ArduinoSensorView = ({ readings, latestReading }: { readings: SensorReadin
   const analog = allMeasurements.filter(m => m.category === 'analog');
   const motion = allMeasurements.filter(m => m.category === 'motion');
 
+  // Check if we have chart data
+  const hasEnvChart = chartData.environmental.length > 1;
+  const hasAnalogChart = chartData.analog.length > 1;
+  const hasMotionChart = chartData.motion.length > 1;
+
   return (
     <div className="space-y-6">
       {/* Environmental Sensors */}
@@ -968,6 +1025,50 @@ const ArduinoSensorView = ({ readings, latestReading }: { readings: SensorReadin
               />
             ))}
           </div>
+          {/* Environmental Trend Chart */}
+          {hasEnvChart && (
+            <Card className="glass-card border-border/50 mt-4">
+              <CardHeader className="pb-2">
+                <CardTitle className="text-sm font-medium text-muted-foreground flex items-center gap-2">
+                  <Activity className="w-4 h-4" />
+                  Environmental Trends
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="pt-0">
+                <div className="h-48">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <LineChart data={chartData.environmental}>
+                      <XAxis 
+                        dataKey="time" 
+                        tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 10 }}
+                        axisLine={{ stroke: 'hsl(var(--border))' }}
+                        tickLine={false}
+                      />
+                      <YAxis 
+                        tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 10 }}
+                        axisLine={{ stroke: 'hsl(var(--border))' }}
+                        tickLine={false}
+                        width={40}
+                      />
+                      <Tooltip
+                        contentStyle={{
+                          backgroundColor: 'hsl(var(--card))',
+                          border: '1px solid hsl(var(--border))',
+                          borderRadius: '8px',
+                          fontSize: '12px',
+                        }}
+                        labelStyle={{ color: 'hsl(var(--foreground))' }}
+                      />
+                      <Legend wrapperStyle={{ fontSize: '11px' }} />
+                      <Line type="monotone" dataKey="temperature" name="Temp (°C)" stroke="hsl(0, 80%, 60%)" strokeWidth={2} dot={false} />
+                      <Line type="monotone" dataKey="humidity" name="Humidity (%)" stroke="hsl(210, 80%, 60%)" strokeWidth={2} dot={false} />
+                      <Line type="monotone" dataKey="pressure" name="Pressure (hPa)" stroke="hsl(270, 80%, 60%)" strokeWidth={2} dot={false} />
+                    </LineChart>
+                  </ResponsiveContainer>
+                </div>
+              </CardContent>
+            </Card>
+          )}
         </div>
       )}
 
@@ -991,6 +1092,50 @@ const ArduinoSensorView = ({ readings, latestReading }: { readings: SensorReadin
               />
             ))}
           </div>
+          {/* Analog Trend Chart */}
+          {hasAnalogChart && (
+            <Card className="glass-card border-border/50 mt-4">
+              <CardHeader className="pb-2">
+                <CardTitle className="text-sm font-medium text-muted-foreground flex items-center gap-2">
+                  <Activity className="w-4 h-4" />
+                  Analog Sensor Trends
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="pt-0">
+                <div className="h-48">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <AreaChart data={chartData.analog}>
+                      <XAxis 
+                        dataKey="time" 
+                        tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 10 }}
+                        axisLine={{ stroke: 'hsl(var(--border))' }}
+                        tickLine={false}
+                      />
+                      <YAxis 
+                        tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 10 }}
+                        axisLine={{ stroke: 'hsl(var(--border))' }}
+                        tickLine={false}
+                        width={40}
+                      />
+                      <Tooltip
+                        contentStyle={{
+                          backgroundColor: 'hsl(var(--card))',
+                          border: '1px solid hsl(var(--border))',
+                          borderRadius: '8px',
+                          fontSize: '12px',
+                        }}
+                        labelStyle={{ color: 'hsl(var(--foreground))' }}
+                      />
+                      <Legend wrapperStyle={{ fontSize: '11px' }} />
+                      <Area type="monotone" dataKey="light" name="Light" stroke="hsl(45, 80%, 50%)" fill="hsl(45, 80%, 50%)" fillOpacity={0.2} strokeWidth={2} />
+                      <Area type="monotone" dataKey="sound" name="Sound" stroke="hsl(185, 80%, 50%)" fill="hsl(185, 80%, 50%)" fillOpacity={0.2} strokeWidth={2} />
+                      <Area type="monotone" dataKey="potentiometer" name="Pot" stroke="hsl(330, 80%, 60%)" fill="hsl(330, 80%, 60%)" fillOpacity={0.2} strokeWidth={2} />
+                    </AreaChart>
+                  </ResponsiveContainer>
+                </div>
+              </CardContent>
+            </Card>
+          )}
         </div>
       )}
 
@@ -1014,6 +1159,50 @@ const ArduinoSensorView = ({ readings, latestReading }: { readings: SensorReadin
               />
             ))}
           </div>
+          {/* Motion Trend Chart */}
+          {hasMotionChart && (
+            <Card className="glass-card border-border/50 mt-4">
+              <CardHeader className="pb-2">
+                <CardTitle className="text-sm font-medium text-muted-foreground flex items-center gap-2">
+                  <Activity className="w-4 h-4" />
+                  Accelerometer Trends
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="pt-0">
+                <div className="h-48">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <LineChart data={chartData.motion}>
+                      <XAxis 
+                        dataKey="time" 
+                        tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 10 }}
+                        axisLine={{ stroke: 'hsl(var(--border))' }}
+                        tickLine={false}
+                      />
+                      <YAxis 
+                        tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 10 }}
+                        axisLine={{ stroke: 'hsl(var(--border))' }}
+                        tickLine={false}
+                        width={40}
+                      />
+                      <Tooltip
+                        contentStyle={{
+                          backgroundColor: 'hsl(var(--card))',
+                          border: '1px solid hsl(var(--border))',
+                          borderRadius: '8px',
+                          fontSize: '12px',
+                        }}
+                        labelStyle={{ color: 'hsl(var(--foreground))' }}
+                      />
+                      <Legend wrapperStyle={{ fontSize: '11px' }} />
+                      <Line type="monotone" dataKey="accelX" name="X (g)" stroke="hsl(160, 80%, 50%)" strokeWidth={2} dot={false} />
+                      <Line type="monotone" dataKey="accelY" name="Y (g)" stroke="hsl(175, 80%, 50%)" strokeWidth={2} dot={false} />
+                      <Line type="monotone" dataKey="accelZ" name="Z (g)" stroke="hsl(200, 80%, 50%)" strokeWidth={2} dot={false} />
+                    </LineChart>
+                  </ResponsiveContainer>
+                </div>
+              </CardContent>
+            </Card>
+          )}
         </div>
       )}
 
