@@ -44,7 +44,7 @@ export function LoginForm({ onSwitchToSignUp }: LoginFormProps) {
   return (
     <Card className="w-full max-w-md bg-slate-900/80 border-cyan-500/30 backdrop-blur-sm">
       <CardHeader className="text-center">
-        <CardTitle className="text-2xl text-cyan-400">Aurora Sense</CardTitle>
+        <CardTitle className="text-2xl text-cyan-400">AuroraSENSE</CardTitle>
         <CardDescription className="text-slate-400">
           Sign in to access your dashboard
         </CardDescription>
