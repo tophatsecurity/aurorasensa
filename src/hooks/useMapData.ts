@@ -130,35 +130,68 @@ function extractGpsFromReadings(readings: Array<{ device_id: string; device_type
   return gpsData;
 }
 
-// Helper to convert geoLocations to array format (API may return object or array)
+// Helper to convert geoLocations to array format (API may return object, array, or wrapped response)
 function normalizeGeoLocations(geoLocations: unknown): GeoLocation[] {
   if (!geoLocations) return [];
-  if (Array.isArray(geoLocations)) {
-    // Filter out null/undefined entries and ensure valid geo data
-    return geoLocations.filter((g): g is GeoLocation => 
-      g !== null && 
-      g !== undefined && 
-      typeof g === 'object' &&
-      typeof g.device_id === 'string' &&
-      typeof g.lat === 'number' && 
-      typeof g.lng === 'number'
-    );
+  
+  // Handle wrapped response format: { status: "success", data: [...], count: N }
+  if (typeof geoLocations === 'object' && !Array.isArray(geoLocations)) {
+    const wrapped = geoLocations as Record<string, unknown>;
+    if (wrapped.data && Array.isArray(wrapped.data)) {
+      return normalizeGeoLocations(wrapped.data);
+    }
   }
+  
+  if (Array.isArray(geoLocations)) {
+    // Map and filter entries, handling both lat/lng and latitude/longitude formats
+    return geoLocations.map((g) => {
+      if (!g || typeof g !== 'object') return null;
+      const item = g as Record<string, unknown>;
+      
+      // Extract coordinates - API may use lat/lng or latitude/longitude
+      const lat = (item.lat ?? item.latitude) as number | undefined;
+      const lng = (item.lng ?? item.longitude ?? item.lon) as number | undefined;
+      
+      if (typeof lat !== 'number' || typeof lng !== 'number') return null;
+      if (lat < -90 || lat > 90 || lng < -180 || lng > 180) return null;
+      if (lat === 0 && lng === 0) return null;
+      
+      return {
+        device_id: (item.device_id as string) || 'unknown',
+        lat,
+        lng,
+        altitude: item.altitude as number | undefined,
+        timestamp: (item.timestamp ?? item.last_seen) as string | undefined,
+        device_name: item.device_name as string | undefined,
+        device_type: item.device_type as string | undefined,
+        client_id: item.client_id as string | undefined,
+        status: item.status as string | undefined,
+      } as GeoLocation & { device_name?: string; device_type?: string; client_id?: string; status?: string };
+    }).filter((g): g is GeoLocation => g !== null);
+  }
+  
   if (typeof geoLocations === 'object') {
     // Handle object format where keys are device_ids
     return Object.entries(geoLocations as Record<string, unknown>).map(([key, value]) => {
       if (value && typeof value === 'object') {
         const v = value as Record<string, unknown>;
+        const lat = (v.lat ?? v.latitude) as number | undefined;
+        const lng = (v.lng ?? v.longitude ?? v.lon) as number | undefined;
+        
+        if (typeof lat !== 'number' || typeof lng !== 'number') return null;
+        if (lat < -90 || lat > 90 || lng < -180 || lng > 180) return null;
+        if (lat === 0 && lng === 0) return null;
+        
         return {
           device_id: (v.device_id as string) || key,
-          lat: (v.lat ?? v.latitude) as number,
-          lng: (v.lng ?? v.longitude ?? v.lon) as number,
+          lat,
+          lng,
           altitude: v.altitude as number | undefined,
-          timestamp: v.timestamp as string | undefined,
+          timestamp: (v.timestamp ?? v.last_seen) as string | undefined,
         } as GeoLocation;
       }
       return null;
-    }).filter((g): g is GeoLocation => g !== null && typeof g.lat === 'number' && typeof g.lng === 'number');
+    }).filter((g): g is GeoLocation => g !== null);
   }
   return [];
 }
@@ -1074,25 +1107,32 @@ export function useMapData(options: UseMapDataOptions = {}) {
 
     // Add geo locations as GPS markers
     const geoArray = normalizeGeoLocations(geoLocations);
+    if (geoArray.length > 0) {
+      console.log('[MapData] Processing', geoArray.length, 'geo locations for markers');
+    }
     geoArray.forEach(geo => {
+      // Use device name if available, otherwise device_id
+      const extendedGeo = geo as GeoLocation & { device_name?: string; device_type?: string; status?: string };
+      const displayName = extendedGeo.device_name || geo.device_id;
       const id = `geo-${geo.device_id}`;
       if (addedIds.has(id)) return;
       
-      // Validate coordinates
+      // Validate coordinates (already done in normalizeGeoLocations, but double-check)
       if (geo.lat >= -90 && geo.lat <= 90 &&
           geo.lng >= -180 && geo.lng <= 180 &&
           !(geo.lat === 0 && geo.lng === 0)) {
         markers.push({
           id,
-          name: geo.device_id,
-          type: 'gps',
+          name: displayName,
+          type: extendedGeo.device_type || 'gps',
           value: geo.altitude || 0,
           unit: 'm',
-          status: 'active',
+          status: extendedGeo.status || 'active',
           lastUpdate: geo.timestamp || new Date().toISOString(),
           location: { lat: geo.lat, lng: geo.lng }
         });
         addedIds.add(id);
+        console.log('[MapData] Added geo marker:', id, { lat: geo.lat, lng: geo.lng, name: displayName });
       }
     });
 
