@@ -15,3 +15,5 @@ export { default as StarlinkPowerSection } from './StarlinkPowerSection';
 export { default as StarlinkPowerTrendChart } from './StarlinkPowerTrendChart';
 export { default as ArduinoSensorSection } from './ArduinoSensorSection';
 export { default as SensorTypeStatsSection } from './SensorTypeStatsSection';
+export { default as ConnectivityStatsSection } from './ConnectivityStatsSection';
+export { default as PowerHistoryChart } from './PowerHistoryChart';

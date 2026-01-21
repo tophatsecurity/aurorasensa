@@ -38,6 +38,14 @@ import {
   useClientThermalData,
   useClientStarlinkData,
   useClientSystemMonitorData,
+  // New hooks for power, wifi, bluetooth
+  usePowerCurrent,
+  usePowerHistory,
+  useWifiScan,
+  useWifiStats,
+  useBluetoothScan,
+  useBluetoothStats,
+  useBatteryStats,
 } from "@/hooks/aurora";
 import {
   LineChart,
@@ -1186,6 +1194,55 @@ export default function ClientSensorStats({ clientId }: ClientSensorStatsProps) 
   const { data: thermalData } = useClientThermalData(effectiveClientId);
   const { data: starlinkData } = useClientStarlinkData(effectiveClientId);
   const { data: systemData } = useClientSystemMonitorData(effectiveClientId);
+
+  // New hooks for power, wifi, and bluetooth data
+  const { data: powerCurrent } = usePowerCurrent(effectiveClientId || null);
+  const { data: powerHistory } = usePowerHistory({ clientId: effectiveClientId || null, hours: 24, limit: 100 });
+  // useWifiScan from clients.ts takes a string, returns { networks: WifiNetwork[] }
+  const { data: wifiScanData } = useWifiScan(effectiveClientId || '');
+  const { data: wifiStats } = useWifiStats(effectiveClientId || null);
+  // useBluetoothScan takes options object
+  const { data: btScanData } = useBluetoothScan({ clientId: effectiveClientId || null, hours: 24, limit: 100 });
+  const { data: btStats } = useBluetoothStats(effectiveClientId || null);
+  const { data: batteryStats } = useBatteryStats(effectiveClientId || null);
+
+  // Process new data sources
+  const connectivityData = useMemo(() => {
+    // Power data
+    const currentPower = powerCurrent?.[0]?.power_watts ?? null;
+    const currentVoltage = powerCurrent?.[0]?.voltage_v ?? null;
+    const avgPower = powerHistory && powerHistory.length > 0
+      ? powerHistory.reduce((sum, p) => sum + (p.power_watts || 0), 0) / powerHistory.length
+      : null;
+
+    // WiFi data - useWifiScan returns { networks: WifiNetwork[] }
+    const wifiNetworksArr = wifiScanData?.networks ?? [];
+    const wifiNetworksFound = wifiNetworksArr.length > 0 ? wifiNetworksArr.length : (wifiStats?.unique_networks_24h ?? 0);
+    const wifiScanCount = wifiStats?.scan_count_24h ?? 0;
+    const wifiActiveScanners = wifiStats?.active_scanners ?? 0;
+
+    // Bluetooth data - useBluetoothScan returns BluetoothDevice[] array
+    const btDevicesArr = btScanData ?? [];
+    const btDevicesFound = btDevicesArr.length > 0 ? btDevicesArr.length : (btStats?.unique_devices_24h ?? 0);
+    const btScanCount = btStats?.scan_count_24h ?? 0;
+    const btActiveScanners = btStats?.active_scanners ?? 0;
+
+    // Battery data
+    const batteryArr = batteryStats ?? [];
+    const batteryAvgCharge = batteryArr.length > 0
+      ? batteryArr.reduce((sum, b) => sum + (b.charge_percent || 0), 0) / batteryArr.length
+      : null;
+    const batteryStatus = batteryArr[0]?.status ?? null;
+
+    return {
+      currentPower, currentVoltage, avgPower,
+      wifiNetworksFound, wifiScanCount, wifiActiveScanners,
+      btDevicesFound, btScanCount, btActiveScanners,
+      batteryAvgCharge, batteryStatus,
+      wifiNetworks: wifiNetworksArr,
+      btDevices: btDevicesArr,
+    };
+  }, [powerCurrent, powerHistory, wifiScanData, wifiStats, btScanData, btStats, batteryStats]);
 
   // Extract real-time sensor values - combine batch data with fallback readings
   const sensorValues = useMemo(() => {
