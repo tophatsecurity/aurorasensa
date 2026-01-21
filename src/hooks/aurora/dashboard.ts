@@ -650,6 +650,15 @@ export function useDashboardClientStats(clientId?: string | null, hours: number 
         // Check if by-client returned "unknown" client_ids - if so, use all-states as primary source
         const hasUnknownClients = rawClients.length > 0 && rawClients.every(c => c.client_id === 'unknown');
         
+        // Helper to validate hostname - filter out invalid values
+        const isValidHostname = (hostname: unknown): hostname is string => {
+          if (!hostname) return false;
+          if (typeof hostname !== 'string') return false;
+          if (hostname === 'unknown' || hostname === 'undefined') return false;
+          if (hostname.trim() === '') return false;
+          return true;
+        };
+        
         // Build hostname map and client list from all-states
         const allStatesClients: ClientStatsItem[] = [];
         if (allStatesResult) {
@@ -665,7 +674,7 @@ export function useDashboardClientStats(clientId?: string | null, hours: number 
               if (client.client_id) {
                 allStatesClients.push({
                   client_id: client.client_id,
-                  hostname: client.hostname && client.hostname !== 'unknown' ? client.hostname : undefined,
+                  hostname: isValidHostname(client.hostname) ? client.hostname : undefined,
                   reading_count: client.readings_count || client.batches_received || 0,
                   device_count: 0, // Will be estimated
                   sensor_type_count: 0,
@@ -702,10 +711,15 @@ export function useDashboardClientStats(clientId?: string | null, hours: number 
             }
           }
           
-          enrichedClients = rawClients.map(c => ({
-            ...c,
-            hostname: hostnameMap.get(c.client_id) || c.hostname || c.client_id,
-          }));
+          enrichedClients = rawClients.map(c => {
+            // Validate existing hostname on client
+            const existingHostname = typeof c.hostname === 'string' && c.hostname !== 'unknown' 
+              ? c.hostname : undefined;
+            return {
+              ...c,
+              hostname: hostnameMap.get(c.client_id) || existingHostname || c.client_id,
+            };
+          });
           
           console.log('[useDashboardClientStats] Enriched clients with hostnames:', 
             enrichedClients.map(c => ({ id: c.client_id, hostname: c.hostname })));
