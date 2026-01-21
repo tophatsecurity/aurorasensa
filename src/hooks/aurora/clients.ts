@@ -661,3 +661,56 @@ export function useClientLatestBatch(clientId: string | null, includeJson: boole
     retry: 1,
   });
 }
+
+// Hook to fetch latest batches for all clients and extract hostnames/system info
+export function useAllClientsLatestBatch(clientIds: string[]) {
+  return useQuery({
+    queryKey: ["aurora", "clients", "all-latest-batches", clientIds.sort().join(",")],
+    queryFn: async () => {
+      if (!clientIds.length) return {};
+      
+      const results: Record<string, { hostname?: string; platform?: string; model?: string }> = {};
+      
+      // Fetch in parallel, limiting to avoid overwhelming the API
+      const batchSize = 5;
+      for (let i = 0; i < clientIds.length; i += batchSize) {
+        const batch = clientIds.slice(i, i + batchSize);
+        const promises = batch.map(async (clientId) => {
+          try {
+            const result = await callAuroraApi<ClientLatestBatch>(
+              `/api/clients/${clientId}/latest-batch`,
+              "GET",
+              undefined,
+              { params: { include_json: true } }
+            );
+            
+            // Extract hostname from system_monitor sensor
+            const readings = result?.batch?.json_content?.readings || [];
+            for (const reading of readings) {
+              const systemMonitor = reading.sensors?.['system_monitor_1'] as Record<string, unknown> | undefined;
+              if (systemMonitor) {
+                const systemInfo = systemMonitor['system'] as Record<string, unknown> | undefined;
+                if (systemInfo) {
+                  results[clientId] = {
+                    hostname: typeof systemInfo['hostname'] === 'string' ? systemInfo['hostname'] : undefined,
+                    platform: typeof systemInfo['os'] === 'string' ? systemInfo['os'] : undefined,
+                    model: typeof systemInfo['model'] === 'string' ? systemInfo['model'] : undefined,
+                  };
+                  break;
+                }
+              }
+            }
+          } catch {
+            // Ignore errors for individual clients
+          }
+        });
+        await Promise.all(promises);
+      }
+      
+      return results;
+    },
+    enabled: hasAuroraSession() && clientIds.length > 0,
+    staleTime: 60000,
+    refetchInterval: 120000,
+  });
+}

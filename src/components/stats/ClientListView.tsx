@@ -16,7 +16,7 @@ import {
   Database
 } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
-import { useClientsWithHostnames, useAllClientsSystemInfo, useStatsByClient } from "@/hooks/aurora";
+import { useClientsWithHostnames, useAllClientsSystemInfo, useStatsByClient, useAllClientsLatestBatch } from "@/hooks/aurora";
 
 interface ClientListViewProps {
   onClientSelect: (clientId: string) => void;
@@ -50,6 +50,15 @@ export function ClientListView({ onClientSelect }: ClientListViewProps) {
   const { data: clients, isLoading: clientsLoading } = useClientsWithHostnames();
   const { data: systemInfoAll } = useAllClientsSystemInfo();
   const { data: statsByClient } = useStatsByClient({ hours: 24 });
+  
+  // Get client IDs for batch fetching
+  const clientIds = useMemo(() => {
+    if (!clients || clients.length === 0) return [];
+    return clients.map((c: any) => c.client_id).filter(Boolean);
+  }, [clients]);
+  
+  // Fetch latest batches for all clients to get real hostnames
+  const { data: batchHostnames } = useAllClientsLatestBatch(clientIds);
 
   // Enrich clients with location data and reading counts
   const enrichedClients = useMemo(() => {
@@ -66,6 +75,7 @@ export function ClientListView({ onClientSelect }: ClientListViewProps) {
     return clients.map((client: any) => {
       const systemInfo = systemInfoAll?.clients?.[client.client_id];
       const clientStats = statsMap.get(client.client_id);
+      const batchInfo = batchHostnames?.[client.client_id];
       
       // Try to get location from various sources
       let location: { city?: string; country?: string; lat?: number; lng?: number } | null = null;
@@ -83,15 +93,20 @@ export function ClientListView({ onClientSelect }: ClientListViewProps) {
       // Check systemInfo for IP info
       const ipAddress = systemInfo?.ip || client.ip_address;
       
-      // Get display hostname - use actual hostname, systemInfo hostname, or derive from client_id
-      const actualHostname = client.hostname && client.hostname !== client.client_id 
-        ? client.hostname 
-        : systemInfo?.hostname || null;
+      // Get display hostname - priority: batch data > client data > systemInfo > fallback
+      const actualHostname = batchInfo?.hostname 
+        || (client.hostname && client.hostname !== client.client_id ? client.hostname : null)
+        || systemInfo?.hostname 
+        || null;
+      
+      // Get hardware model from batch data
+      const hardwareModel = batchInfo?.model || batchInfo?.platform || systemInfo?.platform || null;
       
       return {
         client_id: client.client_id,
         hostname: actualHostname,
         displayName: actualHostname || `Client ${client.client_id.replace('client_', '').slice(0, 8)}`,
+        hardwareModel,
         sensors: client.sensors || [],
         last_seen: client.last_seen,
         state: client.state || 'unknown',
@@ -101,7 +116,7 @@ export function ClientListView({ onClientSelect }: ClientListViewProps) {
         reading_count: clientStats?.reading_count || client.batches_received || client.batch_count || 0,
       };
     });
-  }, [clients, systemInfoAll, statsByClient]);
+  }, [clients, systemInfoAll, statsByClient, batchHostnames]);
 
   if (clientsLoading) {
     return (
@@ -161,7 +176,7 @@ export function ClientListView({ onClientSelect }: ClientListViewProps) {
                       {client.hostname || client.displayName}
                     </h3>
                     <p className="text-xs text-muted-foreground truncate mt-0.5">
-                      {client.systemInfo?.platform || client.systemInfo?.version || client.client_id}
+                      {client.hardwareModel || client.systemInfo?.platform || client.client_id}
                     </p>
                     
                     {/* Location & Stats Row */}

@@ -69,6 +69,7 @@ export {
   useDisconnectWifiClient,
   // Latest Batch
   useClientLatestBatch,
+  useAllClientsLatestBatch,
   type ClientLatestBatch,
   type LatestBatchReading,
 } from "./clients";
