@@ -85,6 +85,31 @@ const getSensorIcon = (sensorType: string) => {
   return <Cpu className={iconClass} />;
 };
 
+// Format sensor type label for display
+const formatSensorLabel = (sensorType: string): string => {
+  const type = sensorType.toLowerCase();
+  
+  // Custom labels for specific sensors
+  if (type.includes('starlink_dish') || type === 'starlink') return 'Starlink Dish';
+  if (type.includes('thermal_probe')) return 'Thermal Probe';
+  if (type.includes('arduino_sensor_kit') || type === 'arduino') return 'Arduino Sensor Kit';
+  if (type.includes('wifi_scanner')) return 'WiFi Scanner';
+  if (type.includes('bluetooth_scanner')) return 'Bluetooth Scanner';
+  if (type.includes('adsb')) return 'ADS-B Receiver';
+  if (type.includes('lora')) return 'LoRa Detector';
+  if (type.includes('gps')) return 'GPS';
+  if (type.includes('system_monitor')) return 'System Monitor';
+  if (type.includes('aht_sensor')) return 'AHT Sensor';
+  if (type.includes('bmt_sensor')) return 'BMT Sensor';
+  
+  // Default: clean up the type name
+  return sensorType
+    .replace(/_/g, ' ')
+    .replace(/\d+$/, '')
+    .replace(/^\w/, c => c.toUpperCase())
+    .trim();
+};
+
 const getResourceColor = (percent: number): string => {
   if (percent >= 90) return 'text-destructive';
   if (percent >= 75) return 'text-warning';
@@ -151,13 +176,36 @@ export function ClientDetailPage({ clientId, onBack }: ClientDetailPageProps) {
     return null;
   }, [systemInfo, batchReadings]);
 
+  // Define preferred tab order for sensors
+  const SENSOR_ORDER = [
+    'starlink_dish', 'starlink', 
+    'thermal_probe', 
+    'arduino_sensor_kit', 'arduino',
+    'wifi_scanner', 'wifi',
+    'bluetooth_scanner', 'bluetooth',
+    'adsb', 'adsb_receiver',
+    'lora', 'lora_detector',
+    'gps', 'gps_receiver',
+    'system_monitor',
+    'aht_sensor', 'bmt_sensor',
+  ];
+
   const sensorTypes = useMemo((): string[] => {
     const types = batchReadings.map((r: any) => {
       const sensors = r.sensors as Record<string, any> | undefined;
       if (sensors) return Object.keys(sensors);
       return [r.device_type || 'unknown'];
     }).flat();
-    return [...new Set(types.filter(Boolean))] as string[];
+    const uniqueTypes = [...new Set(types.filter(Boolean))] as string[];
+    
+    // Sort by preferred order, unknown types go to end
+    return uniqueTypes.sort((a, b) => {
+      const aIndex = SENSOR_ORDER.findIndex(s => a.toLowerCase().includes(s));
+      const bIndex = SENSOR_ORDER.findIndex(s => b.toLowerCase().includes(s));
+      const aOrder = aIndex >= 0 ? aIndex : 999;
+      const bOrder = bIndex >= 0 ? bIndex : 999;
+      return aOrder - bOrder;
+    });
   }, [batchReadings]);
 
   const isLoading = clientLoading || systemLoading;
@@ -220,15 +268,15 @@ export function ClientDetailPage({ clientId, onBack }: ClientDetailPageProps) {
         <div className="px-6 pt-4 border-b border-border/30">
           <TabsList className="flex flex-wrap h-auto gap-1 p-1 bg-muted/50">
             <TabsTrigger value="overview" className="gap-2"><Activity className="w-4 h-4" />Overview</TabsTrigger>
-            <TabsTrigger value="system" className="gap-2"><Server className="w-4 h-4" />System</TabsTrigger>
-            <TabsTrigger value="wifi" className="gap-2"><Wifi className="w-4 h-4" />WiFi</TabsTrigger>
             <TabsTrigger value="network" className="gap-2"><Network className="w-4 h-4" />Network</TabsTrigger>
             {sensorTypes.map((type) => (
               <TabsTrigger key={type} value={`sensor-${type}`} className="gap-2 capitalize">
                 {getSensorIcon(type)}
-                {type.replace(/_/g, ' ').replace(/\d+$/, '')}
+                {formatSensorLabel(type)}
               </TabsTrigger>
             ))}
+            <TabsTrigger value="system" className="gap-2"><Server className="w-4 h-4" />System</TabsTrigger>
+            <TabsTrigger value="wifi" className="gap-2"><Wifi className="w-4 h-4" />WiFi Config</TabsTrigger>
             <TabsTrigger value="raw" className="gap-2"><FileJson className="w-4 h-4" />Raw Data</TabsTrigger>
           </TabsList>
         </div>
@@ -412,7 +460,11 @@ export function ClientDetailPage({ clientId, onBack }: ClientDetailPageProps) {
 
           {/* Raw Data Tab */}
           <TabsContent value="raw" className="m-0">
-            <ClientRawBatchTab batch={latestBatch} readings={batchReadingsData?.readings || null} />
+            <ClientRawBatchTab 
+              batch={latestBatch} 
+              readings={batchReadingsData?.readings || null} 
+              latestBatchData={latestBatchData}
+            />
           </TabsContent>
         </ScrollArea>
       </Tabs>
