@@ -132,7 +132,7 @@ const StarlinkPowerTrendChart = ({ device, hours = 24 }: StarlinkPowerTrendChart
               type="monotone"
               dataKey="power"
               stroke="hsl(var(--chart-1))"
-              strokeWidth={2}
+              strokeWidth={3}
               fill={`url(#powerGradient-${device.composite_key})`}
             />
           </AreaChart>

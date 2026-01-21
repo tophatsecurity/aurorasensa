@@ -208,7 +208,7 @@ function CorrelationChart({
                   dataKey="x"
                   name="x"
                   stroke={xColor}
-                  strokeWidth={2}
+                  strokeWidth={3}
                   fill={`url(#${gradientId})`}
                   connectNulls
                 />
@@ -218,7 +218,7 @@ function CorrelationChart({
                   dataKey="y"
                   name="y"
                   stroke={yColor}
-                  strokeWidth={2}
+                  strokeWidth={3}
                   dot={false}
                   connectNulls
                 />
