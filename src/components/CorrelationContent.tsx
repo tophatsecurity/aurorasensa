@@ -183,6 +183,13 @@ function CorrelationChart({
                   tickLine={false}
                   axisLine={false}
                   interval="preserveStartEnd"
+                  tickFormatter={(value) => {
+                    // For date-prefixed times, show just the time part
+                    if (typeof value === 'string' && value.includes(' ')) {
+                      return value.split(' ')[1];
+                    }
+                    return value;
+                  }}
                 />
                 <YAxis
                   yAxisId="x"
@@ -297,12 +304,50 @@ const CorrelationContent = () => {
     refetchArduino();
   };
 
-  // Helper to format timestamp - more granular for better correlation matching
+  // Helper to format timestamp - adaptive granularity based on time range
   const formatTime = (timestamp: string) => {
     const date = new Date(timestamp);
-    // Round to 5-minute intervals for better data pairing
-    const minutes = Math.floor(date.getMinutes() / 5) * 5;
-    return `${date.getHours().toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}`;
+    if (isNaN(date.getTime())) return '';
+    
+    // For longer time ranges, use larger buckets and include date
+    // 1h: 5-min buckets (HH:MM)
+    // 6h: 10-min buckets (HH:MM)
+    // 12h-24h: 15-min buckets with date (MM-DD HH:MM)
+    // weekly: 1-hour buckets with date (MM-DD HH:00)
+    let bucketMinutes: number;
+    let includeDate = false;
+    
+    if (timeRange <= 1) {
+      bucketMinutes = 5;
+    } else if (timeRange <= 6) {
+      bucketMinutes = 10;
+    } else if (timeRange <= 24) {
+      bucketMinutes = 15;
+      includeDate = true;
+    } else {
+      bucketMinutes = 60;
+      includeDate = true;
+    }
+    
+    const minutes = Math.floor(date.getMinutes() / bucketMinutes) * bucketMinutes;
+    const timeStr = `${date.getHours().toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}`;
+    
+    if (includeDate) {
+      const month = (date.getMonth() + 1).toString().padStart(2, '0');
+      const day = date.getDate().toString().padStart(2, '0');
+      return `${month}-${day} ${timeStr}`;
+    }
+    
+    return timeStr;
+  };
+  
+  // Format time for chart display (shorter format)
+  const formatChartTime = (key: string) => {
+    // If includes date, show just the time portion for chart labels
+    if (key.includes(' ')) {
+      return key.split(' ')[1];
+    }
+    return key;
   };
 
   // Get temperature label and unit based on selected measurement
@@ -315,14 +360,35 @@ const CorrelationContent = () => {
     }
   };
 
-  // Debug logging for data availability
+  // Debug logging for data availability and sample values
   useEffect(() => {
+    const starlinkSample = starlinkData?.readings?.[0];
+    const thermalSample = thermalData?.readings?.[0];
+    const arduinoSample = arduinoData?.readings?.[0];
+    
     console.log('[Correlation] Data sources:', {
       starlink: starlinkData?.readings?.length || 0,
       thermal: thermalData?.readings?.length || 0,
       arduino: arduinoData?.readings?.length || 0,
       clientId: effectiveClientId,
-      timeRange
+      timeRange,
+      // Sample first reading to debug value extraction
+      starlinkSample: starlinkSample ? {
+        timestamp: starlinkSample.timestamp,
+        power_w: starlinkSample.power_w,
+        pop_ping_latency_ms: starlinkSample.pop_ping_latency_ms,
+        downlink_throughput_bps: starlinkSample.downlink_throughput_bps,
+      } : null,
+      thermalSample: thermalSample ? {
+        timestamp: thermalSample.timestamp,
+        temp_c: thermalSample.temp_c,
+        probe_c: thermalSample.probe_c,
+      } : null,
+      arduinoSample: arduinoSample ? {
+        timestamp: arduinoSample.timestamp,
+        th_temp_c: arduinoSample.th_temp_c,
+        th_humidity: arduinoSample.th_humidity,
+      } : null,
     });
   }, [starlinkData, thermalData, arduinoData, effectiveClientId, timeRange]);
 
