@@ -198,15 +198,25 @@ export const ADSB = {
 // STARLINK
 // =============================================
 export const STARLINK = {
+  // Device management
   DEVICES: '/api/starlink/devices',
   DEVICE: (deviceId: string) => `/api/starlink/devices/${deviceId}`,
+  // Real-time status & history
+  STATUS: (deviceId: string) => `/api/starlink/status/${deviceId}`,
+  HISTORY: (deviceId: string) => `/api/starlink/history/${deviceId}`,
+  OBSTRUCTIONS: (deviceId: string) => `/api/starlink/obstructions/${deviceId}`,
+  // Stats endpoints
   STATS: '/api/starlink/stats',
   STATS_GLOBAL: '/api/starlink/stats/global',
   STATS_DEVICE: (deviceId: string) => `/api/starlink/stats/device/${deviceId}`,
+  // Metrics endpoints  
   SIGNAL_STRENGTH: '/api/starlink/signal-strength',
   PERFORMANCE: '/api/starlink/performance',
   POWER: '/api/starlink/power',
   CONNECTIVITY: '/api/starlink/connectivity',
+  // Timeseries - supports ?hours= query param
+  TIMESERIES: '/api/starlink/timeseries',
+  TIMESERIES_DEVICE: (deviceId: string) => `/api/starlink/timeseries/${deviceId}`,
 } as const;
 
 // =============================================

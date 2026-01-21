@@ -537,6 +537,132 @@ export function useStarlinkTimeseries(hours: number = 24, clientId?: string, dev
   });
 }
 
+// =============================================
+// NEW STARLINK ENDPOINTS (from updated API docs)
+// =============================================
+
+// Get real-time status for a specific Starlink dish
+export function useStarlinkStatus(deviceId: string | null) {
+  return useQuery({
+    queryKey: ["aurora", "starlink", "status", deviceId],
+    queryFn: async () => {
+      if (!deviceId) return null;
+      try {
+        const response = await callAuroraApi<{
+          device_id: string;
+          state: string;
+          connected: boolean;
+          uptime_seconds?: number;
+          hardware_version?: string;
+          software_version?: string;
+          last_seen?: string;
+          alerts?: string[];
+        }>(STARLINK.STATUS(deviceId));
+        return response;
+      } catch (error) {
+        console.warn(`Failed to fetch Starlink status for ${deviceId}:`, error);
+        return null;
+      }
+    },
+    enabled: STARLINK_EXTENDED_API_ENABLED && hasAuroraSession() && !!deviceId,
+    staleTime: 10000,
+    refetchInterval: 15000,
+    retry: 2,
+  });
+}
+
+// Get historical telemetry for Starlink metrics (latency, throughput, obstructions)
+export function useStarlinkHistory(deviceId: string | null, hours: number = 24) {
+  return useQuery({
+    queryKey: ["aurora", "starlink", "history", deviceId, hours],
+    queryFn: async () => {
+      if (!deviceId) return { count: 0, readings: [] };
+      try {
+        const response = await callAuroraApi<{
+          count: number;
+          device_id: string;
+          readings: Array<{
+            timestamp: string;
+            downlink_throughput_bps?: number;
+            uplink_throughput_bps?: number;
+            pop_ping_latency_ms?: number;
+            snr?: number;
+            obstruction_percent?: number;
+            power_watts?: number;
+            connected?: boolean;
+          }>;
+        }>(withQuery(STARLINK.HISTORY(deviceId), { hours }));
+        return response;
+      } catch (error) {
+        console.warn(`Failed to fetch Starlink history for ${deviceId}:`, error);
+        return { count: 0, readings: [] };
+      }
+    },
+    enabled: STARLINK_EXTENDED_API_ENABLED && hasAuroraSession() && !!deviceId,
+    ...fastQueryOptions,
+    retry: 2,
+  });
+}
+
+// Get detailed obstruction map data for a Starlink dish
+export function useStarlinkObstructions(deviceId: string | null) {
+  return useQuery({
+    queryKey: ["aurora", "starlink", "obstructions", deviceId],
+    queryFn: async () => {
+      if (!deviceId) return null;
+      try {
+        const response = await callAuroraApi<{
+          device_id: string;
+          obstruction_percent: number;
+          obstruction_map?: number[][];
+          avg_prolonged_obstruction_duration_s?: number;
+          avg_prolonged_obstruction_interval_s?: number;
+          currently_obstructed?: boolean;
+          fraction_obstructed?: number;
+          last_24h_obstructed_s?: number;
+          valid_s?: number;
+          wedge_abs_fraction_obstructed?: number[];
+          wedge_fraction_obstructed?: number[];
+        }>(STARLINK.OBSTRUCTIONS(deviceId));
+        return response;
+      } catch (error) {
+        console.warn(`Failed to fetch Starlink obstructions for ${deviceId}:`, error);
+        return null;
+      }
+    },
+    enabled: STARLINK_EXTENDED_API_ENABLED && hasAuroraSession() && !!deviceId,
+    staleTime: 30000,
+    refetchInterval: 60000,
+    retry: 2,
+  });
+}
+
+// Get Starlink timeseries from dedicated endpoint
+export function useStarlinkTimeseriesDedicated(hours: number = 24, deviceId?: string) {
+  return useQuery({
+    queryKey: ["aurora", "starlink", "timeseries-dedicated", hours, deviceId],
+    queryFn: async () => {
+      try {
+        const endpoint = deviceId 
+          ? withQuery(STARLINK.TIMESERIES_DEVICE(deviceId), { hours })
+          : withQuery(STARLINK.TIMESERIES, { hours });
+          
+        const response = await callAuroraApi<{
+          count: number;
+          readings: StarlinkTimeseriesPoint[];
+        }>(endpoint);
+        return response;
+      } catch (error) {
+        console.warn("Failed to fetch Starlink timeseries from dedicated endpoint:", error);
+        return { count: 0, readings: [] };
+      }
+    },
+    enabled: STARLINK_EXTENDED_API_ENABLED && hasAuroraSession(),
+    ...fastQueryOptions,
+    retry: 2,
+  });
+}
+
 // Combined hook for dashboard usage
 export function useStarlinkDashboard() {
   const devicesFromReadings = useStarlinkDevicesFromReadings();
@@ -553,6 +679,49 @@ export function useStarlinkDashboard() {
       devicesFromReadings.refetch();
       timeseries.refetch();
       stats.refetch();
+    },
+  };
+}
+
+// Enhanced Starlink dashboard with new endpoints
+export function useStarlinkEnhancedDashboard(selectedDeviceId?: string | null) {
+  const devices = useStarlinkDevices();
+  const devicesFromReadings = useStarlinkDevicesFromReadings();
+  const stats = useStarlinkStats();
+  const globalStats = useStarlinkGlobalStats();
+  const status = useStarlinkStatus(selectedDeviceId || null);
+  const history = useStarlinkHistory(selectedDeviceId || null, 24);
+  const obstructions = useStarlinkObstructions(selectedDeviceId || null);
+  const performance = useStarlinkPerformance();
+  const connectivity = useStarlinkConnectivity();
+  const power = useStarlinkPower();
+  
+  // Merge device lists - prefer dedicated endpoint, fallback to readings extraction
+  const allDevices = devices.data?.length ? devices.data : devicesFromReadings.data;
+  
+  return {
+    devices: allDevices || [],
+    stats: stats.data,
+    globalStats: globalStats.data,
+    selectedDeviceStatus: status.data,
+    selectedDeviceHistory: history.data?.readings || [],
+    selectedDeviceObstructions: obstructions.data,
+    performance: performance.data,
+    connectivity: connectivity.data,
+    power: power.data,
+    isLoading: devices.isLoading || devicesFromReadings.isLoading || stats.isLoading,
+    isError: devices.isError && devicesFromReadings.isError && stats.isError,
+    refetch: () => {
+      devices.refetch();
+      devicesFromReadings.refetch();
+      stats.refetch();
+      globalStats.refetch();
+      status.refetch();
+      history.refetch();
+      obstructions.refetch();
+      performance.refetch();
+      connectivity.refetch();
+      power.refetch();
     },
   };
 }
