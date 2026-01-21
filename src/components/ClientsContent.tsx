@@ -71,10 +71,12 @@ import {
   useRenameClient,
   useLatestReadings,
   useDeleteSensor,
+  useAllClientsLatestBatch,
   type Client,
   type ClientState,
   callAuroraApi,
 } from "@/hooks/aurora";
+import { useMemo } from "react";
 import { formatLastSeen, formatDateTime, getDeviceStatusFromLastSeen } from "@/utils/dateUtils";
 import { toast } from "sonner";
 import { ClientDetailsPanel } from "@/components/client";
@@ -162,6 +164,24 @@ const ClientsContent = () => {
   const deleteClient = useDeleteClient();
   const deleteSensor = useDeleteSensor();
   const renameClient = useRenameClient();
+
+  // Get all client IDs for fetching latest batch hostnames
+  const rawClientIds = useMemo(() => {
+    if (!clientsData?.clients_by_state) return [];
+    const allStates = clientsData.clients_by_state;
+    const allClients = [
+      ...(allStates.pending || []),
+      ...(allStates.registered || []),
+      ...(allStates.adopted || []),
+      ...(allStates.disabled || []),
+      ...(allStates.suspended || []),
+      ...(allStates.deleted || []),
+    ];
+    return allClients.map(c => c.client_id).filter(Boolean);
+  }, [clientsData]);
+
+  // Fetch real hostnames from latest batch sensor data
+  const { data: batchHostnames } = useAllClientsLatestBatch(rawClientIds);
   
   const [searchQuery, setSearchQuery] = useState("");
   const [stateFilter, setStateFilter] = useState<string>("all");
@@ -517,21 +537,44 @@ const ClientsContent = () => {
     }
   };
 
-  // Combine all clients from all states (excluding deleted for main datasets)
-  const allClientsIncludingDeleted: Client[] = clientsData ? [
-    ...(clientsData.clients_by_state?.pending || []),
-    ...(clientsData.clients_by_state?.registered || []),
-    ...(clientsData.clients_by_state?.adopted || []),
-    ...(clientsData.clients_by_state?.disabled || []),
-    ...(clientsData.clients_by_state?.suspended || []),
-    ...(clientsData.clients_by_state?.deleted || []),
-  ] : [];
+  // Combine all clients from all states and enrich with real hostnames from batch data
+  const allClientsIncludingDeleted: Client[] = useMemo(() => {
+    if (!clientsData) return [];
+    
+    const rawClients = [
+      ...(clientsData.clients_by_state?.pending || []),
+      ...(clientsData.clients_by_state?.registered || []),
+      ...(clientsData.clients_by_state?.adopted || []),
+      ...(clientsData.clients_by_state?.disabled || []),
+      ...(clientsData.clients_by_state?.suspended || []),
+      ...(clientsData.clients_by_state?.deleted || []),
+    ];
+    
+    // Enrich with real hostnames from batch sensor data
+    return rawClients.map(client => {
+      const batchInfo = batchHostnames?.[client.client_id];
+      const realHostname = batchInfo?.hostname;
+      
+      // Only use the real hostname if it's different from the client_id pattern
+      const hasRealHostname = realHostname && 
+        realHostname !== 'unknown' && 
+        !realHostname.startsWith('client_');
+      
+      return {
+        ...client,
+        hostname: hasRealHostname ? realHostname : (client.hostname && !client.hostname.startsWith('client_') ? client.hostname : undefined),
+      };
+    });
+  }, [clientsData, batchHostnames]);
 
   // Active clients (excluding deleted) for stats and general use
   const allClients = allClientsIncludingDeleted.filter(c => c.state !== "deleted");
   
   // Deleted clients only shown when specifically viewing deleted tab
-  const deletedClients = clientsData?.clients_by_state?.deleted || [];
+  const deletedClients = useMemo(() => 
+    allClientsIncludingDeleted.filter(c => c.state === "deleted"), 
+    [allClientsIncludingDeleted]
+  );
 
   // Filter clients based on current view
   const filteredClients = (activeTab === "deleted" ? deletedClients : allClients).filter((client) => {
