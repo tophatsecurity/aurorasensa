@@ -229,8 +229,8 @@ function extractArduinoMetrics(data: Record<string, unknown>): ArduinoMetrics {
 // =============================================
 
 export function useCorrelationStarlinkData(hours: number = 24, clientId?: string) {
-  // Calculate appropriate limit based on time range
-  const limit = hours <= 1 ? 500 : hours <= 6 ? 300 : hours <= 24 ? 200 : 100;
+  // Calculate appropriate limit based on time range - increase for better data coverage
+  const limit = hours <= 1 ? 1000 : hours <= 6 ? 800 : hours <= 24 ? 500 : 300;
   
   return useQuery({
     queryKey: ["aurora", "correlation", "starlink", hours, clientId, limit],
@@ -240,23 +240,33 @@ export function useCorrelationStarlinkData(hours: number = 24, clientId?: string
         limit: limit.toString()
       });
       
-      // Use client_id as query param (the working pattern from useStarlinkTimeseries)
+      // Use client_id as query param 
       if (clientId && clientId !== 'all') {
         params.append('client_id', clientId);
       }
       
-      // Always use the readings endpoint - it works correctly with client_id filter
       const response = await callAuroraApi<RawReadingsResponse>(
         `${READINGS.BY_SENSOR_TYPE('starlink')}?${params.toString()}`
       );
       
-      const readings = (response.readings || []).map(r => {
+      // Filter by client if needed - check batch_id for client pattern since client_id may be "unknown"
+      const filteredReadings = (response.readings || []).filter(r => {
+        if (!clientId || clientId === 'all') return true;
+        // Check if client_id matches directly
+        if (r.client_id && r.client_id !== 'unknown' && r.client_id === clientId) return true;
+        // Check if batch_id contains the client id (e.g., "batch_client_88a29e1f6f6d_...")
+        if (r.batch_id && r.batch_id.includes(clientId.replace('client_', ''))) return true;
+        // If no client filtering possible on this reading, include it when API was queried with client_id
+        return r.client_id === 'unknown';
+      });
+      
+      const readings = filteredReadings.map(r => {
         const data = parseMeasurement(r);
         const metrics = extractStarlinkMetrics(data);
         return {
           timestamp: r.timestamp,
           time: formatTimeBucket(r.timestamp, hours),
-          client_id: r.client_id || clientId,
+          client_id: r.client_id !== 'unknown' ? r.client_id : clientId,
           ...metrics,
         };
       }).filter(r => r.time);
@@ -271,7 +281,8 @@ export function useCorrelationStarlinkData(hours: number = 24, clientId?: string
 }
 
 export function useCorrelationThermalData(hours: number = 24, clientId?: string) {
-  const limit = hours <= 1 ? 500 : hours <= 6 ? 300 : hours <= 24 ? 200 : 100;
+  // Increase limits for better data coverage
+  const limit = hours <= 1 ? 1000 : hours <= 6 ? 800 : hours <= 24 ? 500 : 300;
   
   return useQuery({
     queryKey: ["aurora", "correlation", "thermal", hours, clientId, limit],
@@ -281,23 +292,29 @@ export function useCorrelationThermalData(hours: number = 24, clientId?: string)
         limit: limit.toString()
       });
       
-      // Use client_id as query param (the working pattern from useThermalProbeTimeseries)
       if (clientId && clientId !== 'all') {
         params.append('client_id', clientId);
       }
       
-      // Always use the readings endpoint - it works correctly with client_id filter
       const response = await callAuroraApi<RawReadingsResponse>(
         `${READINGS.BY_SENSOR_TYPE('thermal_probe')}?${params.toString()}`
       );
       
-      const readings = (response.readings || []).map(r => {
+      // Filter by client if needed - check batch_id for client pattern since client_id may be "unknown"
+      const filteredReadings = (response.readings || []).filter(r => {
+        if (!clientId || clientId === 'all') return true;
+        if (r.client_id && r.client_id !== 'unknown' && r.client_id === clientId) return true;
+        if (r.batch_id && r.batch_id.includes(clientId.replace('client_', ''))) return true;
+        return r.client_id === 'unknown';
+      });
+      
+      const readings = filteredReadings.map(r => {
         const data = parseMeasurement(r);
         const metrics = extractThermalMetrics(data);
         return {
           timestamp: r.timestamp,
           time: formatTimeBucket(r.timestamp, hours),
-          client_id: r.client_id || clientId,
+          client_id: r.client_id !== 'unknown' ? r.client_id : clientId,
           ...metrics,
         };
       }).filter(r => r.time);
@@ -312,7 +329,8 @@ export function useCorrelationThermalData(hours: number = 24, clientId?: string)
 }
 
 export function useCorrelationArduinoData(hours: number = 24, clientId?: string) {
-  const limit = hours <= 1 ? 500 : hours <= 6 ? 300 : hours <= 24 ? 200 : 100;
+  // Increase limits for better data coverage
+  const limit = hours <= 1 ? 1000 : hours <= 6 ? 800 : hours <= 24 ? 500 : 300;
   
   return useQuery({
     queryKey: ["aurora", "correlation", "arduino", hours, clientId, limit],
@@ -322,7 +340,6 @@ export function useCorrelationArduinoData(hours: number = 24, clientId?: string)
         limit: limit.toString()
       });
       
-      // Use client_id as query param (the working pattern from useArduinoTimeseries)
       if (clientId && clientId !== 'all') {
         params.append('client_id', clientId);
       }
@@ -347,13 +364,21 @@ export function useCorrelationArduinoData(hours: number = 24, clientId?: string)
         );
       }
       
-      const readings = (response.readings || []).map(r => {
+      // Filter by client if needed - check batch_id for client pattern since client_id may be "unknown"
+      const filteredReadings = (response.readings || []).filter(r => {
+        if (!clientId || clientId === 'all') return true;
+        if (r.client_id && r.client_id !== 'unknown' && r.client_id === clientId) return true;
+        if (r.batch_id && r.batch_id.includes(clientId.replace('client_', ''))) return true;
+        return r.client_id === 'unknown';
+      });
+      
+      const readings = filteredReadings.map(r => {
         const data = parseMeasurement(r);
         const metrics = extractArduinoMetrics(data);
         return {
           timestamp: r.timestamp,
           time: formatTimeBucket(r.timestamp, hours),
-          client_id: r.client_id || clientId,
+          client_id: r.client_id !== 'unknown' ? r.client_id : clientId,
           ...metrics,
         };
       }).filter(r => r.time);
