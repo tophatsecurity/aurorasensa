@@ -290,7 +290,7 @@ const DashboardContent = () => {
       </div>
 
       {/* ===== PRIMARY STATS ROW ===== */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
         <PrimaryStat
           label="Total Readings"
           value={formatNumber(totalReadings)}
@@ -314,14 +314,6 @@ const DashboardContent = () => {
           icon={HardDrive}
           iconColor="bg-violet-500/20 text-violet-400"
           subtitle={`${sensorTypesCount} sensor types`}
-          isLoading={dashboardStatsLoading}
-        />
-        <PrimaryStat
-          label="Data Points"
-          value={formatNumber(totalMeasurements)}
-          icon={BarChart3}
-          iconColor="bg-amber-500/20 text-amber-400"
-          subtitle={`${formatNumber(totalBatches)} batches`}
           isLoading={dashboardStatsLoading}
         />
       </div>
