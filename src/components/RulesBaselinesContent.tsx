@@ -51,7 +51,7 @@ const RulesBaselinesContent = () => {
       {/* Tabs */}
       <Tabs value={activeTab} onValueChange={setActiveTab} className="flex-1 flex flex-col overflow-hidden">
         <div className="px-6 pt-4 border-b border-border/50">
-          <TabsList className="bg-card/50">
+          <TabsList className="flex flex-wrap h-auto gap-1 bg-card/50">
             <TabsTrigger value="rules" className="gap-2 data-[state=active]:bg-primary/10">
               <FileText className="w-4 h-4" />
               Alert Rules

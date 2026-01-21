@@ -218,21 +218,19 @@ export function ClientDetailPage({ clientId, onBack }: ClientDetailPageProps) {
       {/* Tabs */}
       <Tabs value={activeTab} onValueChange={setActiveTab} className="flex-1 flex flex-col overflow-hidden">
         <div className="px-6 pt-4 border-b border-border/30">
-          <ScrollArea className="w-full">
-            <TabsList className="inline-flex h-10 p-1 w-auto bg-muted/50">
-              <TabsTrigger value="overview" className="gap-2"><Activity className="w-4 h-4" />Overview</TabsTrigger>
-              <TabsTrigger value="system" className="gap-2"><Server className="w-4 h-4" />System</TabsTrigger>
-              <TabsTrigger value="wifi" className="gap-2"><Wifi className="w-4 h-4" />WiFi</TabsTrigger>
-              <TabsTrigger value="network" className="gap-2"><Network className="w-4 h-4" />Network</TabsTrigger>
-              {sensorTypes.map((type) => (
-                <TabsTrigger key={type} value={`sensor-${type}`} className="gap-2 capitalize">
-                  {getSensorIcon(type)}
-                  {type.replace(/_/g, ' ').replace(/\d+$/, '')}
-                </TabsTrigger>
-              ))}
-              <TabsTrigger value="raw" className="gap-2"><FileJson className="w-4 h-4" />Raw Data</TabsTrigger>
-            </TabsList>
-          </ScrollArea>
+          <TabsList className="flex flex-wrap h-auto gap-1 p-1 bg-muted/50">
+            <TabsTrigger value="overview" className="gap-2"><Activity className="w-4 h-4" />Overview</TabsTrigger>
+            <TabsTrigger value="system" className="gap-2"><Server className="w-4 h-4" />System</TabsTrigger>
+            <TabsTrigger value="wifi" className="gap-2"><Wifi className="w-4 h-4" />WiFi</TabsTrigger>
+            <TabsTrigger value="network" className="gap-2"><Network className="w-4 h-4" />Network</TabsTrigger>
+            {sensorTypes.map((type) => (
+              <TabsTrigger key={type} value={`sensor-${type}`} className="gap-2 capitalize">
+                {getSensorIcon(type)}
+                {type.replace(/_/g, ' ').replace(/\d+$/, '')}
+              </TabsTrigger>
+            ))}
+            <TabsTrigger value="raw" className="gap-2"><FileJson className="w-4 h-4" />Raw Data</TabsTrigger>
+          </TabsList>
         </div>
 
         <ScrollArea className="flex-1 p-6">
