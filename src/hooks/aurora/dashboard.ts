@@ -360,10 +360,18 @@ export function useDashboardSensorStats(clientId?: string | null) {
       
       // Fallback 3: Try /api/clients/all-states to derive sensor types from clients
       try {
+        // The all-states response has sensors as config objects, not simple arrays
+        // We need to parse the metadata.config.sensors or just look at known sensor patterns
         interface AllStatesClient {
           client_id: string;
           hostname?: string;
-          sensors?: string[];
+          sensors?: string[] | Record<string, unknown>; // Can be array or object
+          batches_received?: number;
+          metadata?: {
+            config?: {
+              sensors?: Record<string, unknown>;
+            };
+          };
         }
         interface AllStatesResponse {
           states?: {
@@ -383,27 +391,97 @@ export function useDashboardSensorStats(clientId?: string | null) {
           const allClients = [...adoptedClients, ...registeredClients];
           
           if (allClients.length > 0) {
-            // Aggregate sensors from all clients
-            const sensorTypeCounts = new Map<string, { count: number; clientCount: number }>();
+            // Parse sensor types from client metadata.config.sensors
+            const sensorTypeCounts = new Map<string, { count: number; clientCount: number; readingsEstimate: number }>();
+            
+            // Known sensor type keys that appear in the config
+            const KNOWN_SENSOR_KEYS = [
+              'adsb_devices', 'arduino_devices', 'bluetooth', 'gps', 'lora',
+              'starlink', 'system_monitor', 'thermal_probe', 'wifi', 'rf_sensors',
+              'aprs', 'ais', 'epirb', 'aircrack_wifi', 'sdr'
+            ];
+            
+            // Map config keys to display names
+            const SENSOR_TYPE_NAMES: Record<string, string> = {
+              'adsb_devices': 'adsb',
+              'arduino_devices': 'arduino',
+              'bluetooth': 'bluetooth',
+              'gps': 'gps',
+              'lora': 'lora',
+              'starlink': 'starlink',
+              'system_monitor': 'system_monitor',
+              'thermal_probe': 'thermal_probe',
+              'wifi': 'wifi',
+              'rf_sensors': 'rf_sensors',
+              'aprs': 'aprs',
+              'ais': 'ais',
+              'epirb': 'epirb',
+              'aircrack_wifi': 'aircrack',
+              'sdr': 'sdr'
+            };
             
             for (const client of allClients) {
-              const sensors = client.sensors || [];
-              const seenTypes = new Set<string>();
+              const batchesReceived = client.batches_received || 0;
+              const sensorsConfig = client.metadata?.config?.sensors;
               
-              for (const sensor of sensors) {
-                // Extract sensor type from sensor ID (e.g., "adsb_rtlsdr_1" -> "adsb")
-                const sensorType = sensor.replace(/_\d+$/, '').replace(/_[a-z]+$/, '');
-                const normalizedType = sensorType.split('_')[0] || sensorType;
-                
-                const existing = sensorTypeCounts.get(normalizedType) || { count: 0, clientCount: 0 };
-                existing.count += 1;
-                
-                if (!seenTypes.has(normalizedType)) {
+              // Handle if sensors is a simple array of strings (some endpoints return this format)
+              if (Array.isArray(client.sensors)) {
+                for (const sensor of client.sensors) {
+                  const sensorType = String(sensor).replace(/_\d+$/, '').split('_')[0];
+                  const existing = sensorTypeCounts.get(sensorType) || { count: 0, clientCount: 0, readingsEstimate: 0 };
+                  existing.count += 1;
                   existing.clientCount += 1;
-                  seenTypes.add(normalizedType);
+                  existing.readingsEstimate += Math.max(100, Math.floor(batchesReceived / 10));
+                  sensorTypeCounts.set(sensorType, existing);
+                }
+              }
+              // Handle if sensors is a config object
+              else if (sensorsConfig && typeof sensorsConfig === 'object') {
+                for (const key of KNOWN_SENSOR_KEYS) {
+                  const sensorConfig = sensorsConfig[key as keyof typeof sensorsConfig];
+                  if (!sensorConfig) continue;
+                  
+                  // Check if sensor is enabled (array of devices or single config)
+                  let isEnabled = false;
+                  let deviceCount = 1;
+                  
+                  if (Array.isArray(sensorConfig)) {
+                    // Array of devices (e.g., adsb_devices, arduino_devices)
+                    const enabledDevices = sensorConfig.filter((d: { enabled?: boolean }) => d?.enabled !== false);
+                    isEnabled = enabledDevices.length > 0;
+                    deviceCount = enabledDevices.length;
+                  } else if (typeof sensorConfig === 'object' && sensorConfig !== null) {
+                    // Single device config
+                    isEnabled = (sensorConfig as { enabled?: boolean }).enabled !== false;
+                  }
+                  
+                  if (isEnabled) {
+                    const sensorType = SENSOR_TYPE_NAMES[key] || key;
+                    const existing = sensorTypeCounts.get(sensorType) || { count: 0, clientCount: 0, readingsEstimate: 0 };
+                    existing.count += deviceCount;
+                    existing.clientCount += 1;
+                    // Estimate readings based on batches received and sensor count
+                    existing.readingsEstimate += Math.max(50, Math.floor(batchesReceived / (allClients.length * 2)));
+                    sensorTypeCounts.set(sensorType, existing);
+                  }
                 }
                 
-                sensorTypeCounts.set(normalizedType, existing);
+                // Also check rf_sensors which has nested sensor types
+                const rfSensors = sensorsConfig['rf_sensors' as keyof typeof sensorsConfig];
+                if (rfSensors && typeof rfSensors === 'object') {
+                  const rfConfig = rfSensors as Record<string, { enabled?: boolean; device_id?: string }>;
+                  const rfSubTypes = ['ais', 'aprs', 'epirb', 'globalstar', 'iridium', 'rtl433'];
+                  for (const subType of rfSubTypes) {
+                    const subConfig = rfConfig[subType];
+                    if (subConfig?.enabled) {
+                      const existing = sensorTypeCounts.get(subType) || { count: 0, clientCount: 0, readingsEstimate: 0 };
+                      existing.count += 1;
+                      existing.clientCount += 1;
+                      existing.readingsEstimate += Math.max(25, Math.floor(batchesReceived / (allClients.length * 4)));
+                      sensorTypeCounts.set(subType, existing);
+                    }
+                  }
+                }
               }
             }
             
@@ -411,13 +489,16 @@ export function useDashboardSensorStats(clientId?: string | null) {
             const sensorItems: DashboardSensorStatsItem[] = Array.from(sensorTypeCounts.entries()).map(
               ([sensorType, stats]) => ({
                 sensor_type: sensorType,
-                reading_count: stats.count * 100, // Estimate readings based on sensor count
+                reading_count: stats.readingsEstimate,
                 client_count: stats.clientCount,
                 device_count: stats.count,
               })
             );
             
-            console.log('[useDashboardSensorStats] Using /api/clients/all-states fallback:', sensorItems);
+            // Sort by reading count descending
+            sensorItems.sort((a, b) => b.reading_count - a.reading_count);
+            
+            console.log('[useDashboardSensorStats] Using /api/clients/all-states fallback with parsed config:', sensorItems);
             
             return {
               total_sensors: sensorItems.length,
@@ -428,7 +509,8 @@ export function useDashboardSensorStats(clientId?: string | null) {
             };
           }
         }
-      } catch {
+      } catch (err) {
+        console.warn('[useDashboardSensorStats] all-states fallback failed:', err);
         // Return empty
       }
       
