@@ -429,13 +429,10 @@ export function useIpGeolocation() {
     queryKey: ["aurora", "geo", "ip-location"],
     queryFn: async (): Promise<IpGeolocation> => {
       try {
-        // Try dedicated IP locate endpoint first
-        const result = await callAuroraApi<IpGeolocation | { data: IpGeolocation }>(IP_GEO.LOCATE);
-        if (result && typeof result === 'object') {
-          const data = 'data' in result ? result.data : result;
-          if (data.latitude && data.longitude) {
-            return data;
-          }
+        // API now returns flat response
+        const result = await callAuroraApi<IpGeolocation>(IP_GEO.LOCATE);
+        if (result?.latitude && result?.longitude) {
+          return result;
         }
       } catch {
         // Fall through to geo/lookup
@@ -443,12 +440,9 @@ export function useIpGeolocation() {
       
       try {
         // Try geo/lookup endpoint
-        const result = await callAuroraApi<IpGeolocation | { data: IpGeolocation }>(GEO.LOOKUP);
-        if (result && typeof result === 'object') {
-          const data = 'data' in result ? result.data : result;
-          if (data.latitude && data.longitude) {
-            return data;
-          }
+        const result = await callAuroraApi<IpGeolocation>(GEO.LOOKUP);
+        if (result?.latitude && result?.longitude) {
+          return result;
         }
       } catch {
         // Fall through to external-ip with geo
@@ -496,21 +490,15 @@ export function useIpGeolocationByIp(ip: string | null) {
       if (!ip) return {};
       
       try {
-        const result = await callAuroraApi<IpGeolocation | { data: IpGeolocation }>(IP_GEO.LOCATE_IP(ip));
-        if (result && typeof result === 'object') {
-          const data = 'data' in result ? result.data : result;
-          return data;
-        }
+        const result = await callAuroraApi<IpGeolocation>(IP_GEO.LOCATE_IP(ip));
+        if (result) return result;
       } catch {
         // Try geo lookup endpoint
       }
       
       try {
-        const result = await callAuroraApi<IpGeolocation | { data: IpGeolocation }>(GEO.LOOKUP_IP(ip));
-        if (result && typeof result === 'object') {
-          const data = 'data' in result ? result.data : result;
-          return data;
-        }
+        const result = await callAuroraApi<IpGeolocation>(GEO.LOOKUP_IP(ip));
+        if (result) return result;
       } catch {
         // All fallbacks failed
       }
@@ -675,7 +663,7 @@ export function useClientLocationHistory(clientId: string | null, hours: number 
       try {
         const result = await callAuroraApi<
           LocationHistoryPoint[] | 
-          { data: LocationHistoryPoint[]; history?: LocationHistoryPoint[]; points?: LocationHistoryPoint[] }
+          { history?: LocationHistoryPoint[]; points?: LocationHistoryPoint[] }
         >(`${LOCATION.CLIENT_HISTORY(clientId)}?hours=${hours}`);
         
         if (Array.isArray(result)) {
@@ -687,9 +675,6 @@ export function useClientLocationHistory(clientId: string | null, hours: number 
           }
           if ('points' in result && Array.isArray(result.points)) {
             return result.points;
-          }
-          if ('data' in result && Array.isArray(result.data)) {
-            return result.data;
           }
         }
       } catch (e) {
@@ -713,16 +698,13 @@ export function useLocationSummary(hours: number = 48) {
     queryKey: ["aurora", "location", "summary", hours],
     queryFn: async (): Promise<LocationSummary | null> => {
       try {
-        const result = await callAuroraApi<LocationSummary | { data: LocationSummary; summary?: LocationSummary }>(
+        const result = await callAuroraApi<LocationSummary | { summary?: LocationSummary }>(
           `${LOCATION.SUMMARY}?hours=${hours}`
         );
         
         if (result && typeof result === 'object') {
           if ('summary' in result && result.summary) {
             return result.summary;
-          }
-          if ('data' in result && result.data) {
-            return result.data;
           }
           // Direct response
           if ('total_clients' in result || 'clients_with_location' in result) {
@@ -752,16 +734,13 @@ export function useClientLocationTrack(clientId: string | null, hours: number = 
       if (!clientId) return null;
       
       try {
-        const result = await callAuroraApi<GeoJsonTrack | { data: GeoJsonTrack; track?: GeoJsonTrack }>(
+        const result = await callAuroraApi<GeoJsonTrack | { track?: GeoJsonTrack }>(
           `${LOCATION.TRACK(clientId)}?hours=${hours}`
         );
         
         if (result && typeof result === 'object') {
           if ('track' in result && result.track) {
             return result.track;
-          }
-          if ('data' in result && result.data) {
-            return result.data;
           }
           // Direct GeoJSON response
           if ('type' in result && result.type === 'FeatureCollection') {

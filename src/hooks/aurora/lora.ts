@@ -88,12 +88,10 @@ export function useLoraDevices() {
   return useQuery({
     queryKey: ["aurora", "lora", "devices"],
     queryFn: async () => {
-      // Core now auto-unwraps { data: [...], status: 'success' } responses
-      const result = await callAuroraApi<{ devices: LoRaDevice[] } | LoRaDevice[]>(LORA.DEVICES);
-      if (Array.isArray(result)) {
-        return { devices: result };
-      }
-      return result?.devices ? result : { devices: [] };
+      // API now returns flat response
+      const result = await callAuroraApi<LoRaDevice[] | { devices: LoRaDevice[] }>(LORA.DEVICES);
+      const devices = Array.isArray(result) ? result : (result?.devices || []);
+      return { devices };
     },
     enabled: hasAuroraSession(),
     staleTime: 60000,

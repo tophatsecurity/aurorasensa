@@ -384,12 +384,8 @@ export async function callAuroraApi<T>(
           throw new Error(errorStr);
         }
 
-        // Unwrap API responses that have a { data: ..., status: 'success' } structure
-        let result = data;
-        if (result && typeof result === 'object' && 'data' in result && 
-            (result as { status?: string }).status === 'success') {
-          result = (result as { data: unknown }).data;
-        }
+        // API responses are now flat (no wrapper) - use data directly
+        const result = data;
         
         // Cache successful GET responses
         if (method === 'GET' && !options?.skipCache) {

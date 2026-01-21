@@ -95,7 +95,7 @@ export interface UsbPowerStats {
 }
 
 // =============================================
-// QUERY HOOKS
+// QUERY HOOKS - API responses are now flat
 // =============================================
 
 export function usePowerCurrent(clientId?: string | null, deviceId?: string) {
@@ -107,10 +107,8 @@ export function usePowerCurrent(clientId?: string | null, deviceId?: string) {
       if (deviceId) params.set('device_id', deviceId);
       const query = params.toString();
       const path = query ? `${POWER.CURRENT}?${query}` : POWER.CURRENT;
-      const raw = await callAuroraApi<CurrentPowerStatus[] | { data: CurrentPowerStatus[] }>(path);
-      if (Array.isArray(raw)) return raw;
-      if (raw && 'data' in raw) return raw.data;
-      return [];
+      const result = await callAuroraApi<CurrentPowerStatus[]>(path);
+      return Array.isArray(result) ? result : [];
     },
     enabled: hasAuroraSession(),
     staleTime: 30000,
@@ -124,9 +122,7 @@ export function usePowerSummary(clientId?: string | null) {
     queryKey: ["aurora", "power", "summary", clientId],
     queryFn: async () => {
       const path = clientId ? `${POWER.SUMMARY}?client_id=${clientId}` : POWER.SUMMARY;
-      const raw = await callAuroraApi<PowerSummary | { data: PowerSummary }>(path);
-      if (raw && 'data' in raw) return raw.data;
-      return raw as PowerSummary;
+      return callAuroraApi<PowerSummary>(path);
     },
     enabled: hasAuroraSession(),
     staleTime: 60000,
@@ -151,10 +147,8 @@ export function usePowerHistory(options?: {
       params.set('hours', String(hours));
       params.set('limit', String(limit));
       const path = `${POWER.HISTORY}?${params.toString()}`;
-      const raw = await callAuroraApi<PowerHistoryPoint[] | { data: PowerHistoryPoint[] }>(path);
-      if (Array.isArray(raw)) return raw;
-      if (raw && 'data' in raw) return raw.data;
-      return [];
+      const result = await callAuroraApi<PowerHistoryPoint[]>(path);
+      return Array.isArray(result) ? result : [];
     },
     enabled: hasAuroraSession(),
     staleTime: 60000,
@@ -172,10 +166,8 @@ export function usePowerDevices(clientId?: string | null, type?: string) {
       if (type) params.set('type', type);
       const query = params.toString();
       const path = query ? `${POWER.DEVICES}?${query}` : POWER.DEVICES;
-      const raw = await callAuroraApi<PowerDevice[] | { data: PowerDevice[] }>(path);
-      if (Array.isArray(raw)) return raw;
-      if (raw && 'data' in raw) return raw.data;
-      return [];
+      const result = await callAuroraApi<PowerDevice[]>(path);
+      return Array.isArray(result) ? result : [];
     },
     enabled: hasAuroraSession(),
     staleTime: 60000,
@@ -193,10 +185,8 @@ export function useBatteryStats(clientId?: string | null, deviceId?: string) {
       if (deviceId) params.set('device_id', deviceId);
       const query = params.toString();
       const path = query ? `${POWER.BATTERY}?${query}` : POWER.BATTERY;
-      const raw = await callAuroraApi<BatteryStats[] | { data: BatteryStats[] }>(path);
-      if (Array.isArray(raw)) return raw;
-      if (raw && 'data' in raw) return raw.data;
-      return [];
+      const result = await callAuroraApi<BatteryStats[]>(path);
+      return Array.isArray(result) ? result : [];
     },
     enabled: hasAuroraSession(),
     staleTime: 60000,
@@ -214,10 +204,8 @@ export function useVoltageStats(clientId?: string | null, deviceId?: string) {
       if (deviceId) params.set('device_id', deviceId);
       const query = params.toString();
       const path = query ? `${POWER.VOLTAGE}?${query}` : POWER.VOLTAGE;
-      const raw = await callAuroraApi<VoltageStats[] | { data: VoltageStats[] }>(path);
-      if (Array.isArray(raw)) return raw;
-      if (raw && 'data' in raw) return raw.data;
-      return [];
+      const result = await callAuroraApi<VoltageStats[]>(path);
+      return Array.isArray(result) ? result : [];
     },
     enabled: hasAuroraSession(),
     staleTime: 60000,
@@ -235,10 +223,8 @@ export function useUsbPower(clientId?: string | null, deviceId?: string) {
       if (deviceId) params.set('device_id', deviceId);
       const query = params.toString();
       const path = query ? `${POWER.USB}?${query}` : POWER.USB;
-      const raw = await callAuroraApi<UsbPowerStats[] | { data: UsbPowerStats[] }>(path);
-      if (Array.isArray(raw)) return raw;
-      if (raw && 'data' in raw) return raw.data;
-      return [];
+      const result = await callAuroraApi<UsbPowerStats[]>(path);
+      return Array.isArray(result) ? result : [];
     },
     enabled: hasAuroraSession(),
     staleTime: 60000,

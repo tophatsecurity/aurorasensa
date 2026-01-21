@@ -59,7 +59,7 @@ export interface WifiHistoryPoint {
 }
 
 // =============================================
-// QUERY HOOKS
+// QUERY HOOKS - API responses are now flat
 // =============================================
 
 export function useWifiScanners(clientId?: string | null) {
@@ -67,10 +67,8 @@ export function useWifiScanners(clientId?: string | null) {
     queryKey: ["aurora", "wifi", "devices", clientId],
     queryFn: async () => {
       const path = clientId ? `${WIFI.DEVICES}?client_id=${clientId}` : WIFI.DEVICES;
-      const raw = await callAuroraApi<WifiScanner[] | { data: WifiScanner[] }>(path);
-      if (Array.isArray(raw)) return raw;
-      if (raw && 'data' in raw) return raw.data;
-      return [];
+      const result = await callAuroraApi<WifiScanner[]>(path);
+      return Array.isArray(result) ? result : [];
     },
     enabled: hasAuroraSession(),
     staleTime: 60000,
@@ -95,10 +93,8 @@ export function useWifiScan(options?: {
       params.set('hours', String(hours));
       params.set('limit', String(limit));
       const path = `${WIFI.SCAN}?${params.toString()}`;
-      const raw = await callAuroraApi<WifiNetwork[] | { data: WifiNetwork[] }>(path);
-      if (Array.isArray(raw)) return raw;
-      if (raw && 'data' in raw) return raw.data;
-      return [];
+      const result = await callAuroraApi<WifiNetwork[]>(path);
+      return Array.isArray(result) ? result : [];
     },
     enabled: hasAuroraSession(),
     staleTime: 30000,
@@ -121,10 +117,9 @@ export function useWifiNetworks(options?: {
       params.set('limit', String(limit));
       params.set('offset', String(offset));
       const path = `${WIFI.NETWORKS}?${params.toString()}`;
-      const raw = await callAuroraApi<WifiNetwork[] | { data: WifiNetwork[]; total?: number }>(path);
-      if (Array.isArray(raw)) return { networks: raw, total: raw.length };
-      if (raw && 'data' in raw) return { networks: raw.data, total: raw.total || raw.data.length };
-      return { networks: [], total: 0 };
+      const result = await callAuroraApi<{ networks: WifiNetwork[]; total?: number } | WifiNetwork[]>(path);
+      if (Array.isArray(result)) return { networks: result, total: result.length };
+      return { networks: result?.networks || [], total: result?.total || 0 };
     },
     enabled: hasAuroraSession(),
     staleTime: 60000,
@@ -147,10 +142,8 @@ export function useWifiNearby(options?: {
       params.set('rssi_threshold', String(rssiThreshold));
       params.set('limit', String(limit));
       const path = `${WIFI.NEARBY}?${params.toString()}`;
-      const raw = await callAuroraApi<WifiNetwork[] | { data: WifiNetwork[] }>(path);
-      if (Array.isArray(raw)) return raw;
-      if (raw && 'data' in raw) return raw.data;
-      return [];
+      const result = await callAuroraApi<WifiNetwork[]>(path);
+      return Array.isArray(result) ? result : [];
     },
     enabled: hasAuroraSession(),
     staleTime: 30000,
@@ -164,9 +157,7 @@ export function useWifiStats(clientId?: string | null) {
     queryKey: ["aurora", "wifi", "stats", clientId],
     queryFn: async () => {
       const path = clientId ? `${WIFI.STATS}?client_id=${clientId}` : WIFI.STATS;
-      const raw = await callAuroraApi<WifiStats | { data: WifiStats }>(path);
-      if (raw && 'data' in raw) return raw.data;
-      return raw as WifiStats;
+      return callAuroraApi<WifiStats>(path);
     },
     enabled: hasAuroraSession(),
     staleTime: 60000,
@@ -192,10 +183,8 @@ export function useWifiHistory(bssid: string | null, options?: {
       params.set('hours', String(hours));
       params.set('limit', String(limit));
       const path = `${WIFI.HISTORY(bssid)}?${params.toString()}`;
-      const raw = await callAuroraApi<WifiHistoryPoint[] | { data: WifiHistoryPoint[] }>(path);
-      if (Array.isArray(raw)) return raw;
-      if (raw && 'data' in raw) return raw.data;
-      return [];
+      const result = await callAuroraApi<WifiHistoryPoint[]>(path);
+      return Array.isArray(result) ? result : [];
     },
     enabled: hasAuroraSession() && !!bssid,
     staleTime: 60000,

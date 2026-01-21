@@ -126,14 +126,12 @@ export function useDashboardStats(clientId?: string | null) {
       
       // Try stats/by-client first (now returns rich data)
       try {
-        const byClientResult = await callAuroraApi<ClientStatsResponse | ClientStatsItem[]>(
+        const byClientResult = await callAuroraApi<ClientStatsItem[]>(
           STATS.BY_CLIENT, "GET", undefined, options
         );
         
-        // Handle both wrapped and unwrapped responses
-        const clients = Array.isArray(byClientResult) 
-          ? byClientResult 
-          : byClientResult?.data || [];
+        // API now returns flat array
+        const clients = Array.isArray(byClientResult) ? byClientResult : [];
         
         if (clients.length > 0) {
           // Aggregate stats from all clients
