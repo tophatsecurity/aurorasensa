@@ -47,7 +47,7 @@ export function AuroraLoginForm({ onLogin, isLoading, serverStatus, onSwitchToSi
         <div className="mx-auto w-16 h-16 rounded-full bg-primary/10 flex items-center justify-center">
           <Zap className="w-8 h-8 text-primary" />
         </div>
-        <CardTitle className="text-2xl">Aurora Sense</CardTitle>
+        <CardTitle className="text-2xl">AuroraSENSE</CardTitle>
         <CardDescription>
           Sign in to access the monitoring dashboard
         </CardDescription>
