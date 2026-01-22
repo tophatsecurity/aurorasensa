@@ -1,161 +1,445 @@
-import { Download, FileJson, FileSpreadsheet, FileText, Calendar, Filter, Loader2 } from "lucide-react";
+import { useState, useMemo, useCallback } from "react";
+import { Download, FileSpreadsheet, FileText, Calendar, Filter, Loader2, Columns, Settings2, Database, ChevronDown, Check, X } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { useComprehensiveStats } from "@/hooks/aurora";
+import { Badge } from "@/components/ui/badge";
+import { ScrollArea } from "@/components/ui/scroll-area";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
+import { useToast } from "@/hooks/use-toast";
+import { useExportTypes, useExportStats, buildExportUrl, type ExportType, type ExportOptions } from "@/hooks/aurora/export";
+import { useClients } from "@/hooks/aurora/clients";
+import { callAuroraApi } from "@/hooks/aurora/core";
 
 const ExportContent = () => {
-  const { data: stats, isLoading } = useComprehensiveStats();
+  const { toast } = useToast();
+  const { data: exportTypesData, isLoading: typesLoading } = useExportTypes();
+  const { data: clientsData } = useClients();
+  
+  // State
+  const [selectedType, setSelectedType] = useState<string>("");
+  const [selectedColumns, setSelectedColumns] = useState<string[]>([]);
+  const [timeRange, setTimeRange] = useState<string>("24h");
+  const [clientFilter, setClientFilter] = useState<string>("all");
+  const [deviceFilter, setDeviceFilter] = useState<string>("");
+  const [exportFormat, setExportFormat] = useState<'csv' | 'tsv'>('csv');
+  const [isDownloading, setIsDownloading] = useState(false);
+  const [columnsOpen, setColumnsOpen] = useState(false);
 
-  // Get real sensor types from API
-  const sensorTypes = stats?.sensors_summary?.sensor_types || [];
-  // Use flat structure first, fallback to nested
-  const totalReadings = stats?.global?.total_readings ?? stats?.global?.database?.total_readings ?? 0;
+  // Get export types
+  const exportTypes = exportTypesData?.export_types || [];
+  const selectedExportType = exportTypes.find(t => t.type === selectedType);
+  
+  // Parse hours from time range
+  const hours = useMemo(() => {
+    switch (timeRange) {
+      case "1h": return 1;
+      case "6h": return 6;
+      case "12h": return 12;
+      case "24h": return 24;
+      case "7d": return 168;
+      case "30d": return 720;
+      case "all": return undefined;
+      default: return 24;
+    }
+  }, [timeRange]);
 
-  // Estimate export size based on readings
-  const estimatedSize = (totalReadings * 0.0001).toFixed(1); // ~100 bytes per reading
+  // Build export options
+  const exportOptions: ExportOptions | null = selectedType ? {
+    exportType: selectedType,
+    format: exportFormat,
+    hours,
+    clientId: clientFilter !== 'all' ? clientFilter : undefined,
+    deviceId: deviceFilter || undefined,
+    columns: selectedColumns.length > 0 ? selectedColumns : undefined,
+  } : null;
+
+  // Fetch stats for selected export
+  const { data: exportStats, isLoading: statsLoading } = useExportStats(exportOptions);
+
+  // Handle type selection
+  const handleTypeChange = (type: string) => {
+    setSelectedType(type);
+    const typeInfo = exportTypes.find(t => t.type === type);
+    if (typeInfo) {
+      setSelectedColumns(typeInfo.default_columns || []);
+    }
+  };
+
+  // Toggle column selection
+  const toggleColumn = (column: string) => {
+    setSelectedColumns(prev => 
+      prev.includes(column) 
+        ? prev.filter(c => c !== column)
+        : [...prev, column]
+    );
+  };
+
+  // Select all / none columns
+  const selectAllColumns = () => {
+    if (selectedExportType) {
+      setSelectedColumns(selectedExportType.available_columns || []);
+    }
+  };
+
+  const selectDefaultColumns = () => {
+    if (selectedExportType) {
+      setSelectedColumns(selectedExportType.default_columns || []);
+    }
+  };
+
+  // Handle download
+  const handleDownload = useCallback(async () => {
+    if (!exportOptions) return;
+    
+    setIsDownloading(true);
+    try {
+      const path = buildExportUrl(exportOptions);
+      const response = await callAuroraApi<string>(path, 'GET', undefined, { timeout: 120000 });
+      
+      // Create blob and trigger download
+      const blob = new Blob([response], { 
+        type: exportFormat === 'tsv' ? 'text/tab-separated-values' : 'text/csv' 
+      });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `${selectedType}_export_${new Date().toISOString().slice(0,10)}.${exportFormat}`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+      
+      toast({
+        title: "Export Complete",
+        description: `Downloaded ${exportStats?.filtered_records?.toLocaleString() || 'data'} records as ${exportFormat.toUpperCase()}`,
+      });
+    } catch (error) {
+      console.error("Export failed:", error);
+      toast({
+        title: "Export Failed",
+        description: error instanceof Error ? error.message : "Failed to download export",
+        variant: "destructive",
+      });
+    } finally {
+      setIsDownloading(false);
+    }
+  }, [exportOptions, exportFormat, selectedType, exportStats, toast]);
+
+  // Group export types by category
+  const groupedTypes = useMemo(() => {
+    const groups: Record<string, ExportType[]> = {
+      "Raw Data": [],
+      "Sensors": [],
+      "Statistics": [],
+      "Other": [],
+    };
+    
+    exportTypes.forEach(type => {
+      if (['readings', 'batches'].includes(type.type)) {
+        groups["Raw Data"].push(type);
+      } else if (['hourly', 'sixhour', 'twelvehour', 'daily', 'weekly', 'monthly'].includes(type.type)) {
+        groups["Statistics"].push(type);
+      } else if (['adsb', 'bluetooth', 'wifi', 'starlink', 'starlink_telemetry', 'system_monitor', 'thermal', 'arduino', 'lora'].includes(type.type)) {
+        groups["Sensors"].push(type);
+      } else {
+        groups["Other"].push(type);
+      }
+    });
+    
+    return groups;
+  }, [exportTypes]);
+
+  const clients = clientsData || [];
 
   return (
     <div className="flex-1 p-6 overflow-y-auto">
       <div className="mb-6">
         <h1 className="text-2xl font-bold">Export Data</h1>
-        <p className="text-muted-foreground">Export sensor data in various formats</p>
+        <p className="text-muted-foreground">Export sensor data with flexible filtering and column selection</p>
       </div>
 
-      <div className="grid grid-cols-3 gap-6">
-        <div className="col-span-2 space-y-6">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        {/* Left Column - Export Type & Filters */}
+        <div className="lg:col-span-2 space-y-6">
+          {/* Export Type Selection */}
           <Card className="bg-card/50 backdrop-blur-sm border-border/50">
             <CardHeader>
               <CardTitle className="text-lg flex items-center gap-2">
-                <Filter className="w-5 h-5" />
-                Select Sensors ({sensorTypes.length} available)
+                <Database className="w-5 h-5" />
+                Export Type
               </CardTitle>
             </CardHeader>
             <CardContent>
-              {isLoading ? (
+              {typesLoading ? (
                 <div className="flex items-center justify-center py-8">
                   <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
                 </div>
-              ) : sensorTypes.length > 0 ? (
-                <div className="grid grid-cols-2 gap-4">
-                  {sensorTypes.map((sensor) => (
-                    <div key={sensor.device_type} className="flex items-center space-x-2">
-                      <Checkbox id={sensor.device_type} defaultChecked />
-                      <Label htmlFor={sensor.device_type} className="text-sm cursor-pointer capitalize">
-                        {sensor.device_type.replace(/_/g, ' ')}
-                        <span className="text-xs text-muted-foreground ml-2">
-                          ({sensor.total_readings.toLocaleString()} readings)
-                        </span>
-                      </Label>
-                    </div>
-                  ))}
-                </div>
               ) : (
-                <p className="text-muted-foreground text-center py-4">No sensors available</p>
+                <div className="space-y-4">
+                  {Object.entries(groupedTypes).map(([group, types]) => 
+                    types.length > 0 && (
+                      <div key={group}>
+                        <Label className="text-xs text-muted-foreground uppercase tracking-wide">{group}</Label>
+                        <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 mt-2">
+                          {types.map((type) => (
+                            <Button
+                              key={type.type}
+                              variant={selectedType === type.type ? "default" : "outline"}
+                              size="sm"
+                              className="justify-start h-auto py-2 px-3"
+                              onClick={() => handleTypeChange(type.type)}
+                            >
+                              <div className="text-left">
+                                <div className="font-medium capitalize">{type.type.replace(/_/g, ' ')}</div>
+                                <div className="text-xs opacity-70">{type.available_columns?.length || 0} columns</div>
+                              </div>
+                            </Button>
+                          ))}
+                        </div>
+                      </div>
+                    )
+                  )}
+                </div>
               )}
             </CardContent>
           </Card>
 
+          {/* Filters */}
           <Card className="bg-card/50 backdrop-blur-sm border-border/50">
             <CardHeader>
               <CardTitle className="text-lg flex items-center gap-2">
-                <Calendar className="w-5 h-5" />
-                Time Range
+                <Filter className="w-5 h-5" />
+                Filters
               </CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
                 <div>
-                  <Label className="text-sm text-muted-foreground">Preset Range</Label>
-                  <Select defaultValue="24h">
+                  <Label className="text-sm text-muted-foreground">Time Range</Label>
+                  <Select value={timeRange} onValueChange={setTimeRange}>
                     <SelectTrigger className="mt-1">
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
                       <SelectItem value="1h">Last Hour</SelectItem>
                       <SelectItem value="6h">Last 6 Hours</SelectItem>
+                      <SelectItem value="12h">Last 12 Hours</SelectItem>
                       <SelectItem value="24h">Last 24 Hours</SelectItem>
                       <SelectItem value="7d">Last 7 Days</SelectItem>
                       <SelectItem value="30d">Last 30 Days</SelectItem>
-                      <SelectItem value="all">All Data ({stats?.global?.time_ranges?.data_span_days?.toFixed(0) ?? '—'} days)</SelectItem>
+                      <SelectItem value="all">All Time</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
+                
                 <div>
-                  <Label className="text-sm text-muted-foreground">Data Resolution</Label>
-                  <Select defaultValue="1m">
+                  <Label className="text-sm text-muted-foreground">Client</Label>
+                  <Select value={clientFilter} onValueChange={setClientFilter}>
                     <SelectTrigger className="mt-1">
-                      <SelectValue />
+                      <SelectValue placeholder="All clients" />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="raw">Raw (All Data)</SelectItem>
-                      <SelectItem value="1m">1 Minute Average</SelectItem>
-                      <SelectItem value="5m">5 Minute Average</SelectItem>
-                      <SelectItem value="1h">1 Hour Average</SelectItem>
+                      <SelectItem value="all">All Clients</SelectItem>
+                      {clients.map((client) => (
+                        <SelectItem key={client.client_id} value={client.client_id}>
+                          {client.hostname || client.client_id.slice(0, 12)}
+                        </SelectItem>
+                      ))}
                     </SelectContent>
                   </Select>
                 </div>
+
+                {selectedExportType?.supports_device_filter && (
+                  <div>
+                    <Label className="text-sm text-muted-foreground">Device ID (optional)</Label>
+                    <input
+                      type="text"
+                      value={deviceFilter}
+                      onChange={(e) => setDeviceFilter(e.target.value)}
+                      placeholder="e.g., starlink_dish_1"
+                      className="mt-1 w-full px-3 py-2 text-sm rounded-md border border-input bg-background"
+                    />
+                  </div>
+                )}
               </div>
-              {stats?.global?.time_ranges && (
-                <div className="mt-4 p-3 rounded-lg bg-muted/30 text-xs text-muted-foreground">
-                  <p>Data available from {new Date(stats.global.time_ranges.earliest_reading).toLocaleDateString()} to {new Date(stats.global.time_ranges.latest_reading).toLocaleDateString()}</p>
-                </div>
-              )}
             </CardContent>
           </Card>
+
+          {/* Column Selection */}
+          {selectedExportType && (
+            <Card className="bg-card/50 backdrop-blur-sm border-border/50">
+              <Collapsible open={columnsOpen} onOpenChange={setColumnsOpen}>
+                <CardHeader className="cursor-pointer" onClick={() => setColumnsOpen(!columnsOpen)}>
+                  <CollapsibleTrigger asChild>
+                    <div className="flex items-center justify-between w-full">
+                      <CardTitle className="text-lg flex items-center gap-2">
+                        <Columns className="w-5 h-5" />
+                        Columns
+                        <Badge variant="secondary" className="ml-2">
+                          {selectedColumns.length} / {selectedExportType.available_columns?.length || 0}
+                        </Badge>
+                      </CardTitle>
+                      <ChevronDown className={`w-5 h-5 transition-transform ${columnsOpen ? 'rotate-180' : ''}`} />
+                    </div>
+                  </CollapsibleTrigger>
+                </CardHeader>
+                <CollapsibleContent>
+                  <CardContent>
+                    <div className="flex gap-2 mb-4">
+                      <Button variant="outline" size="sm" onClick={selectAllColumns}>
+                        Select All
+                      </Button>
+                      <Button variant="outline" size="sm" onClick={selectDefaultColumns}>
+                        Reset to Default
+                      </Button>
+                      <Button variant="outline" size="sm" onClick={() => setSelectedColumns([])}>
+                        Clear All
+                      </Button>
+                    </div>
+                    <ScrollArea className="h-48">
+                      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2">
+                        {selectedExportType.available_columns?.map((column) => (
+                          <div key={column} className="flex items-center space-x-2">
+                            <Checkbox
+                              id={column}
+                              checked={selectedColumns.includes(column)}
+                              onCheckedChange={() => toggleColumn(column)}
+                            />
+                            <Label 
+                              htmlFor={column} 
+                              className="text-sm cursor-pointer font-mono truncate"
+                              title={column}
+                            >
+                              {column}
+                            </Label>
+                          </div>
+                        ))}
+                      </div>
+                    </ScrollArea>
+                  </CardContent>
+                </CollapsibleContent>
+              </Collapsible>
+            </Card>
+          )}
         </div>
 
+        {/* Right Column - Format & Download */}
         <div className="space-y-4">
           <Card className="bg-card/50 backdrop-blur-sm border-border/50">
             <CardHeader>
-              <CardTitle className="text-lg">Export Format</CardTitle>
+              <CardTitle className="text-lg flex items-center gap-2">
+                <Settings2 className="w-5 h-5" />
+                Export Format
+              </CardTitle>
             </CardHeader>
             <CardContent className="space-y-3">
-              <Button variant="outline" className="w-full justify-start gap-3 h-14">
-                <div className="w-10 h-10 rounded bg-green-500/20 flex items-center justify-center">
-                  <FileSpreadsheet className="w-5 h-5 text-green-500" />
+              <Button 
+                variant={exportFormat === 'csv' ? 'default' : 'outline'} 
+                className="w-full justify-start gap-3 h-14"
+                onClick={() => setExportFormat('csv')}
+              >
+                <div className="w-10 h-10 rounded bg-primary/20 flex items-center justify-center">
+                  <FileSpreadsheet className="w-5 h-5 text-primary" />
                 </div>
-                <div className="text-left">
+                <div className="text-left flex-1">
                   <p className="font-medium">CSV</p>
-                  <p className="text-xs text-muted-foreground">Spreadsheet compatible</p>
+                  <p className="text-xs opacity-70">Comma-separated values</p>
                 </div>
+                {exportFormat === 'csv' && <Check className="w-4 h-4" />}
               </Button>
-              <Button variant="outline" className="w-full justify-start gap-3 h-14">
-                <div className="w-10 h-10 rounded bg-blue-500/20 flex items-center justify-center">
-                  <FileJson className="w-5 h-5 text-blue-500" />
+              <Button 
+                variant={exportFormat === 'tsv' ? 'default' : 'outline'} 
+                className="w-full justify-start gap-3 h-14"
+                onClick={() => setExportFormat('tsv')}
+              >
+                <div className="w-10 h-10 rounded bg-accent/20 flex items-center justify-center">
+                  <FileText className="w-5 h-5 text-accent-foreground" />
                 </div>
-                <div className="text-left">
-                  <p className="font-medium">JSON</p>
-                  <p className="text-xs text-muted-foreground">API compatible</p>
+                <div className="text-left flex-1">
+                  <p className="font-medium">TSV</p>
+                  <p className="text-xs opacity-70">Tab-separated values</p>
                 </div>
-              </Button>
-              <Button variant="outline" className="w-full justify-start gap-3 h-14">
-                <div className="w-10 h-10 rounded bg-purple-500/20 flex items-center justify-center">
-                  <FileText className="w-5 h-5 text-purple-500" />
-                </div>
-                <div className="text-left">
-                  <p className="font-medium">InfluxDB</p>
-                  <p className="text-xs text-muted-foreground">Line protocol format</p>
-                </div>
+                {exportFormat === 'tsv' && <Check className="w-4 h-4" />}
               </Button>
             </CardContent>
           </Card>
 
+          {/* Export Stats & Download */}
           <Card className="bg-card/50 backdrop-blur-sm border-border/50">
             <CardContent className="p-4">
-              <div className="text-center mb-4">
-                <p className="text-sm text-muted-foreground">Estimated Export Size</p>
-                <p className="text-2xl font-bold">~{estimatedSize} MB</p>
-                <p className="text-xs text-muted-foreground">~{totalReadings.toLocaleString()} records</p>
-              </div>
-              <Button className="w-full gap-2">
-                <Download className="w-4 h-4" />
-                Export Data
+              {statsLoading ? (
+                <div className="flex items-center justify-center py-6">
+                  <Loader2 className="w-5 h-5 animate-spin text-muted-foreground" />
+                </div>
+              ) : exportStats ? (
+                <div className="text-center mb-4 space-y-2">
+                  <p className="text-sm text-muted-foreground">Estimated Export</p>
+                  <p className="text-3xl font-bold">{exportStats.filtered_records?.toLocaleString() || 0}</p>
+                  <p className="text-xs text-muted-foreground">records</p>
+                  <div className="flex justify-center gap-4 text-xs text-muted-foreground pt-2">
+                    <span>~{exportStats.estimated_size_mb?.toFixed(1) || 0} MB</span>
+                    <span>{selectedColumns.length} columns</span>
+                  </div>
+                </div>
+              ) : selectedType ? (
+                <div className="text-center py-4 text-sm text-muted-foreground">
+                  Configure export to see stats
+                </div>
+              ) : (
+                <div className="text-center py-4 text-sm text-muted-foreground">
+                  Select an export type to begin
+                </div>
+              )}
+              
+              <Button 
+                className="w-full gap-2" 
+                disabled={!selectedType || isDownloading || selectedColumns.length === 0}
+                onClick={handleDownload}
+              >
+                {isDownloading ? (
+                  <>
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    Downloading...
+                  </>
+                ) : (
+                  <>
+                    <Download className="w-4 h-4" />
+                    Download {exportFormat.toUpperCase()}
+                  </>
+                )}
               </Button>
+              
+              {selectedType && selectedColumns.length === 0 && (
+                <p className="text-xs text-destructive text-center mt-2">
+                  Select at least one column
+                </p>
+              )}
             </CardContent>
           </Card>
+
+          {/* Type Description */}
+          {selectedExportType && (
+            <Card className="bg-card/50 backdrop-blur-sm border-border/50">
+              <CardContent className="p-4">
+                <h4 className="font-medium capitalize mb-2">{selectedExportType.type.replace(/_/g, ' ')}</h4>
+                <p className="text-sm text-muted-foreground">{selectedExportType.description}</p>
+                <div className="flex flex-wrap gap-1 mt-3">
+                  {selectedExportType.supports_client_filter && (
+                    <Badge variant="outline" className="text-xs">Client Filter</Badge>
+                  )}
+                  {selectedExportType.supports_device_filter && (
+                    <Badge variant="outline" className="text-xs">Device Filter</Badge>
+                  )}
+                  {selectedExportType.supports_sensor_filter && (
+                    <Badge variant="outline" className="text-xs">Sensor Filter</Badge>
+                  )}
+                </div>
+              </CardContent>
+            </Card>
+          )}
         </div>
       </div>
     </div>

@@ -465,8 +465,24 @@ export {
   useAcknowledgeViolation,
   useWhitelistViolation,
   useAutoLearnBaseline,
-  // Export
+  // Export (legacy)
   useExportFormats,
+} from "../useAuroraApi";
+
+// Comprehensive Export
+export {
+  useExportTypes,
+  useExportStats,
+  buildExportUrl,
+  downloadExport,
+  type ExportType,
+  type ExportTypesResponse,
+  type ExportStats,
+  type ExportStatsResponse,
+  type ExportOptions,
+} from "./export";
+
+export {
   // Audit
   useAuditLogs,
   useAuditStats,
