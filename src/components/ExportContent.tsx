@@ -11,7 +11,7 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/component
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { useToast } from "@/hooks/use-toast";
 import { useExportTypes, useExportStats, buildExportUrl, type ExportType, type ExportOptions } from "@/hooks/aurora/export";
-import { useClientsWithHostnames } from "@/hooks/aurora/clients";
+import { useClients } from "@/hooks/aurora/clients";
 import { callAuroraApi } from "@/hooks/aurora/core";
 
 // Hostname validation helper
@@ -34,7 +34,7 @@ const getClientDisplayName = (client: { client_id: string; hostname?: string; na
 const ExportContent = () => {
   const { toast } = useToast();
   const { data: exportTypesData, isLoading: typesLoading } = useExportTypes();
-  const { data: clientsData } = useClientsWithHostnames();
+  const { data: clientsData } = useClients();
   
   // State
   const [selectedType, setSelectedType] = useState<string>("");
