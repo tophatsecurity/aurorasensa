@@ -1,5 +1,5 @@
 import { useState, useMemo, useCallback } from "react";
-import { Download, FileSpreadsheet, FileText, Calendar, Filter, Loader2, Columns, Settings2, Database, ChevronDown, Check, X } from "lucide-react";
+import { Download, FileSpreadsheet, FileText, Filter, Loader2, Columns, Settings2, Database, ChevronDown, Check } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
@@ -8,25 +8,44 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { useToast } from "@/hooks/use-toast";
 import { useExportTypes, useExportStats, buildExportUrl, type ExportType, type ExportOptions } from "@/hooks/aurora/export";
-import { useClients } from "@/hooks/aurora/clients";
+import { useClientsWithHostnames } from "@/hooks/aurora/clients";
 import { callAuroraApi } from "@/hooks/aurora/core";
+
+// Hostname validation helper
+const isValidHostname = (val: unknown): val is string => {
+  if (typeof val !== 'string') return false;
+  const lower = val.toLowerCase().trim();
+  return lower.length > 0 && 
+    !['unknown', 'undefined', 'null', '[object', 'object object'].some(bad => lower.includes(bad));
+};
+
+const getClientDisplayName = (client: { client_id: string; hostname?: string; name?: string }, index: number): string => {
+  if (isValidHostname(client.hostname)) return client.hostname;
+  if (isValidHostname(client.name)) return client.name;
+  if (client.client_id && client.client_id !== 'unknown') {
+    return client.client_id.length > 16 ? `${client.client_id.slice(0, 12)}…` : client.client_id;
+  }
+  return `Client ${index + 1}`;
+};
 
 const ExportContent = () => {
   const { toast } = useToast();
   const { data: exportTypesData, isLoading: typesLoading } = useExportTypes();
-  const { data: clientsData } = useClients();
+  const { data: clientsData } = useClientsWithHostnames();
   
   // State
   const [selectedType, setSelectedType] = useState<string>("");
   const [selectedColumns, setSelectedColumns] = useState<string[]>([]);
   const [timeRange, setTimeRange] = useState<string>("24h");
-  const [clientFilter, setClientFilter] = useState<string>("all");
+  const [selectedClients, setSelectedClients] = useState<string[]>([]);
   const [deviceFilter, setDeviceFilter] = useState<string>("");
   const [exportFormat, setExportFormat] = useState<'csv' | 'tsv'>('csv');
   const [isDownloading, setIsDownloading] = useState(false);
   const [columnsOpen, setColumnsOpen] = useState(false);
+  const [clientsOpen, setClientsOpen] = useState(false);
 
   // Get export types - ensure it's always an array
   const exportTypes = Array.isArray(exportTypesData?.export_types) ? exportTypesData.export_types : [];
@@ -46,18 +65,35 @@ const ExportContent = () => {
     }
   }, [timeRange]);
 
-  // Build export options
+  // Build export options (use first selected client for stats, or all)
   const exportOptions: ExportOptions | null = selectedType ? {
     exportType: selectedType,
     format: exportFormat,
     hours,
-    clientId: clientFilter !== 'all' ? clientFilter : undefined,
+    clientId: selectedClients.length === 1 ? selectedClients[0] : undefined,
     deviceId: deviceFilter || undefined,
     columns: selectedColumns.length > 0 ? selectedColumns : undefined,
   } : null;
 
   // Fetch stats for selected export
   const { data: exportStats, isLoading: statsLoading } = useExportStats(exportOptions);
+
+  // Toggle client selection
+  const toggleClient = (clientId: string) => {
+    setSelectedClients(prev =>
+      prev.includes(clientId)
+        ? prev.filter(c => c !== clientId)
+        : [...prev, clientId]
+    );
+  };
+
+  const selectAllClients = () => {
+    setSelectedClients(clients.map(c => c.client_id));
+  };
+
+  const clearClientSelection = () => {
+    setSelectedClients([]);
+  };
 
   // Handle type selection
   const handleTypeChange = (type: string) => {
@@ -235,21 +271,72 @@ const ExportContent = () => {
                   </Select>
                 </div>
                 
-                <div>
-                  <Label className="text-sm text-muted-foreground">Client</Label>
-                  <Select value={clientFilter} onValueChange={setClientFilter}>
-                    <SelectTrigger className="mt-1">
-                      <SelectValue placeholder="All clients" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="all">All Clients</SelectItem>
-                      {clients.map((client) => (
-                        <SelectItem key={client.client_id} value={client.client_id}>
-                          {client.hostname || client.client_id.slice(0, 12)}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                <div className="sm:col-span-2">
+                  <Label className="text-sm text-muted-foreground">Clients</Label>
+                  <Popover open={clientsOpen} onOpenChange={setClientsOpen}>
+                    <PopoverTrigger asChild>
+                      <Button
+                        variant="outline"
+                        className="w-full mt-1 justify-between font-normal"
+                      >
+                        <span className="truncate">
+                          {selectedClients.length === 0 
+                            ? "All Clients" 
+                            : selectedClients.length === 1
+                              ? getClientDisplayName(clients.find(c => c.client_id === selectedClients[0]) || { client_id: selectedClients[0] }, 0)
+                              : `${selectedClients.length} clients selected`
+                          }
+                        </span>
+                        <ChevronDown className="w-4 h-4 ml-2 shrink-0 opacity-50" />
+                      </Button>
+                    </PopoverTrigger>
+                    <PopoverContent className="w-80 p-0 bg-popover border-border z-50" align="start">
+                      <div className="p-2 border-b border-border flex gap-2">
+                        <Button variant="ghost" size="sm" onClick={selectAllClients} className="flex-1">
+                          Select All
+                        </Button>
+                        <Button variant="ghost" size="sm" onClick={clearClientSelection} className="flex-1">
+                          Clear
+                        </Button>
+                      </div>
+                      <ScrollArea className="h-64">
+                        <div className="p-2 space-y-1">
+                          {clients.map((client, index) => {
+                            const displayName = getClientDisplayName(client, index);
+                            const isSelected = selectedClients.includes(client.client_id);
+                            return (
+                              <div
+                                key={client.client_id}
+                                className={`flex items-center gap-2 p-2 rounded-md cursor-pointer hover:bg-accent/50 ${isSelected ? 'bg-accent' : ''}`}
+                                onClick={() => toggleClient(client.client_id)}
+                              >
+                                <Checkbox checked={isSelected} className="pointer-events-none" />
+                                <div className="flex-1 min-w-0">
+                                  <p className="text-sm font-medium truncate">{displayName}</p>
+                                  {displayName !== client.client_id && (
+                                    <p className="text-xs text-muted-foreground font-mono truncate">
+                                      {client.client_id.slice(0, 20)}
+                                    </p>
+                                  )}
+                                </div>
+                                {isSelected && <Check className="w-4 h-4 text-primary shrink-0" />}
+                              </div>
+                            );
+                          })}
+                          {clients.length === 0 && (
+                            <p className="text-sm text-muted-foreground text-center py-4">No clients available</p>
+                          )}
+                        </div>
+                      </ScrollArea>
+                      {selectedClients.length > 0 && (
+                        <div className="p-2 border-t border-border">
+                          <p className="text-xs text-muted-foreground text-center">
+                            {selectedClients.length} of {clients.length} selected
+                          </p>
+                        </div>
+                      )}
+                    </PopoverContent>
+                  </Popover>
                 </div>
 
                 {selectedExportType?.supports_device_filter && (
