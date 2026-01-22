@@ -6,11 +6,12 @@ const corsHeaders = {
 };
 
 const AURORA_ENDPOINT = "http://aurora.tophatsecurity.com:9151";
-const TIMEOUT_MS = 55000; // Edge functions have ~60s limit
+const DEFAULT_TIMEOUT_MS = 55000; // Edge functions have ~60s limit
 
-async function fetchWithTimeout(url: string, options: RequestInit): Promise<Response> {
+async function fetchWithTimeout(url: string, options: RequestInit, timeoutMs?: number): Promise<Response> {
   const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), TIMEOUT_MS);
+  const effectiveTimeout = timeoutMs || DEFAULT_TIMEOUT_MS;
+  const timeoutId = setTimeout(() => controller.abort(), effectiveTimeout);
   
   try {
     const response = await fetch(url, {
@@ -47,6 +48,8 @@ function getEmptyDataForPath(apiPath: string): unknown {
   if (apiPath.includes('/batches/list') || apiPath.includes('/batches/by-client')) return { batches: [], count: 0 };
   if (apiPath.includes('/sensors/list') || apiPath.includes('/sensors/recent')) return { sensors: [] };
   if (apiPath.includes('/maritime/vessels') || apiPath.includes('/maritime/stations') || apiPath.includes('/maritime/beacons')) return [];
+  if (apiPath.includes('/stats/by-client')) return { clients: [], total: 0 };
+  if (apiPath.includes('/stats/by-sensor')) return { sensors: [], total: 0 };
   if (apiPath.includes('/stats/history')) return [];
   if (apiPath.includes('/stats/devices')) return { devices: [] };
   if (apiPath.includes('/stats/endpoints')) return { endpoints: [] };
@@ -161,7 +164,7 @@ Deno.serve(async (req) => {
 
   try {
     const body = await req.json().catch(() => ({}));
-    const { path = "", method = "GET", body: requestBody, auroraToken } = body;
+    const { path = "", method = "GET", body: requestBody, auroraToken, timeout } = body;
     
     if (!path) {
       return new Response(JSON.stringify({ error: 'Missing path' }), {
@@ -224,17 +227,31 @@ Deno.serve(async (req) => {
       bodyContent = JSON.stringify(requestBody);
     }
 
+    // Use dynamic timeout or default
+    const effectiveTimeout = timeout && typeof timeout === 'number' ? timeout : DEFAULT_TIMEOUT_MS;
+    
     let response: Response;
     try {
       response = await fetchWithTimeout(url, {
         method,
         headers,
         body: bodyContent,
-      });
+      }, effectiveTimeout);
     } catch (fetchError) {
       const msg = fetchError instanceof Error ? fetchError.message : String(fetchError);
       if (msg.includes('aborted')) {
-        console.error(`Timeout after ${TIMEOUT_MS}ms for ${url}`);
+        console.error(`Timeout after ${effectiveTimeout}ms for ${url}`);
+        
+        // For GET requests that timeout, return empty data instead of error
+        if (method === 'GET') {
+          console.log(`Returning empty data for ${path} due to timeout`);
+          const emptyData = getEmptyDataForPath(path);
+          return new Response(JSON.stringify(emptyData), {
+            status: 200,
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          });
+        }
+        
         return new Response(JSON.stringify({ 
           error: 'Aurora server timeout', 
           details: 'The Aurora server is taking too long to respond. Please try again.',

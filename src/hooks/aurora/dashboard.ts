@@ -185,37 +185,8 @@ export function useDashboardStats(clientId?: string | null) {
         // Fall through
       }
       
-      // Try 3: /api/stats/by-client to aggregate
-      try {
-        const byClientResult = await callAuroraApi<ClientStatsItem[]>(
-          STATS.BY_CLIENT, "GET", undefined, options
-        );
-        
-        const clients = Array.isArray(byClientResult) ? byClientResult : [];
-        
-        if (clients.length > 0) {
-          const totalReadings = clients.reduce((sum, c) => sum + (c.reading_count || 0), 0);
-          const totalDevices = clients.reduce((sum, c) => sum + (c.device_count || 0), 0);
-          const allSensorTypes = new Set(clients.flatMap(c => c.sensor_types || []));
-          
-          console.log('[useDashboardStats] Using /api/stats/by-client:', { clients: clients.length, totalReadings });
-          return {
-            avg_humidity: null,
-            avg_power_w: null,
-            avg_signal_dbm: null,
-            avg_temp_aht: null,
-            avg_temp_bmt: null,
-            avg_temp_c: null,
-            avg_temp_f: null,
-            total_clients: clients.length,
-            total_sensors: allSensorTypes.size,
-            total_readings: totalReadings,
-            total_devices: totalDevices,
-          };
-        }
-      } catch {
-        // Fall through
-      }
+      // Try 3: /api/stats/by-client - SKIPPED due to frequent timeouts
+      // This endpoint is too slow and causes 504 errors, use all-states count instead
       
       // Try 4: /api/clients/all-states for client count
       try {
@@ -621,27 +592,27 @@ export function useDashboardClientStats(clientId?: string | null, hours: number 
   return useQuery({
     queryKey: ["aurora", "dashboard", "client-stats", clientId, hours],
     queryFn: async () => {
-      const options: AuroraApiOptions = { clientId, params: { hours } };
+      const options: AuroraApiOptions = { clientId, params: { hours }, timeout: 15000 };
       
       try {
-        // Fetch client stats and all-states in parallel for hostname enrichment
-        const [statsResult, allStatesResult] = await Promise.all([
-          callAuroraApi<ClientStatsResponse | ClientStatsItem[]>(
-            STATS.BY_CLIENT, "GET", undefined, options
-          ),
-          callAuroraApi<{
-            states?: {
-              adopted?: Array<{ client_id: string; hostname?: string; batches_received?: number; readings_count?: number; last_seen?: string }>;
-              registered?: Array<{ client_id: string; hostname?: string; batches_received?: number; readings_count?: number; last_seen?: string }>;
-              pending?: Array<{ client_id: string; hostname?: string; batches_received?: number; readings_count?: number; last_seen?: string }>;
-            };
-            clients_by_state?: {
-              adopted?: Array<{ client_id: string; hostname?: string; batches_received?: number; readings_count?: number; last_seen?: string }>;
-              registered?: Array<{ client_id: string; hostname?: string; batches_received?: number; readings_count?: number; last_seen?: string }>;
-              pending?: Array<{ client_id: string; hostname?: string; batches_received?: number; readings_count?: number; last_seen?: string }>;
-            };
-          }>(CLIENTS.ALL_STATES, "GET").catch(() => null),
-        ]);
+        // Fetch all-states first (fast), then try stats/by-client with timeout
+        const allStatesResult = await callAuroraApi<{
+          states?: {
+            adopted?: Array<{ client_id: string; hostname?: string; batches_received?: number; readings_count?: number; last_seen?: string }>;
+            registered?: Array<{ client_id: string; hostname?: string; batches_received?: number; readings_count?: number; last_seen?: string }>;
+            pending?: Array<{ client_id: string; hostname?: string; batches_received?: number; readings_count?: number; last_seen?: string }>;
+          };
+          clients_by_state?: {
+            adopted?: Array<{ client_id: string; hostname?: string; batches_received?: number; readings_count?: number; last_seen?: string }>;
+            registered?: Array<{ client_id: string; hostname?: string; batches_received?: number; readings_count?: number; last_seen?: string }>;
+            pending?: Array<{ client_id: string; hostname?: string; batches_received?: number; readings_count?: number; last_seen?: string }>;
+          };
+        }>(CLIENTS.ALL_STATES, "GET").catch(() => null);
+        
+        // Try stats/by-client with short timeout - don't block on it
+        const statsResult = await callAuroraApi<ClientStatsResponse | ClientStatsItem[]>(
+          STATS.BY_CLIENT, "GET", undefined, { ...options, timeout: 10000 }
+        ).catch(() => null);
         
         // Handle both wrapped and unwrapped responses from by-client
         const rawClients = Array.isArray(statsResult) ? statsResult : statsResult?.data || [];

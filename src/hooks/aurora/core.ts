@@ -237,7 +237,7 @@ export async function callAuroraApi<T>(
     for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
       try {
         const { data, error } = await supabase.functions.invoke("aurora-proxy", {
-          body: { path: finalPath, method, body, auroraToken },
+          body: { path: finalPath, method, body, auroraToken, timeout: options?.timeout },
         });
 
         if (error) {

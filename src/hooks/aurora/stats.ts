@@ -666,39 +666,45 @@ export function useStatsAll(options?: {
   });
 }
 
-// NEW: Stats grouped by client
+// NEW: Stats grouped by client - with short timeout to prevent blocking
 export function useStatsByClient(options?: { clientId?: string | null; hours?: number; limit?: number; offset?: number }) {
   return useQuery({
     queryKey: ["aurora", "stats", "by-client", options],
     queryFn: async () => {
-      // Core now auto-unwraps { data: [...], status: 'success' } responses
-      const raw = await callAuroraApi<ClientGroupedStats[] | { clients: ClientGroupedStats[]; total: number }>(
-        STATS.BY_CLIENT, 
-        "GET", 
-        undefined, 
-        { 
-          clientId: options?.clientId,
-          params: { 
-            hours: options?.hours ?? 24,
-            limit: options?.limit ?? 100,
-            offset: options?.offset ?? 0,
+      try {
+        // Use a shorter timeout (15s) for this slow endpoint
+        const raw = await callAuroraApi<ClientGroupedStats[] | { clients: ClientGroupedStats[]; total: number }>(
+          STATS.BY_CLIENT, 
+          "GET", 
+          undefined, 
+          { 
+            clientId: options?.clientId,
+            params: { 
+              hours: options?.hours ?? 24,
+              limit: options?.limit ?? 50, // Reduced limit to speed up query
+              offset: options?.offset ?? 0,
+            },
+            timeout: 15000, // 15 second timeout
           }
+        );
+        // Handle array response (when auto-unwrapped)
+        if (Array.isArray(raw)) {
+          return { clients: raw, total: raw.length };
         }
-      );
-      // Handle array response (when auto-unwrapped)
-      if (Array.isArray(raw)) {
-        return { clients: raw, total: raw.length };
+        // Handle object with clients array
+        if (raw && 'clients' in raw) {
+          return raw;
+        }
+        return { clients: [], total: 0 };
+      } catch (error) {
+        console.warn('[useStatsByClient] Failed to fetch, returning empty:', error);
+        return { clients: [], total: 0 };
       }
-      // Handle object with clients array
-      if (raw && 'clients' in raw) {
-        return raw;
-      }
-      return { clients: [], total: 0 };
     },
     enabled: hasAuroraSession(),
-    staleTime: 60000,
-    refetchInterval: 120000,
-    retry: 1,
+    staleTime: 120000, // Cache longer to reduce retries
+    refetchInterval: 300000, // Refetch less often (5 min)
+    retry: 0, // No retries for this slow endpoint
   });
 }
 
