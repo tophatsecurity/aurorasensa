@@ -28,8 +28,8 @@ const ExportContent = () => {
   const [isDownloading, setIsDownloading] = useState(false);
   const [columnsOpen, setColumnsOpen] = useState(false);
 
-  // Get export types
-  const exportTypes = exportTypesData?.export_types || [];
+  // Get export types - ensure it's always an array
+  const exportTypes = Array.isArray(exportTypesData?.export_types) ? exportTypesData.export_types : [];
   const selectedExportType = exportTypes.find(t => t.type === selectedType);
   
   // Parse hours from time range

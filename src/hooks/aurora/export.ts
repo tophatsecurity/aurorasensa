@@ -56,8 +56,17 @@ export function useExportTypes() {
     queryFn: async () => {
       if (!hasAuroraSession()) return { export_types: [], total_types: 0 };
       try {
-        const response = await callAuroraApi<ExportTypesResponse>(EXPORT.COMPREHENSIVE_TYPES);
-        return response;
+        const response = await callAuroraApi<ExportTypesResponse | ExportType[]>(EXPORT.COMPREHENSIVE_TYPES);
+        // Handle both array response and wrapped response
+        if (Array.isArray(response)) {
+          return { export_types: response, total_types: response.length };
+        }
+        // Handle wrapped response
+        const types = response?.export_types || [];
+        return { 
+          export_types: Array.isArray(types) ? types : [], 
+          total_types: response?.total_types || 0 
+        };
       } catch (error) {
         console.warn("Failed to fetch export types:", error);
         return { export_types: [], total_types: 0 };
