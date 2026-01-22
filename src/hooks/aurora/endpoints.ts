@@ -410,6 +410,10 @@ export const EXPORT = {
   FORMATS: '/api/export/formats',
   CSV: '/api/v1/export/csv',
   JSON: '/api/v1/export/json',
+  // Comprehensive export system
+  COMPREHENSIVE_TYPES: '/api/v1/export/comprehensive/types',
+  COMPREHENSIVE_CSV: '/api/v1/export/comprehensive/csv',
+  COMPREHENSIVE_STATS: '/api/v1/export/comprehensive/stats',
 } as const;
 
 // =============================================
