@@ -33,12 +33,56 @@ export function useClients() {
     queryKey: ["aurora", "clients"],
     queryFn: async () => {
       try {
-        const response = await callAuroraApi<ClientsListResponse | Client[]>(CLIENTS.LIST);
-        // Handle both array response and wrapped response
-        if (Array.isArray(response)) {
-          return response;
+        // Try multiple endpoints in parallel
+        const [listResponse, mapResponse] = await Promise.all([
+          callAuroraApi<ClientsListResponse | Client[]>(CLIENTS.LIST).catch(() => null),
+          callAuroraApi<{ clients?: Array<{ client_id: string; hostname?: string }> }>('/api/map/markers').catch(() => null),
+        ]);
+        
+        // Build client list from LIST endpoint
+        let clients: Client[] = [];
+        if (listResponse) {
+          if (Array.isArray(listResponse)) {
+            clients = listResponse;
+          } else if (listResponse?.clients) {
+            clients = listResponse.clients;
+          }
         }
-        return response?.clients || [];
+        
+        // Filter out "unknown" client_ids and enrich with map data
+        const mapClients: Array<{ client_id: string; hostname?: string }> = mapResponse?.clients || [];
+        const mapClientMap = new Map<string, { client_id: string; hostname?: string }>(
+          mapClients.map(c => [c.client_id, c])
+        );
+        
+        // If LIST returned only "unknown", use map clients instead
+        const validClients = clients.filter(c => c.client_id && c.client_id !== 'unknown');
+        
+        if (validClients.length === 0 && mapClients.length > 0) {
+          // Use map clients as primary source - create partial Client objects
+          return mapClients.map((mc): Client => ({
+            client_id: mc.client_id,
+            hostname: mc.hostname || mc.client_id,
+            ip_address: '',
+            mac_address: '',
+            last_seen: new Date().toISOString(),
+            adopted_at: null,
+            batches_received: 0,
+            auto_registered: false,
+            state: 'adopted',
+          }));
+        }
+        
+        // Enrich valid clients with map hostnames
+        // Enrich valid clients with map hostnames
+        return validClients.map(client => {
+          const mapClient = mapClientMap.get(client.client_id);
+          const existingHostname = 'hostname' in client ? (client as { hostname?: string }).hostname : undefined;
+          return {
+            ...client,
+            hostname: mapClient?.hostname || existingHostname || client.client_id,
+          };
+        });
       } catch {
         return [];
       }
