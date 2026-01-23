@@ -101,13 +101,22 @@ export function useMapMarkers(options: MapMarkersOptions = {}) {
     hours,
   });
 
+  const sessionActive = hasAuroraSession();
+  console.log('[useMapMarkers] Session active:', sessionActive, 'options:', options);
+  
   return useQuery({
     queryKey: ["aurora", "map", "markers", options],
     queryFn: async () => {
+      console.log('[useMapMarkers] Fetching map markers...');
       const response = await callAuroraApi<MapMarkersResponse>(`${MAP.MARKERS}${queryParams}`);
+      console.log('[useMapMarkers] Response:', {
+        clients: response?.clients?.length ?? 0,
+        starlink: response?.starlink_dishes?.length ?? 0,
+        aircraft: response?.adsb_aircraft?.length ?? 0,
+      });
       return response;
     },
-    enabled: hasAuroraSession(),
+    enabled: sessionActive,
     staleTime: 30_000,
     refetchInterval: 30_000,
     retry: 2,

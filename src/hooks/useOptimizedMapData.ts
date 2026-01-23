@@ -166,9 +166,14 @@ export function useOptimizedMapData(options: UseOptimizedMapDataOptions = {}) {
   // ===== BUILD CLIENT MARKERS FROM UNIFIED API =====
   const clientMarkers = useMemo<ClientMarker[]>(() => {
     const clients = mapMarkersData?.clients || [];
-    if (!clients.length) return [];
+    if (!clients.length) {
+      console.log('[useOptimizedMapData] No clients from API');
+      return [];
+    }
 
-    return clients
+    console.log('[useOptimizedMapData] Processing', clients.length, 'clients from API');
+    
+    const markers = clients
       .filter((client: MapClientMarker) => isValidCoordinate(client.latitude, client.longitude))
       .map((client: MapClientMarker) => ({
         client_id: client.client_id,
@@ -178,6 +183,9 @@ export function useOptimizedMapData(options: UseOptimizedMapDataOptions = {}) {
         city: client.metadata?.city,
         country: client.metadata?.country,
       }));
+    
+    console.log('[useOptimizedMapData] Processed client markers:', markers.length);
+    return markers;
   }, [mapMarkersData?.clients]);
 
   // ===== BUILD ADS-B MARKERS FROM UNIFIED API =====
