@@ -263,6 +263,13 @@ const MapContent = () => {
   // Update markers with animations
   useEffect(() => {
     if (!mapRef.current) return;
+    
+    console.log('[MapContent] Updating markers:', {
+      sensors: sensorMarkers.length,
+      clients: clientMarkers.length,
+      adsb: adsbMarkers.length,
+      activeFilters: Array.from(activeFilters),
+    });
 
     const existingMarkerIds = new Set<string>();
 
