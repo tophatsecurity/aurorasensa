@@ -53,7 +53,7 @@ export function AuroraSignUpForm({ onSignUp, isLoading, onSwitchToLogin }: Auror
         </div>
         <CardTitle className="text-2xl">Create Account</CardTitle>
         <CardDescription>
-          Sign up to access Aurora Sense
+          Sign up to access AuroraSENSE
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">

@@ -162,7 +162,7 @@ const SettingsContent = () => {
       <div className="flex items-center justify-between p-6 border-b border-border shrink-0">
         <div>
           <h1 className="text-2xl font-bold">Settings</h1>
-          <p className="text-muted-foreground">Configure your AuroraSense dashboard</p>
+          <p className="text-muted-foreground">Configure your AuroraSENSE dashboard</p>
         </div>
         <div className="flex gap-2">
           <Button variant="outline" onClick={handleRefresh} size="sm">

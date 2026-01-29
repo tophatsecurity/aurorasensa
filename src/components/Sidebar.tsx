@@ -102,7 +102,7 @@ const Sidebar = ({ activeItem, onNavigate }: SidebarProps) => {
             <Server className="w-5 h-5 text-primary-foreground" />
           </div>
           <div>
-            <h1 className="text-lg font-bold tracking-tight glow-text text-primary">AURORASENSE</h1>
+            <h1 className="text-lg font-bold tracking-tight glow-text text-primary">AuroraSENSE</h1>
             <p className="text-xs text-muted-foreground">Server Dashboard</p>
           </div>
         </div>
