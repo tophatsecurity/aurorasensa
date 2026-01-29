@@ -57,7 +57,7 @@ const Index = () => {
             <div className="absolute inset-0 w-16 h-16 rounded-full border-4 border-transparent border-b-purple-400/50 animate-spin" style={{ animationDirection: 'reverse', animationDuration: '1.5s' }} />
           </div>
           <div className="text-center">
-            <h2 className="text-xl font-semibold text-slate-100 mb-2">Aurora Sense</h2>
+            <h2 className="text-xl font-semibold text-slate-100 mb-2">AuroraSENSE</h2>
             <p className="text-slate-400 text-sm">Validating session...</p>
           </div>
         </div>
