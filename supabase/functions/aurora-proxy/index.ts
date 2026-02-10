@@ -407,18 +407,18 @@ Deno.serve(async (req) => {
     if (response.status === 422) {
       try {
         const errorData = JSON.parse(responseText);
-        if (errorData.detail && Array.isArray(errorData.detail) && 
-            errorData.detail.some((d: { type?: string }) => d.type === 'int_parsing')) {
-          console.log(`Endpoint validation error (422): ${path} - returning empty data`);
-          let emptyData: unknown = null;
-          if (path.includes('/rules')) emptyData = { rules: [] };
-          else if (path.includes('/settings')) emptyData = {};
-          else if (path.includes('/profiles') || path.includes('/violations') || path.includes('/baselines')) emptyData = [];
-          else emptyData = [];
-          return new Response(JSON.stringify(emptyData), {
-            status: 200,
-            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-          });
+        if (errorData.detail && Array.isArray(errorData.detail)) {
+          const hasValidationError = errorData.detail.some((d: { type?: string }) => 
+            d.type === 'int_parsing' || d.type === 'missing' || d.type === 'value_error'
+          );
+          if (hasValidationError) {
+            console.log(`Endpoint validation error (422): ${path} - returning empty data`);
+            const emptyData = getEmptyDataForPath(path) || [];
+            return new Response(JSON.stringify(emptyData), {
+              status: 200,
+              headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+            });
+          }
         }
       } catch {
         // Continue with normal response handling
