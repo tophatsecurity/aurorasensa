@@ -400,9 +400,11 @@ Deno.serve(async (req) => {
       });
     }
     
+    // Read response body once to avoid "Body already consumed" errors
+    const responseText = await response.text();
+
     // Handle 422 validation errors
     if (response.status === 422) {
-      const responseText = await response.text();
       try {
         const errorData = JSON.parse(responseText);
         if (errorData.detail && Array.isArray(errorData.detail) && 
@@ -422,9 +424,6 @@ Deno.serve(async (req) => {
         // Continue with normal response handling
       }
     }
-    
-    // Get response text
-    const responseText = await response.text();
     
     return new Response(responseText, {
       status: response.status,
