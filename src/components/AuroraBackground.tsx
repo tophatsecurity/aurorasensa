@@ -1,4 +1,16 @@
-const AuroraBackground = () => {
+import { memo, useMemo } from "react";
+
+const AuroraBackground = memo(function AuroraBackground() {
+  // Memoize stars so random positions are only computed once
+  const stars = useMemo(() => {
+    return Array.from({ length: 50 }, (_, i) => ({
+      key: i,
+      left: `${Math.random() * 100}%`,
+      top: `${Math.random() * 60}%`,
+      opacity: Math.random() * 0.5 + 0.2,
+    }));
+  }, []);
+
   return (
     <div className="fixed inset-0 overflow-hidden pointer-events-none">
       {/* Base gradient */}
@@ -24,22 +36,22 @@ const AuroraBackground = () => {
         }}
       />
       
-      {/* Stars */}
+      {/* Stars - positions memoized */}
       <div className="absolute inset-0">
-        {[...Array(50)].map((_, i) => (
+        {stars.map((star) => (
           <div
-            key={i}
+            key={star.key}
             className="absolute w-px h-px bg-foreground/40 rounded-full"
             style={{
-              left: `${Math.random() * 100}%`,
-              top: `${Math.random() * 60}%`,
-              opacity: Math.random() * 0.5 + 0.2,
+              left: star.left,
+              top: star.top,
+              opacity: star.opacity,
             }}
           />
         ))}
       </div>
     </div>
   );
-};
+});
 
 export default AuroraBackground;
