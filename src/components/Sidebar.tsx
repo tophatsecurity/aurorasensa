@@ -1,3 +1,4 @@
+import { memo, useCallback } from "react";
 import { 
   LayoutDashboard, 
   Map, 
@@ -87,7 +88,37 @@ const menuSections = [
   },
 ];
 
-const Sidebar = ({ activeItem, onNavigate }: SidebarProps) => {
+// Memoized menu item to prevent re-renders of all items when one is clicked
+const MenuItem = memo(function MenuItem({ 
+  id, label, icon: Icon, isActive, onNavigate 
+}: { 
+  id: string; 
+  label: string; 
+  icon: React.ElementType; 
+  isActive: boolean; 
+  onNavigate: (id: string) => void;
+}) {
+  const handleClick = useCallback(() => onNavigate(id), [onNavigate, id]);
+  
+  return (
+    <li>
+      <button
+        onClick={handleClick}
+        className={cn(
+          "w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all duration-200",
+          isActive
+            ? "bg-primary/10 text-primary"
+            : "text-muted-foreground hover:bg-sidebar-accent hover:text-foreground"
+        )}
+      >
+        <Icon className={cn("w-5 h-5", isActive && "text-primary")} />
+        {label}
+      </button>
+    </li>
+  );
+});
+
+const Sidebar = memo(function Sidebar({ activeItem, onNavigate }: SidebarProps) {
   const { user, isAdmin } = useAuroraAuthContext();
   
   const displayName = user?.username || 'User';
@@ -116,26 +147,16 @@ const Sidebar = ({ activeItem, onNavigate }: SidebarProps) => {
               {section.title}
             </h3>
             <ul className="space-y-1 px-3">
-              {section.items.map((item) => {
-                const Icon = item.icon;
-                const isActive = activeItem === item.id;
-                return (
-                  <li key={item.id}>
-                    <button
-                      onClick={() => onNavigate(item.id)}
-                      className={cn(
-                        "w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all duration-200",
-                        isActive
-                          ? "bg-primary/10 text-primary"
-                          : "text-muted-foreground hover:bg-sidebar-accent hover:text-foreground"
-                      )}
-                    >
-                      <Icon className={cn("w-5 h-5", isActive && "text-primary")} />
-                      {item.label}
-                    </button>
-                  </li>
-                );
-              })}
+              {section.items.map((item) => (
+                <MenuItem
+                  key={item.id}
+                  id={item.id}
+                  label={item.label}
+                  icon={item.icon}
+                  isActive={activeItem === item.id}
+                  onNavigate={onNavigate}
+                />
+              ))}
             </ul>
           </div>
         ))}
@@ -153,6 +174,6 @@ const Sidebar = ({ activeItem, onNavigate }: SidebarProps) => {
       </div>
     </aside>
   );
-};
+});
 
 export default Sidebar;
