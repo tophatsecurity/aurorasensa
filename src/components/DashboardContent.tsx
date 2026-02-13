@@ -1,21 +1,11 @@
 import { useMemo, useState, Suspense, lazy } from "react";
 import { 
-  Zap, 
   Loader2,
   Database,
-  Satellite,
-  Radio,
   Users,
-  Gauge,
-  Wifi,
-  Activity,
   RefreshCw,
   HardDrive,
   TrendingUp,
-  BarChart3,
-  Server,
-  Cpu,
-  ThermometerSun
 } from "lucide-react";
 import ConnectionStatusIndicator from "./ConnectionStatusIndicator";
 import { Button } from "@/components/ui/button";
@@ -39,13 +29,13 @@ import {
 const HourlyTrendChart = lazy(() => import("./dashboard/HourlyTrendChart"));
 const SensorTypeStatsSection = lazy(() => import("./dashboard/SensorTypeStatsSection"));
 
-// Use dashboard-specific hooks that fetch from /api/dashboard/* and /api/stats/* endpoints
+// Use stats endpoints for all dashboard data
 import { 
-  useDashboardStats,
-  useDashboardSensorStats,
-  useDashboardClientStats,
-  useLoraGlobalStats,
-  useStarlinkReadings,
+  useGlobalStats,
+  use1hrStats,
+  use24hrStats,
+  useAlertStats,
+  useStatsBySensor,
 } from "@/hooks/aurora";
 
 // Chart loading fallback
@@ -130,95 +120,55 @@ const formatNumber = (num: number): string => {
   return num.toLocaleString();
 };
 
-// Starlink reading type from hook
-interface StarlinkReadingData {
-  timestamp: string;
-  signal_dbm?: number;
-  power_w?: number;
-  snr?: number;
-  downlink_throughput_bps?: number;
-  uplink_throughput_bps?: number;
-  pop_ping_latency_ms?: number;
-}
 
-// Parse Starlink data from readings (using the StarlinkReading type from hook)
-const parseStarlinkData = (readings: StarlinkReadingData[] | undefined) => {
-  if (!readings || readings.length === 0) return null;
-  
-  const latest = readings[0];
-  if (!latest) return null;
-  
-  return {
-    state: 'CONNECTED', // Inferred from having readings
-    powerWatts: latest.power_w,
-    latencyMs: latest.pop_ping_latency_ms,
-    downlinkBps: latest.downlink_throughput_bps,
-    uplinkBps: latest.uplink_throughput_bps,
-    signalDbm: latest.signal_dbm,
-    snr: latest.snr,
-  };
-};
-
-// Parse Starlink timeseries from readings
-const parseStarlinkTimeseries = (readings: StarlinkReadingData[] | undefined) => {
-  if (!readings || readings.length === 0) return [];
-  
-  return readings.slice(0, 24).reverse().map((r, idx) => ({
-    time: new Date(r.timestamp).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }),
-    power: r.power_w ?? 0,
-    latency: r.pop_ping_latency_ms ?? 0,
-  }));
-};
 
 const DashboardContent = () => {
   const periodHours = 24;
   const [isRefreshing, setIsRefreshing] = useState(false);
   
-  // ===== DASHBOARD STATS FROM API =====
-  const { data: dashboardStats, isLoading: dashboardStatsLoading, refetch: refetchDashboardStats } = useDashboardStats();
-  const { data: sensorStats, isLoading: sensorStatsLoading } = useDashboardSensorStats();
-  const { data: clientStats, isLoading: clientStatsLoading } = useDashboardClientStats(undefined, periodHours);
-  const { data: loraStats } = useLoraGlobalStats();
-  const { data: starlinkReadings } = useStarlinkReadings(periodHours);
+  // ===== STATS ENDPOINTS =====
+  const { data: globalStats, isLoading: globalLoading, refetch: refetchGlobalStats } = useGlobalStats();
+  const { data: stats1hr, isLoading: stats1hrLoading } = use1hrStats();
+  const { data: stats24hr } = use24hrStats();
+  const { data: alertStats } = useAlertStats();
+  const { data: sensorStats } = useStatsBySensor({ hours: periodHours });
 
-  // ===== DERIVED METRICS FROM DASHBOARD API =====
-  const totalReadings = dashboardStats?.total_readings ?? sensorStats?.readings_last_24h ?? 0;
-  const totalBatches = (dashboardStats as Record<string, unknown>)?.total_batches as number ?? 0;
-  // Prefer clientStats (from all-states) as it has accurate client count
-  const totalClients = clientStats?.clients?.length ?? dashboardStats?.total_clients ?? sensorStats?.total_clients ?? 0;
-  const totalDevices = dashboardStats?.total_devices ?? sensorStats?.total_devices ?? 0;
-  const sensorTypesCount = dashboardStats?.total_sensors ?? sensorStats?.total_sensors ?? 0;
-  const activeClients24h = (dashboardStats as Record<string, unknown>)?.active_clients_24h as number ?? totalClients;
+  // ===== DERIVED METRICS FROM STATS API =====
+  const totalReadings = globalStats?.total_readings ?? 0;
+  const totalBatches = globalStats?.total_batches ?? 0;
+  const totalClients = globalStats?.total_clients ?? 0;
+  const totalDevices = globalStats?.total_devices ?? 0;
+  const sensorTypesCount = globalStats?.sensor_types_count ?? globalStats?.device_breakdown?.length ?? 0;
+  const activeClients24h = globalStats?.active_clients_24h ?? totalClients;
   
-  // Total measurements from device breakdown (sum of all sensor type readings)
+  // Total measurements from device breakdown
   const totalMeasurements = useMemo(() => {
-    const breakdown = (dashboardStats as Record<string, unknown>)?.device_breakdown as Array<{ device_type: string; count: number }> | undefined;
+    const breakdown = globalStats?.device_breakdown;
     if (breakdown && Array.isArray(breakdown)) {
       return breakdown.reduce((sum, d) => sum + (d.count || 0), 0);
     }
-    // Fallback to total readings
     return totalReadings;
-  }, [dashboardStats, totalReadings]);
+  }, [globalStats, totalReadings]);
 
   // Device breakdown from /api/stats/global
   const deviceBreakdown = useMemo(() => {
-    const breakdown = (dashboardStats as Record<string, unknown>)?.device_breakdown as Array<{ device_type: string; count: number }> | undefined;
+    const breakdown = globalStats?.device_breakdown;
     if (!breakdown || !Array.isArray(breakdown)) return [];
     return breakdown.sort((a, b) => b.count - a.count).slice(0, 6);
-  }, [dashboardStats]);
+  }, [globalStats]);
 
   const maxDeviceCount = deviceBreakdown.length > 0 ? deviceBreakdown[0].count : 0;
 
-  // Readings by day from /api/stats/global - for chart
+  // Readings by day from /api/stats/global
   const readingsByDay = useMemo(() => {
-    const data = (dashboardStats as Record<string, unknown>)?.readings_by_day as Array<{ date: string; count: number }> | undefined;
+    const data = globalStats?.readings_by_day;
     if (!data || !Array.isArray(data)) return [];
     return data.slice(0, 7).reverse().map(d => ({
       date: new Date(d.date).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' }),
       shortDate: new Date(d.date).toLocaleDateString('en-US', { weekday: 'short' }),
       count: d.count,
     }));
-  }, [dashboardStats]);
+  }, [globalStats]);
 
   const todayReadings = readingsByDay.length > 0 ? readingsByDay[readingsByDay.length - 1].count : 0;
   const yesterdayReadings = readingsByDay.length > 1 ? readingsByDay[readingsByDay.length - 2].count : 0;
@@ -227,33 +177,18 @@ const DashboardContent = () => {
     : '0';
 
   // Storage info from /api/stats/global
-  const storage = (dashboardStats as Record<string, unknown>)?.storage as { readings_size?: string; batches_size?: string; total_db_size?: string } | undefined;
+  const storage = globalStats?.storage;
 
-  // Sensor types from /api/dashboard/sensor-stats
-  const sensorItems = sensorStats?.sensorItems ?? [];
+  // Sensor types from stats/by-sensor
+  const sensorItems = sensorStats?.sensors ?? [];
   const topSensorTypes = sensorItems.slice(0, 5);
 
-  // Starlink metrics from /api/readings/sensor/starlink
-  const starlinkData = useMemo(() => 
-    parseStarlinkData(starlinkReadings?.readings), 
-    [starlinkReadings]
-  );
-  
-  const starlinkTimeseries = useMemo(() => 
-    parseStarlinkTimeseries(starlinkReadings?.readings), 
-    [starlinkReadings]
-  );
-
-  // LoRa from /api/lora/stats/global
-  const loraDevicesCount = loraStats?.total_devices ?? 0;
-  const loraDetections = loraStats?.total_detections ?? 0;
-
-  const isLoading = dashboardStatsLoading || sensorStatsLoading || clientStatsLoading;
+  const isLoading = globalLoading || stats1hrLoading;
 
   // Refresh handler
   const handleRefresh = async () => {
     setIsRefreshing(true);
-    await refetchDashboardStats();
+    await refetchGlobalStats();
     setIsRefreshing(false);
   };
 
@@ -299,7 +234,7 @@ const DashboardContent = () => {
           iconColor="bg-cyan-500/20 text-cyan-400"
           subtitle={`${formatNumber(todayReadings)} today`}
           trend={parseInt(readingsTrend) > 0 ? `+${readingsTrend}%` : undefined}
-          isLoading={dashboardStatsLoading}
+          isLoading={globalLoading}
         />
         <PrimaryStat
           label="Connected Clients"
@@ -307,7 +242,7 @@ const DashboardContent = () => {
           icon={Users}
           iconColor="bg-emerald-500/20 text-emerald-400"
           subtitle={`${activeClients24h} active (24h)`}
-          isLoading={clientStatsLoading}
+          isLoading={globalLoading}
         />
         <PrimaryStat
           label="Devices"
@@ -315,7 +250,7 @@ const DashboardContent = () => {
           icon={HardDrive}
           iconColor="bg-violet-500/20 text-violet-400"
           subtitle={`${sensorTypesCount} sensor types`}
-          isLoading={dashboardStatsLoading}
+          isLoading={globalLoading}
         />
       </div>
 
