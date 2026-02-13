@@ -859,6 +859,72 @@ export function useDashboardRealTime(enabled = true) {
   };
 }
 
+/**
+ * Map positions real-time data - SSE for live marker updates
+ * Uses /api/stream/map/positions stream type
+ */
+export function useMapPositionsSSE(enabled = true, clientId?: string) {
+  const endpoint = useMemo(() => {
+    const params = new URLSearchParams();
+    if (clientId && clientId !== "all") params.set("client_id", clientId);
+    const queryString = params.toString();
+    return `/api/stream/map/positions${queryString ? `?${queryString}` : ""}`;
+  }, [clientId]);
+
+  return useSSE({
+    endpoint,
+    queryKeys: [
+      ["aurora", "map", "markers"],
+      ["aurora", "gps"],
+      ["aurora", "gps-history"],
+    ],
+    enabled,
+  });
+}
+
+/**
+ * Map real-time data - SSE primary with polling fallback
+ */
+export function useMapRealTime(enabled = true, clientId?: string) {
+  const { isAvailable: sseAvailable } = useSSEAvailability();
+  const sseResult = useMapPositionsSSE(sseAvailable === true && enabled, clientId);
+  const pollingResult = useRealTimeData('gps', { 
+    enabled: sseAvailable === false && enabled, 
+    clientId,
+    interval: POLLING_INTERVALS.FAST,
+  });
+
+  if (sseAvailable === true) {
+    return {
+      isConnected: sseResult.isConnected,
+      isConnecting: sseResult.isConnecting,
+      error: sseResult.error,
+      reconnectCount: sseResult.reconnectCount,
+      lastMessage: sseResult.lastMessage,
+      data: sseResult.lastMessage,
+      isPolling: false,
+      isSSE: true,
+      reconnect: sseResult.reconnect,
+    };
+  }
+
+  const errorMessage = pollingResult.error 
+    ? (typeof pollingResult.error === 'string' ? pollingResult.error : pollingResult.error.message)
+    : null;
+
+  return {
+    isConnected: pollingResult.isPolling && !pollingResult.error,
+    isConnecting: pollingResult.isPolling && pollingResult.pollCount === 0,
+    error: errorMessage,
+    reconnectCount: pollingResult.errorCount,
+    lastMessage: pollingResult.data,
+    data: pollingResult.data,
+    isPolling: true,
+    isSSE: false,
+    reconnect: () => pollingResult.refetch?.(),
+  };
+}
+
 // Re-export polling utilities for direct use
 export { 
   useRealTimeData, 

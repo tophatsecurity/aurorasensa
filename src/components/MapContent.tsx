@@ -12,6 +12,7 @@ import { spreadOverlappingPoints, COVERAGE_RANGES, ONE_MILE_METERS } from "@/uti
 import { useOptimizedMapData } from "@/hooks/useOptimizedMapData";
 import { useGpsHistory } from "@/hooks/useGpsHistory";
 import { useAdsbHistory, AircraftTrail } from "@/hooks/useAdsbHistory";
+import { useMapRealTime } from "@/hooks/useSSE";
 import { useClientContext } from "@/contexts/ClientContext";
 
 
@@ -135,8 +136,17 @@ const MapContent = () => {
     return `${hours}h ago`;
   }, [lastUpdate]);
   
+  // SSE real-time map position updates
+  const mapRealTime = useMapRealTime(true, selectedClient);
+  
+  // Invalidate map markers query when SSE message received
+  useEffect(() => {
+    if (mapRealTime.lastMessage) {
+      handleRefresh();
+    }
+  }, [mapRealTime.lastMessage, handleRefresh]);
+  
   // Merge SSE real-time updates with base map data
-  // Use base data directly (no SSE merging)
   const sensorMarkers = baseSensorMarkers;
   const adsbMarkers = baseAdsbMarkers;
   
@@ -1181,7 +1191,12 @@ const MapContent = () => {
             onClearHistory={clearHistory}
             onClearAdsbTrails={clearAllAdsbTrails}
           />
-          
+          <Badge 
+            variant={mapRealTime.isSSE && mapRealTime.isConnected ? "default" : "secondary"}
+            className={`text-xs ${mapRealTime.isSSE && mapRealTime.isConnected ? 'bg-green-500/20 text-green-400 border-green-500/30' : 'bg-muted text-muted-foreground'}`}
+          >
+            {mapRealTime.isSSE && mapRealTime.isConnected ? '● Live' : mapRealTime.isConnecting ? '◌ Connecting' : '○ Polling'}
+          </Badge>
         </div>
         
         {/* Filter Buttons - Full Width Below */}
