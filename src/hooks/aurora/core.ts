@@ -15,16 +15,15 @@ const MAX_BACKOFF_MS = 8000;
 let connectionHealthy = false;
 let consecutiveBootErrors = 0;
 
-// Supabase session storage key
-const SUPABASE_STORAGE_KEY = 'sb-hewwtgcrupegpcwfujln-auth-token';
-
 // =============================================
 // SESSION HELPERS
 // =============================================
 
 export function hasAuroraSession(): boolean {
+  // Synchronous check via localStorage for quick UI gating
+  const storageKey = `sb-hewwtgcrupegpcwfujln-auth-token`;
   try {
-    const stored = localStorage.getItem(SUPABASE_STORAGE_KEY);
+    const stored = localStorage.getItem(storageKey);
     if (stored) {
       const parsed = JSON.parse(stored);
       return !!parsed?.access_token;
@@ -33,15 +32,14 @@ export function hasAuroraSession(): boolean {
   return false;
 }
 
-function getAuroraToken(): string | null {
+// Get a fresh token from the Supabase client (handles refresh automatically)
+async function getAuroraTokenAsync(): Promise<string | null> {
   try {
-    const stored = localStorage.getItem(SUPABASE_STORAGE_KEY);
-    if (stored) {
-      const parsed = JSON.parse(stored);
-      return parsed?.access_token || null;
-    }
-  } catch {}
-  return null;
+    const { data: { session } } = await supabase.auth.getSession();
+    return session?.access_token || null;
+  } catch {
+    return null;
+  }
 }
 
 export function clearAuroraSession(): void {
@@ -226,7 +224,7 @@ export async function callAuroraApi<T>(
   options?: AuroraApiOptions
 ): Promise<T> {
   const finalPath = buildFinalPath(path, options);
-  const auroraToken = getAuroraToken();
+  const auroraToken = await getAuroraTokenAsync();
   
   // Check cache first for GET requests
   if (method === 'GET' && !options?.skipCache) {
