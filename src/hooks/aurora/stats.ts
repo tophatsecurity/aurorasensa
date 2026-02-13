@@ -510,23 +510,32 @@ export function useGlobalStats(clientId?: string | null) {
         // Fall through
       }
       
-      // Fallback to /api/stats/comprehensive
+      // Fallback to /api/stats/comprehensive (this endpoint returns rich nested data)
       try {
-        const comprehensive = await callAuroraApi<{ 
-          global?: GlobalStats;
-          database?: { total_readings?: number; total_batches?: number; total_clients?: number };
-        }>(STATS.COMPREHENSIVE, "GET", undefined, { clientId });
+        const comprehensive = await callAuroraApi<ComprehensiveStats & { global: ComprehensiveStatsGlobal & { sensors?: { by_type?: Array<{ sensor: string; reading_count: number }> } } }>(
+          STATS.COMPREHENSIVE, "GET", undefined, { clientId }
+        );
         
-        if (comprehensive?.global) {
-          console.log('[useGlobalStats] Using /api/stats/comprehensive fallback:', comprehensive.global);
-          return comprehensive.global;
-        }
-        if (comprehensive?.database) {
-          return {
-            total_readings: comprehensive.database.total_readings,
-            total_batches: comprehensive.database.total_batches,
-            total_clients: comprehensive.database.total_clients,
-          } as GlobalStats;
+        const g = comprehensive?.global;
+        if (g) {
+          const db = g.database;
+          const devs = g.devices;
+          const act = g.activity;
+          const mapped: GlobalStats = {
+            total_readings: db?.total_readings ?? g.total_readings ?? 0,
+            total_batches: db?.total_batches ?? g.total_batches ?? 0,
+            total_clients: db?.total_clients ?? g.total_clients ?? 0,
+            total_devices: devs?.total_unique_devices ?? g.total_devices ?? 0,
+            sensor_types_count: devs?.total_unique_devices ?? g.sensor_types_count ?? 0,
+            active_clients_24h: act?.last_24_hours?.active_devices_24h ?? g.active_clients_24h,
+            readings_last_hour: act?.last_1_hour?.readings_1h,
+            readings_last_24h: act?.last_24_hours?.readings_24h,
+            active_alerts: db?.active_alerts,
+            device_breakdown: g.sensors?.by_type?.map(s => ({ device_type: s.sensor, count: s.reading_count })),
+            time_ranges: g.time_ranges,
+          };
+          console.log('[useGlobalStats] Using /api/stats/comprehensive fallback:', mapped);
+          return mapped;
         }
       } catch {
         // Return empty
