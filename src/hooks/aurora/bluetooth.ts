@@ -152,7 +152,8 @@ export function useBluetoothHistory(macAddress: string | null, options?: {
       if (deviceId) params.set('device_id', deviceId);
       params.set('hours', String(hours));
       params.set('limit', String(limit));
-      const path = `${BLUETOOTH.HISTORY(macAddress)}?${params.toString()}`;
+      params.set('mac_address', macAddress);
+      const path = `${BLUETOOTH.HISTORY}?${params.toString()}`;
       const result = await callAuroraApi<BluetoothHistoryPoint[]>(path);
       return Array.isArray(result) ? result : [];
     },

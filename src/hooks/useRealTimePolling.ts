@@ -197,7 +197,7 @@ export function useSensorTypePolling(
 export function useStarlinkPolling(config: PollingConfig = {}) {
   return useRealTimePolling<{ count: number; readings: unknown[] }>(
     ["starlink", "polling"],
-    "/api/readings/sensor/starlink",
+    "/api/starlink/stats",
     {
       interval: POLLING_INTERVALS.NORMAL,
       ...config,
@@ -211,7 +211,7 @@ export function useStarlinkPolling(config: PollingConfig = {}) {
 export function useThermalProbePolling(config: PollingConfig = {}) {
   return useRealTimePolling<{ count: number; readings: unknown[] }>(
     ["thermal", "polling"],
-    "/api/readings/sensor/thermal_probe",
+    "/api/thermal/latest",
     {
       interval: POLLING_INTERVALS.NORMAL,
       ...config,
@@ -225,7 +225,7 @@ export function useThermalProbePolling(config: PollingConfig = {}) {
 export function useArduinoPolling(config: PollingConfig = {}) {
   return useRealTimePolling<{ count: number; readings: unknown[] }>(
     ["arduino", "polling"],
-    "/api/readings/sensor/aht_sensor",
+    "/api/arduino/current",
     {
       interval: POLLING_INTERVALS.NORMAL,
       ...config,
@@ -281,7 +281,7 @@ export function useSystemMonitorPolling(config: PollingConfig = {}) {
 export function usePowerPolling(config: PollingConfig = {}) {
   return useRealTimePolling<{ count: number; readings: unknown[] }>(
     ["power", "polling"],
-    "/api/starlink/power",
+    "/api/power/current",
     {
       interval: POLLING_INTERVALS.NORMAL,
       ...config,
@@ -350,13 +350,13 @@ export function useRealTimeData(
   const queryClient = useQueryClient();
 
   const endpointMap: Record<RealTimeDataType, string> = {
-    starlink: "/api/readings/sensor/starlink",
-    thermal: "/api/readings/sensor/thermal_probe",
-    arduino: "/api/readings/sensor/aht_sensor",
+    starlink: "/api/starlink/stats",
+    thermal: "/api/thermal/latest",
+    arduino: "/api/arduino/current",
     gps: "/api/readings/sensor/gps",
     adsb: "/api/adsb/aircraft",
     system: "/api/readings/sensor/system_monitor",
-    power: "/api/starlink/power",
+    power: "/api/power/current",
     alerts: "/api/alerts",
     dashboard: "/api/dashboard/sensor-stats",
   };

@@ -515,7 +515,7 @@ export function useRegisterClient() {
   
   return useMutation({
     mutationFn: async (clientId: string) => {
-      return callAuroraApi<StateTransitionResponse>(CLIENTS.REGISTER(clientId), "POST");
+      return callAuroraApi<StateTransitionResponse>(CLIENTS.REGISTER_CLIENT(clientId), "POST");
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["aurora", "clients"] });
