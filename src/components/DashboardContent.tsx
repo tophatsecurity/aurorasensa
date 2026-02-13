@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useMemo, useState, useEffect } from "react";
 import { 
   Loader2,
   Database,
@@ -10,6 +10,9 @@ import {
   Activity,
   Clock,
   BarChart3,
+  Radio,
+  Wifi,
+  WifiOff,
 } from "lucide-react";
 import ConnectionStatusIndicator from "./ConnectionStatusIndicator";
 import { Button } from "@/components/ui/button";
@@ -30,8 +33,10 @@ import {
   CartesianGrid,
 } from 'recharts';
 import { formatDistanceToNow, format, subHours } from "date-fns";
+import { useQueryClient } from "@tanstack/react-query";
 
 import { useGlobalStats } from "@/hooks/aurora";
+import { useDashboardRealTime } from "@/hooks/useSSE";
 
 // Format large numbers
 const formatNumber = (num?: number | null): string => {
@@ -87,9 +92,20 @@ const formatSensorName = (s: string) => s.replace(/_\d+$/, '').replace(/_/g, ' '
 
 const DashboardContent = () => {
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const queryClient = useQueryClient();
   
   // Single data source - useGlobalStats falls back to /api/stats/comprehensive
   const { data: globalStats, isLoading, refetch } = useGlobalStats();
+
+  // Real-time SSE connection (auto-falls back to polling if SSE unavailable)
+  const realTime = useDashboardRealTime(true);
+
+  // When SSE delivers new data, invalidate the global stats query to refresh
+  useEffect(() => {
+    if (realTime.lastMessage) {
+      queryClient.invalidateQueries({ queryKey: ["aurora", "stats", "global"] });
+    }
+  }, [realTime.lastMessage, queryClient]);
 
   // Derived metrics
   const totalReadings = globalStats?.total_readings ?? 0;
@@ -178,6 +194,25 @@ const DashboardContent = () => {
         <div className="flex items-center gap-4">
           <h1 className="text-2xl lg:text-3xl font-bold text-foreground">AuroraSENSE</h1>
           <ConnectionStatusIndicator />
+          {/* SSE Status */}
+          <div className="flex items-center gap-1.5">
+            {realTime.isSSE && realTime.isConnected ? (
+              <Badge variant="outline" className="text-xs gap-1 border-emerald-500/50 text-emerald-400">
+                <Radio className="w-3 h-3 animate-pulse" />
+                Live
+              </Badge>
+            ) : realTime.isPolling ? (
+              <Badge variant="outline" className="text-xs gap-1 border-blue-500/50 text-blue-400">
+                <RefreshCw className="w-3 h-3" />
+                Polling
+              </Badge>
+            ) : realTime.isConnecting ? (
+              <Badge variant="outline" className="text-xs gap-1 border-amber-500/50 text-amber-400">
+                <Loader2 className="w-3 h-3 animate-spin" />
+                Connecting
+              </Badge>
+            ) : null}
+          </div>
         </div>
         <Button variant="outline" size="sm" onClick={handleRefresh} disabled={isRefreshing} className="gap-2">
           <RefreshCw className={`w-4 h-4 ${isRefreshing ? 'animate-spin' : ''}`} />

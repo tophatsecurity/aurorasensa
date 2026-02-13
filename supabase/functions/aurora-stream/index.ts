@@ -50,6 +50,7 @@ Deno.serve(async (req) => {
     const url = new URL(req.url);
     const streamType = url.searchParams.get('type') || 'readings';
     const sessionCookie = url.searchParams.get('session');
+    const auroraToken = url.searchParams.get('token');
     const clientId = url.searchParams.get('client_id');
     const commandId = url.searchParams.get('command_id');
     const sensorType = url.searchParams.get('sensor_type');
@@ -79,9 +80,9 @@ Deno.serve(async (req) => {
       });
     }
 
-    // Require session for protected streams
-    if (!sessionCookie) {
-      return new Response(JSON.stringify({ error: 'Not authenticated' }), {
+    // Require authentication (token or session cookie)
+    if (!auroraToken && !sessionCookie) {
+      return new Response(JSON.stringify({ error: 'Not authenticated. Provide token or session param.' }), {
         status: 401,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
@@ -93,16 +94,25 @@ Deno.serve(async (req) => {
       auroraUrl.searchParams.set('client_id', clientId);
     }
 
-    console.log(`SSE Proxy connecting to: ${auroraUrl.toString()}`);
+    console.log(`SSE Proxy connecting to: ${auroraUrl.toString()} (auth: ${auroraToken ? 'token' : 'cookie'})`);
+
+    // Build headers - support both token and cookie auth
+    const fetchHeaders: Record<string, string> = {
+      'Accept': 'text/event-stream',
+      'Cache-Control': 'no-cache',
+    };
+    if (auroraToken) {
+      fetchHeaders['Authorization'] = `Bearer ${auroraToken}`;
+      fetchHeaders['X-API-Key'] = auroraToken;
+    }
+    if (sessionCookie) {
+      fetchHeaders['Cookie'] = sessionCookie;
+    }
 
     // Connect to Aurora SSE endpoint
     const response = await fetch(auroraUrl.toString(), {
       method: 'GET',
-      headers: {
-        'Accept': 'text/event-stream',
-        'Cookie': sessionCookie,
-        'Cache-Control': 'no-cache',
-      },
+      headers: fetchHeaders,
     });
 
     if (!response.ok) {
