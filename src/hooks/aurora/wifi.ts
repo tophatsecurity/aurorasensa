@@ -182,7 +182,8 @@ export function useWifiHistory(bssid: string | null, options?: {
       if (deviceId) params.set('device_id', deviceId);
       params.set('hours', String(hours));
       params.set('limit', String(limit));
-      const path = `${WIFI.HISTORY(bssid)}?${params.toString()}`;
+      params.set('bssid', bssid);
+      const path = `${WIFI.HISTORY}?${params.toString()}`;
       const result = await callAuroraApi<WifiHistoryPoint[]>(path);
       return Array.isArray(result) ? result : [];
     },

@@ -1,6 +1,6 @@
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version',
   'Access-Control-Allow-Methods': 'GET, OPTIONS',
 };
 
@@ -8,11 +8,15 @@ const AURORA_ENDPOINT = "http://aurora.tophatsecurity.com:9151";
 
 // SSE stream types and their endpoints
 const STREAM_ENDPOINTS: Record<string, string> = {
+  // General streams
   'readings': '/api/stream/readings',
   'alerts': '/api/stream/alerts',
   'dashboard': '/api/stream/dashboard/stats',
+  'dashboard_clients': '/api/stream/dashboard/clients',
   'clients': '/api/stream/clients',
-  'starlink': '/api/stream/readings/starlink',
+  // Dedicated streams
+  'starlink': '/api/stream/starlink',
+  'starlink_readings': '/api/stream/readings/starlink',
   'thermal': '/api/stream/readings/thermal_probe',
   'gps': '/api/stream/readings/gps',
   'adsb': '/api/stream/readings/adsb',
@@ -20,12 +24,18 @@ const STREAM_ENDPOINTS: Record<string, string> = {
   'power': '/api/stream/readings/power',
   'system': '/api/stream/readings/system_monitor',
   'radio': '/api/stream/readings/radio',
+  // New streams
+  'map_positions': '/api/stream/map/positions',
+  'system_health': '/api/stream/system/health',
+  // Real-time statistics streams
+  'realtime': '/api/realtime/stream',
+  'realtime_full': '/api/realtime/stream/full',
 };
 
 Deno.serve(async (req) => {
   // Handle CORS preflight
   if (req.method === 'OPTIONS') {
-    return new Response(null, { headers: corsHeaders });
+    return new Response('ok', { headers: corsHeaders });
   }
 
   // Only allow GET for SSE
@@ -42,6 +52,7 @@ Deno.serve(async (req) => {
     const sessionCookie = url.searchParams.get('session');
     const clientId = url.searchParams.get('client_id');
     const commandId = url.searchParams.get('command_id');
+    const sensorType = url.searchParams.get('sensor_type');
 
     // Check if stream type is valid
     let endpoint = STREAM_ENDPOINTS[streamType];
@@ -51,8 +62,18 @@ Deno.serve(async (req) => {
       endpoint = `/api/stream/commands/${commandId}/status`;
     }
     
+    // Special case for specific client stream
+    if (streamType === 'client' && clientId) {
+      endpoint = `/api/stream/clients/${clientId}`;
+    }
+    
+    // Special case for generic sensor type stream
+    if (streamType === 'sensor' && sensorType) {
+      endpoint = `/api/stream/readings/${sensorType}`;
+    }
+    
     if (!endpoint) {
-      return new Response(JSON.stringify({ error: 'Invalid stream type' }), {
+      return new Response(JSON.stringify({ error: 'Invalid stream type', available: Object.keys(STREAM_ENDPOINTS) }), {
         status: 400,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
@@ -68,7 +89,7 @@ Deno.serve(async (req) => {
 
     // Build Aurora URL with optional client_id filter
     const auroraUrl = new URL(`${AURORA_ENDPOINT}${endpoint}`);
-    if (clientId && clientId !== 'all') {
+    if (clientId && clientId !== 'all' && streamType !== 'client') {
       auroraUrl.searchParams.set('client_id', clientId);
     }
 
@@ -86,8 +107,6 @@ Deno.serve(async (req) => {
 
     if (!response.ok) {
       console.error(`Aurora SSE error: ${response.status}`);
-      // Return 503 with streaming not available info - don't propagate 404
-      // This tells the client to fall back to polling
       return new Response(JSON.stringify({ 
         error: 'Aurora streaming not available',
         status: response.status,
