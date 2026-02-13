@@ -166,6 +166,24 @@ Deno.serve(async (req) => {
     const body = await req.json().catch(() => ({}));
     const { path = "", method = "GET", body: requestBody, auroraToken, timeout } = body;
     
+    // Verify Supabase JWT if provided (auroraToken is now a Supabase access token)
+    if (auroraToken) {
+      const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
+      const supabaseAnonKey = Deno.env.get('SUPABASE_ANON_KEY')!;
+      const supaClient = createClient(supabaseUrl, supabaseAnonKey, {
+        global: { headers: { Authorization: `Bearer ${auroraToken}` } }
+      });
+      const { data: claimsData, error: claimsError } = await supaClient.auth.getUser(auroraToken);
+      if (claimsError || !claimsData?.user) {
+        console.warn('Invalid Supabase JWT provided');
+        return new Response(JSON.stringify({ error: 'Unauthorized', detail: 'Invalid session' }), {
+          status: 401,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
+      console.log(`Authenticated user: ${claimsData.user.email}`);
+    }
+    
     if (!path) {
       return new Response(JSON.stringify({ error: 'Missing path' }), {
         status: 400,
@@ -216,10 +234,11 @@ Deno.serve(async (req) => {
       'Content-Type': 'application/json',
     };
     
-    // Use Aurora token for authentication (not Supabase token)
-    if (auroraToken) {
-      headers['Authorization'] = `Bearer ${auroraToken}`;
-      console.log('Using Aurora Bearer token for API auth');
+    // Use AURORA_API_KEY for server-to-server auth with Aurora backend
+    const auroraApiKey = Deno.env.get('AURORA_API_KEY');
+    if (auroraApiKey) {
+      headers['Authorization'] = `Bearer ${auroraApiKey}`;
+      console.log('Using AURORA_API_KEY for upstream API auth');
     }
     
     let bodyContent: string | undefined;

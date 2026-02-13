@@ -11,29 +11,41 @@ const INITIAL_BACKOFF_MS = 200;
 const COLD_START_BACKOFF_MS = 150;
 const MAX_BACKOFF_MS = 8000;
 
-// Storage keys for Aurora auth
-const AURORA_TOKEN_KEY = 'aurora_access_token';
-
 // Track connection state globally
 let connectionHealthy = false;
 let consecutiveBootErrors = 0;
+
+// Supabase session storage key
+const SUPABASE_STORAGE_KEY = 'sb-hewwtgcrupegpcwfujln-auth-token';
 
 // =============================================
 // SESSION HELPERS
 // =============================================
 
 export function hasAuroraSession(): boolean {
-  const token = localStorage.getItem(AURORA_TOKEN_KEY);
-  return !!token;
+  try {
+    const stored = localStorage.getItem(SUPABASE_STORAGE_KEY);
+    if (stored) {
+      const parsed = JSON.parse(stored);
+      return !!parsed?.access_token;
+    }
+  } catch {}
+  return false;
 }
 
 function getAuroraToken(): string | null {
-  return localStorage.getItem(AURORA_TOKEN_KEY);
+  try {
+    const stored = localStorage.getItem(SUPABASE_STORAGE_KEY);
+    if (stored) {
+      const parsed = JSON.parse(stored);
+      return parsed?.access_token || null;
+    }
+  } catch {}
+  return null;
 }
 
 export function clearAuroraSession(): void {
-  localStorage.removeItem(AURORA_TOKEN_KEY);
-  localStorage.removeItem('aurora_user');
+  // Supabase handles its own session cleanup via signOut
 }
 
 // =============================================
