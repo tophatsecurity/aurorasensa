@@ -15,12 +15,11 @@ const AURORA_ENDPOINT = "http://aurora.tophatsecurity.com:9151";
 // Supabase SSE proxy endpoint for CORS-protected environments
 const SUPABASE_SSE_PROXY = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/aurora-stream`;
 
-// SSE is disabled - use polling only
-// Set to true to re-enable SSE when Aurora server supports it
-const SSE_DISABLED = true;
+// SSE enabled - will attempt connection, falls back to polling on failure
+const SSE_DISABLED = false;
 
-// SSE availability state - starts as unavailable since SSE is disabled
-let sseAvailabilityChecked = true;
+// SSE availability state - not yet checked
+let sseAvailabilityChecked = false;
 let sseIsAvailable = false;
 
 interface SSEConfig {
@@ -130,10 +129,15 @@ export function useSSE({
     const streamType = getStreamType(endpoint);
     const { clientId, commandId } = parseEndpoint(endpoint);
 
-    // Build proxy URL - SSE currently disabled, but if enabled would use Supabase token
+    // Get Aurora API token from localStorage
+    const auroraToken = localStorage.getItem('aurora_access_token');
+
+    // Build proxy URL with token-based auth
     const proxyUrl = new URL(SUPABASE_SSE_PROXY);
     proxyUrl.searchParams.set('type', streamType);
-    // Note: SSE is currently disabled, session param not used
+    if (auroraToken) {
+      proxyUrl.searchParams.set('token', auroraToken);
+    }
     if (clientId && clientId !== 'all') {
       proxyUrl.searchParams.set('client_id', clientId);
     }
