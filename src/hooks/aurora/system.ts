@@ -747,7 +747,45 @@ export function useAllClientsLocations(clientIds: string[]) {
       
       const locations = new Map<string, ClientLocation>();
       
-      // Fetch locations in parallel batches of 10
+      // Try batch endpoint first: /api/location/clients/latest
+      try {
+        const result = await callAuroraApi<
+          ClientLocation[] | 
+          { locations?: ClientLocation[]; clients?: Record<string, ClientLocation> }
+        >(LOCATION.CLIENTS_LATEST);
+        
+        if (Array.isArray(result)) {
+          result.forEach(loc => {
+            if (loc.client_id && typeof loc.latitude === 'number' && typeof loc.longitude === 'number') {
+              locations.set(loc.client_id, loc);
+            }
+          });
+          return locations;
+        }
+        
+        if (result && typeof result === 'object') {
+          if ('locations' in result && Array.isArray(result.locations)) {
+            result.locations.forEach(loc => {
+              if (loc.client_id && typeof loc.latitude === 'number' && typeof loc.longitude === 'number') {
+                locations.set(loc.client_id, loc);
+              }
+            });
+            return locations;
+          }
+          if ('clients' in result && result.clients) {
+            for (const [clientId, loc] of Object.entries(result.clients)) {
+              if (typeof loc.latitude === 'number' && typeof loc.longitude === 'number') {
+                locations.set(clientId, { ...loc, client_id: clientId });
+              }
+            }
+            return locations;
+          }
+        }
+      } catch {
+        // Fallback to individual requests
+      }
+      
+      // Fallback: fetch locations in parallel batches of 10
       const batchSize = 10;
       for (let i = 0; i < clientIds.length; i += batchSize) {
         const batch = clientIds.slice(i, i + batchSize);
@@ -757,30 +795,21 @@ export function useAllClientsLocations(clientIds: string[]) {
               const result = await callAuroraApi<ClientLocation | { data: ClientLocation; location?: ClientLocation }>(
                 LOCATION.CLIENT_LATEST(clientId)
               );
-              
               if (result && typeof result === 'object') {
                 let loc: ClientLocation | null = null;
-                
-                // Handle nested data structure
-                if ('location' in result && result.location) {
-                  loc = result.location;
-                } else if ('data' in result && result.data) {
-                  loc = result.data;
-                } else if ('latitude' in result && 'longitude' in result) {
-                  loc = result as ClientLocation;
-                }
-                
+                if ('location' in result && result.location) loc = result.location;
+                else if ('data' in result && result.data) loc = result.data;
+                else if ('latitude' in result && 'longitude' in result) loc = result as ClientLocation;
                 if (loc && typeof loc.latitude === 'number' && typeof loc.longitude === 'number') {
                   return { clientId, location: loc };
                 }
               }
-            } catch (e) {
-              console.warn(`[useAllClientsLocations] Failed to get location for ${clientId}:`, e);
+            } catch {
+              // Skip failed client
             }
             return null;
           })
         );
-        
         results.forEach((result) => {
           if (result.status === 'fulfilled' && result.value) {
             locations.set(result.value.clientId, result.value.location);
@@ -791,8 +820,8 @@ export function useAllClientsLocations(clientIds: string[]) {
       return locations;
     },
     enabled: hasAuroraSession() && clientIds.length > 0,
-    staleTime: 30000, // 30 seconds
-    refetchInterval: 60000, // 1 minute
+    staleTime: 30000,
+    refetchInterval: 60000,
     retry: 1,
   });
 }
