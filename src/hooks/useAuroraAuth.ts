@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback, createContext, useContext } from 'react';
 import { supabase } from '@/integrations/supabase/client';
+import { resetSSEAvailability } from '@/hooks/useSSE';
 import type { User, Session } from '@supabase/supabase-js';
 
 export interface AuroraUser {
@@ -107,6 +108,7 @@ export function useAuroraAuth(): AuroraAuthContextValue {
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       async (_event, session) => {
         if (session?.user) {
+          resetSSEAvailability();
           setTimeout(() => buildAuthState(session), 0);
         } else {
           setAuthState({
