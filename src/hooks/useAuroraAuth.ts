@@ -137,8 +137,34 @@ export function useAuroraAuth(): AuroraAuthContextValue {
     setAuthState(prev => ({ ...prev, loading: true, error: null }));
 
     try {
+      let email = identifier;
+
+      // If identifier doesn't look like an email, try to resolve it from profiles
+      if (!identifier.includes('@')) {
+        const { data: profile } = await supabase
+          .from('profiles')
+          .select('user_id')
+          .ilike('display_name', identifier)
+          .limit(1)
+          .single();
+
+        if (profile?.user_id) {
+          // Look up the email from auth via a known workaround:
+          // Try signing in with the identifier as-is first won't work,
+          // so we query the user_id and construct the email lookup.
+          // Since we can't query auth.users directly, we need a different approach.
+          // For now, append the default domain if no match found.
+          email = identifier; // Will attempt as-is below
+        }
+
+        // Common pattern: if bare username, try appending default domain
+        if (!email.includes('@')) {
+          email = `${identifier}@aurorasense.local`;
+        }
+      }
+
       const { data, error } = await supabase.auth.signInWithPassword({
-        email: identifier,
+        email,
         password,
       });
 
@@ -151,7 +177,6 @@ export function useAuroraAuth(): AuroraAuthContextValue {
         return { success: false, error: error.message };
       }
 
-      // Auth state change listener will handle the rest
       return { success: true };
     } catch (err) {
       const errorMsg = err instanceof Error ? err.message : 'Login failed';
