@@ -2,3 +2,6 @@ project_id = "hewwtgcrupegpcwfujln"
 
 [functions.aurora-proxy]
 verify_jwt = false
+
+[functions.aurora-stream]
+verify_jwt = false
