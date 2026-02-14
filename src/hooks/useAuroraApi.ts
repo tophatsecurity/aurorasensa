@@ -208,10 +208,20 @@ async function callAuroraApi<T>(path: string, method: string = "GET", body?: unk
         lastError = error;
         continue;
       }
+      // After all retries exhausted, return empty data for GET requests instead of crashing
+      if (method === 'GET') {
+        console.warn(`All retries exhausted for GET ${path}, returning empty data`);
+        return getEmptyDataForPath(path) as T;
+      }
       throw error;
     }
   }
   
+  // Final fallback for GET requests
+  if (method === 'GET') {
+    console.warn(`Failed after ${MAX_RETRIES} retries for GET ${path}, returning empty data`);
+    return getEmptyDataForPath(path) as T;
+  }
   throw lastError || new Error(`Failed after ${MAX_RETRIES} retries`);
 }
 
