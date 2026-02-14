@@ -9,7 +9,7 @@
  */
 
 // Core utilities
-export { callAuroraApi, hasAuroraSession, clearAuroraSession, invalidateAuroraCache, getAuroraQueueStats, type AuroraApiOptions, type HttpMethod } from "./core";
+export { callAuroraApi, hasAuroraSession, clearAuroraSession, invalidateAuroraCache, getAuroraQueueStats, isServerRecentlyTimedOut, type AuroraApiOptions, type HttpMethod } from "./core";
 
 // Centralized API endpoints
 export * from "./endpoints";

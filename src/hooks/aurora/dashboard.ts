@@ -1,6 +1,6 @@
 // Aurora API - Dashboard domain hooks
 import { useQuery } from "@tanstack/react-query";
-import { callAuroraApi, hasAuroraSession, type AuroraApiOptions } from "./core";
+import { callAuroraApi, hasAuroraSession, isServerRecentlyTimedOut, type AuroraApiOptions } from "./core";
 import { STATS, DASHBOARD, SYSTEM, CLIENTS } from "./endpoints";
 
 // =============================================
@@ -154,6 +154,12 @@ export function useDashboardStats(clientId?: string | null) {
         }
       } catch {
         // Fall through
+      }
+      
+      // If server just timed out, skip remaining fallbacks
+      if (isServerRecentlyTimedOut()) {
+        console.warn('[useDashboardStats] Server recently timed out, skipping fallback chain');
+        return null;
       }
       
       // Try 2: /api/stats/overview (direct response)
@@ -357,6 +363,12 @@ export function useDashboardSensorStats(clientId?: string | null) {
         }
       } catch {
         // Fall through to other endpoints
+      }
+      
+      // If server just timed out, skip remaining fallbacks
+      if (isServerRecentlyTimedOut()) {
+        console.warn('[useDashboardSensorStats] Server recently timed out, skipping fallbacks');
+        return { total_sensors: 0, total_clients: 0, total_devices: 0, readings_last_24h: 0, sensorItems: [] };
       }
       
       // Fallback 1: Try /api/stats/overview (returns flat object with total_readings)
