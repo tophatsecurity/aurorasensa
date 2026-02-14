@@ -80,12 +80,35 @@ Deno.serve(async (req) => {
       });
     }
 
-    // Require authentication (token or session cookie)
+    // Authentication: accept token (Supabase JWT or Aurora token) or session cookie
+    // If a Supabase JWT is provided, we validate it and use the AURORA_API_KEY for upstream
+    let upstreamToken = auroraToken;
+    
     if (!auroraToken && !sessionCookie) {
       return new Response(JSON.stringify({ error: 'Not authenticated. Provide token or session param.' }), {
         status: 401,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
+    }
+
+    // If we got a token, try to validate it as a Supabase JWT
+    if (auroraToken) {
+      try {
+        const { createClient } = await import("https://esm.sh/@supabase/supabase-js@2");
+        const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
+        const supabaseAnonKey = Deno.env.get('SUPABASE_ANON_KEY')!;
+        const supabase = createClient(supabaseUrl, supabaseAnonKey, {
+          global: { headers: { Authorization: `Bearer ${auroraToken}` } },
+        });
+        const { data, error: authError } = await supabase.auth.getUser(auroraToken);
+        if (!authError && data?.user) {
+          console.log(`SSE authenticated user: ${data.user.email}`);
+          // Use AURORA_API_KEY for upstream instead of the Supabase JWT
+          upstreamToken = Deno.env.get('AURORA_API_KEY') || auroraToken;
+        }
+      } catch (e) {
+        console.warn('JWT validation failed, using token as-is:', e);
+      }
     }
 
     // Build Aurora URL with optional client_id filter
@@ -101,9 +124,9 @@ Deno.serve(async (req) => {
       'Accept': 'text/event-stream',
       'Cache-Control': 'no-cache',
     };
-    if (auroraToken) {
-      fetchHeaders['Authorization'] = `Bearer ${auroraToken}`;
-      fetchHeaders['X-API-Key'] = auroraToken;
+    if (upstreamToken) {
+      fetchHeaders['Authorization'] = `Bearer ${upstreamToken}`;
+      fetchHeaders['X-API-Key'] = upstreamToken;
     }
     if (sessionCookie) {
       fetchHeaders['Cookie'] = sessionCookie;
