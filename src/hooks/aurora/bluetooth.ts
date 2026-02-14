@@ -1,4 +1,5 @@
 // Aurora API - Bluetooth domain hooks
+// Updated to use all /api/bluetooth/* dedicated endpoints
 import { useQuery } from "@tanstack/react-query";
 import { callAuroraApi, hasAuroraSession } from "./core";
 import { BLUETOOTH } from "./endpoints";
@@ -53,8 +54,23 @@ export interface BluetoothHistoryPoint {
   client_id?: string;
 }
 
+export interface BluetoothSummary {
+  total_scanners: number;
+  active_scanners: number;
+  total_devices: number;
+  unique_devices: number;
+  avg_signal_strength: number;
+  by_type?: Array<{ device_type: string; count: number }>;
+}
+
+export interface BluetoothByTypeResult {
+  device_type: string;
+  count: number;
+  devices: BluetoothDevice[];
+}
+
 // =============================================
-// QUERY HOOKS - API responses are now flat
+// QUERY HOOKS
 // =============================================
 
 export function useBluetoothScanners(clientId?: string | null) {
@@ -160,6 +176,68 @@ export function useBluetoothHistory(macAddress: string | null, options?: {
     enabled: hasAuroraSession() && !!macAddress,
     staleTime: 60000,
     refetchInterval: 120000,
+    retry: 1,
+  });
+}
+
+/** Get Bluetooth summary from /api/bluetooth/summary */
+export function useBluetoothSummary(clientId?: string | null) {
+  return useQuery({
+    queryKey: ["aurora", "bluetooth", "summary", clientId],
+    queryFn: async () => {
+      const path = clientId ? `${BLUETOOTH.SUMMARY}?client_id=${clientId}` : BLUETOOTH.SUMMARY;
+      return callAuroraApi<BluetoothSummary>(path);
+    },
+    enabled: hasAuroraSession(),
+    staleTime: 60000,
+    refetchInterval: 120000,
+    retry: 1,
+  });
+}
+
+/** Get Bluetooth devices grouped by type from /api/bluetooth/by-type */
+export function useBluetoothByType(clientId?: string | null) {
+  return useQuery({
+    queryKey: ["aurora", "bluetooth", "by-type", clientId],
+    queryFn: async () => {
+      const path = clientId ? `${BLUETOOTH.BY_TYPE}?client_id=${clientId}` : BLUETOOTH.BY_TYPE;
+      const result = await callAuroraApi<BluetoothByTypeResult[]>(path);
+      return Array.isArray(result) ? result : [];
+    },
+    enabled: hasAuroraSession(),
+    staleTime: 60000,
+    refetchInterval: 120000,
+    retry: 1,
+  });
+}
+
+/** Get Bluetooth scanner devices from /api/bluetooth/scanners */
+export function useBluetoothScannerDevices() {
+  return useQuery({
+    queryKey: ["aurora", "bluetooth", "scanners"],
+    queryFn: async () => {
+      const result = await callAuroraApi<BluetoothScanner[]>(BLUETOOTH.SCANNERS);
+      return Array.isArray(result) ? result : [];
+    },
+    enabled: hasAuroraSession(),
+    staleTime: 60000,
+    refetchInterval: 120000,
+    retry: 1,
+  });
+}
+
+/** Get Bluetooth devices for a specific client from /api/bluetooth/clients/{clientId}/devices */
+export function useBluetoothClientDevices(clientId: string | null) {
+  return useQuery({
+    queryKey: ["aurora", "bluetooth", "client-devices", clientId],
+    queryFn: async () => {
+      if (!clientId) return [];
+      const result = await callAuroraApi<BluetoothDevice[]>(BLUETOOTH.CLIENT_DEVICES(clientId));
+      return Array.isArray(result) ? result : [];
+    },
+    enabled: hasAuroraSession() && !!clientId,
+    staleTime: 30000,
+    refetchInterval: 60000,
     retry: 1,
   });
 }

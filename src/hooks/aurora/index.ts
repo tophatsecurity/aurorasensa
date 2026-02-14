@@ -386,10 +386,16 @@ export {
   useBluetoothNearby,
   useBluetoothStats,
   useBluetoothHistory,
+  useBluetoothSummary,
+  useBluetoothByType,
+  useBluetoothScannerDevices,
+  useBluetoothClientDevices,
   type BluetoothScanner,
   type BluetoothDevice as BluetoothDeviceData,
   type BluetoothStats,
   type BluetoothHistoryPoint,
+  type BluetoothSummary,
+  type BluetoothByTypeResult,
 } from "./bluetooth";
 
 // WiFi domain hooks
@@ -400,10 +406,16 @@ export {
   useWifiNearby,
   useWifiStats,
   useWifiHistory,
+  useWifiSummary,
+  useWifiSecurityAnalysis,
+  useWifiStrongest,
+  useWifiClientNetworks,
   type WifiScanner,
   type WifiNetwork as WifiNetworkData,
   type WifiStats,
   type WifiHistoryPoint,
+  type WifiSecurityAnalysis,
+  type WifiSummary,
 } from "./wifi";
 
 // Client-specific sensor data hooks
@@ -430,6 +442,16 @@ export {
 } from "./clientSensors";
 
 export {
+  useArduinoDevices,
+  useArduinoCurrent,
+  useArduinoTemperature,
+  useArduinoHumidity,
+  useArduinoPressure,
+  useArduinoLight,
+  useArduinoSound,
+  useArduinoAccelerometer,
+  useArduinoHistory,
+  useArduinoSummary,
   useArduinoDevicesFromReadings,
   useArduinoReadings,
   useArduinoStats,
@@ -437,7 +459,24 @@ export {
   type ArduinoDeviceWithMetrics,
   type ArduinoStats,
   type ArduinoTimeseriesPoint,
+  type ArduinoCurrentReading,
+  type ArduinoSummary,
 } from "./arduino";
+
+// Thermal dedicated hooks
+export {
+  useThermalDevices,
+  useThermalLatest,
+  useThermalCelsius,
+  useThermalFahrenheit,
+  useThermalHistory as useThermalHistoryDedicated,
+  useThermalStats as useThermalStatsDedicated,
+  useThermalStatus,
+  type ThermalDevice,
+  type ThermalReading,
+  type ThermalStats as ThermalDedicatedStats,
+  type ThermalStatus as ThermalStatusResponse,
+} from "./thermal";
 
 // Arduino Stats with all 10 measurements
 export {

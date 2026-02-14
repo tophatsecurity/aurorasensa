@@ -1,4 +1,5 @@
 // Aurora API - WiFi domain hooks
+// Updated to use all /api/wifi/* dedicated endpoints
 import { useQuery } from "@tanstack/react-query";
 import { callAuroraApi, hasAuroraSession } from "./core";
 import { WIFI } from "./endpoints";
@@ -58,8 +59,28 @@ export interface WifiHistoryPoint {
   client_id?: string;
 }
 
+export interface WifiSecurityAnalysis {
+  total_networks: number;
+  open_networks: number;
+  wep_networks: number;
+  wpa_networks: number;
+  wpa2_networks: number;
+  wpa3_networks: number;
+  risk_score?: number;
+  recommendations?: string[];
+}
+
+export interface WifiSummary {
+  total_scanners: number;
+  active_scanners: number;
+  total_networks: number;
+  unique_ssids: number;
+  avg_signal_strength: number;
+  strongest_network?: WifiNetwork;
+}
+
 // =============================================
-// QUERY HOOKS - API responses are now flat
+// QUERY HOOKS
 // =============================================
 
 export function useWifiScanners(clientId?: string | null) {
@@ -190,6 +211,70 @@ export function useWifiHistory(bssid: string | null, options?: {
     enabled: hasAuroraSession() && !!bssid,
     staleTime: 60000,
     refetchInterval: 120000,
+    retry: 1,
+  });
+}
+
+/** Get WiFi summary from /api/wifi/summary */
+export function useWifiSummary(clientId?: string | null) {
+  return useQuery({
+    queryKey: ["aurora", "wifi", "summary", clientId],
+    queryFn: async () => {
+      const path = clientId ? `${WIFI.SUMMARY}?client_id=${clientId}` : WIFI.SUMMARY;
+      return callAuroraApi<WifiSummary>(path);
+    },
+    enabled: hasAuroraSession(),
+    staleTime: 60000,
+    refetchInterval: 120000,
+    retry: 1,
+  });
+}
+
+/** Get WiFi security analysis from /api/wifi/security-analysis */
+export function useWifiSecurityAnalysis(clientId?: string | null) {
+  return useQuery({
+    queryKey: ["aurora", "wifi", "security-analysis", clientId],
+    queryFn: async () => {
+      const path = clientId ? `${WIFI.SECURITY_ANALYSIS}?client_id=${clientId}` : WIFI.SECURITY_ANALYSIS;
+      return callAuroraApi<WifiSecurityAnalysis>(path);
+    },
+    enabled: hasAuroraSession(),
+    staleTime: 120000,
+    refetchInterval: 300000,
+    retry: 1,
+  });
+}
+
+/** Get strongest WiFi networks from /api/wifi/strongest */
+export function useWifiStrongest(clientId?: string | null, limit: number = 10) {
+  return useQuery({
+    queryKey: ["aurora", "wifi", "strongest", clientId, limit],
+    queryFn: async () => {
+      const params = new URLSearchParams();
+      if (clientId) params.set('client_id', clientId);
+      params.set('limit', String(limit));
+      const result = await callAuroraApi<WifiNetwork[]>(`${WIFI.STRONGEST}?${params.toString()}`);
+      return Array.isArray(result) ? result : [];
+    },
+    enabled: hasAuroraSession(),
+    staleTime: 30000,
+    refetchInterval: 60000,
+    retry: 1,
+  });
+}
+
+/** Get WiFi networks for a specific client from /api/wifi/clients/{clientId}/networks */
+export function useWifiClientNetworks(clientId: string | null) {
+  return useQuery({
+    queryKey: ["aurora", "wifi", "client-networks", clientId],
+    queryFn: async () => {
+      if (!clientId) return [];
+      const result = await callAuroraApi<WifiNetwork[]>(WIFI.CLIENT_NETWORKS(clientId));
+      return Array.isArray(result) ? result : [];
+    },
+    enabled: hasAuroraSession() && !!clientId,
+    staleTime: 30000,
+    refetchInterval: 60000,
     retry: 1,
   });
 }
