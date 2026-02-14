@@ -22,6 +22,12 @@ const SSE_DISABLED = false;
 let sseAvailabilityChecked = false;
 let sseIsAvailable = false;
 
+// Reset SSE availability cache (call after login/logout)
+export function resetSSEAvailability() {
+  sseAvailabilityChecked = false;
+  sseIsAvailable = false;
+}
+
 interface SSEConfig {
   endpoint: string;
   queryKeys?: string[][];
@@ -563,11 +569,19 @@ export function useSSEAvailability() {
     
     setIsChecking(true);
     try {
-      // Check if user has a valid Supabase session
+      // Check if user has a valid Supabase session and get token
       const storageKey = `sb-hewwtgcrupegpcwfujln-auth-token`;
-      const hasSession = !!localStorage.getItem(storageKey);
-      if (!hasSession) {
-        // No session, SSE won't work anyway
+      let sessionToken: string | null = null;
+      try {
+        const stored = localStorage.getItem(storageKey);
+        if (stored) {
+          const parsed = JSON.parse(stored);
+          sessionToken = parsed?.access_token || null;
+        }
+      } catch {}
+      
+      if (!sessionToken) {
+        // No session token, SSE won't work anyway
         sseIsAvailable = false;
         sseAvailabilityChecked = true;
         setIsAvailable(false);
@@ -577,6 +591,7 @@ export function useSSEAvailability() {
       // Try connecting to a simple stream type to verify SSE works
       const proxyUrl = new URL(SUPABASE_SSE_PROXY);
       proxyUrl.searchParams.set('type', 'dashboard');
+      proxyUrl.searchParams.set('token', sessionToken);
       
       const response = await fetch(proxyUrl.toString(), {
         method: "GET",
