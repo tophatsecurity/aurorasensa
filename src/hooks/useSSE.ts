@@ -129,14 +129,22 @@ export function useSSE({
     const streamType = getStreamType(endpoint);
     const { clientId, commandId } = parseEndpoint(endpoint);
 
-    // Get Aurora API token from localStorage
-    const auroraToken = localStorage.getItem('aurora_access_token');
+    // Get Supabase session token for auth
+    const storageKey = `sb-hewwtgcrupegpcwfujln-auth-token`;
+    let sessionToken: string | null = null;
+    try {
+      const stored = localStorage.getItem(storageKey);
+      if (stored) {
+        const parsed = JSON.parse(stored);
+        sessionToken = parsed?.access_token || null;
+      }
+    } catch {}
 
     // Build proxy URL with token-based auth
     const proxyUrl = new URL(SUPABASE_SSE_PROXY);
     proxyUrl.searchParams.set('type', streamType);
-    if (auroraToken) {
-      proxyUrl.searchParams.set('token', auroraToken);
+    if (sessionToken) {
+      proxyUrl.searchParams.set('token', sessionToken);
     }
     if (clientId && clientId !== 'all') {
       proxyUrl.searchParams.set('client_id', clientId);
