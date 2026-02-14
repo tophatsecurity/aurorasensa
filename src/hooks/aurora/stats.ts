@@ -1,6 +1,6 @@
 // Aurora API - Stats domain hooks
 import { useQuery } from "@tanstack/react-query";
-import { callAuroraApi, hasAuroraSession, type AuroraApiOptions } from "./core";
+import { callAuroraApi, hasAuroraSession, isServerRecentlyTimedOut, type AuroraApiOptions } from "./core";
 import { STATS, CLIENTS, DEVICES, TIMESERIES } from "./endpoints";
 
 // =============================================
@@ -475,7 +475,7 @@ export function useGlobalStats(clientId?: string | null) {
   return useQuery({
     queryKey: ["aurora", "stats", "global", clientId],
     queryFn: async () => {
-      // Try /api/stats/global first - returns { data: {...}, status: 'success' } which core auto-unwraps
+      // Try /api/stats/global first
       try {
         const result = await callAuroraApi<GlobalStats>(
           STATS.GLOBAL, "GET", undefined, { clientId }
@@ -488,29 +488,13 @@ export function useGlobalStats(clientId?: string | null) {
         // Fall through to fallback
       }
       
-      // Fallback to /api/stats/overview - direct response format
-      try {
-        const overview = await callAuroraApi<{
-          total_readings?: number;
-          total_batches?: number;
-          total_clients?: number;
-          total_devices?: number;
-        }>(STATS.OVERVIEW, "GET", undefined, { clientId });
-        
-        if (overview && (overview.total_readings || overview.total_devices)) {
-          console.log('[useGlobalStats] Using /api/stats/overview fallback:', overview);
-          return {
-            total_readings: overview.total_readings,
-            total_batches: overview.total_batches,
-            total_clients: overview.total_clients,
-            total_devices: overview.total_devices,
-          } as GlobalStats;
-        }
-      } catch {
-        // Fall through
+      // If server just timed out, skip further fallbacks to avoid 2+ minutes of waiting
+      if (isServerRecentlyTimedOut()) {
+        console.warn('[useGlobalStats] Server recently timed out, skipping fallback chain');
+        return null;
       }
       
-      // Fallback to /api/stats/comprehensive (this endpoint returns rich nested data)
+      // Fallback to /api/stats/comprehensive (richer data)
       try {
         const comprehensive = await callAuroraApi<ComprehensiveStats & { global: ComprehensiveStatsGlobal & { sensors?: { by_type?: Array<{ sensor: string; reading_count: number }> } } }>(
           STATS.COMPREHENSIVE, "GET", undefined, { clientId }
@@ -534,14 +518,13 @@ export function useGlobalStats(clientId?: string | null) {
             device_breakdown: g.sensors?.by_type?.map(s => ({ device_type: s.sensor, count: s.reading_count })),
             time_ranges: g.time_ranges,
           };
-          console.log('[useGlobalStats] Using /api/stats/comprehensive fallback:', mapped);
           return mapped;
         }
       } catch {
-        // Return empty
+        // Return null to signal no data
       }
       
-      return {} as GlobalStats;
+      return null;
     },
     enabled: hasAuroraSession(),
     staleTime: 60000,

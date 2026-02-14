@@ -14,6 +14,13 @@ const MAX_BACKOFF_MS = 8000;
 // Track connection state globally
 let connectionHealthy = false;
 let consecutiveBootErrors = 0;
+let lastTimeoutTimestamp = 0;
+const TIMEOUT_COOLDOWN_MS = 30000; // Skip fallback calls for 30s after a timeout
+
+// Check if the server recently timed out (used to skip fallback chains)
+export function isServerRecentlyTimedOut(): boolean {
+  return Date.now() - lastTimeoutTimestamp < TIMEOUT_COOLDOWN_MS;
+}
 
 // =============================================
 // SESSION HELPERS
@@ -429,6 +436,8 @@ export async function callAuroraApi<T>(
         
         if (error.message.includes('timeout')) {
           console.warn(`Timeout for ${path}, returning empty data`);
+          lastTimeoutTimestamp = Date.now();
+          updateConnectionState('degraded');
           return getEmptyDataForPath(path) as T;
         }
         

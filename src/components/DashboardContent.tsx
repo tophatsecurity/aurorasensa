@@ -11,13 +11,13 @@ import {
   Clock,
   BarChart3,
   Radio,
-  Wifi,
   WifiOff,
+  ServerCrash,
 } from "lucide-react";
 import ConnectionStatusIndicator from "./ConnectionStatusIndicator";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Progress } from "@/components/ui/progress";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { 
   BarChart, 
@@ -95,10 +95,14 @@ const DashboardContent = () => {
   const queryClient = useQueryClient();
   
   // Single data source - useGlobalStats falls back to /api/stats/comprehensive
-  const { data: globalStats, isLoading, refetch } = useGlobalStats();
+  const { data: globalStats, isLoading, isError, refetch } = useGlobalStats();
 
   // Real-time SSE connection (auto-falls back to polling if SSE unavailable)
   const realTime = useDashboardRealTime(true);
+
+  // Determine if the Aurora server is unreachable (null data = all endpoints failed/timed out)
+  const isServerUnreachable = !isLoading && (globalStats === null || globalStats === undefined || (typeof globalStats === 'object' && Object.keys(globalStats).length === 0));
+  const hasData = !isServerUnreachable && globalStats && (globalStats.total_readings || globalStats.total_devices || globalStats.total_clients);
 
   // When SSE delivers new data, invalidate the global stats query to refresh
   useEffect(() => {
@@ -220,7 +224,24 @@ const DashboardContent = () => {
         </Button>
       </div>
 
-      {/* Primary Stats */}
+      {/* Server Unreachable Banner */}
+      {isServerUnreachable && !isLoading && (
+        <Alert className="mb-6 border-destructive/50 bg-destructive/10">
+          <ServerCrash className="h-4 w-4" />
+          <AlertTitle>Aurora Server Unreachable</AlertTitle>
+          <AlertDescription className="flex items-center justify-between">
+            <span>
+              Cannot connect to the Aurora API server. All endpoints are timing out. 
+              The server may be offline or experiencing issues.
+            </span>
+            <Button variant="outline" size="sm" onClick={handleRefresh} disabled={isRefreshing} className="ml-4 shrink-0">
+              <RefreshCw className={`w-3.5 h-3.5 mr-1.5 ${isRefreshing ? 'animate-spin' : ''}`} />
+              Retry
+            </Button>
+          </AlertDescription>
+        </Alert>
+      )}
+
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
         <PrimaryStat
           label="Total Readings"
