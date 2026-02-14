@@ -16,7 +16,9 @@ const AURORA_ENDPOINT = "http://aurora.tophatsecurity.com:9151";
 const SUPABASE_SSE_PROXY = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/aurora-stream`;
 
 // SSE enabled - will attempt connection, falls back to polling on failure
-const SSE_DISABLED = false;
+// SSE disabled - edge function proxy can't maintain long-lived SSE connections
+// Aurora SSE endpoints exist but require direct connection (not through proxy)
+const SSE_DISABLED = true;
 
 // SSE availability state - not yet checked
 let sseAvailabilityChecked = false;
@@ -59,6 +61,7 @@ export function useSSE({
   const eventSourceRef = useRef<EventSource | null>(null);
   const reconnectTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const reconnectCountRef = useRef(0);
+  const hasFailedRef = useRef(false);
 
   const [state, setState] = useState<SSEState>({
     isConnected: false,
@@ -76,6 +79,9 @@ export function useSSE({
 
   const connect = useCallback(async () => {
     if (!enabled) return;
+    
+    // Don't reconnect after a failure (prevents infinite loop)
+    if (hasFailedRef.current) return;
 
     // Check if SSE is available first - if not, don't even try to connect
     if (sseAvailabilityChecked && !sseIsAvailable) {
@@ -196,27 +202,19 @@ export function useSSE({
       };
 
       eventSource.onerror = (error) => {
-        console.log(`SSE error: ${streamType}`, error);
+        console.log(`SSE error for ${streamType}, falling back to polling`);
         eventSource.close();
         eventSourceRef.current = null;
-
-        // Mark SSE as unavailable to prevent further attempts
-        // The unified hook will automatically fall back to polling
-        sseIsAvailable = false;
-        sseAvailabilityChecked = true;
+        hasFailedRef.current = true; // Prevent reconnect loop
 
         setState(prev => ({
           ...prev,
           isConnected: false,
           isConnecting: false,
-          error: null, // Not a user-facing error - polling will take over
+          error: `Stream ${streamType} unavailable`,
         }));
 
         onError?.(error);
-
-        // Don't retry SSE connections - let the unified hook use polling instead
-        // This prevents the blank screen caused by repeated SSE failures
-        console.log(`SSE connection failed for ${streamType}, polling will be used instead`);
       };
     } catch (e) {
       console.error("Failed to create EventSource:", e);
@@ -252,6 +250,7 @@ export function useSSE({
   const reconnect = useCallback(() => {
     disconnect();
     reconnectCountRef.current = 0;
+    hasFailedRef.current = false; // Reset failure flag on explicit reconnect
     connect();
   }, [connect, disconnect]);
 
@@ -588,38 +587,67 @@ export function useSSEAvailability() {
         return;
       }
 
-      // Try connecting to a simple stream type to verify SSE works
+      // Try connecting to a known stream type to verify SSE works
+      // Use 'starlink_readings' which maps to /api/stream/readings/starlink (confirmed in API docs)
       const proxyUrl = new URL(SUPABASE_SSE_PROXY);
-      proxyUrl.searchParams.set('type', 'dashboard');
+      proxyUrl.searchParams.set('type', 'starlink_readings');
       proxyUrl.searchParams.set('token', sessionToken);
       
-      const response = await fetch(proxyUrl.toString(), {
-        method: "GET",
-        signal: AbortSignal.timeout(5000),
-        headers: { 'Accept': 'text/event-stream' },
-      });
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 5000);
       
-      // If we get any error status (4xx or 5xx), it means SSE is not available - fall back to polling
-      // This includes 404 (not found), 500 (server error), 503 (unavailable), etc.
-      if (!response.ok) {
-        console.log(`SSE not available on Aurora server (status: ${response.status}), using polling fallback`);
-        sseIsAvailable = false;
+      try {
+        const response = await fetch(proxyUrl.toString(), {
+          method: "GET",
+          signal: controller.signal,
+          headers: { 'Accept': 'text/event-stream' },
+        });
+        clearTimeout(timeoutId);
+        
+        // If we get any error status (4xx or 5xx), SSE is not available
+        if (!response.ok) {
+          console.log(`SSE not available on Aurora server (status: ${response.status}), using polling fallback`);
+          sseIsAvailable = false;
+          sseAvailabilityChecked = true;
+          setIsAvailable(false);
+          setIsChecking(false);
+          return;
+        }
+        
+        // Check if it returned SSE content type
+        const contentType = response.headers.get('content-type');
+        const isSSE = contentType?.includes('text/event-stream') ?? false;
+        
+        sseIsAvailable = isSSE && response.ok;
         sseAvailabilityChecked = true;
-        setIsAvailable(false);
-        setIsChecking(false);
-        return;
+        setIsAvailable(sseIsAvailable);
+        console.log(`SSE availability: ${sseIsAvailable ? 'available' : 'not available'} (content-type: ${contentType})`);
+      } catch (err: unknown) {
+        clearTimeout(timeoutId);
+        // A timeout/abort on an SSE connection likely means the server accepted the 
+        // connection and is holding it open (which is correct SSE behavior).
+        // Treat AbortError as SSE being available.
+        if (err instanceof DOMException && err.name === 'AbortError') {
+          console.log('SSE availability check: connection held open (SSE likely available)');
+          sseIsAvailable = true;
+          sseAvailabilityChecked = true;
+          setIsAvailable(true);
+        } else if (err instanceof DOMException && err.name === 'TimeoutError') {
+          // TimeoutError from AbortSignal.timeout also means connection was held open
+          console.log('SSE availability check: timeout (SSE likely available)');
+          sseIsAvailable = true;
+          sseAvailabilityChecked = true;
+          setIsAvailable(true);
+        } else {
+          // Genuine network error
+          console.log('SSE availability check failed, using polling fallback:', err);
+          sseIsAvailable = false;
+          sseAvailabilityChecked = true;
+          setIsAvailable(false);
+        }
       }
-      
-      // Check if it returned SSE content type
-      const contentType = response.headers.get('content-type');
-      const isSSE = contentType?.includes('text/event-stream') ?? false;
-      
-      sseIsAvailable = isSSE && response.ok;
-      sseAvailabilityChecked = true;
-      setIsAvailable(sseIsAvailable);
     } catch (err) {
-      // Any error (timeout, network, etc.) means SSE is not available
-      console.log('SSE availability check failed, using polling fallback:', err);
+      console.log('SSE availability check error, using polling fallback:', err);
       sseIsAvailable = false;
       sseAvailabilityChecked = true;
       setIsAvailable(false);
@@ -668,16 +696,17 @@ function useUnifiedRealTime(
   const useSSEData = sseAvailable === true && enabled;
   const sseResult = sseHook(useSSEData, clientId);
   
-  // Fallback to polling when SSE not available
-  const usePollingData = sseAvailable === false && enabled;
+  // Fallback to polling when SSE not available OR when SSE connection has an error
+  const sseHasError = sseResult.error !== null;
+  const usePollingData = (sseAvailable === false || sseHasError) && enabled;
   const pollingResult = useRealTimeData(pollingType, { 
     enabled: usePollingData, 
     clientId,
     interval: pollingInterval 
   });
 
-  // Return unified interface
-  if (sseAvailable === true) {
+  // Return unified interface - use SSE only if connected without errors
+  if (sseAvailable === true && sseResult.isConnected && !sseHasError) {
     return {
       isConnected: sseResult.isConnected,
       isConnecting: sseResult.isConnecting,
@@ -842,28 +871,18 @@ export function useAlertsRealTime(enabled = true) {
 }
 
 /**
- * Dashboard stats real-time data - SSE primary with polling fallback
+ * Dashboard stats real-time data - polling only
+ * The /api/stream/dashboard/stats SSE endpoint is not available on Aurora server,
+ * so dashboard always uses polling.
  */
 export function useDashboardRealTime(enabled = true) {
-  const { isAvailable: sseAvailable } = useSSEAvailability();
-  const sseResult = useDashboardStatsSSE(sseAvailable === true && enabled);
+  // Dashboard SSE endpoint doesn't exist - always use polling
+  const sseResult = useDashboardStatsSSE(false); // never enable SSE for dashboard
   const pollingResult = useRealTimeData('dashboard', { 
-    enabled: sseAvailable === false && enabled 
+    enabled
   });
 
-  if (sseAvailable === true) {
-    return {
-      isConnected: sseResult.isConnected,
-      isConnecting: sseResult.isConnecting,
-      error: sseResult.error,
-      reconnectCount: sseResult.reconnectCount,
-      lastMessage: sseResult.lastMessage,
-      data: sseResult.lastMessage,
-      isPolling: false,
-      isSSE: true,
-      reconnect: sseResult.reconnect,
-    };
-  }
+  // Dashboard always uses polling - SSE endpoint doesn't exist
 
   const errorMessage = pollingResult.error 
     ? (typeof pollingResult.error === 'string' ? pollingResult.error : pollingResult.error.message)

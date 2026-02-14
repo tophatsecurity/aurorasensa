@@ -7,15 +7,9 @@ const corsHeaders = {
 const AURORA_ENDPOINT = "http://aurora.tophatsecurity.com:9151";
 
 // SSE stream types and their endpoints
+// Only includes endpoints confirmed in Aurora API docs at /docs#/Real-Time%20Streams
 const STREAM_ENDPOINTS: Record<string, string> = {
-  // General streams
-  'readings': '/api/stream/readings',
-  'alerts': '/api/stream/alerts',
-  'dashboard': '/api/stream/dashboard/stats',
-  'dashboard_clients': '/api/stream/dashboard/clients',
-  'clients': '/api/stream/clients',
-  // Dedicated streams
-  'starlink': '/api/stream/starlink',
+  // Sensor-specific reading streams (confirmed in API docs)
   'starlink_readings': '/api/stream/readings/starlink',
   'thermal': '/api/stream/readings/thermal_probe',
   'gps': '/api/stream/readings/gps',
@@ -24,10 +18,16 @@ const STREAM_ENDPOINTS: Record<string, string> = {
   'power': '/api/stream/readings/power',
   'system': '/api/stream/readings/system_monitor',
   'radio': '/api/stream/readings/radio',
-  // New streams
+  // Aliases for backward compatibility
+  'starlink': '/api/stream/readings/starlink',
+  'readings': '/api/stream/readings/starlink', // fallback to a known endpoint
+  // These may exist but aren't in docs yet - try them anyway
+  'alerts': '/api/stream/alerts',
+  'dashboard': '/api/stream/dashboard/stats',
+  'dashboard_clients': '/api/stream/dashboard/clients',
+  'clients': '/api/stream/clients',
   'map_positions': '/api/stream/map/positions',
   'system_health': '/api/stream/system/health',
-  // Real-time statistics streams
   'realtime': '/api/realtime/stream',
   'realtime_full': '/api/realtime/stream/full',
 };
