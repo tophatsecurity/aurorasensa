@@ -166,22 +166,23 @@ Deno.serve(async (req) => {
     const body = await req.json().catch(() => ({}));
     const { path = "", method = "GET", body: requestBody, auroraToken, timeout } = body;
     
-    // Verify Supabase JWT if provided (auroraToken is now a Supabase access token)
+    // Verify Supabase JWT if provided (for logging/auditing only - not blocking)
     if (auroraToken) {
-      const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
-      const supabaseAnonKey = Deno.env.get('SUPABASE_ANON_KEY')!;
-      const supaClient = createClient(supabaseUrl, supabaseAnonKey, {
-        global: { headers: { Authorization: `Bearer ${auroraToken}` } }
-      });
-      const { data: claimsData, error: claimsError } = await supaClient.auth.getUser(auroraToken);
-      if (claimsError || !claimsData?.user) {
-        console.warn('Invalid Supabase JWT provided');
-        return new Response(JSON.stringify({ error: 'Unauthorized', detail: 'Invalid session' }), {
-          status: 401,
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      try {
+        const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
+        const supabaseAnonKey = Deno.env.get('SUPABASE_ANON_KEY')!;
+        const supaClient = createClient(supabaseUrl, supabaseAnonKey, {
+          global: { headers: { Authorization: `Bearer ${auroraToken}` } }
         });
+        const { data: claimsData, error: claimsError } = await supaClient.auth.getUser(auroraToken);
+        if (claimsError || !claimsData?.user) {
+          console.warn('Invalid Supabase JWT provided - proceeding with API key auth');
+        } else {
+          console.log(`Authenticated user: ${claimsData.user.email}`);
+        }
+      } catch (e) {
+        console.warn('JWT validation error - proceeding with API key auth:', e);
       }
-      console.log(`Authenticated user: ${claimsData.user.email}`);
     }
     
     if (!path) {
